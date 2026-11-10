@@ -49,6 +49,7 @@ import { writeFileAtomic } from "./atomic_write.js";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { blurSnappedChunks, captionBlurGuard, captionChunksFrom, captionPlan, captionsOverlayOf, chunkWords, narrationWords } from "@launchclip/core/captions.mjs";
+import { storyCaptionZones } from "@launchclip/core/cast-captions.mjs";
 import { layoutPlan } from "@launchclip/core/footage-layout.mjs";
 import { sceneWindows } from "@launchclip/core/transitions.mjs";
 import { allFontFaces } from "@launchclip/core/fonts.mjs";
@@ -128,7 +129,7 @@ export async function storyMotionBlurGuard(project, story, { models = sceneModel
   if (!chunks?.length) return null;
   const hide = [...(overlay.hide ?? []), ...sceneWindows(story).scenes.filter((entry) => models.get(entry.id)?.hidesCaptions).map((entry) => [entry.start, entry.renderEnd])];
   const format = { width, height, fps };
-  const plan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide, zones: storyBase(story) ? layoutPlan(story)?.captions : undefined });
+  const plan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide, zones: storyCaptionZones(story, storyBase(story) ? layoutPlan(story) : null) });
   return captionBlurGuard(story, chunks, plan, format);
 }
 

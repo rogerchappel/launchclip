@@ -37,3 +37,18 @@ test("the planner gets the composition rules", () => {
   assert.match(lines, /never repeat a shot back to back/);
   assert.match(lines, /at most two seated characters in 9:16/);
 });
+
+test("density: a character story's captions fill the third they sit in; other stories' captions do not", () => {
+  const bible = { file: "BIBLE.json", hash: `sha256:${"a".repeat(64)}` };
+  const scenes = [bench("b", 0, 12, [{ id: "maya" }])];
+  const cast = rect("cast", "media", 700, 800, 0, 12);
+  const top = { id: "captions@cast-1", role: "caption", rect: { x: 65, y: 250, width: 853, height: 230 }, start: 0, end: 12 };
+  // No bible: the sky over the characters is an empty third, captions or not.
+  const plain = densityGate(story(scenes), { rects: [cast, top], profile: "shorts" });
+  assert.ok(plain.findings.some((finding) => finding.rule === "empty-region" && /top third/.test(finding.detail)), JSON.stringify(plain.findings));
+  // A character story: the captions, moved clear of the cast, hold it.
+  assert.equal(densityGate({ ...story(scenes), bible }, { rects: [cast, top], profile: "shorts" }).status, "passed");
+  // Not while they are hidden.
+  const hidden = densityGate({ ...story(scenes), bible }, { rects: [cast, { ...top, hide: [[1, 9]] }], profile: "shorts" });
+  assert.ok(hidden.findings.some((finding) => finding.rule === "empty-region" && /top third/.test(finding.detail)), JSON.stringify(hidden.findings));
+});

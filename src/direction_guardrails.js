@@ -18,6 +18,7 @@ import { worldTimeline } from "@launchclip/core/catalog-world.mjs";
 import { rideWorldPlates } from "@launchclip/core/camera-world.mjs";
 import { driftEligible } from "@launchclip/core/ambient.mjs";
 import { profileGeometry } from "@launchclip/core/layout-check.mjs";
+import { isCharacterStory } from "@launchclip/core/character-story.mjs";
 import { TEXT_FADE, resolveModule } from "@launchclip/core/modules.mjs";
 import { TRANSFORM_KEYS } from "@launchclip/core/physics.mjs";
 import { samePlaceCuts, twoCopies } from "@launchclip/core/story.mjs";
@@ -347,7 +348,10 @@ function coverShare(rect, region) {
  *   left, centre, right in 16:9) with only the plate in it for over 4 s;
  * - lone-card: a text card over a world plate with no character or other
  *   visual for over 3 s.
- * rects: [{id, role, module?, rect, start, end}] (checkLayoutProject().rects).
+ * In a character story (kit/core/character-story.mjs) the captions fill the
+ * third they sit in while they are up: they are moved clear of the cast
+ * (kit/core/cast-captions.mjs), so the sky over a character holds the words.
+ * rects: [{id, role, module?, rect, start, end, hide?}] (checkLayoutProject().rects).
  */
 export function densityGate(story, { rects = [], profile } = {}) {
   if (!rects.length) return { status: "skipped", reason: "no layout rects" };
@@ -360,6 +364,7 @@ export function densityGate(story, { rects = [], profile } = {}) {
     : { name, x: safe.x + (safe.width / 3) * i, y: safe.y, width: safe.width / 3, height: safe.height });
   const duration = Number(story?.resolved?.duration ?? story?.format?.duration) || 0;
   const worlds = scenesOf(story).filter((scene) => scene?.module === "world" && (scene.track ?? 0) === 0);
+  const filling = isCharacterStory(story) ? [...FILLING, "caption"] : FILLING;
   const findings = [];
   const runs = new Map();
   const report = (key, from, to, finding) => {
@@ -368,7 +373,7 @@ export function densityGate(story, { rects = [], profile } = {}) {
   };
   const close = (key, t) => { const run = runs.get(key); if (run) { report(key, run.from, t, run.finding); runs.delete(key); } };
   for (const t of times(0, Math.max(0, duration - 1e-3), DENSITY.step)) {
-    const active = rects.filter((element) => FILLING.includes(element.role) && element.rect && element.id !== "base" && element.start <= t + 1e-6 && element.end > t + 1e-6);
+    const active = rects.filter((element) => filling.includes(element.role) && element.rect && element.id !== "base" && element.start <= t + 1e-6 && element.end > t + 1e-6 && !(element.hide ?? []).some(([from, to]) => from <= t + 1e-6 && to > t + 1e-6));
     for (const region of regions) {
       const key = `region|${region.name}`;
       const empty = !active.some((element) => coverShare(element.rect, region) >= DENSITY.cover);

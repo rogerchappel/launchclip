@@ -15,6 +15,7 @@ import { emptyPlates, sceneWindows } from "@launchclip/core/transitions.mjs";
 import { storyBase } from "@launchclip/core/story.mjs";
 import { brandFrameLayout, intersectRects } from "@launchclip/core/brand-frame.mjs";
 import { checkBehindText, checkSubjectFace, sceneLayerOf, subjectCameraAt, subjectCameraOps, subjectLocator } from "@launchclip/core/subject-layer.mjs";
+import { castCaptionZones } from "@launchclip/core/cast-captions.mjs";
 import { captionZones, layoutPlan, layoutStateAt, withLayoutCameras } from "@launchclip/core/footage-layout.mjs";
 import { probeFullFrameMedia } from "./media_presence.js";
 
@@ -161,7 +162,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
     if (!produced || !shownEnd.has(scene.id)) return produced;
     // Only the scene's own element: a part (clip callouts) keeps its own timing.
     return (Array.isArray(produced) ? produced : [produced]).map((element) => (element && (element.id ?? scene.id) === scene.id ? { ...element, shownEnd: shownEnd.get(scene.id) } : element));
-  }, profile, captionBand, captionZones: resolved.base ? captionZones(resolved) : [] });
+  }, profile, captionBand, captionZones: resolved.base ? captionZones(resolved) : castCaptionZones(resolved) });
   // Footage-led: the recording fills the frame under everything (media, never a collision).
   if (resolved.base) elements.unshift({ id: "base", role: "media", rect: { x: 0, y: 0, width: canvas.width, height: canvas.height }, start: 0, end: Number(resolved.resolved?.duration ?? resolved.format?.duration), allowOcclusion: ["*"] });
   const report = checkLayout({ canvas, elements, profile, captionBand, duration: Number(resolved.resolved?.duration ?? resolved.format?.duration) || undefined });
@@ -205,7 +206,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
     canvas,
     elements: elements.length,
     // Every element's rect and window (caption plates and the density gate read them).
-    rects: elements.map((element) => ({ id: element.id, role: element.role, module: element.module ?? null, rect: element.rect, start: element.start, end: element.end, ...(element.fullFrame ? { fullFrame: true } : {}) })),
+    rects: elements.map((element) => ({ id: element.id, role: element.role, module: element.module ?? null, rect: element.rect, start: element.start, end: element.end, ...(element.fullFrame ? { fullFrame: true } : {}), ...(element.role === "caption" && element.hide?.length ? { hide: element.hide } : {}) })),
     // Full-frame media facts by scene id (the hold gate reads the moving spans).
     media,
     errors: findings.filter((finding) => finding.severity === "error").length,
