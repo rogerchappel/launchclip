@@ -4,6 +4,44 @@
 
 ### Changed
 
+- A one-prompt explainer from `launchclip make` is carried by characters.
+  With no media in `--assets`, an explainer or short-form script and make's
+  seeded style, the direction map casts one to three characters for the idea
+  (the subject as an object with a face, its parts as mascots), the
+  storyboard is built from `character-cameo` and `cast-scene` shots with
+  diagrams and cards as support, and the plan is checked for a character on
+  screen for at least half the runtime and in the opening. The seeded style
+  takes a playful tone when the prompt names none. `MAKE.json` `explainer`
+  records the cast. A style you choose, supplied footage, `--animation`,
+  promos and long form are unchanged.
+- The planner catches three finish-gate failures before the render: a card
+  with more words than its time on screen allows (`reading:`), an opening
+  that draws itself from an empty plate (`opening:`), and a video of only
+  line diagrams, step rows and text cards (`variety:`; the `variety` gate
+  fails it too, as `abstract-only`).
+- `make`'s concept and story stage succeeds on a bare prompt: the story may
+  cite general knowledge of the subject (never a figure, a date, a name or a
+  quote), the writer is told the structure the check holds it to, and the
+  stage stops at a 300 s budget instead of running on.
+- `make`'s script fits its word ceiling and ends on a call to action: an
+  overshoot is cut by whole sentences, and a narration with no call to
+  action ends on the writer's own, or a plain one ("Save this for later.").
+
+### Fixed
+
+- The ghosting gate counted a diagram's wiring (`from`, `to`, `point`,
+  `weight`, `style` values) as words to read: a 10-word `line-diagram` failed
+  as 33 words. Only copy is counted now.
+- The script check did not know "Save this …" as a call to action, though
+  the short-video rules ask the writer for it, and reported `cta-missing`.
+- A take that ran short of its target was reported as words that "cannot be
+  read" in the seconds the voice had just read them in (`fits-clock`).
+- A `character-cameo` drew a wide character (a blob, a cup) or a wide
+  gesture (a cheer) past the safe zone, failing the cast gate; it is moved
+  and, where needed, drawn smaller to fit its area.
+
+### Changed
+
 - `make` runs independent work at the same time: the descriptions of the
   files in `--assets`, the planner's opening while the second opening is
   designed, the two candidates of a comparison, and a show bible's reference
