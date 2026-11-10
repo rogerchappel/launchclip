@@ -72,7 +72,7 @@ export async function listCharacters(options = {}) {
       seen.add(id);
       try {
         const character = await readCharacter(file);
-        out.push({ id: character.id, name: character.name, personality: character.personality ?? null, style: character.style, voice: character.voice ?? null, build: character.params.build, hair: character.params.hair.style, source, file });
+        out.push({ id: character.id, name: character.name, personality: character.personality ?? null, style: character.style, voice: character.voice ?? null, build: character.params.build ?? null, hair: character.params.hair?.style ?? null, ...(character.params.kind ? { kind: character.params.kind } : {}), source, file });
       } catch (error) {
         out.push({ id, source, file, error: error.message });
       }

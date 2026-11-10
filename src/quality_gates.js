@@ -6,6 +6,8 @@
 //   coverageGate(ctx)   → {status, profile, measures, bands, findings}
 //   faceGate(ctx)       → {status, source, face_time, findings}
 //   constraintsGate(ctx) → {status, file, errors, …}: the app's CONSTRAINTS.json
+//   lipSyncGate(ctx)    → {status, scenes, lines, findings, errors}: drawn
+//     mouths against the voice (docs/ANIMATION_PIPELINE_RFC.md §8.2)
 //   qualityFindings(measures, profile) → critic-style findings
 //     (missed-opportunity, sparseness) the headless critic carries
 //   prototypeCut(resolved, words, {min, max}) → {cut, story} | null
@@ -20,7 +22,9 @@ import path from "node:path";
 import { DIRECTION_LANES, directionMeasures, validateDirection } from "@launchclip/core/direction.mjs";
 import { storyboardMeasures, unionIntervals } from "@launchclip/core/cadence.mjs";
 import { compareMeasures } from "@launchclip/core/profiles.mjs";
-import { storyBase } from "@launchclip/core/story.mjs";
+import { SPEAKING_MODULES, storyBase } from "@launchclip/core/story.mjs";
+import { resolveModule } from "@launchclip/core/modules.mjs";
+import { wordVisemes } from "@launchclip/core/characters/acting.mjs";
 import { faceIntervalsFromProbe } from "./cadence_measures.js";
 import { profileForStory } from "./profile_store.js";
 import { directionFileFor } from "./story_cli.js";
@@ -150,6 +154,120 @@ export function qualityFindings(measures, profile) {
     }
   }
   return findings;
+}
+
+// Lip sync. slack: how far a mouth may lead or trail a word; open: the
+// longest it may stay open past that with no voice under it (and openTotal,
+// the most over a whole scene); line: the shortest spoken line checked;
+// closedShare: the least share of a line's voiced time the mouth is open;
+// gap: a pause that ends a line.
+export const LIP_SYNC = Object.freeze({ slack: 0.12, open: 0.15, openTotal: 0.3, line: 0.2, closedShare: 0.25, gap: 0.35 });
+
+/**
+ * Lip sync: in every character scene (the rig's cast-scene and
+ * character-cameo, and sprite-scene), each drawn mouth against the voice.
+ * Fails when
+ * - a mouth is open with no speech under it (`mouth-open-silent`): open for
+ *   more than LIP_SYNC.open seconds clear of every word it could be saying
+ *   (its own words when the narration's words carry speakers, else any
+ *   word), or
+ * - a mouth is closed through a spoken line (`mouth-closed`): the narration
+ *   gives the character on screen a line and its mouth is open for less
+ *   than a quarter of it (a scene that left out `says`, or timed it
+ *   elsewhere). A line of pressed lips only ("Mmm.") is let through.
+ * The mouths are the ones both renderers play: each actor's speech changes
+ * from the resolved module (kit/core/characters/acting.mjs speechChanges).
+ * `skipped` with no character scene or nobody speaking; `not-checked` when
+ * mouths move and there are no narration words to hold them to. A character
+ * who speaks while off screen is not this gate's business.
+ */
+export function lipSyncGate({ resolved, words }) {
+  const L = LIP_SYNC;
+  const scenes = (resolved?.scenes ?? []).filter((scene) => SPEAKING_MODULES.includes(scene.module));
+  if (!scenes.length) return { status: "skipped", reason: "no character scenes" };
+  const timed = (words ?? []).filter((word) => Number.isFinite(Number(word?.start)) && Number(word.end) > Number(word.start)).map((word) => ({ ...word, start: Number(word.start), end: Number(word.end) }));
+  const speakers = timed.some((word) => typeof word.speaker === "string");
+  const findings = [];
+  let lines = 0, moving = 0, checked = 0;
+  for (const scene of scenes) {
+    let model;
+    try { model = resolveModule(scene, resolved); } catch { continue; /* validation reports a bad module */ }
+    const start = Number(scene.start), end = Number(scene.end);
+    const heard = timed.filter((word) => word.start >= start - 1e-6 && word.start < end - 1e-6).map((word) => ({ ...word, end: Math.min(word.end, end) }));
+    checked += 1;
+    for (const actor of model?.content?.actors ?? []) {
+      const open = mouthOpenSpans(actor.speech ?? [], start, end);
+      if (open.length) moving += 1;
+      if (!timed.length) continue;
+      const own = speakers ? heard.filter((word) => word.speaker === actor.id) : heard;
+      // Open with no speech under it.
+      const clear = subtractSpans(open, own.map((word) => [word.start - L.slack, word.end + L.slack]));
+      const longest = clear.reduce((best, span) => (span[1] - span[0] > best[1] - best[0] ? span : best), [0, 0]);
+      const total = clear.reduce((sum, [a, b]) => sum + b - a, 0);
+      if (longest[1] - longest[0] > L.open + 1e-6 || total > L.openTotal + 1e-6) {
+        const other = speakers ? heard.find((word) => word.speaker !== actor.id && clear.some(([a, b]) => word.start < b && word.end > a)) : null;
+        findings.push({ rule: "mouth-open-silent", scene: scene.id, character: actor.id, at: round(clear[0][0]), end: round(clear.at(-1)[1]), seconds: round(total),
+          detail: `${actor.id}'s mouth is open for ${round(total, 2)} s with no speech of its own under it (${round(clear[0][0], 2)}–${round(clear.at(-1)[1], 2)} s${other ? `, while ${other.speaker} speaks` : ""}); time \`says\` to its own words (says: "auto" in a dialogue), or drop it` });
+      }
+      // Closed through a spoken line.
+      if (!speakers) continue;
+      for (const line of spokenLines(own, L.gap)) {
+        const voiced = line.reduce((sum, word) => sum + word.end - word.start, 0);
+        if (voiced < L.line || line.every((word) => wordVisemes(word.text).every((shape) => shape === "closed"))) continue;
+        lines += 1;
+        const shown = overlapSeconds(open, line.map((word) => [word.start, word.end]));
+        if (shown >= voiced * L.closedShare) continue;
+        const text = line.map((word) => word.text).join(" ");
+        findings.push({ rule: "mouth-closed", scene: scene.id, character: actor.id, at: round(line[0].start), end: round(line.at(-1).end), seconds: round(voiced),
+          detail: `${actor.id} says "${text.length > 48 ? `${text.slice(0, 45)}...` : text}" (${round(line[0].start, 2)}–${round(line.at(-1).end, 2)} s) with its mouth ${shown > 0 ? "all but closed" : "closed"}; give it says: "auto" (or says ranges on these words) in scene ${scene.id}` });
+      }
+    }
+  }
+  if (!checked) return { status: "skipped", reason: "no character scene resolves" };
+  if (!timed.length) return moving ? { status: "not-checked", scenes: checked, reason: "mouths move but there are no narration words to check them against" } : { status: "skipped", reason: "nobody speaks" };
+  if (!moving && !lines) return { status: "skipped", reason: "no character speaks on screen" };
+  return { status: findings.length ? "failed" : "passed", scenes: checked, lines, findings: findings.slice(0, 20), errors: findings.slice(0, 20).map((finding) => `${finding.scene}: ${finding.detail}`) };
+}
+
+// When a mouth is open between start and end, from its speech changes ([{time, open}], closed before the first).
+function mouthOpenSpans(speech, start, end) {
+  const spans = [];
+  let from = null;
+  for (const change of [...speech].sort((a, b) => a.time - b.time)) {
+    if (change.open && from === null) from = change.time;
+    else if (!change.open && from !== null) { spans.push([from, change.time]); from = null; }
+  }
+  if (from !== null) spans.push([from, end]);
+  return spans.map(([a, b]) => [Math.max(a, start), Math.min(b, end)]).filter(([a, b]) => b > a);
+}
+
+// The parts of `spans` outside every span in `cover`.
+function subtractSpans(spans, cover) {
+  const covered = unionIntervals(cover.filter(([a, b]) => b > a));
+  const out = [];
+  for (const [a, b] of spans) {
+    let at = a;
+    for (const [c, d] of covered) {
+      if (d <= at || c >= b) continue;
+      if (c > at) out.push([at, c]);
+      at = Math.max(at, d);
+    }
+    if (at < b) out.push([at, b]);
+  }
+  return out;
+}
+
+const overlapSeconds = (spans, cover) => spans.reduce((sum, [a, b]) => sum + b - a, 0) - subtractSpans(spans, cover).reduce((sum, [a, b]) => sum + b - a, 0);
+
+// Words in order → lines: a pause of `gap` seconds or more starts a new one.
+function spokenLines(list, gap) {
+  const out = [];
+  for (const word of list) {
+    const line = out.at(-1);
+    if (line && word.start - line.at(-1).end < gap) line.push(word);
+    else out.push([word]);
+  }
+  return out;
 }
 
 /**

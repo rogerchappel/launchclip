@@ -19,6 +19,14 @@ export const MAKE_VOICES = Object.freeze(["kokoro", "elevenlabs", "test"]);
 export const MAKE_QUALITIES = Object.freeze(["draft", "high"]);
 // --card-backdrops: footage puts full-screen cards on the asset provider's clips (src/asset_provider.js).
 export const CARD_BACKDROPS = Object.freeze(["off", "footage"]);
+// --stop-after and --approve (docs/ANIMATION_PIPELINE_RFC.md §6.3): the places a character story can stop for a person's yes.
+export const MAKE_STOP_POINTS = Object.freeze(["bible"]);
+
+/** --approve bible[,…] (a string, a list or nothing) → the approved stop points, lower case. */
+export function approvals(value) {
+  if (value === undefined || value === null || value === false || value === "") return [];
+  return [...new Set((Array.isArray(value) ? value : [value]).flatMap((entry) => String(entry).split(",")).map((entry) => entry.trim().toLowerCase()).filter(Boolean))];
+}
 
 /** [flag, {boolean?, setting?}] in usage order. */
 export const MAKE_FLAGS = Object.freeze([
@@ -31,6 +39,9 @@ export const MAKE_FLAGS = Object.freeze([
   ["skeleton", { setting: true }],
   // A character story: the writers' room writes a script with speakers (src/make/animation.js).
   ["animation", { boolean: true, setting: true }],
+  // A character story's review stops: end the run awaiting approval after a stage, and approve it on the next run.
+  ["stop-after", {}],
+  ["approve", {}],
   // The narration's rate: calm (~135 wpm), standard (~150) or fast (~215; short-form's default).
   ["pace", { setting: true }],
   // A comment-keyword call to action ("Comment WORD and I'll send you <offer>"), said at the end and in the post caption.
@@ -146,6 +157,8 @@ export function makeOptionsFromFlags(flags = {}) {
     awareness: flags.awareness,
     skeleton: flags.skeleton,
     ...(flags.animation ? { animation: true } : {}),
+    stopAfter: flags["stop-after"],
+    approve: flags.approve,
     pace: flags.pace,
     ctaKeyword: flags["cta-keyword"],
     ctaOffer: flags["cta-offer"],
@@ -206,6 +219,9 @@ export function validateMakeOptions(options = {}) {
   if (options.longFormVisuals != null && !["model", "rules"].includes(String(options.longFormVisuals).toLowerCase())) throw new Error(`--long-form-visuals must be model or rules; got ${options.longFormVisuals}`);
   if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);
   if (options.animation != null && typeof options.animation !== "boolean") throw new Error(`--animation takes no value; got ${options.animation}`);
+  if (options.stopAfter != null && !MAKE_STOP_POINTS.includes(String(options.stopAfter).toLowerCase())) throw new Error(`--stop-after must be ${MAKE_STOP_POINTS.join(" or ")}; got ${options.stopAfter}`);
+  if (options.approve === true) throw new Error(`--approve names what is approved: --approve ${MAKE_STOP_POINTS.join(" | --approve ")}`);
+  for (const point of approvals(options.approve)) if (!MAKE_STOP_POINTS.includes(point)) throw new Error(`--approve must be ${MAKE_STOP_POINTS.join(" or ")}; got ${point}`);
   if (options.skeleton != null && !/^(auto|none|[a-z][a-z0-9-]{1,40})$/.test(String(options.skeleton).toLowerCase())) throw new Error(`--skeleton must be auto, none or a skeleton id (launchclip skeletons list); got ${options.skeleton}`);
   if (options.visualSimilarityLimit != null && !(Number(options.visualSimilarityLimit) > 0 && Number(options.visualSimilarityLimit) <= 1)) throw new Error(`--visual-similarity-limit must be above 0 and at most 1; got ${options.visualSimilarityLimit}`);
   ctaPlanOptions(options);

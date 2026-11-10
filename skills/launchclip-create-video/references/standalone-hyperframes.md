@@ -610,7 +610,11 @@ For a synthesised voice, write the script into `storyboard.json` and let
 `finish` synthesises the take into `assets/audio/narration.wav` and
 `NARRATION.json` (`launchclip.narration.v1`: the text, provider, voice, speed,
 `duration_seconds` and every word's `start`/`end`), then uses it for word
-anchors, captions, ducking and beat sync. `finish --voice <provider>`
+anchors, captions, ducking and beat sync. Under Kokoro each word also keeps
+its `phonemes` (`"b:60 ˈ:45 o:70 ʊ:70 t:55"`: each sound and the milliseconds
+the voice held it), which a character's mouth follows when it speaks the
+word (`says`); other voices have none and mouths follow the spelling. Never
+write or edit `phonemes` by hand. `finish --voice <provider>`
 overrides `provider` for one run. Takes are cached in `.launchclip/voice` by
 text, provider, voice and speed, so an unchanged script is never synthesised
 twice.

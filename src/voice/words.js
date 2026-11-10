@@ -285,7 +285,7 @@ export function validateWords(words, duration, { tolerance = 1e-3 } = {}) {
   return words;
 }
 
-/** Clamp into the audio, enforce order, round to milliseconds. */
+/** Clamp into the audio, enforce order, round to milliseconds. A word keeps its phonemes (kokoro.js wordPhonemes). */
 export function finalizeWords(words, duration) {
   const limit = Math.floor(duration * 1000) / 1000;
   const result = [];
@@ -297,7 +297,7 @@ export function finalizeWords(words, duration) {
       if (previous.end > start) previous.end = start;
     }
     const end = Math.min(limit, Math.max(round3(word.end), round3(start + 0.001)));
-    result.push({ text: word.text, start, end });
+    result.push({ text: word.text, start, end, ...(typeof word.phonemes === "string" && word.phonemes ? { phonemes: word.phonemes } : {}) });
   }
   return validateWords(result, duration);
 }

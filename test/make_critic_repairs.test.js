@@ -4,8 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { runMake } from "../src/make/index.js";
-import { changedScenes, criticImproved, criticProblems, criticRepairBudget, criticRepairRoute, criticScore, findingScenes, sceneAt } from "../src/make/critic_repair.js";
-import { MAKE_NEEDS_REPAIR_EXIT, parseFlags, runCli } from "../src/cli.js";
+import { RETAKES_SCHEMA, changedScenes, criticImproved, criticProblems, criticRepairBudget, criticRepairRoute, criticScore, failingShots, findingScenes, retakeProblems, retakeRound, retakeStep, retakesDocument, sceneAt, scopedRetake } from "../src/make/critic_repair.js";
+import { MAKE_EXIT_CODES, MAKE_NEEDS_REPAIR_EXIT, makeExitCode, parseFlags, runCli } from "../src/cli.js";
 import { makeOptionsFromFlags } from "../src/make/options.js";
 import { PROMPT, assetsDir, fakeFinish, fakeInventory, fakeModel } from "./helpers/make_fakes.js";
 
@@ -160,4 +160,52 @@ test("the round logic: budget, score, progress, scene mapping, routing and chang
   assert.equal(changedScenes(story, retimed), null);
   const restyled = { ...structuredClone(story), grammar: "snappy" };
   assert.equal(changedScenes(story, restyled), null);
+});
+
+test("the animation path's exit codes: distinct by default, and other videos keep today's", () => {
+  const animation = { routing: { kind: "animation" } };
+  assert.deepEqual(MAKE_EXIT_CODES, { ready: 0, failed: 1, "needs-repair": 2, "awaiting-approval": 3, "ready-for-review": 4 });
+  assert.deepEqual(["ready", "failed", "needs-repair", "awaiting-approval", "ready-for-review", "stopped"].map((status) => makeExitCode({ ...animation, status })), [0, 1, 2, 3, 4, 0]);
+  assert.deepEqual(["ready", "failed", "needs-repair", "awaiting-approval", "ready-for-review"].map((status) => makeExitCode({ routing: { lane: "motion" }, status })), [0, 1, 2, 0, 0], "no existing caller breaks");
+  assert.equal(makeExitCode({ ...animation, status: "needs-repair" }, { allowNeedsRepair: true }), 0);
+  assert.equal(makeExitCode({ ...animation, status: "ready-for-review" }, { allowNeedsRepair: true }), 4, "--allow-needs-repair is about needs-repair only");
+});
+
+test("the retake logic: failing shots, the cheapest step, a scoped storyboard and the record", () => {
+  const shots = [{ id: "desk", frames: 65, beats: ["setup"] }, { id: "ask", frames: 191, beats: ["problem", "attempt"] }, { id: "test", frames: 142, beats: ["turn"] }, { id: "push", frames: 40, beats: ["attempt"] }];
+  const acting = finding("major", "acting", { id: "a1", scenes: ["ask"] });
+  const minor = finding("minor", "acting", { id: "m1", scenes: ["desk"] });
+  const twoShots = finding("blocking", "lip-sync", { id: "l1", scenes: ["test", "ask", "gone"] });
+
+  assert.deepEqual(failingShots([acting, minor, twoShots], shots), [
+    { id: "test", frames: 142, beats: ["turn"], findings: ["l1"], categories: ["lip-sync"] },
+    { id: "ask", frames: 191, beats: ["problem", "attempt"], findings: ["a1", "l1"], categories: ["acting", "lip-sync"] }
+  ], "blocking and major only, the smallest shot first, unknown scenes left out");
+
+  // Step 1: redirect the shots the findings name.
+  assert.deepEqual(retakeStep({ verdict: "repair" }, [acting, minor], shots), { step: "redirect", shots: ["ask"], failing: ["ask"], beats: [], reason: "a finding names the shot" });
+  // Step 3: the beat, when the critic asks for a replan, the story is wrong there, or a redirect did not fix it.
+  assert.deepEqual(retakeStep({ verdict: "replan" }, [acting], shots), { step: "replan-beat", shots: ["ask", "push"], failing: ["ask"], beats: ["problem", "attempt"], reason: "the critic asked for a replan" });
+  assert.equal(retakeStep({ verdict: "repair" }, [finding("major", "narrative", { scenes: ["test"] })], shots).step, "replan-beat");
+  const again = retakeStep({ verdict: "repair" }, [acting], shots, [{ step: "redirect", shots: ["ask"], kept: true }]);
+  assert.deepEqual([again.step, again.reason], ["replan-beat", "the shot was redirected and still fails"]);
+  assert.equal(retakeStep({ verdict: "repair" }, [acting, twoShots], shots, [{ step: "redirect", shots: ["ask"], kept: true }]).step, "redirect", "a shot not yet redirected keeps the round on step 1");
+  assert.deepEqual(retakeStep({ verdict: "repair" }, [minor, finding("major", "narrative", { scenes: [] })], shots), { step: null, shots: [], failing: [], beats: [], reason: "the blocking and major findings name no shot" });
+
+  // Only the named scenes are taken, and their timing holds.
+  const before = { title: "t", scenes: [{ id: "a", start: 0, end: "word:x", params: { pose: "stand" } }, { id: "b", start: "word:x", end: 6, track: 1, params: { pose: "stand" } }] };
+  const after = { title: "changed", scenes: [{ id: "a", start: 0, end: 3, params: { pose: "point" } }, { id: "b", start: "word:x", end: 6, track: 0, params: { pose: "wave" } }, { id: "c", start: 6, end: 7 }] };
+  const scoped = scopedRetake(before, after, ["b"]);
+  assert.deepEqual(scoped.story, { title: "t", scenes: [before.scenes[0], { id: "b", start: "word:x", end: 6, track: 1, params: { pose: "wave" } }] });
+  assert.deepEqual(scoped.changed, ["b"]);
+  assert.deepEqual(scoped.ignored, ["scene a is outside the retake", "new scene c"]);
+  assert.deepEqual(scopedRetake(before, { scenes: [{ ...before.scenes[0], end: 2 }] }, ["a"]), { story: before, changed: [], ignored: ["scene a's start and end (the animatic locked the timing)"] });
+
+  assert.deepEqual(retakeProblems([acting, minor], ["ask"]), ["critic (major acting, scene ask): major acting problem"]);
+  const plan = retakeStep({ verdict: "repair" }, [acting, minor], shots);
+  const round = retakeRound({ round: 1, plan, findings: [acting, minor], before: criticScore({ verdict: "repair", findings: [acting, minor] }) });
+  assert.deepEqual({ round: round.round, step: round.step, shots: round.shots, findings: round.findings, verdict_before: round.verdict_before, kept: round.kept }, { round: 1, step: "redirect", shots: ["ask"], findings: [{ id: "a1", severity: "major", category: "acting", message: "major acting problem", shots: ["ask"] }], verdict_before: "repair", kept: false });
+  assert.deepEqual(retakesDocument([round], { review: "animatic", verdict: "repair" }), { schema: RETAKES_SCHEMA, review: "animatic", limit: 3, status: "needs-repair", verdict: "repair", rounds: [round] });
+  assert.equal(retakesDocument([], { verdict: "ship" }).status, "ship");
+  assert.equal(RETAKES_SCHEMA, "launchclip.retakes.v1");
 });

@@ -1,3 +1,4 @@
+import path from "node:path";
 import { analyzeRender, initWorkspace, runDemo, planVideo, writeCaptions, renderVideo, submitReview, writeReview, runPacket, validateWorkspace } from "./pipeline.js";
 import { writeTeleprompter, alignRecording, renderMotion } from "./talking_head.js";
 import { generateMusic } from "./music.js";
@@ -233,6 +234,7 @@ export async function runCli(argv, io = {}) {
         sfx: flags.sfx,
         candidate: flags.candidate,
         prototype: Boolean(flags.prototype),
+        animatic: Boolean(flags.animatic),
         into: flags.into,
         comparison: flags.comparison,
         kind: flags.kind,
@@ -240,7 +242,15 @@ export async function runCli(argv, io = {}) {
         at: flags.at
       }, productionAdapters.finish).finally(restoreCache);
       throwIfCostLimited(tracker);
-      stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatFinishSummary(report));
+      // --review: a vision model reviews the render (the staging review of an
+      // animatic, else the critic); --retake: while it does not say ship, the
+      // failing shots are retaken and only they render again (src/make/retakes.js).
+      const reviewLines = [];
+      if ((flags.review || flags.retake) && report.status !== "failed") {
+        Object.assign(report, await finishReview(report, flags, { env: productionAdapters.finish?.env ?? process.env, hooks: productionAdapters.finishReview ?? {}, finishAdapters: productionAdapters.finish, say: (line) => stderr.write(`${line}\n`), lines: reviewLines }));
+        throwIfCostLimited(tracker);
+      }
+      stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : `${formatFinishSummary(report)}${reviewLines.map((line) => `${line}\n`).join("")}`);
       if (report.status === "failed") {
         const failedStage = report.stages.find((stage) => stage.status === "failed");
         throw new Error(`launchclip finish failed at the ${failedStage?.name ?? "unknown"} stage: ${failedStage?.error ?? ""}`.trim());
@@ -308,7 +318,9 @@ export async function runCli(argv, io = {}) {
       stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatMakeSummary(report));
       if (report.status === "failed") throw new Error(`launchclip make failed at the ${report.failed_stage} stage: ${report.stages[report.failed_stage]?.error ?? ""}\nnext: ${report.next_steps[0] ?? ""}`.trim());
       // A rendered video with a failed gate is not a finished one: its own exit code, so a caller can tell it from a failure (1) and from success (0).
-      if (report.status === "needs-repair" && !flags["allow-needs-repair"]) throw needsRepairError(report);
+      // The animation path also tells awaiting-approval (3) and ready-for-review (4) apart (makeExitCode).
+      const exit = makeExitCode(report, { allowNeedsRepair: Boolean(flags["allow-needs-repair"]) });
+      if (exit) throw makeStatusError(report, exit);
       return;
     } else if (command === "history") {
       if (historyInvocation.action !== "check") throw new Error(`launchclip history needs an action: launchclip history check <dir> [--json]${historyInvocation.action ? ` (got ${historyInvocation.action})` : ""}`);
@@ -407,8 +419,8 @@ export async function runCli(argv, io = {}) {
   } catch (error) {
     // A wrapped or downstream failure after the spending limit tripped is reported as the limit.
     const failure = tracker.limitError() ?? (error instanceof Error ? error : new Error(String(error)));
-    // A needs-repair make already printed its report, costs included.
-    if (failure.exitCode !== MAKE_NEEDS_REPAIR_EXIT) failure.costs = tracker.summary();
+    // A make that exits on its status (needs-repair and the like) already printed its report, costs included.
+    if (!failure.makeStatus) failure.costs = tracker.summary();
     throw failure;
   } finally {
     if (globalThis.fetch === tracker.fetch) globalThis.fetch = previousFetch;
@@ -418,11 +430,68 @@ export async function runCli(argv, io = {}) {
 /** launchclip make's exit code when the video rendered but a gate failed (MAKE.json status "needs-repair"). */
 export const MAKE_NEEDS_REPAIR_EXIT = 2;
 
-function needsRepairError(report) {
+/**
+ * launchclip make's exit codes by MAKE.json status. Every kind of video: 0,
+ * 1 (failed) and 2 (needs-repair). The animation path (routing.kind
+ * "animation") also returns 3 and 4 by default, so a host can tell a run
+ * that waits for an approval, or for a review no model could give, from a
+ * finished one without reading MAKE.json (docs/ANIMATION_PIPELINE_RFC.md §7).
+ */
+export const MAKE_EXIT_CODES = Object.freeze({ ready: 0, failed: 1, "needs-repair": MAKE_NEEDS_REPAIR_EXIT, "awaiting-approval": 3, "ready-for-review": 4 });
+const ANIMATION_ONLY_EXITS = ["awaiting-approval", "ready-for-review"];
+
+/** The exit code for a make report. allowNeedsRepair (--allow-needs-repair): needs-repair exits 0. */
+export function makeExitCode(report, { allowNeedsRepair = false } = {}) {
+  const status = report?.status;
+  if (status === "failed") return MAKE_EXIT_CODES.failed;
+  if (status === "needs-repair") return allowNeedsRepair ? 0 : MAKE_EXIT_CODES["needs-repair"];
+  if (ANIMATION_ONLY_EXITS.includes(status) && report?.routing?.kind === "animation") return MAKE_EXIT_CODES[status];
+  return 0;
+}
+
+function makeStatusError(report, exitCode) {
   const failed = Object.entries(report.gates ?? {}).filter(([, gate]) => gate.status === "failed").map(([name]) => name);
-  const error = new Error(`launchclip make: needs-repair (${failed.join(", ") || "a gate"} failed); the video is rendered but not finished. See ${report.project}/MAKE.json. Pass --allow-needs-repair to exit 0.`);
-  error.exitCode = MAKE_NEEDS_REPAIR_EXIT;
+  const pending = Object.entries(report.gates ?? {}).filter(([, gate]) => gate.status === "pending").map(([name]) => name);
+  const message = report.status === "needs-repair"
+    ? `launchclip make: needs-repair (${failed.join(", ") || "a gate"} failed); the video is rendered but not finished. See ${report.project}/MAKE.json. Pass --allow-needs-repair to exit 0.`
+    : report.status === "awaiting-approval"
+      ? `launchclip make: awaiting-approval${report.stopped?.after ? ` (stopped after ${report.stopped.after})` : ""}; look at what it made, then run it again with --approve. See ${report.project}/MAKE.json.`
+      : `launchclip make: ready-for-review (${pending.join(", ") || "a gate"} pending); the video is rendered but nothing reviewed it. See ${report.project}/MAKE.json.`;
+  const error = new Error(message);
+  error.exitCode = exitCode;
+  error.makeStatus = report.status;
   return error;
+}
+
+// finish --review / --retake: the review of a finished render, then retakes.
+// hooks (tests, a host): {client: {client, provider, model, vision}, critic, redirect, render}.
+async function finishReview(report, flags, { env, hooks = {}, finishAdapters = {}, say = () => {}, lines = [] } = {}) {
+  const { selectMakeModel, createMakeClient } = await import("./make/models.js");
+  const { reviewAnimatic, runHeadlessCritic } = await import("./make/critic.js");
+  const { retakeProject, runRetakes } = await import("./make/retakes.js");
+  const { criticRepairBudget } = await import("./make/critic_repair.js");
+  const project = report.project;
+  const staging = Boolean(report.animatic);
+  const model = hooks.client ?? createMakeClient(selectMakeModel(flags.model, env).spec);
+  if (!model.vision) throw new Error(`launchclip finish --review needs a model that takes images; ${model.provider}:${model.model} does not (launchclip doctor --models says what your keys cover; pass --model provider:model)`);
+  const shots = (await retakeProject(project)).shots;
+  const quality = report.gates?.coverage?.findings ?? [];
+  const critic = hooks.critic ?? ((args) => (staging ? reviewAnimatic : runHeadlessCritic)({ project, client: model.client, model: model.model, provider: model.provider, ...(staging ? {} : { quality }), ...args }));
+  say(`model: PAID call to ${model.provider} ${model.model} (${staging ? "staging review of the animatic" : "headless critic"} over qa/critic-sheets/)`);
+  const first = await critic({ shots });
+  if (first.status !== "written") throw new Error(`launchclip finish --review: the review did not run (${first.reason ?? first.status})`);
+  const file = path.relative(project, first.file ?? "") || first.file;
+  const review = { status: "written", file, verdict: first.verdict, findings: first.findings, reference_sheets: first.reference_sheets ?? [], warnings: first.warnings ?? [] };
+  lines.push(`review: ${first.verdict} (${first.findings} finding${first.findings === 1 ? "" : "s"}; ${file}${review.reference_sheets.length ? `; ${review.reference_sheets.length} reference sheet${review.reference_sheets.length === 1 ? "" : "s"} shown` : ""})`);
+  if (!flags.retake) return { review };
+  const retakes = await runRetakes({
+    project, review: staging ? "animatic" : "final", critique: first.critique, rounds: criticRepairBudget(flags["critic-repairs"]), client: model.client, model: model.model, provider: model.provider,
+    finish: { renderer: report.renderer, quality: report.quality, ...(flags.music != null ? { music: flags.music } : {}), ...(flags.voice != null ? { voice: flags.voice } : {}), ...(flags.sfx != null ? { sfx: flags.sfx } : {}), ...(flags.concurrency != null ? { concurrency: flags.concurrency } : {}) },
+    finishAdapters, say, critic, ...(hooks.redirect ? { redirect: hooks.redirect } : {}), ...(hooks.render ? { render: hooks.render } : {})
+  });
+  for (const round of retakes.rounds) lines.push(`retake ${round.round}: ${round.step ?? "none"} ${round.shots.join(", ")}: ${round.kept ? `kept (${round.verdict_before} → ${round.verdict_after}; rendered ${round.rendered.join(", ")})` : `undone (${round.error ?? `no better: ${round.verdict_after}`})`}`);
+  lines.push(`retakes: ${retakes.status} after ${retakes.rounds.length} round${retakes.rounds.length === 1 ? "" : "s"} (${path.relative(project, retakes.file)})`);
+  return { review: { ...review, verdict: retakes.verdict }, retakes: { file: path.relative(project, retakes.file), status: retakes.status, verdict: retakes.verdict, rounds: retakes.rounds } };
 }
 
 function throwIfCostLimited(tracker) {
@@ -574,7 +643,13 @@ export function parseFlags(args) {
       throw new Error(`Unexpected argument: ${token}`);
     }
     const name = token.slice(2);
-    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "allow-needs-repair" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "base-edited" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "face-track" || name === "no-direction" || name === "prototype" || name === "overshoot" || name === "off" || name === "refresh-free-vision-models" || name === "capacity" || name === "still" || name === "models" || name === "no-sheet" || name === "no-pin") {
+    // make --approve bible names what is approved; elsewhere --approve is a switch.
+    if (name === "approve" && /^(bible|animatic)(,(bible|animatic))*$/.test(args[index + 1] ?? "")) {
+      flags[name] = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "allow-needs-repair" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "base-edited" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "face-track" || name === "no-direction" || name === "prototype" || name === "overshoot" || name === "off" || name === "refresh-free-vision-models" || name === "capacity" || name === "still" || name === "models" || name === "no-sheet" || name === "no-pin" || name === "animatic" || name === "retake") {
       flags[name] = true;
       continue;
     }

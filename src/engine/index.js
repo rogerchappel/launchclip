@@ -16,7 +16,7 @@ export { withStateDirs } from "../state_dirs.js";
 // Pure functions an app can call without an engine: the recording edit plan
 // and the gates read only their arguments (and the project files they name).
 export { normalizeRecordingTranscript, planRecordingEdit } from "../recording_edit.js";
-export { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, prototypeCut, prototypeScope, qualityFindings, readProjectDirection } from "../quality_gates.js";
+export { LIP_SYNC, constraintsGate, coverageGate, directionGate, faceGate, gateProfile, lipSyncGate, prototypeCut, prototypeScope, qualityFindings, readProjectDirection } from "../quality_gates.js";
 // Direction constraints and footage notes (docs/KIT_CONTRACTS.md): pass
 // planStoryboard({constraints, media}) the parsed rules and the supplied clips.
 export { checkConstraints, constrainProvider, fillConstraints, parseConstraints } from "../constraints.js";

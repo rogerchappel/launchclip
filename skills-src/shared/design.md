@@ -16,7 +16,12 @@ video. When the brief describes its own people or supplies a reference image,
 design them first with the `launchclip-character-design` skill (`launchclip
 cast create <id> --describe "…"`, then look at `cast/<id>.sheet.png`) and
 list each by id: `{"id": "<id>"}`. A reference image maps to traits, never to
-a real person's likeness.
+a real person's likeness. A cast need not be people: the starters include
+animals (`mochi`, `biscuit`, `rusty`…), brand-coloured mascots (`bloop`,
+`twinkle`…) and objects with faces (`ping` the phone, `byte` the laptop,
+`latte` the cup, `watt` the bulb, `penny` the coin…), which take the same
+poses, expressions and cues as people and can stand for an idea (the
+product, the problem, the cost) beside them.
 
 ### Direction guardrails
 
