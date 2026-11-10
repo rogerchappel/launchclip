@@ -9,8 +9,8 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {EXPRESSIONS, POSES, normalizeRigParams, poseJoints, rigFingerprint} from '@launchclip/core/characters/rig.mjs';
 import {RETIRED_CAST, STARTER_CAST, STARTER_IDS, STARTER_KIND_IDS, characterLook, starterCharacter} from '@launchclip/core/characters/cast.mjs';
-import {KINDS, KIND_GROUPS, KIND_NAMES, KIND_SIZES, KIND_STAGE, kindsOf} from '@launchclip/core/characters/kinds.mjs';
-import {DRAWING_STYLES, drawCharacter, stageHeight, styleGeometry, styleHeight} from '@launchclip/core/characters/styles.mjs';
+import {KINDS, KIND_GROUPS, KIND_MARKS, KIND_NAMES, KIND_SIZES, KIND_STAGE, isFourLegged, kindsOf} from '@launchclip/core/characters/kinds.mjs';
+import {DRAWING_STYLES, STICK_STYLES, drawCharacter, stageHeight, styleGeometry, styleHeight} from '@launchclip/core/characters/styles.mjs';
 import {drawingBounds, partBounds} from '@launchclip/core/characters/bounds.mjs';
 import {characterView} from '@launchclip/core/characters/view.mjs';
 import {CHARACTER_SETS, PEOPLE_SET_NAMES, generateCast} from '@launchclip/core/characters/generate.mjs';
@@ -40,8 +40,8 @@ test('people are untouched: every starter person keeps its look in every style, 
 });
 
 test('a kind takes kind, size and three colours, in a fixed shape, and refuses a person\'s params by name', () => {
-  assert.equal(KIND_NAMES.length, 20);
-  assert.deepEqual(KIND_GROUPS.map(group => kindsOf(group).length), [8, 4, 8]);
+  assert.equal(KIND_NAMES.length, 23);
+  assert.deepEqual(KIND_GROUPS.map(group => kindsOf(group).length), [11, 4, 8]);
   for (const kind of KIND_NAMES) {
     const params = normalizeRigParams({kind});
     assert.deepEqual(Object.keys(params), ['kind', 'colors'], `${kind}: medium is not stored`);
@@ -56,16 +56,17 @@ test('a kind takes kind, size and three colours, in a fixed shape, and refuses a
   assert.throws(() => normalizeRigParams({kind: 'cup', colors: {top: 'red'}}), /colors\.top is not a colour slot of a cup \(allowed: body, detail, accent\)/);
   assert.throws(() => normalizeRigParams({kind: 'cup', colors: {body: 'sparkly'}}), /colors\.body must be a palette colour/);
   assert.throws(() => normalizeRigParams({kind: 'cup', size: 'huge'}), /size must be one of small, medium, large/);
-  assert.throws(() => normalizeRigParams({kind: 'dragon'}), /kind must be person or one of cat, dog/);
+  assert.throws(() => normalizeRigParams({kind: 'dragon'}), /kind must be person or one of stallion, mare, foal, cat, dog/);
   // A person still refuses a kind's fields.
   assert.throws(() => normalizeRigParams({skin: 'tan', hair: {style: 'bob'}, size: 'small'}), /size is not a rig param/);
 });
 
 test('the starter cast has about two dozen animals, mascots and objects: every kind, a personality and a voice each, no id shared with a generated name', () => {
-  assert.equal(STARTER_KIND_IDS.length, 24);
+  assert.equal(STARTER_KIND_IDS.length, 30);
+  assert.deepEqual(STARTER_KIND_IDS.slice(0, 6), ['comet', 'duchess', 'sprig', 'misty', 'copper', 'shadow'], 'the horses come first');
   const kinds = STARTER_KIND_IDS.map(id => starterCharacter(id).params.kind);
   assert.deepEqual([...new Set(kinds)].sort(), [...KIND_NAMES].sort(), 'every kind has a starter');
-  assert.equal(STARTER_IDS.indexOf(STARTER_KIND_IDS[0]), STARTER_IDS.length - 24, 'they come after the people, so earlier ids keep their places');
+  assert.equal(STARTER_IDS.indexOf(STARTER_KIND_IDS[0]), STARTER_IDS.length - 30, 'they come after the people, so earlier ids keep their places');
   const generated = new Set(Object.keys(CHARACTER_SETS).flatMap(set => [1, 2, 3].flatMap(k => generateCast({seed: `s${k}`, set, count: 12}).map(member => member.id))));
   for (const id of STARTER_KIND_IDS) {
     const entry = STARTER_CAST.find(one => one.id === id);
@@ -289,4 +290,128 @@ test('the face of a kind stays on its head or body at rest and in every pose\'s 
       assert.ok(face.left > whole.left && face.right < whole.right && face.top > whole.top && face.bottom < whole.bottom, `${id} ${pose}: the face is inside the drawing`);
     }
   }
+});
+
+// ---------------------------------------------------------------------------
+// Horses (four legs) and stick figures
+
+const HORSES = ['stallion', 'mare', 'foal'];
+const drawn = (style, params, pose, {facing = 'right', seated = pose === 'sit'} = {}) => {
+  const geometry = styleGeometry(style, params);
+  return drawCharacter(style, params, characterLook(params, {style}).colors, {id: 'c', joints: poseJoints(pose, {geometry, seated, facing}), facing, expression: 'neutral', expressions: ['neutral']});
+};
+const boxOf = (drawing, part) => partBounds(drawing, node => node.id === `c-${part}`);
+
+test('a horse family: a stallion, a mare and a foal on four legs, told apart by size and build, with coats and white markings', () => {
+  assert.deepEqual(KIND_NAMES.slice(0, 3), HORSES, 'the horses come first');
+  assert.ok(HORSES.every(isFourLegged) && !isFourLegged('cat'));
+  const [sire, dam, foal] = HORSES.map(kind => normalizeRigParams({kind}));
+  assert.ok(styleHeight('flat', sire) > styleHeight('flat', dam) && styleHeight('flat', dam) > styleHeight('flat', foal) + 100);
+  // The foal is leggy: its legs are a larger share of its height, and its body is short.
+  const legShare = params => -styleGeometry('flat', params).hipY / styleHeight('flat', params);
+  assert.ok(legShare(foal) > legShare(dam) + 0.03);
+  assert.ok(KINDS.foal.dims.b < KINDS.mare.dims.b * 0.7 && KINDS.stallion.dims.neckW > KINDS.mare.dims.neckW);
+  assert.deepEqual([...KIND_MARKS].sort(), ['blaze', 'socks', 'star']);
+  assert.deepEqual(normalizeRigParams({kind: 'mare', marks: ['socks', 'blaze', 'socks']}), {kind: 'mare', marks: ['blaze', 'socks'], colors: KINDS.mare.colors});
+  assert.deepEqual(Object.keys(normalizeRigParams({kind: 'mare', marks: []})), ['kind', 'colors'], 'no marks, nothing stored');
+  assert.throws(() => normalizeRigParams({kind: 'mare', marks: ['stripes']}), /marks\[0\] must be one of blaze, socks, star/);
+  assert.throws(() => normalizeRigParams({kind: 'cat', marks: ['blaze']}), /marks does not apply to a cat/);
+  // Markings are white shapes in the drawing: socks on the four lower legs, a blaze down the face.
+  const white = params => JSON.stringify(drawn('chibi', params, 'stand')).split('#f7f5f0').length - 1;
+  assert.equal(white(dam), 0);
+  assert.ok(white(normalizeRigParams({kind: 'mare', marks: ['socks']})) >= 4 && white(normalizeRigParams({kind: 'mare', marks: ['blaze']})) >= 1);
+  // Starters: the six horses resolve, with coats in bay, black, grey and chestnut.
+  const bodies = new Set(STARTER_KIND_IDS.slice(0, 6).map(id => starterCharacter(id).params.colors.body));
+  assert.equal(bodies.size, 4);
+});
+
+test('a horse faces the way its scene faces it, and a positive leg angle always swings the leg forward', () => {
+  for (const kind of HORSES) for (const facing of ['left', 'right']) {
+    const params = normalizeRigParams({kind});
+    const ahead = facing === 'right' ? 1 : -1;
+    const stand = drawn('chibi', params, 'stand', {facing});
+    const head = boxOf(stand, 'head'), body = boxOf(stand, 'torso');
+    assert.ok(ahead * ((head.left + head.right) / 2) > 60, `${kind} ${facing}: the head is at the front`);
+    assert.ok(body.right - body.left > 1.3 * (KINDS[kind].dims.b), `${kind}: a long body seen from the side`);
+    // point lifts the facing foreleg forward; the other three stay down.
+    const point = drawn('chibi', params, 'point', {facing});
+    const side = facing === 'right' ? 'r' : 'l';
+    const hoof = d => { const fore = boxOf(d, `fore-${side}`); return ahead > 0 ? fore.right : -fore.left; };
+    assert.ok(hoof(point) > hoof(stand) + 40, `${kind} ${facing}: the pointing foreleg reaches forward`);
+    assert.ok(Math.abs(boxOf(point, `leg-${side}`).bottom - boxOf(stand, `leg-${side}`).bottom) < 1, 'the hind legs stay planted');
+  }
+  // Mirrored exactly: left is right flipped.
+  const params = normalizeRigParams({kind: 'mare'});
+  const right = drawingBounds(drawn('chibi', params, 'stand', {facing: 'right'})), left = drawingBounds(drawn('chibi', params, 'stand', {facing: 'left'}));
+  assert.ok(Math.abs(right.right + left.left) < 0.6 && Math.abs(right.left + left.right) < 0.6 && Math.abs(right.top - left.top) < 0.6);
+});
+
+test('every pose means something on four legs: no cue fails, the feet stay on the floor, and seated it lies down', () => {
+  for (const kind of HORSES) {
+    const params = normalizeRigParams({kind});
+    const geometry = styleGeometry('chibi', params);
+    assert.ok(geometry.noAim, 'a point is a lifted foreleg and a nod, not an aimed arm');
+    const standing = drawingBounds(drawn('chibi', params, 'stand'));
+    for (const pose of POSES) {
+      const joints = poseJoints(pose, {geometry, seated: pose === 'sit'});
+      for (const key of ['armL', 'armR', 'foreL', 'foreR']) assert.ok(Math.abs(joints[key]) <= 175 && Number.isFinite(joints[key]), `${kind} ${pose} ${key}`);
+      if (pose !== 'sit') for (const key of ['armL', 'armR']) assert.ok(joints[key] >= -15 && joints[key] <= 70, `${kind} ${pose}: a foreleg swings a little back or forward, never overhead (${joints[key]})`);
+      const box = drawingBounds(drawn('chibi', params, pose));
+      assert.ok(box.bottom < 40, `${kind} ${pose}: nothing goes under the floor (${box.bottom})`);
+      if (!['sit', 'slump', 'facepalm'].includes(pose)) assert.ok(box.top < standing.top + 40, `${kind} ${pose}: stands`);
+    }
+    // Lying down: in the sit pose and in any pose of a seated set, the body is on the floor and much lower.
+    for (const pose of ['sit', 'wave', 'cheer', 'point']) {
+      const lying = drawingBounds(drawn('chibi', params, pose, {seated: true}));
+      assert.ok(lying.top > standing.top + 0.5 * -geometry.hipY && lying.bottom < 60, `${kind} seated ${pose}: lies down`);
+    }
+  }
+  // In a scene: a horse in a seated set resolves and passes the gate, and a point at another character never throws.
+  const story = set => ({schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1920, height: 1080, fps: 30, duration: 6}, brand: BRAND, cast: {style: 'chibi', characters: [{id: 'duchess'}, {id: 'maya'}]},
+    scenes: [{id: 'h', module: 'cast-scene', start: 0, end: 6, params: {set, cast: [{id: 'duchess', cues: [{at: 1, pose: 'point', target: {character: 'maya'}}, {at: 3, pose: 'cheer'}, {at: 4.5, pose: 'think'}]}, {id: 'maya'}]}}]});
+  for (const set of ['standing', 'sofa', 'desk-laptop']) assert.deepEqual(castGate(resolveStory(story(set), {words: []})).findings, [], set);
+});
+
+test('stick figures: in stick and stick-classic every kind is a few lines, with every part id, and the classic one is ink on paper', () => {
+  const count = node => (node && typeof node === 'object' ? (['path', 'ellipse'].includes(node.tag) ? 1 : 0) + (node.children ?? []).reduce((sum, child) => sum + count(child), 0) : 0);
+  const fills = (node, out = new Set()) => { if (node && typeof node === 'object') { for (const key of ['fill', 'stroke']) if (/^#/.test(node.attrs?.[key] ?? '')) out.add(node.attrs[key].toLowerCase()); (node.children ?? []).forEach(child => fills(child, out)); } return out; };
+  assert.deepEqual([...STICK_STYLES], ['stick', 'stick-classic']);
+  for (const kind of KIND_NAMES) {
+    const params = normalizeRigParams({kind});
+    const full = count(drawn('chibi', params, 'stand'));
+    for (const style of STICK_STYLES) {
+      const stick = drawn(style, params, 'stand');
+      assert.ok(count(stick) <= full + 4, `${kind} ${style}: no more shapes than the full drawing (${count(stick)} vs ${full})`);
+      for (const pose of POSES) assert.ok(Number.isFinite(drawingBounds(drawn(style, params, pose)).top));
+    }
+    // The classic figure: nothing but ink, paper and white.
+    const classic = fills(drawn('stick-classic', params, 'stand'));
+    for (const hex of classic) assert.ok(['#221d27', '#231e28', '#fbf9f4', '#ffffff', '#000000'].includes(hex), `${kind} stick-classic: ${hex}`);
+    // A stick figure with a trunk has a spine instead, so it is much narrower below the head than the full figure.
+    if (KINDS[kind].dims.plan === 'headed') {
+      const torso = d => { const box = partBounds(d, node => node.id === 'c-leg-l' || node.id === 'c-leg-r'); return box.right - box.left; };
+      assert.ok(torso(drawn('stick', params, 'stand')) < 0.75 * torso(drawn('chibi', params, 'stand')), `${kind}: stick legs meet at the spine`);
+    }
+  }
+  // A stick horse: a line for the body, four for the legs, one each for the neck and the tail, and its head.
+  const horse = drawn('stick-classic', normalizeRigParams({kind: 'mare'}), 'stand');
+  const body = partBounds(horse, node => node.id === 'c-torso');
+  assert.ok(count(horse) < 60 && body.right - body.left > 300);
+});
+
+test('horses in words, files and generated casts: a coat names all three colours, markings are a list', () => {
+  const sets = text => describeCharacter(text).sets.map(set => `${set.path}${set.op}${set.value}`);
+  assert.deepEqual(sets('a bay mare with a blaze'), ['kind=mare', 'colors.body=#8a4f2d', 'colors.detail=#2a2226', 'colors.accent=#2a2226', 'marks+=blaze']);
+  assert.deepEqual(sets('a small grey foal with white socks').slice(0, 2), ['size=small', 'kind=foal']);
+  assert.deepEqual(sets('a black stallion')[0], 'kind=stallion');
+  assert.equal(sets('a chestnut horse')[0], 'kind=mare');
+  const file = normalizeCharacter(applyCharacterSets({schema: 'launchclip.character.v1', id: 'star-runner', params: {kind: 'stallion'}}, [{path: 'marks', op: '+=', value: 'blaze'}, {path: 'marks', op: '+=', value: 'socks'}, {path: 'marks', op: '-=', value: 'blaze'}]));
+  assert.deepEqual(file.params.marks, ['socks']);
+  assert.ok(!('marks' in normalizeCharacter(applyCharacterSets(file, [{path: 'marks', op: '=', value: 'none'}])).params));
+  assert.deepEqual(mustKeep({kind: 'mare', marks: ['blaze'], colors: {body: '#8a4f2d'}}), ['#8a4f2d mare', 'white blaze']);
+  const family = generateCast({seed: '7f3a91c2', set: 'horse-family', count: 6});
+  assert.deepEqual(family.map(member => member.kind).slice(0, 3).sort(), ['foal', 'mare', 'stallion'], 'a sire, a dam and a foal before any repeat');
+  assert.deepEqual(storyCastErrors({characters: family}), []);
+  assert.deepEqual(family, generateCast({seed: '7f3a91c2', set: 'horse-family', count: 6}));
+  assert.deepEqual(castMember(resolveStoryCast({cast: {characters: [{id: 'x', from: 'duchess', marks: ['socks']}]}}), 'x').params.marks, ['socks']);
 });

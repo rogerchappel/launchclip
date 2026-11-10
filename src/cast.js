@@ -123,7 +123,8 @@ function cellNode(member, pose, expression, id, { face = false } = {}) {
     // bodyY: a seated body (a wheelchair user's in every pose) sits lower, and the close-up follows it.
     const headY = geometry.hipY - geometry.torso - geometry.neck + geometry.head.cy + (joints.bodyY ?? 0);
     const scale = (CELL.face * 0.34) / geometry.head.ry;
-    return characterView(drawing, { id, x: CELL.face / 2, y: CELL.face * 0.56 - headY * scale, scale });
+    // (A four-legged character's head is ahead of its body's centre.)
+    return characterView(drawing, { id, x: CELL.face / 2 - (geometry.head.x ?? 0) * scale, y: CELL.face * 0.56 - headY * scale, scale });
   }
   // People share one scale (so heights compare); the shorter kinds (animals, mascots, objects) are drawn larger to read.
   const scale = (CELL.height - 70) / Math.max(member.params.kind ? 820 : 1150, styleHeight(member.style, member.params));

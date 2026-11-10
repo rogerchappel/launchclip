@@ -20,7 +20,7 @@ export const MAKE_QUALITIES = Object.freeze(["draft", "high"]);
 // --card-backdrops: footage puts full-screen cards on the asset provider's clips (src/asset_provider.js).
 export const CARD_BACKDROPS = Object.freeze(["off", "footage"]);
 // --stop-after and --approve (docs/ANIMATION_PIPELINE_RFC.md §6.3): the places a character story can stop for a person's yes.
-export const MAKE_STOP_POINTS = Object.freeze(["bible"]);
+export const MAKE_STOP_POINTS = Object.freeze(["bible", "animatic"]);
 
 /** --approve bible[,…] (a string, a list or nothing) → the approved stop points, lower case. */
 export function approvals(value) {

@@ -553,7 +553,8 @@ design them first with the `launchclip-character-design` skill (`launchclip
 cast create <id> --describe "…"`, then look at `cast/<id>.sheet.png`) and
 list each by id: `{"id": "<id>"}`. A reference image maps to traits, never to
 a real person's likeness. A cast need not be people: the starters include
-animals (`mochi`, `biscuit`, `rusty`…), brand-coloured mascots (`bloop`,
+horses on four legs (`comet` the stallion, `duchess` the mare, `sprig` the
+foal), animals (`mochi`, `biscuit`, `rusty`…), brand-coloured mascots (`bloop`,
 `twinkle`…) and objects with faces (`ping` the phone, `byte` the laptop,
 `latte` the cup, `watt` the bulb, `penny` the coin…), which take the same
 poses, expressions and cues as people and can stand for an idea (the

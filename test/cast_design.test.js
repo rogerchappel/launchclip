@@ -77,7 +77,7 @@ test("set paths change one option each, and the path list follows the rig", () =
   assert.equal(cleared.params.outfit.over, undefined);
   assert.deepEqual(cleared.params.accessories, ["glasses"]);
   assert.throws(() => applyCharacterSets(nova(), [parseSet("hair.length=long")]), /not a character path/);
-  assert.throws(() => applyCharacterSets(nova(), [parseSet("build+=slim")]), /only accessories is a list/);
+  assert.throws(() => applyCharacterSets(nova(), [parseSet("build+=slim")]), /only accessories and marks are lists/);
   assert.throws(() => applyCharacterSets(nova(), [parseSet("skin=none")]), /cannot be cleared/);
   // The vocabulary is the rig's and the styles' own lists, not a copy.
   const paths = characterPaths();

@@ -35,7 +35,11 @@ import {KIND_NAMES} from './kinds.mjs';
 // Everyday words for the kinds that are not people (kinds.mjs).
 const KIND_WORDS = {kitten: 'cat', kitty: 'cat', puppy: 'dog', bunny: 'rabbit', hare: 'rabbit', toad: 'frog', 'teddy bear': 'bear', smartphone: 'phone', mobile: 'phone', computer: 'laptop', notebook: 'laptop',
   mug: 'cup', 'coffee cup': 'cup', coffee: 'cup', 'light bulb': 'bulb', lightbulb: 'bulb', lamp: 'bulb', idea: 'bulb', bot: 'robot', android: 'robot', money: 'coin', 'gold coin': 'coin', manual: 'book',
-  drop: 'droplet', 'water drop': 'droplet', raindrop: 'droplet', creature: 'monster', mascot: 'blob'};
+  drop: 'droplet', 'water drop': 'droplet', raindrop: 'droplet', creature: 'monster', mascot: 'blob',
+  horse: 'mare', pony: 'mare', dam: 'mare', thoroughbred: 'mare', sire: 'stallion', colt: 'foal', filly: 'foal', 'baby horse': 'foal'};
+// Thoroughbred coats: the coat, the mane and tail, the lower legs.
+export const HORSE_COATS = Object.freeze({bay: ['#8a4f2d', '#2a2226', '#2a2226'], chestnut: ['#b9652f', '#c9803f', '#b9652f'], grey: ['#b7b7bb', '#f1eeea', '#8a8a92'], gray: ['#b7b7bb', '#f1eeea', '#8a8a92'], black: ['#3b2d2b', '#1f1a1c', '#1f1a1c'], brown: ['#6b4530', '#2a2226', '#3a2a24'], palomino: ['#e0b060', '#f6ecd6', '#e0b060'], white: ['#f1eeea', '#ffffff', '#d9d6d0']});
+const HORSES = ['stallion', 'mare', 'foal'];
 // What a person's set path becomes on a kind (a size), or null when it has no counterpart.
 const KIND_SIZE_OF = {'very-short': 'small', short: 'small', tall: 'large', 'very-tall': 'large'};
 const PERSON_PATHS = /^(build|height|age|skin|hair\.|outfit\.|accessories|headwear|mobility|colors\.(top|bottom|shoes))/;
@@ -126,6 +130,7 @@ function lexicon() {
   for (const name of DRAWING_STYLES) for (const phrase of [`${key(words(name))} style`, `style ${key(words(name))}`, `${key(words(name))} drawing`]) add(phrase, [['style', name]]);
   for (const voice of KOKORO_VOICES) add(voice, [['voice', voice]]);
   for (const name of KIND_NAMES) add(name, [['kind', name]]);
+  for (const [phrase, mark] of Object.entries({blaze: 'blaze', socks: 'socks', stockings: 'socks', 'white socks': 'socks', 'white blaze': 'blaze', 'white star': 'star'})) add(phrase, [['marks+', mark]]);
   for (const [phrase, name] of Object.entries(KIND_WORDS)) if (KIND_NAMES.includes(name)) add(phrase, [['kind', name]]);
   // "a 30 year old" is an age in years, not a senior.
   for (const phrase of ['year old', 'years old']) add(phrase, []);
@@ -199,12 +204,22 @@ export function describeCharacter(text, {current = null} = {}) {
     const off = negated(at);
     for (const [path, value] of entry) {
       if (path === 'accessories+') push(at, 'accessories', value, phrase, off ? '-=' : '+=');
+      else if (path === 'marks+') push(at, 'marks', value, phrase, off ? '-=' : '+=');
       else if (off) { if (['headwear', 'mobility', 'outfit.over'].includes(path)) push(at, path, 'none', `no ${phrase}`); }
       else push(at, path, value, phrase);
     }
     if (off) continue;
     const paths = entry.map(([path]) => path);
-    if (paths.includes('kind')) adjectives(at, {...hair, ...skin, ...cloth, white: 'white', black: 'black', red: 'red', gold: 'mustard', golden: 'mustard'}, {to: 'colors.body', from: phrase});
+    if (paths.includes('kind') && HORSES.includes(entry.find(([path]) => path === 'kind')[1])) {
+      // A coat names all three of a horse's colours ("a bay mare", "a grey foal").
+      for (let k = at - 1; k >= Math.max(0, at - 3); k--) {
+        const coat = !claimed[k] && Object.hasOwn(HORSE_COATS, tokens[k].text) ? HORSE_COATS[tokens[k].text] : null;
+        if (!coat) continue;
+        ['body', 'detail', 'accent'].forEach((slot, i) => push(at + 0.5 + i / 100, `colors.${slot}`, coat[i], tokens[k].text));
+        claimed[k] = true;
+        break;
+      }
+    } else if (paths.includes('kind')) adjectives(at, {...hair, ...skin, ...cloth, white: 'white', black: 'black', red: 'red', gold: 'mustard', golden: 'mustard'}, {to: 'colors.body', from: phrase});
     else if (paths.includes('hair.style')) adjectives(at, entry.some(([, value]) => value === 'headscarf') ? {...hair, ...cloth} : hair, {to: 'hair.color', from: phrase});
     else if (paths.includes('outfit.top')) adjectives(at, cloth, {to: 'colors.top', from: phrase});
     else if (paths.includes('outfit.bottom')) adjectives(at, cloth, {to: 'colors.bottom', from: phrase});

@@ -94,6 +94,13 @@ export const STARTER_CAST = Object.freeze([
   C('jools', 'Jools', 'dry-humoured barista; undercut, tee, nose stud', {build: 'average', skin: 'ivory', hair: {style: 'undercut', color: 'violet-dye'}, outfit: {top: 'tee', over: 'apron'}, accessories: ['nose-stud'], colors: {top: 'charcoal', bottom: 'black', shoes: 'black', accent: 'ochre'}}, 'af_alloy'),
 
   // Animals, mascots and objects with faces (kinds.mjs): the same rig, poses and expressions as the people.
+  // The horses: a thoroughbred family on four legs (a sire, dams, foals), in bay, black, grey and chestnut.
+  C('comet', 'Comet', 'black stallion with a star; the sire, proud and steady, leads from the front', {kind: 'stallion', marks: ['star']}, 'bm_george'),
+  C('duchess', 'Duchess', 'bay mare with a blaze; the dam, calm and watchful, nobody\'s fool', {kind: 'mare', marks: ['blaze']}, 'bf_emma'),
+  C('sprig', 'Sprig', 'chestnut foal with white socks; all legs and curiosity', {kind: 'foal', marks: ['socks']}, 'af_sky'),
+  C('misty', 'Misty', 'grey mare; a gentle old hand who has seen it all', {kind: 'mare', colors: {body: '#b7b7bb', detail: '#f1eeea', accent: '#8a8a92'}}, 'bf_alice'),
+  C('copper', 'Copper', 'chestnut stallion with a blaze and socks; fast, showy, loves a crowd', {kind: 'stallion', marks: ['blaze', 'socks'], colors: {body: '#b9652f', detail: '#c9803f', accent: '#b9652f'}}, 'am_fenrir'),
+  C('shadow', 'Shadow', 'black foal; shy, keeps close to the mare', {kind: 'foal', colors: {body: '#3b2d2b', detail: '#1f1a1c', accent: '#1f1a1c'}}, 'am_puck'),
   C('mochi', 'Mochi', 'cat; curious, pokes at everything', {kind: 'cat', colors: {body: '#f0b46a', detail: 'cream', accent: 'rose'}}, 'af_sky'),
   C('soot', 'Soot', 'small black cat; aloof, secretly kind', {kind: 'cat', size: 'small', colors: {body: '#2b2a33', detail: '#f4efe6', accent: 'rose'}}, 'bf_lily'),
   C('biscuit', 'Biscuit', 'dog; loyal, over-eager helper', {kind: 'dog'}, 'am_puck'),

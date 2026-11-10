@@ -33,7 +33,7 @@ import {BRAND_ROLES, HAIR_COLORS, NEUTRALS, SKIN_TONES} from './palette.mjs';
 import {isStarterId} from './cast.mjs';
 import {DRAWING_STYLES} from './styles.mjs';
 import {KOKORO_VOICES} from './cues.mjs';
-import {KIND_NAMES, KIND_SIZES} from './kinds.mjs';
+import {KIND_MARKS, KIND_NAMES, KIND_SIZES} from './kinds.mjs';
 
 export const CHARACTER_SCHEMA = 'launchclip.character.v1';
 export const CAST_PACK_SCHEMA = 'launchclip.cast-pack.v1';
@@ -61,6 +61,7 @@ export function characterPaths() {
     style: {values: [...DRAWING_STYLES]},
     kind: {values: ['person', ...KIND_NAMES], describe: 'person (the default), or an animal, a mascot or an object with a face; those take only size and colors.body / detail / accent'},
     size: {values: [...KIND_SIZES], describe: 'for a kind other than a person'},
+    marks: {values: [...KIND_MARKS], list: true, clear: true, describe: 'a horse\'s white markings'},
     build: {values: [...BUILDS]},
     height: {values: [...HEIGHTS]},
     age: {values: [...AGES]},
@@ -196,7 +197,7 @@ export function applyCharacterSets(character, sets) {
     const {path, op = '=', value} = set;
     const spec = paths[path];
     if (!spec) throw new Error(`"${path}" is not a character path (paths: ${CHARACTER_PATHS.join(', ')})`);
-    if (op !== '=' && !spec.list) throw new Error(`${path} takes =, not ${op} (only accessories is a list)`);
+    if (op !== '=' && !spec.list) throw new Error(`${path} takes =, not ${op} (only accessories and marks are lists)`);
     if (isNone(value) && !spec.clear) throw new Error(`${path} cannot be cleared; set it to one of its options`);
     if (path === 'accessories') {
       const names = isNone(value) ? [] : String(value).split(',').map(name => name.trim()).filter(Boolean);
@@ -205,6 +206,13 @@ export function applyCharacterSets(character, sets) {
       // A new pair of glasses replaces the pair already worn (the rig draws one).
       else for (const name of names) { if (GLASSES.includes(name)) list = list.filter(other => !GLASSES.includes(other)); if (!list.includes(name)) list.push(name); }
       p.accessories = list;
+      continue;
+    }
+    if (path === 'marks') {
+      const names = isNone(value) ? [] : String(value).split(',').map(name => name.trim()).filter(Boolean);
+      const now = op === '=' ? [] : [...(Array.isArray(p.marks) ? p.marks : [])];
+      p.marks = op === '-=' ? now.filter(name => !names.includes(name)) : [...new Set([...now, ...names])];
+      if (!p.marks.length) delete p.marks;
       continue;
     }
     const [head, leaf] = path.split('.');
