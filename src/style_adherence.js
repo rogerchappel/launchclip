@@ -10,6 +10,14 @@
 //   there it only asks that the brand primary shows up somewhere (warning):
 //   the storyboard says where it is drawn (captions, brand frame, graphic
 //   scenes); the share of pixels in the primary's hue only backs that up.
+//   A character story (kit/core/character-story.mjs) is drawn by its show
+//   bible: its frames are the world and the cast, whose colours the bible
+//   fixes and the bible gate checks, so the render's clusters say nothing
+//   about the style. There the check reads the storyboard instead: every
+//   colour the story chooses for what the style still governs (the captions,
+//   the brand frame, its cards) is one of the styled story's brand colours
+//   or a neutral (error), and the pixels only back up that the brand primary
+//   shows (warning, as footage-led).
 // - captions: the story's captions use the style's preset for its lane
 //   (error); their resolved case matches the style's (warning). Without a
 //   storyboard the case is read from the render's caption band, a heuristic
@@ -24,12 +32,15 @@
 //   counts them; a cut detector on the pixels misses graphics that change
 //   over a held shot. Pixel pacing is used only without a storyboard.
 //   Without a measured profile, the reference pacing stands in (error), else
-//   the motion grammar's shot range (warning) (compareToStyle).
+//   the motion grammar's shot range (warning) (compareToStyle). A character
+//   story is cut on its dialogue, so the grammar's rule of thumb is left out
+//   (the coverage gate's profile band still checks its shot length).
 // - brand frame: when the style has one, the story draws it (error), unless
 //   the story turns it off with "frame": false (warning).
 import { brandFramePlan, storyFrame } from "@launchclip/core/brand-frame.mjs";
 import { CAPTION_PRESETS, captionOptions, captionPresetName, captionsOverlayOf } from "@launchclip/core/captions.mjs";
-import { colorDistance, hexToHsl, packCaptionsFor } from "@launchclip/core/style.mjs";
+import { colorDistance, hexToHsl, packCaptionsForStory } from "@launchclip/core/style.mjs";
+import { CAST_MODULES, CHARACTER_CAPTIONS, isCharacterStory } from "@launchclip/core/character-story.mjs";
 import { compareMeasures } from "@launchclip/core/profiles.mjs";
 import { isGraphicScene, storyboardMeasures } from "@launchclip/core/cadence.mjs";
 import { directionMeasures } from "@launchclip/core/direction.mjs";
@@ -62,7 +73,24 @@ export function styleAdherence({ story, pack, measured, profile = typeof pack?.p
   const overrides = brandOverrides(story, pack);
   const reference = overrides.length ? null : pack?.reference_stats?.palette ?? null;
   const expected = reference ?? Object.values(colors).map((hex) => ({ hex, weight: 1 }));
-  if (measured?.palette?.length && expected.length) {
+  const characters = isCharacterStory(story);
+  if (characters && expected.length) {
+    // What the storyboard itself colours, against the styled story's brand colours.
+    const off = offPaletteColors(story, colors);
+    const drawn = drawnColorCount(story);
+    add("palette", "error", off.length === 0, "the story's own colours are brand colours", off.length ? off.map((entry) => `${entry.where} ${entry.hex}`) : `${drawn} checked`,
+      off.length ? `${off.map((entry) => `${entry.where} is ${entry.hex}, ${round(entry.distance, 4)} from the nearest brand colour`).join("; ")} (limit ${ADHERENCE.presence}); use a brand colour role (primary, accent, paper, ink, bg) or one of the brand's colours`
+        : "the colours the storyboard chooses (captions, brand frame, cards) are the style's; the world and the cast are the show bible's, checked by the bible gate");
+    const primary = colors.primary;
+    if (primary && measured?.palette?.length) {
+      const uses = primaryUses(story, primary);
+      const share = primaryShare(measured, primary);
+      const nearest = Math.min(...measured.palette.map((entry) => colorDistance(entry.hex, primary)));
+      const seen = share !== null ? share >= ADHERENCE.primaryShare : nearest <= ADHERENCE.presence;
+      const pixels = share !== null ? `${round(share * 100, 2)}% of sampled pixels are near it` : `nearest render colour ${round(nearest, 4)} away`;
+      add("brand primary", "warning", uses.length > 0 || seen, `brand primary ${primary} drawn`, uses.length ? uses : share ?? round(nearest, 4), uses.length ? `the storyboard draws the brand primary in ${uses.join(", ")} (${pixels})` : seen ? `the brand primary shows in the render (${pixels})` : `nothing in the storyboard draws the brand primary ${primary} and ${pixels}; give the captions or a card a brand colour`);
+    }
+  } else if (measured?.palette?.length && expected.length) {
     if (lane === "footage-led") {
       const primary = colors.primary;
       if (primary) {
@@ -86,9 +114,16 @@ export function styleAdherence({ story, pack, measured, profile = typeof pack?.p
   }
 
   // Captions.
-  const wanted = packCaptionsFor(pack, lane)?.preset ?? null;
+  // A character story takes the pack's preset only where the pack sets one for it; else the kit's character-story captions.
+  const packed = packCaptionsForStory(pack, story ?? { lane })?.preset ?? null;
+  const wanted = packed ?? (characters ? CHARACTER_CAPTIONS.preset : null);
   const overlay = captionsOverlayOf(story);
-  if (wanted && wanted !== "none") {
+  if (characters && !packed && overlay) {
+    // No band or plate over the cast (error); another bare preset is the story's choice (warning).
+    const used = captionPresetName(overlay, story);
+    const covers = CAPTION_PRESETS[used]?.layout === "band" || Boolean(CAPTION_PRESETS[used]?.plate);
+    add("captions", covers ? "error" : "warning", used === wanted, wanted, used, used === wanted ? `captions use the character-story treatment (${wanted}, no band or plate)` : covers ? `captions use ${used}, which puts a ${CAPTION_PRESETS[used]?.layout === "band" ? "band" : "plate"} over the characters; remove the overlay's style/preset so the character-story captions (${wanted}) apply` : `captions use ${used}; a character story's own are ${wanted} (remove the overlay's style/preset to get them)`);
+  } else if (wanted && wanted !== "none") {
     if (!overlay) add("captions", "warning", false, wanted, null, "the story has no captions; the style expects them");
     else {
       const used = captionPresetName(overlay, story);
@@ -96,7 +131,7 @@ export function styleAdherence({ story, pack, measured, profile = typeof pack?.p
     }
   }
   // Caption case: our own captions' resolved case is exact; the measured case is a heuristic for renders without a storyboard.
-  const styleCase = caseOf(pack?.reference_stats?.captions?.case ?? (wanted && wanted !== "none" ? CAPTION_PRESETS[wanted]?.case : null));
+  const styleCase = characters && !packed ? caseOf(CHARACTER_CAPTIONS.case) : caseOf(pack?.reference_stats?.captions?.case ?? (wanted && wanted !== "none" ? CAPTION_PRESETS[wanted]?.case : null));
   if (styleCase && overlay) {
     const drawn = caseOf(captionOptions(overlay, { brand: story?.brand, format: story?.format, story }).case);
     add("caption case", "warning", drawn === styleCase, styleCase, drawn, drawn === styleCase ? "the storyboard's captions draw the style's case" : `the storyboard's captions draw ${drawn === "upper" ? "capitals" : "sentence case"}, but the style uses ${styleCase === "upper" ? "capitals" : "sentence case"}; remove the overlay's case so the style fills it`);
@@ -132,7 +167,8 @@ export function styleAdherence({ story, pack, measured, profile = typeof pack?.p
   if (!banded.length) {
     // Reference pacing is measured, so it gates; a grammar's shot range is a rule of thumb, so it warns.
     const pacing = cadence ? { ...measured, pacing: { ...measured?.pacing, shot_seconds: { median: values.shot_seconds }, cut_rate_per_minute: values.visual_changes_per_min } } : measured;
-    for (const metric of compareToStyle(pacing ?? {}, pack ?? {}).metrics.filter((entry) => /shot|cut rate/.test(entry.metric))) {
+    // A character story is cut on its dialogue: the grammar's shot range is not its measure.
+    for (const metric of compareToStyle(pacing ?? {}, pack ?? {}).metrics.filter((entry) => /shot|cut rate/.test(entry.metric) && !(characters && /grammar/.test(entry.metric)))) {
       add(`cadence: ${metric.metric}`, /grammar/.test(metric.metric) ? "warning" : "error", metric.ok, metric.expected, metric.measured, metric.ok ? "the pacing matches the style" : `the pacing drifts from the style (drift ${metric.drift})`);
     }
   }
@@ -151,6 +187,47 @@ export function styleAdherence({ story, pack, measured, profile = typeof pack?.p
 
   const failed = checks.some((entry) => entry.severity === "error" && !entry.ok);
   return { status: failed ? "failed" : "passed", checks };
+}
+
+const HEX = /^#[0-9a-f]{6}$/i;
+// Greys, black and white belong to every palette.
+const neutral = (hex) => hexToHsl(hex).s < 0.12 || hexToHsl(hex).l < 0.06 || hexToHsl(hex).l > 0.96;
+
+/**
+ * The colours a story sets itself, as hex values, for what a style governs:
+ * its captions overlay's colours, its brand frame's kicker and progress line,
+ * and the params of its cards (every scene but the cast's and the world's,
+ * whose colours are the show bible's). → [{where, hex}]
+ */
+export function storyDrawnColors(story) {
+  const out = [];
+  const take = (where, value) => { if (typeof value === "string" && HEX.test(value)) out.push({ where, hex: value.toLowerCase() }); };
+  const overlay = captionsOverlayOf(story);
+  for (const [key, value] of Object.entries(overlay?.colors && typeof overlay.colors === "object" ? overlay.colors : {})) take(`captions ${key}`, value);
+  const frame = story?.frame && typeof story.frame === "object" ? story.frame : null;
+  take("frame kicker", frame?.kicker?.color);
+  take("frame progress", frame?.progress?.color);
+  const walk = (where, value, depth = 0) => {
+    if (depth > 6 || value === null || value === undefined) return;
+    if (typeof value === "string") take(where, value);
+    else if (Array.isArray(value)) value.forEach((item) => walk(where, item, depth + 1));
+    else if (typeof value === "object") for (const [key, item] of Object.entries(value)) walk(`${where}.${key}`, item, depth + 1);
+  };
+  for (const scene of Array.isArray(story?.scenes) ? story.scenes : []) {
+    if (CAST_MODULES.includes(scene?.module) || scene?.module === "world" || scene?.module === "set-prop") continue;
+    walk(`${scene.id} params`, scene?.params);
+  }
+  return out;
+}
+
+const drawnColorCount = (story) => storyDrawnColors(story).length;
+
+/** The colours a story sets itself (storyDrawnColors) that are neither a brand colour nor a neutral: [{where, hex, distance}]. */
+export function offPaletteColors(story, colors) {
+  const brand = Object.values(colors ?? {}).filter((hex) => typeof hex === "string" && HEX.test(hex));
+  return storyDrawnColors(story)
+    .map((entry) => ({ ...entry, distance: brand.length ? Math.min(...brand.map((hex) => colorDistance(entry.hex, hex))) : 1 }))
+    .filter((entry) => entry.distance > ADHERENCE.presence && !neutral(entry.hex));
 }
 
 /** The brand colour roles a story sets to something other than the pack's. */

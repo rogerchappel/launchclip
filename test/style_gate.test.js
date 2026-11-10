@@ -274,3 +274,36 @@ test("two stories in one style pass style check against each other (RFC §13 pha
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+// A character story (kit/core/character-story.mjs): its frames are the show
+// bible's world and cast, so the gate reads what the style still governs.
+test("a character story passes on its world's and cast's own colours, and still fails on colours the story sets off the palette", async () => {
+  const { characterStory, characterWords } = await import("./helpers/character_story.js");
+  const { resolveStyleV2 } = await import("../src/style_store.js");
+  // The first real run's style: a seeded cinematic pack whose captions are a band.
+  const base = (await resolveStyleV2("warm-documentary", {})).pack;
+  const story0 = characterStory();
+  const pack = { ...base, name: "seed-ee163f58", brand: story0.brand, reference_stats: undefined, profile: undefined, brand_frame: undefined, motion: { grammar: "cinematic" } };
+  const styled = (overrides = {}) => applyStyle(resolveStory({ ...story0, style: pack.name, ...overrides }, { words: characterWords() }), pack).story;
+  // What the run's render measured: sky, grass and coats, 0.2059 from the brand colours.
+  const park = { palette: [{ hex: "#8fb3e6", weight: 0.42 }, { hex: "#5d9e4f", weight: 0.3 }, { hex: "#3f7a3a", weight: 0.14 }, { hex: "#ead9a0", weight: 0.08 }, { hex: "#8a8f96", weight: 0.06 }], pacing: { duration_seconds: 26.6, shot_seconds: { median: 2.515 }, cut_rate_per_minute: 20.3 } };
+  const passed = styleAdherence({ story: styled(), pack, measured: park });
+  assert.equal(passed.status, "passed", JSON.stringify(passed.checks.filter((entry) => !entry.ok)));
+  assert.deepEqual(failing(passed).filter((name) => name.startsWith("error")), []);
+  assert.ok(!passed.checks.some((entry) => /grammar/.test(entry.check)), "the grammar's shot range is not a character story's measure");
+  assert.match(passed.checks.find((entry) => entry.check === "palette").detail, /the world and the cast are the show bible's/);
+  assert.equal(passed.checks.find((entry) => entry.check === "captions").measured, "word-highlight");
+  // The same render and style without a bible is a motion story off its palette: still an error.
+  const { bible, ...plain } = story0;
+  const motion = applyStyle(resolveStory({ ...plain, style: pack.name }, { words: characterWords() }), pack).story;
+  assert.ok(failing(styleAdherence({ story: motion, pack, measured: park })).includes("error:palette"));
+  // Genuinely off-palette: the story colours its captions, or a card, outside the brand.
+  const lime = styleAdherence({ story: styled({ overlays: [{ type: "captions", colors: { active: "#39ff14" } }] }), pack, measured: park });
+  assert.deepEqual(failing(lime).filter((name) => name.startsWith("error")), ["error:palette"]);
+  assert.match(lime.checks.find((entry) => entry.check === "palette").detail, /captions active is #39ff14/);
+  // A brand colour or a neutral set by hand is on palette.
+  assert.equal(styleAdherence({ story: styled({ overlays: [{ type: "captions", colors: { active: story0.brand.colors.accent, idle: "#ffffff" } }] }), pack, measured: park }).status, "passed");
+  // A band over the cast is an error even when the storyboard asks for it.
+  const band = styleAdherence({ story: styled({ overlays: [{ type: "captions", preset: "lower-band" }] }), pack, measured: park });
+  assert.ok(failing(band).includes("error:captions"), JSON.stringify(failing(band)));
+});
