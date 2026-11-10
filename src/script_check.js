@@ -133,6 +133,8 @@ const CTA_CLASSES = [
   ["visit", /(?:learn more|find out more|see more at)\b/i, false],
   ["visit", /(?:visit|head (?:over )?to|go to|check out|click|tap|open)\b/i, true],
   ["follow", /(?:follow (?:us|me|for more)|subscribe|hit (?:the )?(?:subscribe|like|bell|follow)|turn on notifications)\b/i, false],
+  // "Save this before your next build": the call to action the short-video rules ask for when there is no destination.
+  ["save", /(?:save (?:this|it for|this one)|bookmark this)\b/i, false],
   ["book", /(?:book (?:a|an|your) (?:free )?(?:demo|call|meeting|consultation|session|seat|spot)|request (?:a demo|access|an invite|early access)|schedule (?:a|your) (?:demo|call))\b/i, false],
   ["buy", /(?:buy|order|shop|pre-?order|grab (?:yours|one|it)|claim (?:yours|your|it)|get (?:yours|it|access|early access|\d+%? off))\b/i, true],
   ["comment", /(?:drop a comment|comment below|let me know in the comments|tell me in the comments|comment (?:the word |one word[,:]? )?["“']?[a-z0-9][a-z0-9-]*(?=["”']?(?:[\s.,!?]|$)))/i, false]

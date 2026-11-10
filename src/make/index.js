@@ -52,7 +52,7 @@ import { directLongFormVisuals, revertCards, typographyShare, unresolvedScenes }
 import { checkModelAccess, createMakeClient, selectMakeModel } from "./models.js";
 import { alternativeTransition, candidatesMode, comparisonEntry, designOpening, judgeCandidates, meanScore, openingScene, renderCandidate, rendererStill, riskyBoundary, sceneResolves, sceneTimes, selectCandidate, storyWith, transitionTimes, writeReceipt } from "./candidates.js";
 import { conceptLookLines, conceptSummary, conceptsMode, planConceptStory, readConceptStory, storySeconds } from "./concept_story.js";
-import { needsResize, planVoiceSpeed, RULES_HEADING, runsShort, SCRIPT_VERSION, WORDS_PER_MINUTE, writeScript } from "./script.js";
+import { needsResize, planVoiceSpeed, RULES_HEADING, runsShort, SCRIPT_VERSION, takeClock, WORDS_PER_MINUTE, writeScript } from "./script.js";
 import { checkScript } from "../script_check.js";
 import { checkStorage, interruptedByStorage } from "../storage_check.js";
 import { SCRIPT_SKELETONS, chooseScriptPlan, scriptPlanOptions } from "@launchclip/core/script-formats.mjs";
@@ -716,7 +716,11 @@ async function prepareMotion(ctx) {
   const short = runsShort(take.duration, target);
   if (short) script.take.short_of_target_seconds = round1(target - take.duration);
   // The final narration's check is the receipt; errors left after the repair pass warn, they do not stop the render.
-  script.check = checkScript({ narration: script.narration, duration: short ? Math.max(1, Math.round(take.duration)) : target, brief: { prompt: ctx.text, notes, assets: assetLines }, ...planChecks });
+  // A short take is checked at the length it runs, and the take itself is the proof it fits that clock: a voice that
+  // reads faster than the plan's pace (Kokoro at 1.2×) is never reported as words that "cannot be read" in the time it read them.
+  script.check = checkScript({ narration: script.narration, ...takeClock({ narration: script.narration, seconds: take.duration, target, pace: plan.pace }), brief: { prompt: ctx.text, notes, assets: assetLines }, ...planChecks });
+  if (script.fit?.cut?.length) report.notices.push(`script: ${script.fit.cut.length} sentence(s) cut to fit the ${plan.word_ceiling}-word ceiling (${script.fit.words_before} → ${script.word_count} words)`);
+  if (script.fit?.call_to_action_added) report.notices.push(`script: the narration had no call to action; it ends on "${script.fit.call_to_action_added}"`);
   auditNarration(ctx, research, script.narration);
   if (!script.check.ok) report.warnings.push(`the script still fails ${script.check.errors.length} script check(s): ${script.check.errors.map((error) => `${error.id}: ${error.message}`).join("; ")} (launchclip script check ${MAKE_PATHS.script})`);
   await writeJson(path.join(project, MAKE_PATHS.script), script);
