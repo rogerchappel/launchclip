@@ -251,3 +251,12 @@ something live moves in it.
 | variety | cast scenes | the same shot back to back |
 | holds | windows and ops at 4 Hz | nothing moves for more than 3 s (only the drift moving warns) |
 | states | shots, states and events | a shot holds one state for more than 10 s |
+| lip-sync | character scenes' mouth changes, narration words | a mouth is open for more than 0.15 s (or 0.3 s in all) with no word of its own under it; a character on screen has a line and its mouth is open for under a quarter of it |
+
+`lip-sync` is `lipSyncGate({resolved, words})` in `src/quality_gates.js`
+(docs/ANIMATION_PIPELINE_RFC.md §8.2). It reads the mouth changes both
+renderers play (`speechChanges`), so it needs no render. With speakers on the
+narration's words a mouth is held to its own character's words; without, to
+any word. It is `skipped` with no character scene or nobody speaking and
+`not-checked` when mouths move with no narration words. `finish` does not
+call it yet.
