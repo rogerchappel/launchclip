@@ -31,7 +31,7 @@ import {drawingBounds} from './characters/bounds.mjs';
 import {ACTING, actingOps, stateJoints, speechChanges} from './characters/acting.mjs';
 import {BACKDROPS, SEATED_SETS, SETS, SET_INFO, WORLD_SETS, layoutSet, phoneProp} from './characters/sets.mjs';
 import {castMember, resolveStoryCast} from './characters/cues.mjs';
-import {ACTIONS, ACTION_INFO, GAZE, NAMED_TARGETS, TARGET_REQUIRED, VIEWS, gazeOffset, viewFor, sideOf, targetError, targetPoint, walkDuration} from './characters/actions.mjs';
+import {ACTIONS, ACTION_INFO, GAZE, NAMED_TARGETS, TARGET_REQUIRED, VIEWS, gazeOffset, viewFor, sideOf, targetError, targetPoint, walkDistance, walkDuration, WALK} from './characters/actions.mjs';
 import {WORLD_KINDS, WORLD_TIMES, renderWorld, worldAnchors, worldFocus, worldGrade, worldLight} from './worlds/index.mjs';
 import {worldLayerNodes} from './worlds/view.mjs';
 import {withoutForeground, worldCameraStates} from './catalog-world.mjs';
@@ -72,6 +72,9 @@ function sceneLight(b, value, ctx, world) {
   if (errors.length) b.check.fail('params.light', errors.join('; ').replace(/^params\.light /, ''));
   return normalizeLight(value ?? (lightErrors(fallback).length ? null : fallback ?? null));
 }
+
+// The most (s) a scene's edge may cut off a spoken word and leave its phonemes in time with it.
+const WORD_CUT = 0.03;
 
 function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light, shots = false}) {
   const {check} = b;
@@ -117,7 +120,7 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light, 
     else if (cue.time - prev.time < ACTING.poseTween - 1e-6 && next.pose !== prev.pose && states.length > 1) check.fail(`${path}.cues`, `pose changes at ${r2(prev.time - b.start)} s and ${r2(cue.time - b.start)} s are closer than ${ACTING.poseTween} s; space them out`);
     else states.push(next);
   });
-  // says "auto" resolves to the character's own dialogue words in the story resolver; without words it stays silent.
+  // says "auto", or left out, resolves to the character's own dialogue words in the story resolver; without words it stays silent.
   const says = raw.says === undefined || raw.says === 'auto' ? [] : check.arr(raw.says, `${path}.says`, 0, 40).map((range, i) => {
     const where = `${path}.says[${i}]`;
     check.obj(range, where, ['from', 'to', 'words'], ['from', 'to']);
@@ -128,8 +131,8 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light, 
     if (to < from) check.fail(`${where}.to`, 'must not be before from');
     const words = range.words === undefined ? null : check.arr(range.words, `${where}.words`, 0, 400).map((w, k) => {
       if (!Array.isArray(w) || w.length < 2 || w.length > 4 || !Number.isFinite(w[0]) || !Number.isFinite(w[1]) || w[1] < w[0] || w.slice(2).some(part => typeof part !== 'string')) check.fail(`${where}.words[${k}]`, 'must be [start, end] seconds, [start, end, "word"], or [start, end, "word", "phonemes"] (symbol:milliseconds pairs)');
-      // A word cut by the scene's edge loses its phonemes: their lengths no longer fit it.
-      const whole = w[0] >= 0 && w[1] <= b.duration;
+      // A word cut by the scene's edge loses its phonemes: their lengths no longer fit it (a cut of a frame or less is no cut).
+      const whole = w[0] >= -WORD_CUT && w[1] <= b.duration + WORD_CUT;
       return [rt(b.start + clip(w[0])), rt(b.start + clip(w[1])), ...w.slice(2, whole ? 4 : 3)];
     }).filter(([s, e]) => e > s);
     return {from: rt(b.start + from), to: rt(b.start + to), words};
@@ -183,12 +186,18 @@ function directActor(b, actor, path, scene) {
     out.push(directed);
     if (action === 'walk-to' && point) {
       const to = Math.min(W - margin, Math.max(margin, point.x ?? (facing === 'left' ? margin : W - margin)));
-      const dx = r2(to - actor.x - x);
-      const dur = walkDuration(dx, actor.scale);
-      const arrive = rt(state.time + dur);
+      const full = r2(to - actor.x - x);
+      // The walk keeps a walking pace. With less time than the whole way
+      // takes (the scene ends, or the character's next cue comes), it goes as
+      // far toward the target as that time allows and stands there: a few
+      // steps in a short shot are still the walk the line asks for.
       const nextCue = actor.states[i + 1]?.time ?? Infinity;
-      if (arrive > b.start + b.duration - ACTING.poseTween + 1e-6) check.fail(`${path}.cues`, `walk-to at ${r2(state.time - b.start)} s takes ${dur} s and would not arrive before the scene ends`);
-      if (nextCue < arrive - 1e-6) check.fail(`${path}.cues`, `walk-to at ${r2(state.time - b.start)} s arrives at ${r2(arrive - b.start)} s; the next cue at ${r2(nextCue - b.start)} s comes before it`);
+      const room = Math.min(b.start + b.duration - ACTING.poseTween, nextCue) - state.time;
+      const whole = walkDuration(full, actor.scale);
+      if (whole > room + 1e-6 && room < WALK.step - 1e-6) check.fail(`${path}.cues`, `walk-to at ${r2(state.time - b.start)} s has ${r2(Math.max(0, room))} s before ${nextCue < b.start + b.duration - ACTING.poseTween ? `the next cue at ${r2(nextCue - b.start)} s` : 'the scene ends'}; a walk needs at least ${WALK.step} s: move the cue earlier`);
+      const dur = whole > room + 1e-6 ? Math.floor(room * 100) / 100 : whole;
+      const dx = dur < whole ? r2(Math.sign(full) * walkDistance(dur, actor.scale)) : full;
+      const arrive = rt(state.time + dur);
       directed.walk = {from: x, to: r2(x + dx), duration: dur};
       walks = walks || Math.abs(dx) > 0.5;
       x = r2(x + dx);
@@ -709,7 +718,7 @@ function cameoTimeline(model, ops) {
 const DEFINITIONS = {
   'cast-scene': {resolve: resolveCastScene, view: castSceneView, timeline: castSceneTimeline,
     describe: 'One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), framed wide, medium or close, acting on cues: named poses and expressions at times or narration words, mouths moving on their lines, cuts in on a character. The screen set plays a real capture.',
-    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id (a story-cast id, or "@1", "@2"… by place in the cast), position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: toward its target, else inward), target?: what it attends to (${NAMED_TARGETS.join(' | ')} | {prop} | {character} | {x, y}; it faces it and turns its head to it), cues?: [{at, pose?, expression?, action?: ${ACTIONS.join(' | ')}, target?, facing?, view?: ${VIEWS.join(' | ')}, shot?: ${SHOTS.join(' | ')} (a hard cut in on this character; the scene's shot cuts back)}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`, shot: `${SHOTS.join(' | ')}: wide = whole figures on the floor; medium = knees up; close = chest up (faces readable on a phone, kept inside the safe zone and above the caption band, no camera move). Default: medium for a 9:16 ${PORTRAIT_MEDIUM_SETS.join(', ')} set, else wide`, light: '{dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world\'s light, else a soft key from the upper left); shaded drawing styles follow it', world: `{kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)`, backdrop: `${BACKDROPS.join(' | ')}: room = the set's own room; world = only its furniture and props, recoloured and lit by the world and standing on its ground, over the world scene beneath or in params.world / story.world drawn behind it (default world when there is a world; not for video-call)`, enter: 'fade | cut: how the cast arrives (default: with the world plate beneath when it starts with it, a cut or a fade over its transition; else a fade)', exit: 'fade | cut: how the cast leaves (default: as the next plate arrives when it ends with the world beneath; else a fade)'},
+    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id (a story-cast id, or "@1", "@2"… by place in the cast), position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: toward its target, else inward), target?: what it attends to (${NAMED_TARGETS.join(' | ')} | {prop} | {character} | {x, y}; it faces it and turns its head to it), cues?: [{at (seconds from the scene start, or "word:<text>": the word as it is said during this scene), pose?, expression?, action?: ${ACTIONS.join(' | ')}, target?, facing?, view?: ${VIEWS.join(' | ')}, shot?: ${SHOTS.join(' | ')} (a hard cut in on this character; the scene's shot cuts back)}], says?: [{from, to}] | "auto" (its own dialogue lines; the default when the narration gives it words in the scene, [] keeps its mouth shut), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`, shot: `${SHOTS.join(' | ')}: wide = whole figures on the floor; medium = knees up; close = chest up (faces readable on a phone, kept inside the safe zone and above the caption band, no camera move). Default: medium for a 9:16 ${PORTRAIT_MEDIUM_SETS.join(', ')} set, else wide`, light: '{dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world\'s light, else a soft key from the upper left); shaded drawing styles follow it', world: `{kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)`, backdrop: `${BACKDROPS.join(' | ')}: room = the set's own room; world = only its furniture and props, recoloured and lit by the world and standing on its ground, over the world scene beneath or in params.world / story.world drawn behind it (default world when there is a world; not for video-call)`, enter: 'fade | cut: how the cast arrives (default: with the world plate beneath when it starts with it, a cut or a fade over its transition; else a fade)', exit: 'fade | cut: how the cast leaves (default: as the next plate arrives when it ends with the world beneath; else a fade)'},
     events: ['<character>-cue-<i>']},
   'character-cameo': {resolve: resolveCameo, view: cameoView, timeline: cameoTimeline,
     describe: 'One animated character beside a card (kicker, title, body) or alone on a panel, for a beat in a footage-led or explainer video.',

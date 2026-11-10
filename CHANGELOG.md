@@ -518,6 +518,22 @@
 
 ### Fixed
 
+- Character stories: a cue anchored to a word (`at: "word:<text>"`) now means
+  the word as it is said during the cue's scene, not the first time the
+  narration says it, and a word that starts just outside the scene plays at
+  the scene's edge. Cue times no longer come out negative, which had every
+  critic retake undone. A retake the validator turns down is sent back once
+  with the validator's messages and the plan's own checks, and
+  `qa/retakes.json` records each attempt (`attempts`, `rejected`).
+- A character moves its mouth on its own words in every scene it is in,
+  whether or not the scene sets `says` (`says: []` keeps it shut), including
+  a line a cut falls inside.
+- A `walk-to` in a shot too short for the whole walk goes as far toward its
+  target as the shot allows instead of failing the plan, and a plan for a
+  character story is held to the acting and lip-sync gates before it renders:
+  a line's action nobody on screen performs says whether the character needs
+  a cue or a place in the shot.
+
 - HyperFrames drew a video in a media layout (`picture-in-picture`,
   `landscape-card`, `media-compare`, `media-grid`, `media-list`,
   `media-stat`, `split-screen`) without its drop shadow, and
