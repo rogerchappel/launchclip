@@ -2199,6 +2199,78 @@ true or false (each medium's defaults are `MEDIUM_DEFAULTS`).
   (`src/style_seed_store.js promptConstraints`); the seed never draws a medium
   on its own.
 
+## Look (`kit/core/look.mjs`, `kit/core/looks/`)
+
+`story.look` (a style pack's `look`, filled by `applyStyle`) is one treatment
+for the world, the cast and the cards together ([SCENE_LOOKS_RFC.md](SCENE_LOOKS_RFC.md)):
+`none` (the default), `blueprint`, `hologram`, `thermal`, `neon-night` or
+`paper-cutout`, or `{name, strength?, step?, furniture?, palette?, labels?}`:
+`strength` 0–1, `step` false or 6–15 drawings a second, `furniture` a boolean,
+`palette` `look` or `brand`, `labels` up to 6 strings of 1–28 characters.
+`lookErrors()` and `validateStory` check it (`STORY_LOOK_NAMES` and
+`STORY_LOOK_KEYS` mirror `LOOK_NAMES` and `LOOK_KEYS`); a name such as `holo`
+names the fix. `lookPlan(story)` is null without a look, and then neither
+renderer adds anything (the HyperFrames compile is byte for byte today's).
+
+A look is `kit/core/looks/<name>.mjs`: `{describe, words, defaults, presets(),
+variants, variantAt(), grade(), furniture(), vars(), cast}`, built from the
+shared parts in `kit/core/looks/parts.mjs`.
+
+- **Presets.** `lookPresets(value)` → `{colors?, cast?: {style}, world?,
+  background?, light?, medium?}`. `applyLook(story, packLook?)` fills them
+  where the story has none; `applyStyle` runs it before the pack's own fill,
+  so the order is the story, the look, the pack (a look's drawing style and
+  time of day also win over the pack's cast style and world time).
+  `palette: "brand"` brings no colours. Every look's palette passes the text
+  contrast the modules check.
+- **Grade.** `lookDefs(plan)` is an `<svg>` of `plan.variants` filters
+  (`lc-look-<n>`, canvas pixels, sRGB) and `#lc-look` a full-canvas layer with
+  `backdrop-filter: var(--lc-look-filter)`, above the medium and under the
+  brand frame and the captions (HyperFrames z-index 81000; Remotion 49, after
+  the medium in DOM order). `lookVariantAt(plan, frame)` picks the drawing
+  from the absolute frame. `strength` under 1 mixes the graded frame back
+  toward the clean one. Parts: `ramp` (brightness through a colour ramp),
+  `outline` (edge lines by colour change), `glow`, `rim` (a coloured light
+  from one side), `sensor` (noise), `tear` (rows pushed sideways), `rules`
+  (a mesh), `nudge`, `fadeDown` and `image` (an SVG as a filter image).
+- **Frame stepping.** With `step`, `lookStepFrame(plan, frame)` is the story
+  frame whose picture a frame shows: a whole frame at or after each step's
+  time (at 30 fps and 12 drawings a second, holds of 3, 2, 3, 2 frames). The
+  HyperFrames compiler builds the scenes, the camera, the light, the feel
+  and the wipes on their own paused timeline (`lcPicture`) and drives it from
+  the story timeline with `lookStepEase(plan)`; Remotion wraps the same layers
+  in `<Freeze frame={…}>` and hands the light's over group the held frame.
+  The medium, the look, the brand frame, the captions and the audio are not
+  stepped. A story with a `base` recording is not stepped.
+- **Furniture.** `plan.furniture` is `{html, css}`: static markup in
+  `#lc-look-furniture` (HyperFrames z-index 82000), marked
+  `data-layout-ignore` so the layout audit leaves it out. It never uses
+  `mix-blend-mode` (the renderers' stacking contexts differ). `zones(plan)`
+  keeps it above the safe zone or under the caption band.
+- **Motion.** `lookVarsAt(plan, frame)` is every CSS variable the look moves
+  by (`--lc-look-filter`, `--lc-look-scan`, …) as a function of the absolute
+  story frame. Remotion sets them inline; the HyperFrames compiler emits
+  `tl.set` at `lookSteps(plan, duration)`, each change half a frame before the
+  frame that shows it. Nothing reads a clock or `Math.random`: seeded values
+  come from `rand(seed, index)` (the look's name and the story's title), so a
+  seek, a partial re-render and a preview window give the same pixels.
+- **Shots and cues.** The plan carries the track-0 shot windows (`plan.shots`)
+  and the cast's expression changes in story seconds (`plan.cues`), for
+  furniture that reacts to them (the blueprint draws in at each shot).
+- **Cast options.** A look's `cast` (`lookCastOptions(story.look)`, from
+  `kit/core/looks/index.mjs`) reaches module resolve as `ctx.look`, and the
+  character modules pass it to `drawCharacter` as `content.castDraw`:
+  `paper-cutout` asks for `{pins: true}`. Without a look the model has no
+  `castDraw`.
+- A module review (`sceneFilter`, `ModuleReview`) has no look.
+- Plain words: `lookFromText(text)` reads a look from a description ("as a
+  hologram" → `hologram`); `make` and `story plan` pass it to the seeded style
+  as the `look` constraint (`promptConstraints`), and `--look` sets it. The
+  seed never draws a look on its own.
+- `node scripts/look-sheet.mjs` renders the test scene (two characters in a
+  world, then a card) in each look with both renderers and prints the SSIM of
+  each pair.
+
 ## World camera (`kit/core/camera-world.mjs`)
 
 ```json

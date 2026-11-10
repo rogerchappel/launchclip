@@ -9,6 +9,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { CONSTRAINT_KEYS, NEAR_DUPLICATE, generateStyle, normalizeSeed, pinStyle, rerollStyle, seedSummaryLine, styleDistanceReport, styleSummary, toneFromText } from "@launchclip/core/style-seed.mjs";
 import { mediumFromText } from "@launchclip/core/medium.mjs";
+import { lookFromText } from "@launchclip/core/look.mjs";
 import { packCaptionsFor, validateStylePack } from "@launchclip/core/style.mjs";
 import { suggestWorld } from "@launchclip/core/worlds/index.mjs";
 import { homeStyleRoot, loadStyleV2, resolveStyleV2 } from "./style_store.js";
@@ -57,7 +58,7 @@ export async function projectSeedStyle(projectDir, { storyFile = path.join(proje
 
 /**
  * The art-direction constraints from flags (--tone, --theme, --world,
- * --drawing-style, --character-set, --background, --panel, --medium). --world takes
+ * --drawing-style, --character-set, --background, --panel, --medium, --look). --world takes
  * one world or several (repeated, or comma-separated) for the seed to pick
  * among.
  */
@@ -91,7 +92,8 @@ export function promptTone(text, tone = null) {
  * topic the seed keeps to its topic-neutral worlds. When it describes the
  * look as a medium in plain words ("soft watercolour, dreamy", "crayon on
  * paper, for kids"), that medium is painted over every frame, and the theme
- * and background that go with it apply unless given.
+ * and background that go with it apply unless given. When it names a
+ * whole-scene look (kit/core/look.mjs lookFromText), that look is set.
  */
 export function promptConstraints(text, constraints = {}) {
   let out = constraints;
@@ -101,6 +103,9 @@ export function promptConstraints(text, constraints = {}) {
   }
   const painted = out.medium === undefined ? mediumFromText(text) : null;
   if (painted) out = { ...out, medium: painted.medium, ...(out.theme === undefined ? { theme: painted.theme } : {}), ...(out.background === undefined ? { background: painted.background } : {}) };
+  // A whole-scene look named in plain words ("as a hologram", "thermal camera") becomes the look constraint.
+  const look = out.look === undefined ? lookFromText(text) : null;
+  if (look) out = { ...out, look };
   return out;
 }
 

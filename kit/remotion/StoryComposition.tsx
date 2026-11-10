@@ -28,6 +28,11 @@
 //   over everything but the brand frame and the captions, that paints the
 //   frame in oil, watercolour, pastel, ink or gouache, its drawing picked from
 //   the absolute frame as the HyperFrames compiler steps it on its timeline;
+// - the look (kit/core/look.mjs): a grade layer and the look's furniture over
+//   the medium and under the brand frame and the captions, their CSS
+//   variables from lookVarsAt(plan, frame); with a step, every scene, the
+//   camera and the light are frozen on the stepped frame (lookStepFrame), as
+//   the HyperFrames compiler holds its scene timeline;
 // - the story feel (kit/core/kinetic.mjs): with motion.feel or camera.kicks,
 //   one wrapper around every scene and the world camera that drifts,
 //   breathes and kicks, from the same per-frame samples the HyperFrames
@@ -90,6 +95,8 @@ import { breakoutNotch, layoutPlan, layoutStateAt, withLayoutCameras } from "@la
 // @ts-ignore plain ESM from kit/core
 import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumLayerStyle, mediumPlan } from "@launchclip/core/medium.mjs";
 // @ts-ignore plain ESM from kit/core
+import { LOOK_FURNITURE_ID, LOOK_LAYER_ID, LOOK_Z, lookCss, lookDefs, lookPlan, lookStepFrame, lookStepped, lookVarsAt } from "@launchclip/core/look.mjs";
+// @ts-ignore plain ESM from kit/core
 import { feelPlan, feelStateAt, feelTransform } from "@launchclip/core/kinetic.mjs";
 // @ts-ignore plain ESM from kit/core
 import { DOT_WIPE, dotWipeCover, dotWipeCss, dotWipePeak, dotWipeSvg, dotWipes } from "@launchclip/core/dot-wipe.mjs";
@@ -115,6 +122,11 @@ export type StoryProps = Record<string, any> & {
 
 // Error boundary so one failing module renders the placeholder instead of
 // aborting the whole render. It keeps no animation state.
+// The frame the picture shows for a composition frame: the frame itself, or
+// under a stepped look (kit/core/look.mjs) the step it holds on. Layers drawn
+// outside the frozen scene tree (the light's over group) read it.
+const PictureFrame = React.createContext<(frame: number) => number>((frame) => frame);
+
 class ModuleBoundary extends React.Component<{ fallback: (error: Error) => React.ReactNode; children: React.ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) { return { error }; }
@@ -186,7 +198,8 @@ export const LightField: React.FC<{ layers: any[]; t: number }> = ({ layers, t }
 );
 
 const LightOver: React.FC<{ plan: any; zIndex: number }> = ({ plan, zIndex }) => {
-  const frame = useCurrentFrame();
+  // Under a stepped look the light holds with the picture.
+  const frame = React.useContext(PictureFrame)(useCurrentFrame());
   const { fps, width, height } = useVideoConfig();
   return (
     <div id={LIGHT_OVER_ID} data-launchclip-light="over" aria-hidden style={{ ...(lightOverStyle({ width, height }) as React.CSSProperties), zIndex }}>
@@ -521,11 +534,41 @@ const MediumLayer: React.FC<{ plan: any }> = ({ plan }) => {
   );
 };
 
+// The look (kit/core/look.mjs): the grade's filters and the shared CSS once,
+// then the grade layer and the furniture with the variables of the story frame.
+const LookLayer: React.FC<{ plan: any }> = ({ plan }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const defs = React.useMemo(() => ({ __html: lookDefs(plan) }), [plan]);
+  const css = React.useMemo(() => lookCss(plan, { grade: LOOK_Z.remotion, furniture: LOOK_Z.remotion }), [plan]);
+  const furniture = React.useMemo(() => (plan.furniture ? { __html: plan.furniture.html } : null), [plan]);
+  const vars = lookVarsAt(plan, Math.floor((frame * plan.fps) / fps + 1e-6)) as React.CSSProperties;
+  return (
+    <>
+      {plan.grade ? <div style={{ position: "absolute", width: 0, height: 0 }} aria-hidden dangerouslySetInnerHTML={defs} /> : null}
+      <style>{css}</style>
+      {plan.grade ? <div id={LOOK_LAYER_ID} data-launchclip-look={plan.name} style={vars} aria-hidden /> : null}
+      {furniture ? <div id={LOOK_FURNITURE_ID} data-launchclip-look={plan.name} data-layout-ignore="true" data-layout-allow-overflow="true" data-layout-allow-overlap="true" style={vars} aria-hidden dangerouslySetInnerHTML={furniture} /> : null}
+    </>
+  );
+};
+
 function captionOverlay(story: any) {
   return captionsOverlayOf(story);
 }
 
 export const StoryComposition: React.FC<StoryProps> = (props) => {
+  const { fps } = useVideoConfig();
+  const hold = React.useMemo(() => {
+    const look = lookPlan(props);
+    if (!lookStepped(look)) return (frame: number) => frame;
+    const rate = Math.max(1, Math.round(fps / look.fps));
+    return (frame: number) => lookStepFrame(look, Math.floor(frame / rate + 1e-6)) * rate;
+  }, [props, fps]);
+  return <PictureFrame.Provider value={hold}><StoryPicture {...props} /></PictureFrame.Provider>;
+};
+
+const StoryPicture: React.FC<StoryProps> = (props) => {
   const { customModules, __captions, __subframes, ...story } = props;
   const { fps } = useVideoConfig();
   // The story's own fps, and the sub-frames per story frame (1 without motion blur).
@@ -588,17 +631,21 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   const feel = React.useMemo(() => feelPlan(story, { windows, camera: plan, words: Array.isArray(__captions) ? __captions : [] }), [story, windows, plan, __captions]);
   const wipes = React.useMemo(() => dotWipes(story, windows), [story, windows]);
   const sweeps = React.useMemo(() => lightSweeps(story, windows), [story, windows]);
+  // The look: with a step, the picture (scenes, camera, light, sweeps, wipes) is frozen on the stepped story frame.
+  const look = React.useMemo(() => lookPlan(story), [story]);
+  const pictureFrame = React.useContext(PictureFrame)(frame);
+  const picture = (children: React.ReactNode, key?: string) => (lookStepped(look) ? <Freeze key={key} frame={pictureFrame}>{children}</Freeze> : children);
   // Per sweep its dip (a shade) and its light (screened over it), as two layers.
-  const sweepParts = (part: "dip" | "light") => sweeps.map((sweep: any) => (
+  const sweepParts = (part: "dip" | "light") => sweeps.map((sweep: any) => picture(
     <Sequence key={`${sweep.id}-${part}`} name={`light-sweep ${part} → ${sweep.sceneId}`} from={frames(sweep.start)} durationInFrames={Math.max(1, frames(sweep.start + sweep.dur) - frames(sweep.start))}>
       <LightSweepLayer sweep={sweep} part={part} />
-    </Sequence>
+    </Sequence>, `${sweep.id}-${part}`
   ));
   const sweepDips = sweepParts("dip"), sweepLights = sweepParts("light");
-  const wipeLayers = wipes.map((wipe: any) => (
+  const wipeLayers = wipes.map((wipe: any) => picture(
     <Sequence key={wipe.id} name={`dot-wipe → ${wipe.sceneId}`} from={frames(wipe.start)} durationInFrames={Math.max(1, frames(wipe.start + wipe.dur) - frames(wipe.start))}>
       <DotWipeLayer wipe={wipe} />
-    </Sequence>
+    </Sequence>, wipe.id
   ));
   const feelOn = Boolean(feel && !feel.idle);
   const feelWrap = (children: React.ReactNode) => (feelOn ? <FeelLayer plan={feel}>{children}</FeelLayer> : children);
@@ -628,9 +675,9 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
     );
     return (
       <AbsoluteFill style={{ backgroundColor: background, fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
-        {world && backdrop && !covered ? <BackgroundField plan={backdrop} t={frame / fps} /> : null}
-        {world && light?.under.length ? <LightField layers={light.under} t={frame / fps} /> : null}
-        {feelWrap(<>
+        {world && backdrop && !covered ? <BackgroundField plan={backdrop} t={pictureFrame / fps} /> : null}
+        {world && light?.under.length ? <LightField layers={light.under} t={pictureFrame / fps} /> : null}
+        {picture(feelWrap(<>
         <CameraWorld plan={plan} brand={story.brand} field={world ? field : null} glowing={!(world && (backdrop || covered))} backdrops={backdrops} background={background}>
           {layers.filter((layer: any) => layer.entry.plate || layer.entry.rides).map(sceneLayer)}
           {/* Overview holds: a shot the overview frames, frozen on its settled last frame (holdTime), as the HyperFrames held clones. */}
@@ -656,7 +703,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
         <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes }}>
           {layers.filter((layer: any) => !layer.entry.plate && !layer.entry.rides).map(sceneLayer)}
         </AbsoluteFill>
-        </>)}
+        </>))}
         {/* Light sweeps darken everything under them (the dip, a plain shade), then add light (screen) over it; the light's own group blends, as the HyperFrames root does. */}
         {sweepDips.length ? <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes, pointerEvents: "none" }}>{sweepDips}</AbsoluteFill> : null}
         {sweepLights.length ? <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes, mixBlendMode: "screen", pointerEvents: "none" }}>{sweepLights}</AbsoluteFill> : null}
@@ -665,6 +712,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
         <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes }}>
           {wipeLayers}
           {medium ? <MediumLayer plan={medium} /> : null}
+          {look ? <LookLayer plan={look} /> : null}
           <BrandFrame story={story} />
           {overlay && Array.isArray(__captions) && __captions.length ? (
             <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} zones={layout?.captions} />
@@ -685,7 +733,7 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
   );
   return (
     <AbsoluteFill style={{ backgroundColor: background, fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
-      {feelWrap(<>
+      {picture(feelWrap(<>
       {base ? <BaseLayer base={base} cameraOps={cameraOps} rooms={subject.rooms} /> : null}
       {subject.needed ? layers.filter((layer: any) => subject.depth(layer) !== "front").map((layer: any) => sceneElement(layer, subject.depth(layer) === "split" ? "behind" : undefined)) : null}
       {breakout ? <LayoutFrame plan={layout} under /> : null}
@@ -699,12 +747,13 @@ export const StoryComposition: React.FC<StoryProps> = (props) => {
           <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate background={background} freeze field={fieldFor(loop.scene)} backdrop={backdropFor(loop.scene)} light={lightFor(loop.scene)}>{loop.render()}</SceneLayer>
         </Sequence>
       ) : null}
-      </>)}
+      </>))}
       {sweepDips}
       {sweepLights}
       {light?.over.length ? <LightOver plan={light} zIndex={LIGHT_Z.remotion} /> : null}
       {wipeLayers}
       {medium ? <MediumLayer plan={medium} /> : null}
+      {look ? <LookLayer plan={look} /> : null}
       <BrandFrame story={story} />
       {overlay && Array.isArray(__captions) && __captions.length ? (
         <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} zones={layout?.captions} />
