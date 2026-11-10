@@ -489,7 +489,7 @@ function resolveCastScene(params, ctx) {
   // frame stand in narrow slots: a wide kind (an open laptop, a cloud) then sets the scale by its reach.
   const tight = canvas.height > canvas.width && p.cast.length > 1;
   const heights = p.cast.map((entry, i) => {
-    try { const member = castMember(cast, entry?.id, `params.cast[${i}].id`); return stageHeight(member.style, member.params, {tight, alone: canvas.height > canvas.width}); } catch { return 1000; }
+    try { const member = castMember(cast, entry?.id, `params.cast[${i}].id`); return stageHeight(member.style, member.params, {tight, alone: canvas.height > canvas.width, shared: p.cast.length > 1}); } catch { return 1000; }
   });
   const inWorldSet = stage.backdrop === 'world';
   const layout = layoutSet(setName, {canvas, colors: b.colors, count: p.cast.length, heights, screen: Boolean(screen), unit: b.unit, backdrop: stage.backdrop,

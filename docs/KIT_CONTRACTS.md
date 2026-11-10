@@ -4022,8 +4022,9 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   size?: small | medium | large, colors: {body, detail, accent}}`
   (`normalizeKindParams`, reached through `normalizeRigParams`; medium is
   not stored), and refuses a person's params by name ("hair does not apply
-  to a cup"). `KINDS` lists 20 in three groups (`KIND_GROUPS`, `kindsOf`):
-  animals `cat dog bear rabbit fox frog penguin owl`, mascots `blob droplet
+  to a cup"). `KINDS` lists 23 in three groups (`KIND_GROUPS`, `kindsOf`):
+  animals `stallion mare foal` (the horses, on four legs) and `cat dog bear
+  rabbit fox frog penguin owl` (upright), mascots `blob droplet
   star monster` (brand colours by default) and objects with faces `phone
   laptop cup bulb robot coin book cloud`; each entry says what its three
   colour slots paint (`slots`). `kindGeometry` reports rig geometry in the
@@ -4036,6 +4037,41 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   `arms-crossed` and `hands-on-hips` rest both hands on the front and
   `point-self` points at the body. A medium kind is 550 to 900 rig units
   tall beside a person of about 1000.
+- Horses (`stallion`, `mare`, `foal`; `isFourLegged`): a sire, a dam and a
+  foal, told apart by size and build (the foal leggy with a short body and a
+  short fluffy mane and tail; the stallion taller with a deeper chest, a
+  thicker neck and a fuller mane). Colour slots: `body` the coat, `detail`
+  the mane and tail, `accent` the lower legs (a bay's black points). They
+  also take `marks`, a list of white markings: `blaze`, `star`, `socks`
+  (`KIND_MARKS`; refused on any other kind). A horse is drawn from the side
+  with its head turned to the camera, facing the way its scene faces it
+  (`facing`); its front legs are the rig's arm joints and its hind legs the
+  leg joints, and a positive angle always swings a leg forward. Every named
+  pose has a four-legged meaning, so no cue fails:
+
+  | Pose | On four legs |
+  | --- | --- |
+  | `stand`, `arms-crossed`, `hands-on-hips`, `shrug` | stands square (forelegs a little apart for the last three), acting with the head |
+  | `walk` | trots: diagonal legs swing together, the body bobs |
+  | `look` | head up |
+  | `slump`, `facepalm` | head low |
+  | `think` | head tilted, a small pawing |
+  | `wave` | lifts the facing foreleg and paws the air |
+  | `point`, `point-self` | lifts the facing foreleg toward the target with a nod (a point is never aimed like an arm: `geometry.noAim`); to the chest for `point-self` |
+  | `cheer` | both forelegs up in a little prance, bouncing |
+  | `stretch` | both forelegs reached forward |
+  | `type` | taps a hoof |
+  | `lean-in` | steps forward, leaning toward the facing side |
+  | `sit`, and any pose in a seated set | lies down: the legs fold under it (`geometry.seatedArms`, `sitLegs`, `sitDrop`) |
+
+- Stick figures: in `stick` and `stick-classic` every kind is a few lines.
+  Limbs are lines (ink alone in `stick-classic`, the limb's colour with an
+  ink edge in `stick`); a headed kind's trunk is its spine and its tail a
+  line; a horse is a line for the body, four for the legs and one each for
+  the neck and the tail; a single body keeps its outline. The head (or the
+  body's outline) and the face stay, so the acting reads. A stick figure's
+  arms and legs meet at the ends of its spine (`kindGeometry(params,
+  {stick})`).
 - `kind-draw.mjs`: `drawKind(style, params, colours, options)` draws a
   kind on the rig's joints with the toon's cute face (`toon.mjs face`), so
   the op list, gaze, blinks and speech mouths act it as they act a person
@@ -4054,19 +4090,20 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   A colour slot is a palette name, a brand role (`primary accent paper ink
   bg`) or a hex. Roles come from the story brand, overridden by the cast's
   colour mapping.
-- `cast.mjs`: the starter cast (95 characters: the original set, then a wider cast with a personality each and one accessory at most, then 24 animals, mascots and objects with faces, `STARTER_KIND_IDS`: `mochi soot biscuit bruno clover rusty ember puddle pebble hoot`, `bloop fizz drip twinkle grumble`, `ping byte latte watt rivet cog penny paige nimbus`). `RETIRED_CAST` holds characters no longer offered (`fatima`): not listed and not in `STARTER_IDS`, but a story that names one by id still draws it (`isStarterId`). Ids are stable and never
+- `cast.mjs`: the starter cast (101 characters: the original set, then a wider cast with a personality each and one accessory at most, then 30 animals, mascots and objects with faces, `STARTER_KIND_IDS`: the horses `comet duchess sprig misty copper shadow`, then `mochi soot biscuit bruno clover rusty ember puddle pebble hoot`, `bloop fizz drip twinkle grumble`, `ping byte latte watt rivet cog penny paige nimbus`). `RETIRED_CAST` holds characters no longer offered (`fatima`): not listed and not in `STARTER_IDS`, but a story that names one by id still draws it (`isStarterId`). Ids are stable and never
   change once shipped.
 - `generate.mjs`: `generateCast({seed, set, count, palette})` → story cast
   entries, always the same for the same inputs. `CHARACTER_SETS` (office-team,
   startup-founders, family, kids, seniors, students, chefs, medical,
   athletes, creators, city-crowd) fix the wardrobe, age mix and props; the
   seed varies the people (skin tones spread across the range, no two members
-  alike). Four more sets give the kinds that are not people:
-  `animal-friends`, `mascots`, `everyday-objects` (each kind once before a
+  alike). Five more sets give the kinds that are not people:
+  `horse-family` (sires, dams and foals in thoroughbred coats, some with
+  markings), `animal-friends`, `mascots`, `everyday-objects` (each kind once before a
   repeat, in its own colours or a seeded variation) and `mixed-company`
   (people and kinds turn about). A seed chooses only among the sets of
   people (`PEOPLE_SET_NAMES`), so seeded styles keep the casts they gave;
-  the four are for `character_set` or `cast.set` to ask for.
+  the five are for `character_set` or `cast.set` to ask for.
   `castFromStyle(pack.cast)` turns a style pack's `{drawing_style,
   set, members}` into `story.cast`.
 - `styles.mjs`: the drawing styles (`DRAWING_STYLES`, flat first) and

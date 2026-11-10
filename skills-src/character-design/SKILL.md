@@ -91,8 +91,9 @@ wear and its colours, glasses, headwear, anything they carry.
 
 ## Animals, mascots and objects
 
-A character does not have to be a person. `kind` chooses what it is: an
-animal (`cat dog bear rabbit fox frog penguin owl`), a soft mascot in the
+A character does not have to be a person. `kind` chooses what it is: a horse
+on four legs (`stallion mare foal`), an upright animal (`cat dog bear rabbit
+fox frog penguin owl`), a soft mascot in the
 brand's colours (`blob droplet star monster`) or an everyday object with a
 face (`phone laptop cup bulb robot coin book cloud`). They act with the same
 poses, expressions, looks and speech as people, in every drawing style, and
@@ -109,9 +110,19 @@ launchclip cast edit whiskers --set size=large --set colors.detail=white
   lists the kinds). Hair, clothes, skin, age and the rest of a person's
   options do not apply and are refused by name; the description reports
   them as `unmatched`.
+- Horses: a `stallion` (sire), a `mare` (dam) or a `foal`. Name the coat
+  and the description sets all three colours: "a bay mare with a blaze", "a
+  grey foal with white socks", "a black stallion". `marks` is a list of
+  white markings (`--set marks+=blaze`, `star`, `socks`). A horse is drawn
+  from the side on four legs, so poses mean their four-legged version
+  (`walk` trots, `look` lifts the head, `slump` lowers it, `wave` and
+  `point` lift a foreleg, `cheer` prances, `sit` lies down): look at those
+  on the sheet.
+- For the simplest look set `--style stick` or `stick-classic`: every kind
+  becomes a stick figure, a few lines and a face.
 - A mascot's colours default to the brand's `primary` and `accent`, so it
   wears each story's brand. A dark body or screen gets light eyes.
-- 24 are ready to use by id (`launchclip cast list`: `mochi`, `biscuit`,
+- 30 are ready to use by id (`launchclip cast list`: `duchess`, `sprig`, `mochi`, `biscuit`,
   `bloop`, `ping`, `latte`, `rivet`…); `--from mochi` starts from one.
 - Where a pose cannot apply, the body does the nearest thing: a blob's arms
   are too short to cross, so `arms-crossed` rests both hands on its front,

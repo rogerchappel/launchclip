@@ -416,8 +416,9 @@ function horse({id, kind, d, g, j, P, F, c, sx, sticks, classic, marks, isStatic
   const legX = B / 2 - 54, top = -(H + d.rise);
   const limb = (length, width, fill) => (sticks ? rod(`M0 0L0 ${n(length)}`, fill) : P.limb(length, width, fill));
   const lower = isFar => P.within({mirror: forward}, () => [
-    ...limb(g.shin - 6, d.legW * 0.8, sticks ? 'body' : socks ? 'marking' : isFar ? 'accentShade' : 'accent'),
-    ...(sticks ? (classic ? [] : [P.ellipse(-3, g.shin + 4, 13, 9, 'hoof')]) : [P.ellipse(-4, g.shin + g.foot * 0.42, d.legW * 0.58, g.foot * 0.62, 'hoof')])
+    // (A stick leg starts at the body's line and ends on the floor.)
+    ...limb(sticks ? g.shin + g.foot + 8 : g.shin - 6, d.legW * 0.8, sticks ? 'body' : socks ? 'marking' : isFar ? 'accentShade' : 'accent'),
+    ...(sticks ? (classic ? [] : [P.ellipse(-3, g.shin + g.foot + 8, 13, 9, 'hoof')]) : [P.ellipse(-4, g.shin + g.foot * 0.42, d.legW * 0.58, g.foot * 0.62, 'hoof')])
   ]);
   const upper = isFar => P.within({mirror: forward}, () => limb(g.thigh, d.legW, sticks ? 'body' : isFar ? 'bodyShade' : 'body'));
   const front = (side, isFar) => {
@@ -436,26 +437,30 @@ function horse({id, kind, d, g, j, P, F, c, sx, sticks, classic, marks, isStatic
   const tail = sticks ? rod(tailPath, 'detail') : P.strand(tailPath, 'detail', foal ? 26 : sire ? 40 : 32);
   const neckFrom = [B / 2 - (sticks ? 54 : 66), sticks ? -6 : -H + 48], neckTo = [d.hx, top + ry * 0.5];
   const neckPath = `M${X(neckFrom[0])} ${n(neckFrom[1])}L${X(neckTo[0])} ${n(neckTo[1])}`;
-  const back = d.neckW * 0.5 + 6;
-  const mane = sticks ? [] : foal
-    ? [0.2, 0.5, 0.8].map(t => P.ellipse(sx * (neckTo[0] + (neckFrom[0] - neckTo[0]) * t - back), neckTo[1] + (neckFrom[1] - neckTo[1]) * t - 8, 22, 22, 'detail'))
-    : P.strand(`M${X(neckTo[0] - back)} ${n(neckTo[1] - 10)}Q${X((neckTo[0] + neckFrom[0]) / 2 - back - 16)} ${n((neckTo[1] + neckFrom[1]) / 2)} ${X(neckFrom[0] - back - 4)} ${n(neckFrom[1] - 20)}`, 'detail', sire ? 50 : 36);
+  // The mane runs down the back of the neck (a foal's is a row of tufts) and shows behind it.
+  const back = d.neckW * 0.5 + (sire ? 28 : 22);
+  const along = t => [neckTo[0] + (neckFrom[0] - neckTo[0]) * t - back, neckTo[1] + (neckFrom[1] - neckTo[1]) * t];
+  const mane = sticks ? (classic ? [] : rod(`M${X(along(0)[0])} ${n(along(0)[1])}L${X(along(1)[0])} ${n(along(1)[1] - 16)}`, 'detail', 9)) : foal
+    ? [0.12, 0.42, 0.72].map(t => P.ellipse(sx * along(t)[0], along(t)[1] - 6, 24, 24, 'detail'))
+    : P.strand(`M${X(along(-0.1)[0] + 8)} ${n(along(-0.1)[1])}Q${X(along(0.5)[0] - 22)} ${n(along(0.5)[1])} ${X(along(1)[0] - 6)} ${n(along(1)[1] - 14)}`, 'detail', sire ? 58 : 44);
   const body = sticks
     ? [...rod(`M${X(-legX)} -6L${X(legX)} -6`, 'body', ROD + 4), ...rod(neckPath, 'body')]
     : [P.shape(rr(-B / 2, -H, B / 2, 26, Math.min(H * 0.48, 86)), 'body'), ...P.strand(neckPath, 'body', d.neckW), P.ellipse(sx * (neckFrom[0] - 4), neckFrom[1] + 16, d.neckW * 0.5, 34, 'body', {outline: false})];
   // Head frame: the pivot under the chin, the head's centre at 0, hc.
   const hc = -ry * 0.9, tip = hc - ry - d.top + 8;
   const head = {
-    ears: both(sg => [P.shape(poly(sg * rx * 0.3, hc - ry * 0.78, sg * rx * 0.6, tip, sg * rx * 0.84, hc - ry * 0.5), 'body'), ...(sticks ? [] : [P.shape(poly(sg * rx * 0.46, hc - ry * 0.8, sg * rx * 0.6, tip + 26, sg * rx * 0.72, hc - ry * 0.66), 'bodyShade', {outline: false})])]),
+    // Small upright ears, close together.
+    ears: both(sg => [P.shape(`M${n(sg * rx * 0.22)} ${n(hc - ry * 0.8)}Q${n(sg * rx * 0.3)} ${n(tip + 10)} ${n(sg * rx * 0.52)} ${n(tip)}Q${n(sg * rx * 0.76)} ${n(tip + 30)} ${n(sg * rx * 0.7)} ${n(hc - ry * 0.62)}Z`, 'body')]),
     head: [P.ellipse(0, hc, rx, ry, 'body')],
     marks: [
-      P.ellipse(0, hc + ry * 0.46, rx * 0.6, ry * 0.36, 'muzzle', {outline: false}),
+      P.ellipse(0, hc + ry * 0.5, rx * 0.66, ry * 0.38, 'muzzle', {outline: false}),
       ...(marks.includes('blaze') ? [P.shape(rr(-rx * 0.13, hc - ry * 0.86, rx * 0.13, hc + ry * 0.22, rx * 0.12), 'marking', {outline: false})] : []),
-      ...(marks.includes('star') ? [P.shape(poly(0, hc - ry * 0.74, rx * 0.15, hc - ry * 0.56, 0, hc - ry * 0.38, -rx * 0.15, hc - ry * 0.56), 'marking', {outline: false})] : []),
-      P.shape(`M${n(-rx * 0.3)} ${n(hc - ry * 0.95)}C${n(-rx * 0.1)} ${n(hc - ry * 1.13)} ${n(rx * 0.36)} ${n(hc - ry * 1.09)} ${n(rx * 0.38)} ${n(hc - ry * 0.86)}C${n(rx * 0.22)} ${n(hc - ry * 0.64)} ${n(-rx * 0.02)} ${n(hc - ry * 0.72)} ${n(-rx * 0.3)} ${n(hc - ry * 0.95)}Z`, 'detail')
+      ...(marks.includes('star') ? [P.shape(poly(0, hc - ry * 0.56, rx * 0.15, hc - ry * 0.4, 0, hc - ry * 0.24, -rx * 0.15, hc - ry * 0.4), 'marking', {outline: false})] : []),
+      // The forelock falls between the ears over the forehead.
+      P.shape(`M${n(-rx * 0.36)} ${n(hc - ry * 0.9)}C${n(-rx * 0.2)} ${n(hc - ry * 1.2)} ${n(rx * 0.4)} ${n(hc - ry * 1.18)} ${n(rx * 0.44)} ${n(hc - ry * 0.84)}C${n(rx * 0.4)} ${n(hc - ry * 0.56)} ${n(rx * 0.16)} ${n(hc - ry * 0.5)} ${n(rx * 0.04)} ${n(hc - ry * 0.58)}C${n(-rx * 0.02)} ${n(hc - ry * 0.74)} ${n(-rx * 0.2)} ${n(hc - ry * 0.72)} ${n(-rx * 0.36)} ${n(hc - ry * 0.9)}Z`, 'detail')
     ],
     features: [F.ellipse(-9, 43, 3.2, 4.4, 'outline', {outline: false}), F.ellipse(9, 43, 3.2, 4.4, 'outline', {outline: false})],
-    dy: 0.07
+    dy: 0.12
   };
   return {head, near, far, front, hind, torso: farFront => [farFront, ...tail, ...mane, ...body]};
 }
@@ -537,7 +542,9 @@ export function drawKind(style, params, colors, {id, joints: j, expression = 'ne
   const headed = d.plan !== 'single';
   const ctx = {id, static: isStatic};
   // A stick figure's trunk is its spine.
-  if (sticks && d.plan === 'headed') Object.assign(shapes, {body: rodOf(P, c, classic)(`M0 -4L0 ${n(-d.torso + 6)}`, shapes.look.limb === 'outline' ? 'outline' : 'body', ROD + 5), front: []});
+  // (And its tail, where it has one, a line.)
+  if (sticks && d.plan === 'headed') Object.assign(shapes, {body: rodOf(P, c, classic)(`M0 -4L0 ${n(-d.torso + 6)}`, shapes.look.limb === 'outline' ? 'outline' : 'body', ROD + 5), front: [],
+    behind: shapes.behind ? rodOf(P, c, classic)('M4 -16Q72 -20 70 -92', 'body') : []});
   // How much of a look the head (or a single body's face) takes, over the toon head's.
   const size = k * (d.turn ?? 1) * s;
   const shift = (headed ? 0.4 : 0.75) * LOOK * k * (d.turn ?? 1);
@@ -564,7 +571,7 @@ export function drawKind(style, params, colors, {id, joints: j, expression = 'ne
   const headJoints = [J(id, 'hb', headX, g.neckY, tilt, [J(id, 'hbidle', 0, 0, {}, [])]), J(id, 'head', headX, g.neckY, tilt, [J(id, 'headidle', 0, 0, {}, headKids)])];
   let body;
   if (quad) {
-    const breath = J(id, 'breath', 0, 0, {}, [headJoints[0], ...four.torso(four.front(four.far, true)), headJoints[1], four.front(four.near, false)]);
+    const breath = J(id, 'breath', 0, 0, {}, [headJoints[0], ...four.torso(four.front(four.far, true)), ...frontView(ctx, turns, []), headJoints[1], four.front(four.near, false)]);
     const torso = J(id, 'torso', 0, g.hipY, {rotation: j.lean, scaleY: j.squash}, [breath]);
     body = J(id, 'body', 0, 0, {y: j.bodyY}, [four.hind(four.far, true), torso, four.hind(four.near, false)]);
   } else {
