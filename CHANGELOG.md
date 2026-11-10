@@ -4,6 +4,41 @@
 
 ### Changed
 
+- `make --animation` delivers a character story as a Short: with no
+  `--aspect` it is 9:16 (it was 16:9). Pass `--aspect 16:9` or `1:1`, or
+  name the shape in the brief ("a landscape cartoon", "16:9", "widescreen").
+  Every other video keeps 16:9.
+- A character story (a story made with a show bible) no longer takes its
+  style's caption preset, which could lay a full-width band over the
+  characters. Its captions are white outlined lines in sentence case, up to
+  four words a line, placed where no character reaches; a style sets its
+  own with `captions.lanes.characters`. The style gate fails a band or a
+  plate over the cast.
+- Every cast scene of a character story moves the camera for as long as it
+  is up (a slow push-in on a speaker, a gentle drift on a wide shot, a
+  punch-in on a reaction), in both renderers. A scene's own `zooms` replace
+  it and `"camera": {"moves": false}` turns it off.
+- The style gate measures what a style governs in a character story: the
+  colours the storyboard sets itself (captions, brand frame, cards) against
+  the brand colours, in place of the render's colour clusters, which are the
+  show bible's world and cast. The motion grammar's shot range is not
+  reported there. Other stories are checked as before.
+- A character story's captions keep a phrase's last word with its phrase: a
+  line cut for size one word short of a full stop or a comma hands words to
+  that word ("The foal watched the" / "starting gate." where it was "The
+  foal watched the starting" / "gate."). Other videos' captions are chunked
+  as before.
+- A `wide` shot on the `standing` set moves a character in from the side of
+  the safe zone when its reach passes it. In 9:16 the right-hand place of a
+  two-shot reached under the platform's buttons, so a wide two-shot failed
+  the cast check whatever the planner wrote. Such a scene failed the cast
+  gate before, so no video that rendered changes.
+- In a character story the captions count as content for the density gate
+  in the third of the frame they sit in.
+- Reference sheets, cast sheets and demo recordings also find the headless
+  shell a renderer already installed (Remotion's, then HyperFrames'), after
+  `LAUNCHCLIP_CHROMIUM`, Playwright's Chromium and a system Chrome. When no
+  browser is found the error lists every place it looked.
 - A one-prompt explainer from `launchclip make` is carried by characters.
   With no media in `--assets`, an explainer or short-form script and make's
   seeded style, the direction map casts one to three characters for the idea

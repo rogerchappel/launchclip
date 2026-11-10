@@ -8,7 +8,7 @@ import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { chooseFile, cursorPath, encodeFrames, findChromium, fixtureResponse, loadPlaywright, locate, prepareContext, sessionState, recorderAvailability, seededRandom, typingDelays, uploadTarget } from "../src/demo/record.js";
+import { chooseFile, chromiumMissingMessage, chromiumSearch, cursorPath, encodeFrames, findChromium, fixtureResponse, loadPlaywright, locate, prepareContext, sessionState, recorderAvailability, seededRandom, typingDelays, uploadTarget } from "../src/demo/record.js";
 import { mediaSkip } from "./helpers/media.js";
 
 const hasFfmpeg = spawnSync("ffmpeg", ["-version"]).status === 0;
@@ -61,6 +61,48 @@ test("findChromium prefers LAUNCHCLIP_CHROMIUM and never invents a path", async 
   assert.equal(await findChromium({ env: { LAUNCHCLIP_CHROMIUM: fake } }), fake);
   const found = await findChromium({ env: { PLAYWRIGHT_BROWSERS_PATH: dir } });
   assert.ok(found === null || typeof found === "string");
+});
+
+test("findChromium finds the browser a renderer already has when Playwright's is missing", async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-chromium-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const empty = path.join(dir, "no-playwright");
+  // A machine with no Playwright Chromium and no system Chrome (win32 has no system list), only renderer browsers.
+  const base = { env: { PLAYWRIGHT_BROWSERS_PATH: empty }, home: path.join(dir, "home"), platform: "win32", root: path.join(dir, "root") };
+  assert.equal(await findChromium(base), null);
+
+  // HyperFrames' cache: the newest build wins.
+  for (const version of ["mac_arm-152.0.7928.2", "mac_arm-152.0.7977.30"]) {
+    const folder = path.join(base.home, ".cache", "hyperframes", "chrome", "chrome-headless-shell", version, "chrome-headless-shell-mac-arm64");
+    await mkdir(folder, { recursive: true });
+    await writeFile(path.join(folder, "chrome-headless-shell"), "");
+  }
+  const hyperframes = path.join(base.home, ".cache", "hyperframes", "chrome", "chrome-headless-shell", "mac_arm-152.0.7977.30", "chrome-headless-shell-mac-arm64", "chrome-headless-shell");
+  assert.equal(await findChromium(base), hyperframes);
+
+  // The Remotion renderer's own headless shell comes before HyperFrames'.
+  const { remotionShellPath } = await import("../src/renderers/remotion_segments.js");
+  const shellFolder = remotionShellPath({ root: base.root });
+  if (shellFolder) {
+    await mkdir(shellFolder, { recursive: true });
+    await writeFile(path.join(shellFolder, "chrome-headless-shell"), "");
+    assert.equal(await findChromium(base), path.join(shellFolder, "chrome-headless-shell"));
+  }
+
+  // LAUNCHCLIP_CHROMIUM still wins over everything.
+  const fake = path.join(dir, "chrome");
+  await writeFile(fake, "");
+  assert.equal(await findChromium({ ...base, env: { ...base.env, LAUNCHCLIP_CHROMIUM: fake } }), fake);
+});
+
+test("a missing Chromium names every place it looked", async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-chromium-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const search = await chromiumSearch({ env: { LAUNCHCLIP_CHROMIUM: path.join(dir, "gone"), PLAYWRIGHT_BROWSERS_PATH: path.join(dir, "pw") }, playwrightPath: path.join(dir, "pinned"), home: path.join(dir, "home"), platform: "win32", root: path.join(dir, "root") });
+  assert.equal(search.path, null);
+  const message = chromiumMissingMessage(search.looked);
+  for (const place of ["LAUNCHCLIP_CHROMIUM", path.join(dir, "gone"), "Playwright's own Chromium", path.join(dir, "pinned"), path.join(dir, "pw"), "Remotion renderer's headless shell", path.join(dir, "root", "node_modules", ".remotion"), "HyperFrames renderer's headless shell", path.join(dir, "home", ".cache", "hyperframes")]) assert.ok(message.includes(place), `the message names ${place}: ${message}`);
+  assert.match(message, /set LAUNCHCLIP_CHROMIUM/);
 });
 
 test("loadPlaywright falls back to the Playwright the recorded app's repo installs", async (t) => {

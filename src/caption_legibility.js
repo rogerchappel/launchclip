@@ -18,7 +18,8 @@
 // that is still illegible after that.
 
 import { spawn } from "node:child_process";
-import { captionOptions, captionPlan, captionsOverlayOf, chunksForCaptions } from "@launchclip/core/captions.mjs";
+import { castCaptionZones } from "@launchclip/core/cast-captions.mjs";
+import { captionOptions, captionPlan, captionZoneIndex, captionsOverlayOf, chunksForCaptions } from "@launchclip/core/captions.mjs";
 import { decodePng } from "./visual_snapshot.js";
 import { renderedModels } from "./direction_guardrails.js";
 
@@ -42,7 +43,8 @@ export function captionLines(story, chunks) {
   // Hidden as the compilers hide them: under a scene that hides captions, and overlay.hide.
   const hide = (Array.isArray(overlay.hide) ? overlay.hide : []).map((range) => [Number(range[0]), Number(range[1])]);
   try { for (const { entry, model } of renderedModels(story).entries.values()) if (model.hidesCaptions) hide.push([entry.start, entry.renderEnd]); } catch { /* unresolvable story: no scene hides */ }
-  const plan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide });
+  // A character story's captions sit clear of its cast (castCaptionZones), as both compilers draw them.
+  const plan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide, zones: castCaptionZones(story) });
   const o = plan.options;
   // The plan's own lines: a preset with its own chunk size re-chunks the words.
   const byId = new Map(chunksForCaptions(chunks, o).map((chunk) => [chunk.id, chunk]));
@@ -97,6 +99,36 @@ export function captionBandRect(options, format) {
   const b = options.band;
   const pad = 0.04 * H;
   return { x: Math.round(b.left * W), y: Math.round(options.bandTop * H - pad), width: Math.round((1 - b.left - b.right) * W), height: Math.round(b.height * H + 2 * pad) };
+}
+
+// The least outline (px) and outline-to-text contrast that carry a line on any background.
+export const CAPTION_OUTLINE = Object.freeze({ stroke: 6, contrast: 4.5 });
+
+/**
+ * Captions that carry their own contrast: a character story's treatment
+ * (captions.mjs worldTone false), type in an outline at least
+ * CAPTION_OUTLINE.stroke px thick that contrasts with the text. Such a line
+ * needs no legibility plate: what is behind each glyph is its outline.
+ */
+export function outlinedCaptions(options) {
+  if (!options || options.worldTone !== false || !(options.stroke >= CAPTION_OUTLINE.stroke)) return false;
+  const rgba = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(String(options.strokeColor ?? ""));
+  const stroke = rgba ? rgba.slice(1, 4).map(Number) : /^#[0-9a-f]{6}$/i.test(String(options.strokeColor)) ? hexRgb(options.strokeColor) : null;
+  if (!stroke || !/^#[0-9a-f]{6}$/i.test(String(options.colors?.idle))) return false;
+  const a = luminance(hexRgb(options.colors.idle)), b = luminance(stroke);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= CAPTION_OUTLINE.contrast;
+}
+
+/**
+ * Where one line is read: its caption zone (a character story's captions
+ * sit clear of its cast, castCaptionZones) with the band's margin, else the
+ * caption band. line: {start, end} (its spoken span).
+ */
+export function lineBandRect(options, format, line, zones = []) {
+  const index = captionZoneIndex(zones, line.start, line.end);
+  if (index < 0) return captionBandRect(options, format);
+  const pad = 0.04 * Number(format.height), rect = zones[index].rect;
+  return { x: Math.round(rect.x), y: Math.round(rect.y - pad), width: Math.round(rect.width), height: Math.round(rect.height + 2 * pad) };
 }
 
 /**
@@ -281,11 +313,15 @@ export async function measureCaptionLegibility(video, story, { chunks, frame = v
   const { lines, options } = captionLines(story, chunks);
   if (!lines.length) return { lines: [], failed: [] };
   const format = { width: Number(story.format.width), height: Number(story.format.height) };
-  const rect = captionBandRect(options, format);
+  const zones = castCaptionZones(story);
   const out = [];
   for (const line of lines) {
+    const rect = lineBandRect(options, format, line, zones);
     const image = await frame(video, line.time, format);
-    out.push({ id: line.id, text: line.text, time: line.time, plated: line.plated, ...(line.backing ? { backing: line.backing.color } : {}), ...lineLegibility(image, rect, line.colors, { size: options.size, chars: line.chars, plate: line.backing?.color ?? null, plateAlpha: line.backing?.alpha ?? 1, plateLine: line.backing?.line ?? null }) });
+    const measured = lineLegibility(image, rect, line.colors, { size: options.size, chars: line.chars, plate: line.backing?.color ?? null, plateAlpha: line.backing?.alpha ?? 1, plateLine: line.backing?.line ?? null });
+    // Outlined type reads on anything: the outline is what is behind every glyph, whatever the frame holds.
+    const outlined = outlinedCaptions(options) && !line.plated;
+    out.push({ id: line.id, text: line.text, time: line.time, plated: line.plated, ...(line.backing ? { backing: line.backing.color } : {}), ...measured, ...(outlined && measured.found ? { legible: true, outlined: true } : {}) });
   }
   return { lines: out, failed: out.filter((line) => line.found && !line.legible).map((line) => line.id) };
 }
@@ -299,12 +335,12 @@ const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b
  */
 export function predictCaptionPlates(story, chunks, elements = []) {
   const { lines, options } = captionLines(story, chunks);
-  if (!lines.length) return [];
-  const band = captionBandRect(options, story.format);
+  if (!lines.length || outlinedCaptions(options)) return [];
+  const zones = castCaptionZones(story);
   // Characters and media under the band (a card in the band is already a layout collision).
   // A photo-scene's picture (fullFrame, src/layout_check.js) is judged on the render, as before.
   const busy = elements.filter((element) => element.role === "media" && element.rect && element.id !== "base" && !element.fullFrame);
-  return lines.filter((line) => busy.some((element) => element.start < line.end && element.end > line.start && overlaps(element.rect, band))).map((line) => line.id);
+  return lines.filter((line) => { const band = lineBandRect(options, story.format, line, zones); return busy.some((element) => element.start < line.end && element.end > line.start && overlaps(element.rect, band)); }).map((line) => line.id);
 }
 
 /** The plates an overlay should carry: predicted and measured ids, merged and sorted. */

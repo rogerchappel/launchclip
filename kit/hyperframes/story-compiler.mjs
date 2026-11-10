@@ -56,6 +56,7 @@ import { EMITTERS as WORLD_EMITTERS } from './catalog-world.mjs';
 import { customModel, emitCustom, loadCustomModules } from './custom-module.mjs';
 import { cameraOverlaps } from '../core/catalog-c.mjs';
 import { needsSubject, roomChanges, roomStateAt, sceneLayerOf, SUBJECT_CAMERA, subjectCameraOps, subjectFilterAt, subjectFilterChanges, subjectSegments, subjectWindows } from '../core/subject-layer.mjs';
+import { storyCaptionZones } from '../core/cast-captions.mjs';
 import { LAYOUT_FRAME, LAYOUT_FRAME_UNDER, breakoutNotch, layoutFrameStyle, layoutPlan, layoutUnderFrameStyle, withLayoutCameras } from '../core/footage-layout.mjs';
 
 export const COMPOSITION_ID = 'launchclip-story';
@@ -577,7 +578,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     if (chunks?.length) {
       captionWords = chunks;
       for (const range of overlay.hide ?? []) hide.push([Number(range[0]), Number(range[1])]);
-      const captionsPlan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide, zones: layout?.captions });
+      const captionsPlan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide, zones: storyCaptionZones(story, layout) });
       // Camera moves that sweep panels through the band dip the captions out
       // (captions.hide_during_moves, camera-world.mjs captionDipWindows).
       const dips = captionDipTweens(captionDipWindows(plan, captionMoveHide(overlay)));

@@ -24,6 +24,7 @@ import { DIRECTION_LANES, directionMeasures, draftDirectionMap, validateDirectio
 import { isLongForm, structureLongForm } from "@launchclip/core/long-form.mjs";
 import { compareMeasures } from "@launchclip/core/profiles.mjs";
 import { checkLayout, elementsFromEditorialLayout, elementsFromStory, layoutExtras } from "@launchclip/core/layout-check.mjs";
+import { castCaptionZones } from "@launchclip/core/cast-captions.mjs";
 import { captionZones } from "@launchclip/core/footage-layout.mjs";
 import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, directionPrompt, planningPrompt, suggestModules } from "@launchclip/core/planning-prompt.mjs";
 import { applyStyle } from "@launchclip/core/style.mjs";
@@ -739,7 +740,7 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
           hidesCaptions
         }), ...extras.parts];
       },
-      captionZones: resolved.base ? captionZones(resolved) : []
+      captionZones: resolved.base ? captionZones(resolved) : castCaptionZones(resolved)
     });
     const report = checkLayout({ canvas, elements, duration: Number(resolved.resolved?.duration) || undefined });
     layout.findings = report.findings;

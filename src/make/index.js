@@ -883,16 +883,14 @@ async function bibleVoices(ctx, script) {
   return cast.length && cast.every(Boolean) ? cast : null;
 }
 
-// The browser that draws the reference sheets: LAUNCHCLIP_CHROMIUM or a
-// Playwright or system Chrome (src/demo/record.js findChromium), else the
-// headless shell the Remotion renderer already has, so a machine that can
-// render a video can draw its sheets. null leaves it to Playwright's default.
+// The browser that draws the reference sheets: LAUNCHCLIP_CHROMIUM, a
+// Playwright or system Chrome, else the headless shell a renderer already
+// has (src/demo/record.js chromiumSearch), so a machine that can render a
+// video can draw its sheets. null leaves the search (and its error, which
+// names every place looked) to the sheet's own launch.
 async function sheetBrowser(env) {
   const { findChromium } = await import("../demo/record.js");
-  const found = await findChromium({ env }).catch(() => null);
-  if (found) return found;
-  const { remotionBrowserExecutable } = await import("../renderers/remotion_segments.js");
-  return remotionBrowserExecutable(env) ?? null;
+  return findChromium({ env }).catch(() => null);
 }
 
 // The show bible (docs/ANIMATION_PIPELINE_RFC.md §4.2, §6.1, §6.3; the

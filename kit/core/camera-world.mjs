@@ -50,6 +50,7 @@ import { getEase, motionBlurPx } from './motion.mjs';
 import { OVERVIEW, isCameraTransition } from './transitions.mjs';
 import { resolveGrammar } from './grammar.mjs';
 import { FIELD_PARALLAX, fieldTiles } from './ambient.mjs';
+import { characterCameraOn } from './character-camera.mjs';
 import { shotZooms } from './zooms.mjs';
 
 export const CAMERA_MODES = Object.freeze(['cuts', 'world']);
@@ -470,10 +471,11 @@ export function cameraPlan(story, { windows, objects } = {}) {
   const warnings = [];
   if (camera.mode === 'world') {
     for (const entry of plates) {
-      if (!Array.isArray(entry.scene.zooms) || !entry.scene.zooms.length) continue;
+      // Its own zooms, else (a character story's cast scene) its default move (character-camera.mjs).
+      const { keys, warnings: dropped } = shotZooms(story, entry, objects?.zoomRects?.(entry.id) ?? null);
+      if (!keys.length && !dropped.length) continue;
       const placement = layout.placements.get(entry.id);
       const rest = restState(placement, size);
-      const { keys, warnings: dropped } = shotZooms(story, entry, objects?.zoomRects?.(entry.id) ?? null);
       warnings.push(...dropped);
       const at = (state) => { const point = worldPoint(placement, state); return { x: round(point.x, 4), y: round(point.y, 4), zoom: round(rest.zoom * state.s, 6), rotation: rest.rotation }; };
       for (const key of keys) moves.push({ sceneId: entry.id, type: 'zoom', zoom: true, start: key.start, duration: key.duration, ease: key.ease, blur: blurFor('zoom'), from: at(key.from), to: at(key.to) });
@@ -508,7 +510,9 @@ export function cameraPlan(story, { windows, objects } = {}) {
   for (let i = 0; i < moves.length - 1; i += 1) moves[i].duration = round(Math.max(1 / fps, Math.min(moves[i].duration, moves[i + 1].start - moves[i].start)), 6);
   const unit = Math.min(width, height) / 1080;
   const style = grammar.camera;
-  const drift = camera.mode === 'world' && style.drift > 0 && duration > 0 ? {
+  // A character story's shots carry their own moves (character-camera.mjs), which keep the view inside each
+  // plate; the drift would add a sway under them and shrink the view past a plate that draws its own world.
+  const drift = camera.mode === 'world' && style.drift > 0 && duration > 0 && !characterCameraOn(story) ? {
     x: wave(style.drift * unit, style.driftPeriod, duration),
     y: wave(-style.drift * 0.7 * unit, style.driftPeriod * 0.73, duration),
     scale: { ...wave(style.breathe, style.driftPeriod * 1.37, duration), centre: round(1 - style.breathe, 6) }

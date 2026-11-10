@@ -91,6 +91,8 @@ import { needsSubject, roomStateAt, sceneLayerOf, subjectCameraAt, subjectCamera
 // @ts-ignore plain ESM from kit/core
 import { propsToStyle } from "@launchclip/core/catalog-b-view.mjs";
 // @ts-ignore plain ESM from kit/core
+import { storyCaptionZones } from "@launchclip/core/cast-captions.mjs";
+// @ts-ignore plain ESM from kit/core
 import { breakoutNotch, layoutPlan, layoutStateAt, withLayoutCameras } from "@launchclip/core/footage-layout.mjs";
 // @ts-ignore plain ESM from kit/core
 import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumLayerStyle, mediumPlan } from "@launchclip/core/medium.mjs";
@@ -595,6 +597,8 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
   const base = React.useMemo(() => storyBase(story), [story]);
   // Footage layouts: the sections' frame and the reframing base camera.
   const layout = React.useMemo(() => (base ? layoutPlan(story) : null), [story, base]);
+  // Footage layouts put the captions beside the presenter; a character story puts them clear of its cast.
+  const captionZones = React.useMemo(() => storyCaptionZones(story, layout), [story, layout]);
   const layoutFill = React.useMemo(() => (layout ? panelFillPlan(story, { width: story.format.width, height: story.format.height }) : null), [layout, story]);
   const cameraOps = React.useMemo(() => {
     const models = layers.map((layer: any) => layer.model);
@@ -719,7 +723,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
           {look ? <LookLayer plan={look} /> : null}
           <BrandFrame story={story} />
           {overlay && Array.isArray(__captions) && __captions.length ? (
-            <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} zones={layout?.captions} />
+            <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} zones={captionZones} />
           ) : null}
         </AbsoluteFill>
         {audio ? <Audio src={assetUrl(audio)} volume={mixVolume} /> : null}
@@ -763,7 +767,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
       {look ? <LookLayer plan={look} /> : null}
       <BrandFrame story={story} />
       {overlay && Array.isArray(__captions) && __captions.length ? (
-        <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} zones={layout?.captions} />
+        <WordCaptions chunks={__captions} hide={hide} overlay={overlay} story={story} dips={dips} zones={captionZones} />
       ) : null}
       {audio ? <Audio src={assetUrl(audio)} volume={mixVolume} /> : null}
     </AbsoluteFill>

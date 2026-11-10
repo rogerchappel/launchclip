@@ -189,8 +189,9 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
 - `states` on a scene (1–5 entries, each `{at, set}`) advances one module
   instance through timed states; see "Shot states and the focus device".
 - `motion.grammar` (a grammar name or `{base, ...overrides}`), `motion.feel` (see "Story feel") and `camera`
-  (`{mode, layout?, spacing?, parallax?, blur?, kicks?}`): see "Motion grammar" and
-  "World camera".
+  (`{mode, layout?, spacing?, parallax?, blur?, kicks?, moves?}`): see "Motion grammar" and
+  "World camera"; `moves: false` turns off a character story's default moves
+  ("Zooms inside a shot").
 - Assets are project-relative paths under `assets/`.
 - `audio.narration` = `{text, provider?, voice?, speed?}` is narration that
   `launchclip finish` synthesises into `audio.voice` and `audio.words` (text
@@ -963,7 +964,8 @@ A style pack is `.launchclip/styles/<name>/style.json`:
   mean, or a string grammar, to replace them); `motion: {blur: {samples:
   4}}` keeps the pack's `shutter` 1.5. The captions
   overlay gets the pack's preset (with `captions.lanes[story.lane]` on top,
-  `packCaptionsFor`) only when it names neither `preset` nor `style`, and its
+  `packCaptionsFor`; a character story takes only `captions.lanes.characters`,
+  `packCaptionsForStory`) only when it names neither `preset` nor `style`, and its
   other options per key (a story with no `overlays` at all
   gets one captions overlay); `sound` lands on `audio.sfx_density`,
   `audio.sfx_library` and `audio.music_hints` (finish filters cues by density
@@ -1342,10 +1344,45 @@ colors?, stroke?, shadow?, entrance?, exit?, offset?, hide_during_moves?}`; lega
 presets; `STORY_CAPTION_PRESETS` in `story.mjs` mirrors the names. An overlay
 that names neither gets `captionDefaultPreset(story)`: `quiet-accent` in a
 footage-led story that names no style pack, `word-highlight` everywhere else
-(a pack's caption defaults arrive through `applyStyle`). `quiet-accent` is
+(a pack's caption defaults arrive through `applyStyle`). A character story
+has its own treatment: see "Character stories" below. `quiet-accent` is
 sentence case in the body face with no stroke, and colours at most one accent
 word per line (`accents: 1`): the line's first emphasis word, else its longest
 word of six letters or more.
+
+**Chunking.** `chunkWords(words, {maxWords, maxChars, gapSeconds,
+keepPhrase})` fills a line until the next word would pass a limit, and ends
+it on a full stop, a comma (after two words or more) or a pause. With
+`keepPhrase` (off by default; a character story's captions turn it on) a
+phrase's last word is kept with its phrase: when a line was cut for size one word short of the phrase's end
+("The foal watched the starting" / "gate."), it hands words from its end to
+the lone word until the two are about even ("The foal watched the" /
+"starting gate."). Only when the line before keeps two words or more, the two
+were spoken without a pause, and the new line fits the limits; a one-word
+sentence ("No.") stays alone.
+
+**Character stories** (`kit/core/character-story.mjs`,
+`kit/core/cast-captions.mjs`). `isCharacterStory(story)`: the story carries a
+`bible` reference and stages its cast (`cast-scene`, `character-cameo`), and
+is not footage-led. Its captions overlay, when it names no `preset` or
+`style`, resolves with `CHARACTER_CAPTIONS` under its own options
+(`characterCaptions`): `word-highlight` (no band, no plate) in sentence case
+and the brand's body face, 4 words and 20 letters a line with a phrase's
+last word kept with its phrase, white type in
+the preset's dark outline with the spoken word in the brand primary, and no
+world-tone recolouring (the outline carries it on any world). A style pack's
+caption preset is not filled into such a story (`packCaptionsForStory`):
+only what the pack sets under `captions.lanes.characters` applies.
+`castCaptionZones(story)` places the captions clear of the cast: over every
+cast scene it scores the usual band, the band 58% down, the middle and the
+top by how much of the band each character's reach covers (a head counting
+three times a body), takes the first place with the lowest score for the
+whole story, and returns one zone per run of cast scenes (`[]` when that
+place is the usual band, when the overlay sets `position` or `rect`, or when
+the story is not a character story). Both compilers, the segment renderer,
+the caption legibility check and the layout check take their zones from
+`storyCaptionZones(story, layout)` (a footage layout's zones first), so the
+captions are drawn, measured and checked in the same place.
 
 **Over worlds.** A line spoken mostly over a track-0 `world` scene sits on
 the world, not the brand background. Its tone is the world's time of day
@@ -2926,6 +2963,43 @@ without a cut. The shape matches `evidence-clip`'s `focus`.
   next zoom (the camera travels box to box) or, on the last zoom, eases out
   so it is back at rest when the shot ends, before the next shot's move.
 
+**A character story's default moves** (`kit/core/character-camera.mjs`). In
+a character story (`isCharacterStory`) a track-0 cast scene with no `zooms`
+of its own takes one move for as long as it is up; `shotZooms` returns its
+keys, so both compilers play it through the same code as a zoom (camera
+moves flagged `zoom: true` in world mode, which leave the captions alone;
+the scene's zoom wrappers in cuts mode). `characterMove(story, scene)`
+chooses it from the storyboard alone:
+
+| Move | When | What |
+|---|---|---|
+| `speaker` | a `medium` or `close` shot where a character `says` a line | a push-in that travels along the canvas's long side: up toward the face in 9:16, across in 16:9 |
+| `wide` | a `wide` shot | a drift across both sides at once with the same push; its direction alternates with the plate's place in the story |
+| `reaction` | a `medium` or `close` shot where nobody speaks | a punch-in from the shot's own framing over 0.42 s on the grammar's camera ease, then the speaker's move from the centre it landed on |
+
+`CHARACTER_CAMERA` holds the amounts: a move travels 3.3% of the long side
+and pushes 2.5% of scale each second (10% of push at most), and starts
+between 1.05× and 1.14× so that travel has room inside the plate: the view
+never leaves it. The motion gate (`src/render_motion_analysis.js`) calls a
+frame pair still under 0.4 grey levels of mean change on a 72 px grid; on a
+flat drawn world a push alone changes too few pixels, which is why the move
+also travels. A slow move starts and ends on a cut, so it never stops: it
+climbs from 40% of its cruising speed in four even steps over 0.32 s,
+cruises, and comes back down the same way, all in linear keys (slow, fast,
+slow; no overshoot; the same frame whichever way the timeline is sought).
+Only the punch-in is fast enough for the camera's velocity blur to show.
+In world mode the camera's drift is off while these moves are on, and when
+the next shot has no move of its own a last key puts the camera back at
+rest as the scene ends. A `world` plate keeps its own `params.camera`. A
+scene gets no move when it is shorter than 0.8 s; when it or the next plate
+arrives on a camera move between plates (`pan`, `pull`, `orbit`, `whip-pan`,
+and `push` or `overview` in world mode); in world mode, when it or the next
+plate arrives on anything but a cut or a transition of 0.2 s or less; or
+when it is the last scene of a story that loops back (`ending.loop_to`). In
+cuts mode a scene zooms inside its own layer, so it moves through a
+dissolve or a wipe.
+`camera.moves: false` turns every default move off.
+
 Validation (`kit/core/story.mjs` `validateZooms`; timing is checked with the
 longest move, 0.8 s, so it holds in every grammar):
 
@@ -4340,8 +4414,14 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   the set's furniture by the same zoom (`content.shot.set`, a transform with
   origin 0 0; a world the scene draws itself comes closer by a third of
   that). `fitShot` then moves a character in, or shrinks the shot, until
-  every pose's reach is inside the safe zone. A framed actor's reach is cut
-  at the frame's bottom edge (`actor.cut`). A 9:16 cast-scene in standing,
+  every pose's reach is inside the safe zone. A `wide` shot keeps the set's
+  own layout, except on a set with no furniture (`WIDE_SHIFT_SETS`:
+  `standing`), where a character whose reach passes one side of the safe
+  zone moves in by that much (nothing shrinks): in 9:16 the safe zone ends
+  140 px inside the right edge, which the set's right-hand place reaches
+  past. A shift that does not bring every reach inside (a walk to the
+  frame's edge) is not kept, and the cast gate reports it. A framed actor's
+  reach is cut at the frame's bottom edge (`actor.cut`). A 9:16 cast-scene in standing,
   phone, kitchen-counter, sofa or park-bench defaults to medium
   (`defaultShot`), or wide when someone walks; everything else defaults to wide. A cue's `shot` on a
   cast-scene character is a punch-in: a hard cut (`set` op on

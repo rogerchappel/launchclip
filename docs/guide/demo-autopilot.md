@@ -233,7 +233,7 @@ await recordFlow(context, plan.flows[0], { url, out: "assets/demo", viewport: { 
 
 ## What you need
 
-Demo autopilot uses Playwright (an optional dependency, or the `playwright` / `@playwright/test` your app's repo already installs) and a Chromium that's already on your machine: `LAUNCHCLIP_CHROMIUM`, Playwright's own browser, or Google Chrome. It never downloads a browser itself; if none is found, run `npx playwright install chromium`. Video is encoded with your system `ffmpeg`.
+Demo autopilot uses Playwright (an optional dependency, or the `playwright` / `@playwright/test` your app's repo already installs) and a Chromium that's already on your machine: `LAUNCHCLIP_CHROMIUM`, Playwright's own browser, Google Chrome, or the headless shell a renderer already installed (Remotion's, then HyperFrames'). It never downloads a browser itself; if none is found, the error lists every place it looked: set `LAUNCHCLIP_CHROMIUM` or run `npx playwright install chromium`. Video is encoded with your system `ffmpeg`.
 
 Try it on the bundled sample app, [`examples/demo-app`](../../examples/demo-app) (Pulseboard, a made-up analytics SaaS):
 

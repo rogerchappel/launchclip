@@ -22,6 +22,8 @@ const RANK = Object.freeze({wide: 0, medium: 1, close: 2});
 export const SHOT_ZOOM = Object.freeze({wide: 1, medium: 2, close: 3.1});
 // Sets where the people are the subject: a 9:16 frame opens on them at medium.
 export const PORTRAIT_MEDIUM_SETS = Object.freeze(['standing', 'phone', 'kitchen-counter', 'sofa', 'park-bench']);
+// Sets with no furniture to stand at: a wide shot there may move a character across (fitShot).
+export const WIDE_SHIFT_SETS = Object.freeze(['standing']);
 // A face is at most this share of its slot's width (two heads never touch).
 const HEAD_SHARE = Object.freeze({medium: 0.6, close: 0.78});
 const r2 = value => Math.round(value * 100) / 100;
@@ -78,7 +80,8 @@ export function frameGuides(canvas) {
 export function frameCast(shot, {canvas, actors, floor, box = null, fit = 1, shift = null}) {
   const W = canvas.width, H = canvas.height;
   const s0 = actors[0].scale;
-  if (shot === 'wide') return {shot, scale: s0, floor, xs: actors.map(a => a.x), zoom: 1, top: floor - Math.max(...actors.map(a => a.marks.top)) * s0, set: {x: 0, y: 0, scale: 1}};
+  // Wide: the set's own layout; `shift` moves a character across (fitShot's wideShift, a set with no furniture).
+  if (shot === 'wide') return {shot, scale: s0, floor, xs: actors.map((a, i) => r2(a.x + (shift?.[i] ?? 0))), zoom: 1, top: floor - Math.max(...actors.map(a => a.marks.top)) * s0, set: {x: 0, y: 0, scale: 1}};
   const {safe, band} = frameGuides(canvas);
   const area = box ?? safe;
   const n = actors.length;
@@ -139,15 +142,35 @@ export function punchIn(shot, sceneShot, {canvas, actor, lean = 0}) {
  * A character whose gesture reaches past a side moves in by that much; a
  * reach above the safe zone, or past both sides, shrinks the shot. → the
  * last placement.
+ *
+ * A wide shot keeps the set's own layout. With wideShift (a set with no
+ * furniture to stand at, like `standing`) a character whose reach passes one
+ * side of the safe zone moves in by that much, and nothing shrinks: in 9:16
+ * the safe zone ends well inside the right edge (the platform's buttons), so
+ * the set's right-hand place, level with its left, reaches past it. A shift
+ * that does not bring every reach inside (a walk to the frame's edge) is not
+ * kept: the placement is the set's own, and the cast gate says what is out.
  */
-export function fitShot(shot, place, {canvas, count}) {
+export function fitShot(shot, place, {canvas, count, wideShift = false}) {
   let fit = 1, shift = new Array(count).fill(0);
   let placed = place(fit, shift);
-  if (shot === 'wide') return placed;
+  if (shot === 'wide' && !wideShift) return placed;
   const {safe} = frameGuides(canvas);
   const right = safe.x + safe.width;
   // Kept a few px inside the edges, so the gate's rounding never meets them.
   const inset = 3;
+  if (shot === 'wide') {
+    const own = placed;
+    const sides = () => placed.actors.map(a => ({under: safe.x + inset - a.reach.left, over: a.reach.right - (right - inset)}));
+    for (let tries = 0; tries < 6; tries++) {
+      const off = sides();
+      if (off.every(o => o.under <= 0 && o.over <= 0)) return placed;
+      if (off.some(o => o.under > 0 && o.over > 0)) return own;
+      shift = shift.map((dx, i) => dx + (off[i].under > 0 ? off[i].under + 1 : 0) - (off[i].over > 0 ? off[i].over + 1 : 0));
+      placed = place(fit, shift);
+    }
+    return sides().every(o => o.under <= 0 && o.over <= 0) ? placed : own;
+  }
   for (let tries = 0; tries < 12; tries++) {
     const off = placed.actors.map(a => ({under: safe.x + inset - a.reach.left, over: a.reach.right - (right - inset), top: safe.y + inset - a.reach.top}));
     if (off.every(o => o.under <= 0 && o.over <= 0 && o.top <= 0)) break;

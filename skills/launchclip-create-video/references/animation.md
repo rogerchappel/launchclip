@@ -29,7 +29,9 @@ The order is fixed, and two points stop for the user:
 `launchclip make "<prompt>" --animation` is the same pipeline with an API
 model in your seat. Both routes write these files in these schemas and check
 each with the same command, so a project started on one route can be finished
-on the other.
+on the other. `make --animation` delivers 9:16 (a Short) unless you pass
+`--aspect 16:9` (or `1:1`) or the brief names the shape ("a landscape
+cartoon", "16:9", "widescreen").
 
 | File | Schema | Written by | Checked with | `make` stage |
 |---|---|---|---|---|
@@ -224,9 +226,22 @@ world (its kind and time): the cast then stands in that place, full frame,
 and not in a small room of its own. `motion` keeps the camera alive under
 people who stand and talk. With the seeded style from the quick path's
 step 1, name it in `style` as [workflow.md](workflow.md) ("No style
-given") says, leave the caption style and `motion.grammar` to it, and pass
+given") says, leave `motion.grammar` to it, and pass
 it to the bible too (`bible freeze --pack <style>`). Do not write a
-`cast`: the bible supplies it. Pin the story to the bible, then voice it:
+`cast`: the bible supplies it.
+
+A story pinned to a bible gets two things without being asked. Its captions
+are the character-story treatment whatever the style's caption preset is:
+white outlined lines with no band or plate, placed where no character
+reaches (above the cast in most 9:16 shots). Write `{"type": "captions"}`
+and name no preset or position; a preset with a band or a plate fails the
+style gate. And every cast scene moves the camera for as long as it is up:
+a slow push-in on a speaker, a gentle drift on a `wide` shot, a punch-in
+on a character who only listens. Plan no camera for that, and join the
+shots with cuts (a camera move between two shots keeps both at rest). A scene's own `zooms` replace its move, and
+`"camera": {"moves": false}` turns them all off.
+
+Pin the story to the bible, then voice it:
 
 ```bash
 launchclip bible freeze <project>     # changes nothing in the bible; writes the story's cast and "bible": {file, hash}

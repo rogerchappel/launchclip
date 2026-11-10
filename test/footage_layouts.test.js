@@ -11,6 +11,7 @@ import {deriveBoundaries, resolveStory, validateStory} from '@launchclip/core/st
 import {resolveModule} from '@launchclip/core/modules.mjs';
 import {BREAKOUT_EDGE, breakoutNotch, breakoutWindows, captionZone, captionZones, layoutAt, sceneLayoutAt, layoutFrameStyle, layoutGeometry, layoutPlan, layoutStateAt, layoutUnderFrameStyle, panelSafeArea, storySections, withLayoutCameras} from '@launchclip/core/footage-layout.mjs';
 import {captionPlan, captionZoneIndex} from '@launchclip/core/captions.mjs';
+import {storyCaptionZones} from '@launchclip/core/cast-captions.mjs';
 import {elementsFromStory, profileGeometry} from '@launchclip/core/layout-check.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
 import {readProjectStory} from '../src/story_loader.js';
@@ -233,8 +234,11 @@ test('the compiler and the layout check place captions in the zones', async () =
   assert.deepEqual(captions[0].hide, [[2, 5], [5, 7.5], [7.5, 10]]);
   assert.deepEqual(captions[1].rect, {x: 192, y: 864, width: 648, height: 140});
   const source = readFileSync(join(ROOT, 'kit/remotion/StoryComposition.tsx'), 'utf8');
-  assert.equal((source.match(/zones=\{layout\?\.captions\}/g) ?? []).length, 2, 'Remotion hands WordCaptions the same zones');
-  assert.match(readFileSync(join(ROOT, 'kit/hyperframes/story-compiler.mjs'), 'utf8'), /zones: layout\?\.captions/);
+  // Both compilers take the zones from storyCaptionZones: the footage layout's first, else a character story's.
+  assert.equal((source.match(/zones=\{captionZones\}/g) ?? []).length, 2, 'Remotion hands WordCaptions the same zones');
+  assert.match(source, /const captionZones = React\.useMemo\(\(\) => storyCaptionZones\(story, layout\)/);
+  assert.match(readFileSync(join(ROOT, 'kit/hyperframes/story-compiler.mjs'), 'utf8'), /zones: storyCaptionZones\(story, layout\)/);
+  assert.deepEqual(storyCaptionZones(captioned, plan), plan.captions);
 });
 
 test('a scene that starts a moment before its section takes the section layout, with a warning', () => {

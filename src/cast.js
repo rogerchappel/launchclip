@@ -186,11 +186,19 @@ export async function castSheet(target, { out, report: reportPath, ids, chromium
 }
 
 export async function screenshotHtml(html, file, { chromium } = {}) {
-  const { findChromium, loadPlaywright } = await import("./demo/record.js");
+  const { chromiumSearch, chromiumMissingMessage, loadPlaywright } = await import("./demo/record.js");
   const playwrightChromium = await loadPlaywright();
   if (!playwrightChromium) throw new Error("cast sheet needs Playwright (npm i playwright)");
-  const executablePath = chromium ?? (await findChromium());
-  const browser = await playwrightChromium.launch(executablePath ? { executablePath } : {});
+  let executablePath = chromium ?? null;
+  if (!executablePath) {
+    // Playwright's own build, a system Chrome or the browser the renderers use: never a download.
+    let pinned = null;
+    try { pinned = playwrightChromium.executablePath(); } catch { pinned = null; }
+    const search = await chromiumSearch({ playwrightPath: pinned });
+    if (!search.path) throw new Error(`cast sheet needs a browser: ${chromiumMissingMessage(search.looked)}`);
+    executablePath = search.path;
+  }
+  const browser = await playwrightChromium.launch({ executablePath });
   try {
     const page = await browser.newPage({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 });
     await page.setContent(html, { waitUntil: "load" });

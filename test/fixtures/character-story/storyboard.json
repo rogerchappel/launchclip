@@ -1,0 +1,257 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "The Starting Gate",
+  "lane": "motion",
+  "format": {
+    "fps": 30,
+    "width": 1080,
+    "height": 1920,
+    "duration": 11.55
+  },
+  "brand": {
+    "colors": {
+      "bg": "#fbf3f8",
+      "paper": "#1b0d15",
+      "ink": "#fef9fc",
+      "primary": "#b34f90",
+      "accent": "#007975"
+    },
+    "fonts": {
+      "display": "lexend",
+      "body": "manrope",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "bible": {
+    "file": "BIBLE.json",
+    "hash": "sha256:dd11853f579e709e189d6baafaa1746f6846b306e6a32ee8c009a12e64544c8c"
+  },
+  "cast": {
+    "style": "chibi",
+    "characters": [
+      {
+        "id": "foal",
+        "name": "Foal",
+        "voice": "af_river",
+        "position": "left",
+        "kind": "foal",
+        "size": "small",
+        "marks": [
+          "socks"
+        ],
+        "colors": {
+          "body": "chestnut",
+          "detail": "cream",
+          "accent": "#b9652f"
+        }
+      },
+      {
+        "id": "mare",
+        "name": "Mare",
+        "voice": "af_bella",
+        "position": "right",
+        "kind": "mare",
+        "size": "large",
+        "marks": [
+          "blaze"
+        ],
+        "colors": {
+          "body": "grey",
+          "detail": "charcoal",
+          "accent": "#2a2226"
+        }
+      }
+    ]
+  },
+  "world": {
+    "kind": "park",
+    "time": "day"
+  },
+  "scenes": [
+    {
+      "id": "gate-wide",
+      "module": "cast-scene",
+      "start": 0,
+      "end": 2,
+      "energy": 0,
+      "params": {
+        "set": "standing",
+        "shot": "wide",
+        "cast": [
+          {
+            "id": "foal",
+            "position": "left",
+            "pose": "look",
+            "expression": "thinking",
+            "target": "right",
+            "cues": [
+              {
+                "at": "word:watched",
+                "action": "gaze-at",
+                "target": "right"
+              }
+            ]
+          },
+          {
+            "id": "mare",
+            "position": "right",
+            "pose": "stand",
+            "expression": "neutral",
+            "cues": [
+              {
+                "at": "word:gate",
+                "action": "gaze-at",
+                "target": "left"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "foal-questions",
+      "module": "cast-scene",
+      "start": 2,
+      "end": 4.92,
+      "energy": 1,
+      "in": {
+        "type": "cut",
+        "dur": 0.1
+      },
+      "params": {
+        "set": "standing",
+        "shot": "medium",
+        "cast": [
+          {
+            "id": "foal",
+            "position": "centre",
+            "pose": "look",
+            "expression": "confused",
+            "target": "right",
+            "says": "auto",
+            "cues": [
+              {
+                "at": 0.1,
+                "action": "gaze-at",
+                "target": "right"
+              },
+              {
+                "at": "word:time",
+                "pose": "look",
+                "expression": "worried",
+                "action": "turn-to-look",
+                "target": "right"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "foal-steps-back",
+      "module": "cast-scene",
+      "start": 4.92,
+      "end": 8.44,
+      "energy": 1,
+      "in": {
+        "type": "cut",
+        "dur": 0.1
+      },
+      "params": {
+        "set": "standing",
+        "shot": "wide",
+        "cast": [
+          {
+            "id": "foal",
+            "position": "left",
+            "pose": "look",
+            "expression": "worried",
+            "says": "auto",
+            "cues": [
+              {
+                "at": "word:home",
+                "pose": "look",
+                "expression": "worried",
+                "action": "gaze-at",
+                "target": {
+                  "character": "mare"
+                }
+              }
+            ]
+          },
+          {
+            "id": "mare",
+            "position": "right",
+            "pose": "look",
+            "expression": "worried",
+            "target": {
+              "character": "foal"
+            },
+            "cues": [
+              {
+                "at": "word:back",
+                "action": "gaze-at",
+                "target": {
+                  "character": "foal"
+                }
+              },
+              {
+                "at": "word:home",
+                "pose": "lean-in",
+                "expression": "focused",
+                "action": "gaze-at",
+                "target": {
+                  "character": "foal"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "mare-reassures",
+      "module": "cast-scene",
+      "start": 8.44,
+      "end": 11.55,
+      "energy": 1,
+      "in": {
+        "type": "cut",
+        "dur": 0.1
+      },
+      "params": {
+        "set": "standing",
+        "shot": "medium",
+        "cast": [
+          {
+            "id": "mare",
+            "position": "centre",
+            "pose": "look",
+            "expression": "happy",
+            "target": "left",
+            "says": "auto",
+            "cues": [
+              {
+                "at": 0.1,
+                "action": "gaze-at",
+                "target": "left"
+              },
+              {
+                "at": "word:opens",
+                "pose": "point",
+                "expression": "happy",
+                "action": "point-at",
+                "target": "left"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "overlays": [
+    {
+      "type": "captions"
+    }
+  ]
+}

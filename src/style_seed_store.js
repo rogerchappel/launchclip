@@ -10,7 +10,8 @@ import path from "node:path";
 import { CONSTRAINT_KEYS, NEAR_DUPLICATE, generateStyle, normalizeSeed, pinStyle, rerollStyle, seedSummaryLine, styleDistanceReport, styleSummary, toneFromText } from "@launchclip/core/style-seed.mjs";
 import { mediumFromText } from "@launchclip/core/medium.mjs";
 import { lookFromText } from "@launchclip/core/look.mjs";
-import { packCaptionsFor, validateStylePack } from "@launchclip/core/style.mjs";
+import { packCaptionsForStory, validateStylePack } from "@launchclip/core/style.mjs";
+import { isCharacterStory } from "@launchclip/core/character-story.mjs";
 import { suggestWorld } from "@launchclip/core/worlds/index.mjs";
 import { homeStyleRoot, loadStyleV2, resolveStyleV2 } from "./style_store.js";
 import { paletteClusters, pixelsFromFrames, sampleFrames } from "./style_reference.js";
@@ -120,11 +121,15 @@ export function adoptStyleLook(story, pack) {
   if (pack.brand) story.brand = JSON.parse(JSON.stringify(pack.brand));
   const grammar = pack.motion?.grammar;
   if (grammar) story.motion = { ...(story.motion && typeof story.motion === "object" ? story.motion : {}), grammar };
-  const preset = packCaptionsFor(pack, story.lane)?.preset;
+  // A character story keeps its own captions unless the pack sets some for it (packCaptionsForStory).
+  const preset = packCaptionsForStory(pack, story)?.preset;
   for (const overlay of Array.isArray(story.overlays) ? story.overlays : []) {
-    if (overlay?.type !== "captions" || overlay.style === "none" || overlay.preset === "none" || !preset) continue;
+    if (overlay?.type !== "captions" || overlay.style === "none" || overlay.preset === "none") continue;
+    // A character story's captions are the kit's character-story treatment: a preset the model wrote is dropped too.
+    if (!preset && !isCharacterStory(story)) continue;
     delete overlay.style;
-    overlay.preset = preset;
+    if (preset) overlay.preset = preset;
+    else delete overlay.preset;
   }
   story.style = pack.name;
   return story;

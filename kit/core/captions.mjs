@@ -12,6 +12,7 @@
 import { getEase, interpolateColor } from './motion.mjs';
 import { brandFontStacks } from './fonts.mjs';
 import { captionSnapOffset, guardFrames, guardRect, resolveMotionBlur } from './motion-blur.mjs';
+import { CHARACTER_CAPTIONS, isCharacterStory } from './character-story.mjs';
 
 const STRONG_BREAK = /[.!?…]$/;
 const SOFT_BREAK = /[,;:—–-]$/;
@@ -66,7 +67,48 @@ export function joinAttachedWords(words) {
   return out;
 }
 
-export function chunkWords(words, { maxWords = 3, maxChars = 18, gapSeconds = 0.28 } = {}) {
+const lineChars = (words) => words.reduce((sum, word) => sum + word.text.length + 1, -1);
+
+/**
+ * A phrase's last word is kept with its phrase: when a line filled up one
+ * word short of the phrase's end ("The foal watched the starting" / "gate."),
+ * the fuller line hands words from its end to the lone word until the two
+ * are about even ("The foal watched" / "the starting gate."). Only a lone
+ * word that ends a phrase (a full stop, a comma) straight after a line that
+ * was cut for size, spoken without a pause, and only when the line before
+ * keeps two words or more; a one-word sentence ("No.") stays alone. Edits
+ * chunks in place.
+ */
+function keepPhraseEnds(chunks, { maxWords, maxChars, gapSeconds }) {
+  for (let i = 1; i < chunks.length; i += 1) {
+    const before = chunks[i - 1].words, lone = chunks[i].words;
+    if (lone.length !== 1 || before.length < 3) continue;
+    const last = before.at(-1);
+    if (!(STRONG_BREAK.test(lone[0].text) || SOFT_BREAK.test(lone[0].text)) || STRONG_BREAK.test(last.text) || SOFT_BREAK.test(last.text) || lone[0].start - last.end > gapSeconds) continue;
+    let keep = before.length;
+    // Hand over a word while the line before stays the longer one (or level), keeps two words, and the new line fits.
+    while (keep > 2) {
+      const moved = [...before.slice(keep - 1), ...lone];
+      if (moved.length > maxWords || lineChars(moved) > maxChars) break;
+      if (keep < before.length && lineChars(moved) > lineChars(before.slice(0, keep - 1))) break;
+      keep -= 1;
+    }
+    if (keep === before.length) continue;
+    const next = [...before.slice(keep), ...lone];
+    chunks[i - 1] = { start: before[0].start, end: before[keep - 1].end, words: before.slice(0, keep) };
+    chunks[i] = { start: next[0].start, end: next.at(-1).end, words: next };
+  }
+}
+
+/**
+ * Words → caption chunks: a line fills until the next word would pass
+ * maxWords or maxChars, and ends on a full stop, a comma (after two words or
+ * more) or a pause over gapSeconds. keepPhrase (off by default, so every
+ * caption that was chunked before is chunked the same): a phrase's last word
+ * is kept with its phrase (keepPhraseEnds); a character story's captions
+ * turn it on.
+ */
+export function chunkWords(words, { maxWords = 3, maxChars = 18, gapSeconds = 0.28, keepPhrase = false } = {}) {
   const clean = joinAttachedWords(words
     .map((word) => ({ text: String(word.text ?? word.word ?? '').trim(), start: Number(word.start), end: Number(word.end) }))
     .filter((word) => word.text && Number.isFinite(word.start) && Number.isFinite(word.end) && word.end >= word.start));
@@ -85,6 +127,7 @@ export function chunkWords(words, { maxWords = 3, maxChars = 18, gapSeconds = 0.
     if (STRONG_BREAK.test(word.text) || (SOFT_BREAK.test(word.text) && current.length > 1)) flush();
   }
   flush();
+  if (keepPhrase) keepPhraseEnds(chunks, { maxWords, maxChars, gapSeconds });
   // Hold each chunk until the next one starts (or briefly past its last word)
   // so captions never blink off between closely spaced phrases.
   return chunks.map((chunk, index) => {
@@ -493,8 +536,19 @@ function tagChipColors(p, own, role, brandColors) {
   return { box, boxText: own.boxText !== undefined ? role('boxText') : box === ink ? paper : ink };
 }
 
+/**
+ * A character story's captions overlay with the character-story treatment
+ * (character-story.mjs CHARACTER_CAPTIONS) under its own options, when it
+ * names no preset or style of its own; any other overlay unchanged.
+ */
+export function characterCaptions(overlay, story) {
+  if (!isCharacterStory(story) || overlay?.preset !== undefined || overlay?.style !== undefined) return overlay ?? {};
+  return { ...CHARACTER_CAPTIONS, ...(overlay ?? {}), colors: { ...CHARACTER_CAPTIONS.colors, ...(overlay?.colors ?? {}) } };
+}
+
 /** Resolved options of a captions overlay: preset defaults overridden by the overlay's options. */
-export function captionOptions(overlay = {}, { brand, format, fonts, story } = {}) {
+export function captionOptions(given = {}, { brand, format, fonts, story } = {}) {
+  const overlay = characterCaptions(given, story);
   const name = captionPresetName(overlay, story) ?? 'word-highlight';
   const p = CAPTION_PRESETS[name];
   const brandColors = brand?.colors ?? {};
@@ -548,6 +602,10 @@ export function captionOptions(overlay = {}, { brand, format, fonts, story } = {
     accents: p.accents ?? null,
     entrance: Object.hasOwn(CAPTION_ENTRANCES, overlay?.entrance) ? overlay.entrance : p.entrance,
     exit: Object.hasOwn(CAPTION_EXITS, overlay?.exit) ? overlay.exit : p.exit,
+    // false: the type carries its own contrast (an outline), so a world plate's tone does not recolour it.
+    worldTone: overlay?.world_tone !== false,
+    // true: a phrase's last word is kept with its phrase when the lines are chunked (keepPhraseEnds).
+    keepPhrase: overlay?.keep_phrase === true,
     offset: Number.isFinite(Number(overlay?.offset)) ? Math.max(-0.5, Math.min(0.5, Number(overlay.offset))) : 0,
     colors: {
       idle,
@@ -616,8 +674,8 @@ export const captionLinePlated = (o, id) => Boolean(o.plate) || o.plates === 'al
 
 /** Re-chunk words for a preset whose chunk size differs from the default chunking. */
 export function chunksForCaptions(chunks, options) {
-  if (options.maxWords === 3 && options.maxChars === 18) return chunks;
-  return chunkWords(chunks.flatMap((chunk) => chunk.words), { maxWords: options.maxWords, maxChars: options.maxChars });
+  if (options.maxWords === 3 && options.maxChars === 18 && !options.keepPhrase) return chunks;
+  return chunkWords(chunks.flatMap((chunk) => chunk.words), { maxWords: options.maxWords, maxChars: options.maxChars, keepPhrase: Boolean(options.keepPhrase) });
 }
 
 const r4 = (value) => Math.round(value * 10000) / 10000;
@@ -794,7 +852,7 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
     const roles = heroWords ? captionHierarchy(chunk.words, heroWords) : null;
     // A legibility plate holds the preset's own colours, so it takes no world tone.
     const legible = !o.plate && captionLinePlated(o, chunk.id);
-    const tone = o.plate || legible ? null : toneOf(...spoken(chunk));
+    const tone = o.plate || legible || !o.worldTone ? null : toneOf(...spoken(chunk));
     const toned = tone ? captionToneColors(o.colors, tone, ctx.brand?.colors) : null;
     if (toned) o.tones[tone] = { idle: toned.idle, accent: toned.accent, swapped: toned.swapped };
     if (legible) o.legible = true;
