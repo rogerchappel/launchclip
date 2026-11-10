@@ -40,6 +40,7 @@ import { profileGeometry } from '../core/layout-check.mjs';
 import { CAPTION_DEFAULT_COLORS, blurSnappedChunks, captionBlurGuard, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from '../core/captions.mjs';
 import { brandFramePlan, brandFrameRuntime } from '../core/brand-frame.mjs';
 import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumFilterAt, mediumPlan, mediumSteps } from '../core/medium.mjs';
+import { LOOK_Z, lookCss, lookDefs, lookMarkup, lookPlan, lookSelector, lookStepEase, lookStepped, lookSteps } from '../core/look.mjs';
 import { brandFontStacks, fontFaceRule, fontSlug, frozenFontFaces, projectFontFamilies, registryFontFaces } from '../core/fonts.mjs';
 import { EMITTERS as EDITORIAL_EMITTERS } from './editorial-ui-modules.mjs';
 import { EMITTERS as CATALOG_A_EMITTERS } from './catalog-a.mjs';
@@ -613,6 +614,13 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   // tl.set calls on --lc-medium-filter. No medium, nothing added. A module
   // review has none, like ModuleReview.
   const medium = isolate ? null : mediumPlan(story);
+  // Look (kit/core/look.mjs): a grade layer and the look's furniture above
+  // the medium, under the brand frame and the captions, their CSS variables
+  // set per frame; with a step, the scenes, the camera and the light run on
+  // their own timeline, which the story timeline holds on each step. No
+  // look, nothing added. A module review has none.
+  const look = isolate ? null : lookPlan(story);
+  const stepped = lookStepped(look);
   // The light's over group (kit/core/lighting.mjs): wrap, pulse halos and the
   // vignette, above every scene and the camera, under the dot wipes.
   const lightOver = light?.over.length ? lightLayers(light.over, 'over', 0, D) : null;
@@ -643,7 +651,7 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     .lc-ambient-blob { position: absolute; left: 0; top: 0; border-radius: 50%; transform-origin: 50% 50%; }
     .lc-drift { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; }${feelLines.length ? `\n    .lc-feel { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; }` : ''}${wipes.length ? `\n    ${dotWipeCss(W, H).split('\n').join('\n    ')}` : ''}${sweeps.length ? `\n    ${lightSweepCss(W, H).split('\n').join('\n    ')}` : ''}
     ${placeholderCss()}
-    ${captions ? `${captions.plan.css.trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}${medium ? `\n    #${MEDIUM_LAYER_ID} { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; pointer-events: none; z-index: ${MEDIUM_Z.hyperframes}; --lc-medium-filter: ${mediumFilterAt(medium, 0)}; backdrop-filter: var(--lc-medium-filter); -webkit-backdrop-filter: var(--lc-medium-filter); }` : ''}${frame ? `\n    #lc-frame-root { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; pointer-events: none; z-index: 90000; }\n    ${frame.css.trim().split('\n').join('\n    ')}` : ''}
+    ${captions ? `${captions.plan.css.trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}${medium ? `\n    #${MEDIUM_LAYER_ID} { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; pointer-events: none; z-index: ${MEDIUM_Z.hyperframes}; --lc-medium-filter: ${mediumFilterAt(medium, 0)}; backdrop-filter: var(--lc-medium-filter); -webkit-backdrop-filter: var(--lc-medium-filter); }` : ''}${look ? `\n    ${lookCss(look, LOOK_Z.hyperframes).split('\n').join('\n    ')}` : ''}${frame ? `\n    #lc-frame-root { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; pointer-events: none; z-index: 90000; }\n    ${frame.css.trim().split('\n').join('\n    ')}` : ''}
     ${css.filter(Boolean).join('\n    ')}
   </style>
   <script>${FONT_WARMUP}</script>
@@ -656,13 +664,13 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     ${feelLines.length ? '<div id="lc-feel" class="lc-feel">' : ''}${plan ? cameraMarkup(plan, story.brand, world, worldField.html, !worldBackdrop && !covered, stack?.html ?? '') : ''}
     ${hoisted.join('\n    ')}
     ${markup.join('\n    ')}${feelLines.length ? '\n    </div>' : ''}${lightOver ? `\n    <div id="${LIGHT_OVER_ID}" data-launchclip-light="over" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:${LIGHT_Z.hyperframes}">${lightOver.html}</div>` : ''}${wipeMarkup.length ? `\n    ${wipeMarkup.join('\n    ')}` : ''}
-    ${medium ? `${mediumDefs(medium)}<div id="${MEDIUM_LAYER_ID}" data-launchclip-medium="${medium.kind}" aria-hidden="true"></div>\n    ` : ''}${frame ? `<div id="lc-frame-root" aria-hidden="true"></div>\n    <script>\n${brandFrameRuntime(frame)}</script>\n    ` : ''}${captions ? '<div id="lc-captions" class="lc-captions"></div>' : ''}
+    ${medium ? `${mediumDefs(medium)}<div id="${MEDIUM_LAYER_ID}" data-launchclip-medium="${medium.kind}" aria-hidden="true"></div>\n    ` : ''}${look ? `${lookDefs(look)}${lookMarkup(look)}\n    ` : ''}${frame ? `<div id="lc-frame-root" aria-hidden="true"></div>\n    <script>\n${brandFrameRuntime(frame)}</script>\n    ` : ''}${captions ? '<div id="lc-captions" class="lc-captions"></div>' : ''}
     ${captions ? `<script>\n${captionPlanRuntime(captions.plan)}</script>` : ''}
     <script>
       window.__timelines = window.__timelines || {};
-      const tl = gsap.timeline({ paused: true });
-${seamTweens([...motion, ...(lightOver ? ['// light (over the scenes)', ...lightOver.motion] : [])].join('\n').split('\n')).map((line) => `      ${line}`).join('\n')}${feelLines.length || wipes.length || sweeps.length ? `\n${[...feelLines, ...wipes.flatMap((wipe) => [`// dot-wipe into ${wipe.sceneId}`, ...dotWipeGsap(wipe)]), ...sweeps.flatMap((sweep) => [`// light-sweep into ${sweep.sceneId}`, ...lightSweepGsap(sweep)])].map((line) => `      ${line}`).join('\n')}` : ''}
-      ${medium ? `${mediumSteps(medium, D).map((step) => `tl.set(${js(`#${MEDIUM_LAYER_ID}`)}, ${js({ '--lc-medium-filter': step.filter })}, ${num(step.time)});`).join('\n      ')}\n      ` : ''}${frame ? 'window.mountBrandFrame(tl, document.getElementById("lc-frame-root"));\n      ' : ''}${captions ? 'window.mountCaptions(tl, document.getElementById("lc-captions"));' : ''}${captions?.dips.length ? `\n      // captions dip out during sweeping camera moves (each dip out ends in a hard
+      const tl = gsap.timeline({ paused: true });${stepped ? `\n      // look ${look.name}: the picture runs on its own timeline, held on ${look.step} drawings a second\n      const lcPicture = gsap.timeline({ paused: true });\n      ((tl) => {` : ''}
+${seamTweens([...motion, ...(lightOver ? ['// light (over the scenes)', ...lightOver.motion] : [])].join('\n').split('\n')).map((line) => `      ${line}`).join('\n')}${feelLines.length || wipes.length || sweeps.length ? `\n${[...feelLines, ...wipes.flatMap((wipe) => [`// dot-wipe into ${wipe.sceneId}`, ...dotWipeGsap(wipe)]), ...sweeps.flatMap((sweep) => [`// light-sweep into ${sweep.sceneId}`, ...lightSweepGsap(sweep)])].map((line) => `      ${line}`).join('\n')}` : ''}${stepped ? `\n      })(lcPicture);\n      lcPicture.render(0, true, true);\n      tl.fromTo(lcPicture, { time: 0 }, { time: ${num(D)}, duration: ${num(D)}, ease: ${lookStepEase(look)}, immediateRender: false }, 0);` : ''}
+      ${look ? `${lookSteps(look, D).map((step) => `tl.set(${js(lookSelector(look))}, ${js(step.vars)}, ${num(step.time)});`).join('\n      ')}\n      ` : ''}${medium ? `${mediumSteps(medium, D).map((step) => `tl.set(${js(`#${MEDIUM_LAYER_ID}`)}, ${js({ '--lc-medium-filter': step.filter })}, ${num(step.time)});`).join('\n      ')}\n      ` : ''}${frame ? 'window.mountBrandFrame(tl, document.getElementById("lc-frame-root"));\n      ' : ''}${captions ? 'window.mountCaptions(tl, document.getElementById("lc-captions"));' : ''}${captions?.dips.length ? `\n      // captions dip out during sweeping camera moves (each dip out ends in a hard
       // set, so a seek past the fade, often onto a shot's start, finds them hidden)\n      ${captions.dips.map((dip) => `tl.fromTo('#lc-captions', { opacity: ${dip.from} }, { opacity: ${dip.to}, duration: ${num(dip.dur)}, ease: 'none', immediateRender: false }, ${num(dip.at)});${dip.to === 0 ? `\n      tl.set('#lc-captions', { opacity: 0 }, ${num(dip.at + dip.dur)});` : ''}`).join('\n      ')}` : ''}
       window.__timelines["${COMPOSITION_ID}"] = tl;
     </script>
