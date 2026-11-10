@@ -22,6 +22,7 @@ import { lipSyncGate } from "../src/quality_gates.js";
 import { actingGate } from "../src/direction_guardrails.js";
 import { checkStoryboard } from "../src/storyboard_planner.js";
 import { redirectShots } from "../src/make/retakes.js";
+import { placeActions } from "../src/acting_place.js";
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./fixtures/animation-first-run/${name}`, import.meta.url), "utf8"));
 const STORY = fixture("storyboard.json");
@@ -213,4 +214,42 @@ test("a retake of several shots keeps the ones that pass when the corrective pas
   assert.equal(kept.attempts, 2);
   assert.match(kept.ignored.join("\n"), /scene foal-ready's retake \(it did not pass the checks; the shot stays as it was\)/);
   assert.deepEqual(kept.story.scenes.find((entry) => entry.id === "foal-ready"), STORY.scenes.find((entry) => entry.id === "foal-ready"));
+});
+
+test("acting: a map action whose character is in the shot without its cue is placed by tooling, on the line's words", () => {
+  // As saved: the foal is in mare-playful on "One step, then another." with a walk pose and no walk-to.
+  const placed = placeActions(story(), { direction: MAP, words: WORDS });
+  assert.deepEqual(placed.changed, ["gave foal the map's walk-to in mare-playful at 0.928 s (a new cue)"]);
+  const cue = actor(placed.storyboard.scenes.find((scene) => scene.id === "mare-playful"), "foal").cues.at(-1);
+  assert.deepEqual(cue, { at: 0.928, action: "walk-to", target: "right" });
+  const checked = checkStoryboard(placed.storyboard, { words: WORDS, direction: MAP, castGate: true, bandErrors: false });
+  assert.deepEqual(checked.errors.filter((entry) => /^(acting|lip-sync|params|cast): /.test(entry)), []);
+  assert.deepEqual(STORY.scenes.find((scene) => scene.id === "mare-playful"), story().scenes.find((scene) => scene.id === "mare-playful"), "the input is not changed");
+  // Nothing to do: nothing changes. A character who is not in the shot is left to the planner.
+  assert.equal(placeActions(placed.storyboard, { direction: MAP, words: WORDS }).changed.length, 0);
+  const alone = story((scenes) => {
+    const mare = actor(scenes["mare-playful"], "mare");
+    scenes["mare-playful"].params.cast = [{ ...mare, position: "centre", target: "left", cues: mare.cues.filter((entry) => !entry.target?.character) }];
+  });
+  assert.deepEqual(placeActions(alone, { direction: MAP, words: WORDS }).changed, []);
+  // A target the map names as a cast member in the shot becomes that character.
+  const map = structuredClone(MAP);
+  const line = map.sections.flatMap((section) => section.lines).find((entry) => entry.words[0] === 66);
+  line.action = { verb: "point-at", who: "foal", target: "the Mare beside it" };
+  const pointed = placeActions(story(), { direction: map, words: WORDS });
+  assert.deepEqual(actor(pointed.storyboard.scenes.find((scene) => scene.id === "mare-playful"), "foal").cues.at(-1), { at: 0.928, action: "point-at", target: { character: "mare" } });
+});
+
+test("a retake that drops a map action's cue gets it back from the caller's tooling before it is checked", async () => {
+  const scene = structuredClone(walking().scenes.find((entry) => entry.id === "mare-playful"));
+  actor(scene, "foal").cues = [{ at: 0.1, expression: "happy" }];
+  const base = walking();
+  const client = { runStructured: async () => ({ value: { scenes_json: JSON.stringify([scene]), note: "n" }, usage: {}, model: "test" }) };
+  const options = { words: WORDS, direction: MAP, castGate: true, bandErrors: false };
+  const check = (candidate) => checkStoryboard(candidate, options).errors.filter((entry) => entry.startsWith("acting: "));
+  const args = { client, project: "/nonexistent", story: base, words: WORDS, shots: ["mare-playful"], shotList: [], problems: [], check };
+  await assert.rejects(redirectShots(args), /did not validate after 2 attempts: acting: .*foal does not perform it in mare-playful/);
+  const fixed = await redirectShots({ ...args, tidy: (candidate) => placeActions(candidate, { direction: MAP, words: WORDS }).storyboard });
+  assert.equal(fixed.attempts, 1);
+  assert.equal(actor(fixed.story.scenes.find((entry) => entry.id === "mare-playful"), "foal").cues.at(-1).action, "walk-to");
 });

@@ -201,7 +201,7 @@ export function actingGate(story, { map, words, rects = [] } = {}) {
         const detail = !candidates.length ? `${said}, but no cast scene plays on it; put a cast scene with ${action.who} on these words, with a cue ${hint}`
           : present.length ? `${said}, but ${action.who} does not perform it in ${present.map(({ entry }) => entry.id).join(", ")}; give ${action.who} a cue ${hint} there, on a word of the line`
             : `${said}, but ${action.who} is not in ${candidates.map(({ entry }) => entry.id).join(", ")}, the cast scene${candidates.length === 1 ? "" : "s"} on those words; add ${action.who} to that scene's params.cast with a cue ${hint}, or name a character who is in the shot in the map line's action.who`;
-        findings.push({ rule: "action-missing", severity: "error", at: first.start, ids: candidates.map(({ entry }) => entry.id), who: action.who, in_shot: present.length > 0, detail });
+        findings.push({ rule: "action-missing", severity: "error", at: first.start, ids: candidates.map(({ entry }) => entry.id), who: action.who, in_shot: present.length > 0, present: present.map(({ entry }) => entry.id), line: { verb: action.verb, target: action.target ?? null, start: first.start, end: last.end }, detail });
       }
     }
   }

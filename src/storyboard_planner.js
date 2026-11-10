@@ -38,6 +38,7 @@ import { fitDirectionCast, normalizeCastCues, plannedCast } from "./cast_fit.js"
 import { bibleCast, bibleRef, directionWithBible } from "@launchclip/core/bible.mjs";
 import { castGate } from "./cast.js";
 import { actingGate } from "./direction_guardrails.js";
+import { placeActions } from "./acting_place.js";
 import { lipSyncGate } from "./quality_gates.js";
 import { SHORT_FORM_HOLD, fitDurations, paceErrors } from "./duration_fit.js";
 import { fitCaptionBand } from "./caption_band_fit.js";
@@ -319,6 +320,14 @@ export async function planStoryboard(options = {}) {
       if (diagrams.changed.length) {
         pinned.storyboard = diagrams.storyboard;
         pinned.warnings = [...pinned.warnings, ...diagrams.changed.map((entry) => `diagrams: tooling ${entry}`)];
+      }
+      // A character story: a map action whose character is in the shot without the cue is tooling's to add (src/acting_place.js).
+      if (bible && direction) {
+        const placed = placeActions(pinned.storyboard, { direction, words: wordList });
+        if (placed.changed.length) {
+          pinned.storyboard = placed.storyboard;
+          pinned.warnings = [...pinned.warnings, ...placed.changed.map((entry) => `acting: tooling ${entry}`)];
+        }
       }
       const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints, minHold: SHORT_FORM_HOLD, ...(script ? { script } : {}), ...(bible ? { castGate: true } : {}) };
       checked = checkStoryboard(pinned.storyboard, checkOptions);

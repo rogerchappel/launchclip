@@ -62,6 +62,7 @@ import { talkingHeadLayout } from "../talking_head_layout.js";
 import { reviewAnimatic, runHeadlessCritic } from "./critic.js";
 import { ANIMATIC_FILE, ANIMATIC_VIDEO, readAnimatic } from "../animatic.js";
 import { redirectShots, retakeProject, runRetakes } from "./retakes.js";
+import { placeActions } from "../acting_place.js";
 import { RETAKES_FILE, changedScenes,criticBriefSection, criticFindings, criticImproved, criticProblems, criticRepairBudget, criticRepairRoute, criticScore, findingScenes } from "./critic_repair.js";
 import { readProjectStory } from "../story_loader.js";
 import { plannedSubjectRanges } from "../subject/plan.js";
@@ -1420,6 +1421,8 @@ async function stageStoryboard(ctx) {
     const checked = checkStoryboard(candidate, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints, ...(pinned ? { script: pinned.script, castGate: true } : {}) });
     return [...(checked.ok ? [] : checked.errors), ...assetErrors(candidate, allowed, { shots: Boolean(assets) }), ...storyboardStructureErrors(candidate, ctx.skeleton)];
   };
+  // The planner's own tooling for a character story, for a storyboard changed after the plan (a retake): the map's actions keep their cues.
+  if (pinned && plan.direction) ctx.storyTidy = (candidate) => placeActions(candidate, { direction: plan.direction, words: ctx.words }).storyboard;
   if (!recheck.ok) throw new Error(`the storyboard failed its checks after make filled in audio:\n- ${recheck.errors.slice(0, 10).join("\n- ")}`);
   await writeJson(storyFile, story);
   if (plan.direction) await writeFile(directionFile, directionJson(plan.direction));
@@ -1800,7 +1803,7 @@ async function retakeRounds(ctx, { review, critique, rounds, label = "", render,
       held = { round: args.round, fields: Object.fromEntries(CRITIC_ROUND_FIELDS.map((field) => [field, structuredClone(report[field])])), finish: ctx.finish };
       ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (retake ${args.round}: ${args.step} ${args.shots.join(", ")})`);
       // The plan's own checks are part of the retake's corrective pass (redirectShots check).
-      const answer = await (ctx.adapters.redirect ?? redirectShots)({ client: ctx.model.client, ...args, ...(ctx.storyCheck ? { check: ctx.storyCheck, maxRepairs: RETAKE_CORRECTIONS } : {}) });
+      const answer = await (ctx.adapters.redirect ?? redirectShots)({ client: ctx.model.client, ...args, ...(ctx.storyCheck ? { check: ctx.storyCheck, maxRepairs: RETAKE_CORRECTIONS } : {}), ...(ctx.storyTidy ? { tidy: ctx.storyTidy } : {}) });
       const errors = ctx.storyCheck && answer?.story?.scenes ? ctx.storyCheck(answer.story) : [];
       if (errors.length) throw new Error(`the retake failed the storyboard's checks: ${errors.slice(0, 3).join("; ")}`);
       return answer;

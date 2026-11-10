@@ -533,6 +533,15 @@
   character story is held to the acting and lip-sync gates before it renders:
   a line's action nobody on screen performs says whether the character needs
   a cue or a place in the shot.
+- A character story's plan no longer fails outright when the planner leaves
+  out the cue for an action its direction map names: when the character is
+  already in the shot, tooling adds the cue on the line's words (a retake
+  gets the same). A character turned to its target counts as looking at it,
+  and a cameo's own card no longer counts as hiding a far look.
+- A critic retake is told the actions its shots must keep and the targets a
+  cue can take, gets two corrective passes in `make`, and when those run out
+  keeps the shots that pass the checks on their own instead of losing all of
+  them.
 
 - HyperFrames drew a video in a media layout (`picture-in-picture`,
   `landscape-card`, `media-compare`, `media-grid`, `media-list`,

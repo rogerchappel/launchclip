@@ -99,14 +99,15 @@ async function storyErrors(project, story, words) {
  * written), words, step ("redirect"|"replan-beat"), shots (scene ids it may
  * change), shotList (the shot list's shots), problems (retakeProblems),
  * check(story) → [errors] (the caller's own checks on the retaken storyboard,
- * answered in the same corrective call)}
+ * answered in the same corrective call), tidy(story) → story (the caller's
+ * deterministic fixes to the retaken storyboard, before it is checked)}
  * → {story, changed, ignored, note, attempts, rejected: [{attempt, errors}],
  * usage: [..], model}. When the last answer still fails, the shots of it that
  * pass every check on their own are kept and the others are listed in
  * `ignored`; it throws when none does (or no shot changed), with the same
  * attempts, rejected and usage on the error.
  */
-export async function redirectShots({ client, project, story, words = [], step = "redirect", shots = [], shotList: list = [], problems = [], maxRepairs = 1, check = null } = {}) {
+export async function redirectShots({ client, project, story, words = [], step = "redirect", shots = [], shotList: list = [], problems = [], maxRepairs = 1, check = null, tidy = null } = {}) {
   if (!client || typeof client.runStructured !== "function") throw new Error("a retake needs a model client with runStructured(), or its own redirect hook");
   const wanted = new Set(shots);
   const scenes = (story?.scenes ?? []).filter((scene) => wanted.has(scene.id));
@@ -151,6 +152,8 @@ export async function redirectShots({ client, project, story, words = [], step =
     if (!Array.isArray(proposed)) errors = ["scenes_json is not a JSON array of scenes"];
     else {
       scoped = scopedRetake(story, { scenes: proposed }, shots);
+      // The caller's deterministic fixes (make: a map action the retake left without its cue) before anything is checked.
+      if (scoped.changed.length && typeof tidy === "function") scoped = { ...scoped, story: tidy(scoped.story) ?? scoped.story };
       if (!scoped.changed.length) errors = ["no scene was changed; change the acting, the framing or the set of the shots named"];
       else {
         errors = await storyErrors(project, scoped.story, words);
