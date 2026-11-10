@@ -11,7 +11,7 @@
 // Plain ESM; imports only sibling kit/core files. Canonical copy:
 // kit/core/planning-prompt.mjs.
 
-import { STORY_SCHEMA, STORY_LANES, STORY_TRANSITIONS, STORY_CAPTION_STYLES, STORY_CAMERA_LAYOUTS, STORY_AMBIENT_LEVELS } from './story.mjs';
+import { STORY_SCHEMA, STORY_LANES, STORY_TRANSITIONS, STORY_CARD_TRANSITIONS as CARD_TRANSITIONS, STORY_CAPTION_STYLES, STORY_CAMERA_LAYOUTS, STORY_AMBIENT_LEVELS } from './story.mjs';
 import { GRAMMARS, GRAMMAR_NAMES } from './grammar.mjs';
 import { knownModules, catalogModules, isEditorialKind, moduleTiming, SUBJECT_DENSITY } from './modules.mjs';
 import { SAFE_ZONE_PROFILES, captionBandAt, profileGeometry } from './layout-check.mjs';
@@ -584,7 +584,7 @@ export function buildLines() {
     'Builds, not cuts: a data or proof shot runs 2–4 states timed to the clauses on one plate (scene.states [{at: <anchor>, set: {...}}], 1–5 after the scene itself), so each line gets a new visual without a cut. Nothing holds one state longer than about 10 s, and nothing stands still over 3 s (the holds and states gates).',
     'A state sets any of: params (the module\'s state params, merged; arrays keep their length, so list every item and hold the later ones back with reveal), reveal [item], focus item | "<element id>" | null (a ring in the focus colour travels there and the rest dims to 30 %), glow item, guide {value, label} (bar-chart) or {target, edge, label}, note {text ≤ 32, target}, clear true. Items are indexes (bar 0, row 2); element ids drop the scene prefix ("cell-1-2", "line-3").',
     'States run on bar-chart (data, max, highlight), scatter-plot (points, highlight), comparison-table (rows, highlight), leaderboard (entries, highlight), unit-grid (highlight), process-steps (steps) and excerpt (lines). Example on bar-chart: the first bar ($1) → the second grows in (reveal [1]) → a dashed "half" guide → focus and glow on the winner.',
-    'Between shots: "rack-focus" (the card blurs back while the next sharpens forward) is the default between builds; "card-to-card" when one card becomes the next; "glow-wipe" or "dot-wipe" (a halftone dot grid grows over the cut and shrinks away, about 0.5 s) only for chapter breaks.'
+    'Between shots: "rack-focus" (the card blurs back while the next sharpens forward) is the default between builds; "card-to-card" when one card becomes the next; "glow-wipe" or "dot-wipe" (a halftone dot grid grows over the cut and shrinks away, about 0.5 s) only for chapter breaks. rack-focus and card-to-card are for cards: not between two full-frame footage scenes.'
   ];
 }
 
@@ -611,6 +611,7 @@ function contractLines() {
     'Recorded product flows (assets/demo/<flow>.mp4 with demo/<flow>.actions.json, from launchclip demo record) play in product-demo scenes. Copy the params the asset inventory gives for each flow (media, viewport, actions, callouts) unchanged: the zooms, outlines and SFX are timed from the real action log, so never invent or move action boxes or times. Time the scene to the clip window (media.sourceStart plus the scene length must stay inside the clip); you may shorten a scene from the end, and drop actions after it.',
     'Captured evidence (assets/evidence/<id>.mp4 with <id>.evidence.json, from launchclip evidence capture) plays in evidence-clip scenes. Copy the params the asset inventory gives (media, viewport, source) unchanged; the page\'s own beats (scroll, selection, focus ring, date pin) are already in the clip, so add focus or cursor only on boxes the sidecar lists, and never retype what the page says.',
     'Supplied footage (assets/ videos and stills) plays full frame in clip scenes, cut to the narration: params.media {src, sourceStart?, sourceEnd?} picks the source window (the scene must fit inside it), focus keeps the subject in frame when the source is cropped to the canvas, and 1–3 callouts carry the key words over the footage. Higher-track scenes may sit over a clip.',
+    `Footage to footage (a clip or photo-scene on track 0 straight after another): use cut, fade, push, whip, zoom or iris (or push-blur, light-sweep, glow-wipe, dot-wipe); the new picture arrives over the old one, which stays whole under it, so the frame never drops to the background. In world mode a camera pan, whip-pan, push or pull works too (a push grows the new picture out of the old one). Never ${CARD_TRANSITIONS.join(', ')} between footage: they move a card or hand a named object across, footage has neither, and they play as a plain fade there.`,
     'Vary the modules: a 20–40 s piece uses at least four different modules and never the same module three times in a row.'
   ];
 }
