@@ -50,7 +50,9 @@ briefs (see "Measuring parity").
    as finished.
    *Landed:* three rounds by default (`--critic-repairs`); long form
    re-directs the chunks that hold the named scenes; `launchclip make` exits 2
-   for a `needs-repair` video (`--allow-needs-repair` exits 0).
+   for a `needs-repair` video (`--allow-needs-repair` exits 0). The animation
+   path also exits 3 for `awaiting-approval` and 4 for `ready-for-review`
+   (`makeExitCode` in `src/cli.js`).
 3. **Concept and story.** Before the script: an angle, five concepts judged in
    a fresh context, the chosen story edited for retention, then the script.
    Long form keeps its chapters, but the outline comes from the story.

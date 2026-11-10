@@ -256,7 +256,7 @@ test("a seeded bad shot is fixed by a retake that re-renders only that shot", as
   assert.deepEqual({ pose: cue.pose, expression: cue.expression }, { pose: "hands-on-hips", expression: "frustrated" });
   assert.equal(story.scenes[1].end, seeded.scenes[1].end, "the animatic locked the timing");
   assert.deepEqual(story.scenes.filter((scene) => scene.id !== "ask"), seeded.scenes.filter((scene) => scene.id !== "ask"));
-  assert.deepEqual(round.ignored, ["scene ask's start and end (the animatic locked the timing)", "scene desk is outside the retake"]);
+  assert.deepEqual(round.ignored, ["scene desk is outside the retake", "scene ask's start and end (the animatic locked the timing)"]);
   // The model was asked about that shot only, with the finding and what is said in it.
   const request = client.requests.find((entry) => entry.schemaName === "launchclip_retake");
   assert.match(request.input, /critic \(major acting, scene ask\): Maya shrugs and smiles/);
