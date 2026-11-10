@@ -34,8 +34,17 @@ import { draftStoryboard } from "./draft_plan.js";
 export const DRAFT_VERSION = "launchclip.make-draft.v1";
 /** The silence between two sentence takes in the joined narration. */
 export const SENTENCE_GAP = 0.12;
-/** Sentence takes in flight at once. */
+/** Sentence takes in flight at once, for a hosted voice. */
 export const DRAFT_VOICE_CONCURRENCY = 4;
+
+/**
+ * How many sentence takes run at once. A local engine (Kokoro) speaks one
+ * text at a time behind a machine-wide slot (src/queue.js), and takes queued
+ * on that slot wait out its poll interval: they go one after another here.
+ */
+export function draftVoiceConcurrency(provider) {
+  return provider === "kokoro" ? 1 : DRAFT_VOICE_CONCURRENCY;
+}
 /** How long the draft waits for its one direction call (LAUNCHCLIP_DRAFT_DIRECTION_MS; 0 sends none). */
 export const DRAFT_DIRECTION_MS = 12_000;
 /** How long the draft waits for each shot (LAUNCHCLIP_DRAFT_SHOT_MS). */

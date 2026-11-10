@@ -34,7 +34,7 @@ import { normalizePronunciation } from "../voice/pronunciation.js";
 import { inventoryAssets } from "./assets.js";
 import { describeMakeAssets, featuredForMake } from "./describe.js";
 import { approvals, makeSpeed, validateMakeOptions } from "./options.js";
-import { DRAFT_REASONING, DRAFT_VERSION, DRAFT_VOICE_CONCURRENCY, RULES_MODEL, applyDraftDirection, deadlineProvider, draftDirection, draftModelSpec, draftWaits, joinSentenceTakes, ruleClient, takeCached } from "./draft.js";
+import { DRAFT_REASONING, DRAFT_VERSION, RULES_MODEL, applyDraftDirection, deadlineProvider, draftDirection, draftModelSpec, draftVoiceConcurrency, draftWaits, joinSentenceTakes, ruleClient, takeCached } from "./draft.js";
 import { draftStoryboard } from "./draft_plan.js";
 import { animationBrief, isAnimation, isLongForm, routeLane } from "./routing.js";
 import { ANIMATION_PROFILE, checkAnimationScript, estimatedPace, repairScreenplay, standInCast, writersRoom } from "./animation.js";
@@ -822,8 +822,9 @@ async function prepareDraftMotion(ctx) {
   const scriptHash = hashValue({ draft: 1, prompt: ctx.text, notes, assets: assetLines, target, model: draft.model.spec, reasoning: draft.model.reasoning, voice: voiceProvider, ...(options.voiceId ? { voice_id: String(options.voiceId) } : {}), plan: [plan.format, plan.goal, plan.awareness, plan.pace, plan.cta ?? null, plan.series ?? null, plan.skeleton], ...(rules ? { rules } : {}) });
   let script = await readJson(path.join(project, MAKE_PATHS.script));
   const reuse = Boolean(script && state.script?.hash === scriptHash && script.narration);
-  // Sentence takes: started as the script streams, at most DRAFT_VOICE_CONCURRENCY at once, each cached like any take.
-  const pool = createLimiter(DRAFT_VOICE_CONCURRENCY);
+  // Sentence takes: started as the script streams, several at once for a hosted voice, each cached like any take.
+  const atOnce = draftVoiceConcurrency(voiceProvider);
+  const pool = createLimiter(atOnce);
   const takes = new Map();
   const speak = (sentence) => {
     if (takes.has(sentence)) return takes.get(sentence);
@@ -888,7 +889,7 @@ async function prepareDraftMotion(ctx) {
   ctx.narration = { text: script.narration, ...narrationVoice(ctx) };
   Object.assign(report.draft.parts, { script: "draft", voice: "draft" });
   report.draft.script = { reused: reuse, streamed_sentences: voiced.streamed, ...(voiced.first_sentence_seconds != null ? { first_sentence_seconds: voiced.first_sentence_seconds } : {}), words: script.word_count, word_ceiling: plan.word_ceiling };
-  report.draft.voice = { sentences: voiced.sentences, at_once: DRAFT_VOICE_CONCURRENCY, joined: Boolean(voiced.sentences) };
+  report.draft.voice = { sentences: voiced.sentences, at_once: atOnce, joined: Boolean(voiced.sentences) };
   report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, target_words: plan.word_target, plan: script.plan ?? null, passes: 1, reused: reuse, draft: true, take: script.take, check: { ok: script.check.ok, errors: script.check.errors.map((error) => error.id), warnings: script.check.warnings.map((warning) => warning.id) } };
   if (options.duration == null && routing.duration_source === "default") report.warnings.push("no --duration and none named in the prompt; sized for 30 s");
   return { status: "done" };

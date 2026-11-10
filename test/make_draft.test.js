@@ -68,7 +68,7 @@ test("--speed draft: one streamed script call, a take per sentence, a rule-made 
     assert.deepEqual(report.draft.parts, { script: "draft", voice: "draft", storyboard: "draft", render: "none" });
     assert.equal(report.draft.storyboard.source, "rules+direction");
     assert.equal(report.draft.storyboard.direction.status, "applied");
-    assert.equal(report.draft.voice.sentences, DRAFT_SENTENCES.length);
+    assert.deepEqual(report.draft.voice, { sentences: DRAFT_SENTENCES.length, at_once: 4, joined: true });
     assert.deepEqual(Object.keys(report.milestones), ["first_sentence_seconds", "script_seconds", "voice_seconds", "plan_seconds"]);
     assert.deepEqual(report.costs.items.map((item) => item.stage), ["draft-script", "draft-direction"]);
     assert.equal(report.options.speed, "draft");
@@ -319,4 +319,10 @@ test("sentence takes join into one narration on one clock; a provider's late ans
   assert.equal(slow, null);
   assert.deepEqual(provider.late, ["slow"]);
   await wait(100);
+});
+
+test("a local voice's sentence takes run one after another; a hosted voice's overlap", async () => {
+  const { draftVoiceConcurrency } = await import("../src/make/draft.js");
+  assert.equal(draftVoiceConcurrency("kokoro"), 1);
+  assert.equal(draftVoiceConcurrency("elevenlabs"), 4);
 });
