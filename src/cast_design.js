@@ -61,9 +61,13 @@ const MODEL_SCHEMA = () => ({
   }
 });
 
+/** One prompt line per set path with the options the rig has for it (only: the paths to list; all of them by default). */
+export function characterOptionLines(only = null) {
+  return Object.entries(characterPaths()).filter(([name]) => !only || only.includes(name)).map(([name, spec]) => `- ${name}: ${spec.values ? spec.values.join(", ") : spec.describe}${spec.hex ? " (or a six-digit hex)" : ""}${spec.list ? " (a list: use += to add one and -= to remove one)" : ""}${spec.clear ? ' ("none" clears it)' : ""}`);
+}
+
 function modelInstructions() {
-  const paths = characterPaths();
-  const lines = Object.entries(paths).map(([name, spec]) => `- ${name}: ${spec.values ? spec.values.join(", ") : spec.describe}${spec.hex ? " (or a six-digit hex)" : ""}${spec.list ? " (a list: use += to add one and -= to remove one)" : ""}${spec.clear ? ' ("none" clears it)' : ""}`);
+  const lines = characterOptionLines();
   return [
     "You design an illustrated character for an animated explainer by choosing options of a drawing rig.",
     "Answer with set paths only. Each value must be one of the options listed for its path; choose the nearest option when the words name something the rig lacks, and leave a trait out when nothing is close.",
@@ -76,8 +80,8 @@ function modelInstructions() {
   ].join("\n");
 }
 
-/** Keep the sets whose path and value the rig knows; name the rest. */
-function checkedSets(sets) {
+/** Keep the sets whose path and value the rig knows; name the rest. The door every model-chosen look goes through (make's show bible stage uses it too). */
+export function checkedSets(sets) {
   const paths = characterPaths();
   const kept = [], rejected = [];
   for (const set of Array.isArray(sets) ? sets : []) {

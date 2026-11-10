@@ -2,95 +2,45 @@
 // the writers' room writes SCRIPT.json version 2 and voices it as a dialogue.
 // No test here calls a model: the responses are fixtures in
 // test/fixtures/make-animation/, written by hand in the shape each call's
-// schema asks for, and served by a stub client.
+// schema asks for, and served by a stub client (test/helpers/make_animation.js).
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { copyFile, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { SCREENPLAY_VERSION, screenplayNarration, validateScreenplay } from "@launchclip/core/screenplay.mjs";
 import { runCli } from "../src/cli.js";
 import { JUDGE_SCHEMA, PREMISE_SCHEMA, SCREENPLAY_SCHEMA, animationWordTarget, estimatedPace, normalizeCharacters, normalizeScreenplay, rankLoglines, standInCast } from "../src/make/animation.js";
-import { formatMakeSummary, runMake } from "../src/make/index.js";
-import { dialogueLayout } from "../src/voice/dialogue.js";
-import { synthesizeNarration } from "../src/voice/narrate.js";
+import { formatMakeSummary } from "../src/make/index.js";
+import { PROMPT, room as sharedRoom, schemas as allSchemas } from "./helpers/make_animation.js";
 
-const PROMPT = "A 21-second animated short: Maya keeps shipping a fix that fails, and Sam shows her the check she skipped";
-const fixture = async (name) => JSON.parse(await readFile(new URL(`./fixtures/make-animation/${name}.json`, import.meta.url), "utf8"));
+// These tests are about the writers' room and the voice, so every run stops
+// after the show bible (--stop-after bible); test/make_animation_bible.test.js
+// covers the bible and the shot list.
+const room = async (options = {}) => {
+  const t = await sharedRoom(options);
+  const make = t.make;
+  return { ...t, make: (extra = {}) => make({ stopAfter: "bible", ...extra }), calls: t.calls };
+};
+// The writers' room's calls: the designer's one call is the bible stage's.
+const schemas = (calls) => allSchemas(calls).filter((name) => name !== "bible");
+const writing = (calls) => calls.filter((call) => call.schemaName !== "launchclip_animation_bible");
+const writingCosts = (report) => report.costs.items.map((item) => item.stage).filter((stage) => stage !== "bible");
 
-// A model that answers each of the room's calls from a fixture. `scripts` is
-// the script call's answers in order (the last one repeats).
-async function recordedModel({ scripts = ["script"] } = {}) {
-  const calls = [];
-  const usage = { input_tokens: 1200, output_tokens: 400, total_tokens: 1600 };
-  const answers = { launchclip_animation_premise: await fixture("premise"), launchclip_animation_loglines: await fixture("loglines") };
-  const plays = await Promise.all(scripts.map(fixture));
-  let written = 0;
-  const client = {
-    provider: "openai",
-    async runStructured(request) {
-      calls.push(request);
-      if (request.schemaName === "launchclip_animation_script") return { model: "gpt-5.6-luna", value: plays[Math.min(written++, plays.length - 1)], usage };
-      if (answers[request.schemaName]) return { model: "gpt-5.6-luna", value: answers[request.schemaName], usage };
-      throw new Error(`unexpected schema ${request.schemaName}`);
-    }
-  };
-  return { calls, model: { client, provider: "openai", model: "gpt-5.6-luna", spec: "openai:gpt-5.6-luna", vision: false } };
-}
-
-// synthesizeDialogue without ffmpeg (the CI test jobs have none): every line
-// is still synthesised and cached through the narration module and laid out by
-// dialogueLayout; only the join of the wav files is left out.
-function dialogueWithoutFfmpeg(takes) {
-  return async (entries, { outFile, cacheDir, voiceProvider, gap }) => {
-    const gaps = entries.slice(0, -1).map((_, index) => gap[index]);
-    const lines = [];
-    for (const [index, entry] of entries.entries()) {
-      const take = await synthesizeNarration(entry.request, { outFile: `${outFile}.line-${index}.wav`, cacheDir, voiceProvider });
-      takes.push({ speaker: entry.speaker, text: entry.request.text, voice: entry.request.voice, cached: take.cached });
-      lines.push({ ...entry, take });
-    }
-    const layout = dialogueLayout(lines, gaps);
-    await copyFile(lines[0].take.file, outFile);
-    for (const [index] of entries.entries()) await rm(`${outFile}.line-${index}.wav`, { force: true });
-    return { file: outFile, words: layout.words, duration: layout.duration, lines: layout.lines, gaps, sampleRate: 24000, loudness: null, cached: lines.every(({ take }) => take.cached) };
-  };
-}
-
-async function room(options = {}) {
-  const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-animation-"));
-  const { calls, model } = await recordedModel(options);
-  const takes = [];
-  const notices = [];
-  const adapters = {
-    env: {},
-    client: model,
-    notice: (line) => notices.push(line),
-    synthesizeDialogue: dialogueWithoutFfmpeg(takes),
-    finish: async () => { throw new Error("the animation path must not reach finish"); }
-  };
-  const project = path.join(cwd, "short");
-  const make = (extra = {}) => runMake(PROMPT, { animation: true, voice: "test", cwd, out: "short", ...extra }, adapters);
-  const read = async (file) => JSON.parse(await readFile(path.join(project, file), "utf8"));
-  return { cwd, project, calls, takes, notices, adapters, make, read, done: () => rm(cwd, { recursive: true, force: true }) };
-}
-
-const schemas = (calls) => calls.map((call) => call.schemaName.replace("launchclip_animation_", ""));
-
-test("make --animation writes a valid SCRIPT.json and a NARRATION.json with a narrator and two characters, then stops; a rerun reuses both", async () => {
+test("make --animation writes a valid SCRIPT.json and a NARRATION.json with a narrator and two characters; a rerun reuses both", async () => {
   const t = await room();
   try {
     const report = await t.make();
-    assert.equal(report.status, "stopped", JSON.stringify(report.stages));
+    assert.equal(report.status, "awaiting-approval", JSON.stringify(report.stages));
     assert.equal(report.routing.lane, "motion");
     assert.equal(report.routing.kind, "animation");
     assert.ok(report.routing.reasons.some((reason) => /--animation: a character story/.test(reason)));
     // Three writing calls, in order, and no repair.
     assert.deepEqual(schemas(t.calls), ["premise", "loglines", "script"]);
-    assert.deepEqual(t.calls.map((call) => call.schema), [PREMISE_SCHEMA, JUDGE_SCHEMA, SCREENPLAY_SCHEMA]);
-    assert.deepEqual(report.costs.items.map((item) => item.stage), ["premise", "loglines", "script"]);
+    assert.deepEqual(writing(t.calls).map((call) => call.schema), [PREMISE_SCHEMA, JUDGE_SCHEMA, SCREENPLAY_SCHEMA]);
+    assert.deepEqual(writingCosts(report), ["premise", "loglines", "script"]);
     assert.ok(report.costs.estimated_usd > 0);
     assert.equal(t.notices.filter((line) => /PAID call to openai gpt-5\.6-luna \(writers' room/.test(line)).length, 3);
     // The judge sees the brief and the loglines, never the writer's premise or its notes on each logline.
@@ -106,18 +56,17 @@ test("make --animation writes a valid SCRIPT.json and a NARRATION.json with a na
     assert.match(brief, new RegExp(`about ${animationWordTarget(21)} spoken words`));
     assert.match(brief, /The problem beat must start within 12 seconds/);
 
-    // The stage stops after the script and the voice.
+    // This run was asked to stop after the show bible: nothing is planned or rendered.
     assert.equal(report.stages.prepare.status, "done");
     for (const stage of ["storyboard", "subject", "finish", "critic"]) {
       assert.equal(report.stages[stage].status, "skipped", stage);
-      assert.match(report.stages[stage].reason, /stops after the script and the voice/);
+      assert.match(report.stages[stage].reason, /approval of the show bible/);
     }
-    assert.equal(report.stopped.after, "prepare");
+    assert.equal(report.stopped.after, "bible");
     assert.equal(report.final, null);
     assert.equal(report.gates, null);
-    assert.match(report.next_steps.at(-1), /No video is rendered/);
     assert.ok(!existsSync(path.join(t.project, "storyboard.json")));
-    assert.match(formatMakeSummary(report), /launchclip make: stopped \(motion lane/);
+    assert.match(formatMakeSummary(report), /launchclip make: awaiting-approval \(motion lane/);
     assert.match(formatMakeSummary(report), /storyboard\s+skipped/);
 
     // SCRIPT.json: the screenplay contract.
@@ -159,15 +108,16 @@ test("make --animation writes a valid SCRIPT.json and a NARRATION.json with a na
     assert.deepEqual(report.script.lines, { spoken: 8, silent: 2 });
     assert.deepEqual(Object.keys(report.script.voices), ["narrator", "maya", "sam"]);
     assert.equal(report.script.reused, false);
-    assert.ok(report.warnings.some((warning) => /every character speaks in the narrator's voice/.test(warning)), "the test voice has no stand-in voices");
+    assert.ok(report.warnings.some((warning) => /every character speaks in the narrator's voice/.test(warning)), "the test voice has no voices to hand out");
 
     // Rerun: no model call, no take, the same files.
     const before = { calls: t.calls.length, takes: t.takes.length, script: await readFile(path.join(t.project, "SCRIPT.json"), "utf8"), narration: await readFile(path.join(t.project, "NARRATION.json"), "utf8") };
     const again = await t.make();
     assert.equal(t.calls.length, before.calls);
     assert.equal(t.takes.length, before.takes);
-    assert.equal(again.status, "stopped");
+    assert.equal(again.status, "awaiting-approval");
     assert.equal(again.stages.prepare.status, "cached");
+    assert.equal(again.stages.bible.status, "cached");
     assert.equal(again.script.reused, true);
     assert.equal(again.script.voice_reused, true);
     assert.deepEqual(again.costs.items, []);
@@ -187,8 +137,8 @@ test("a script that fails its checks gets one repair pass, with the findings", a
   try {
     const report = await t.make();
     assert.deepEqual(schemas(t.calls), ["premise", "loglines", "script", "script"]);
-    assert.deepEqual(report.costs.items.map((item) => item.stage), ["premise", "loglines", "script", "script-repair"]);
-    const repair = t.calls[3].input;
+    assert.deepEqual(writingCosts(report), ["premise", "loglines", "script", "script-repair"]);
+    const repair = writing(t.calls)[3].input;
     assert.match(repair, /## Repair/);
     assert.match(repair, /\[speaker-unknown\] \(line l3\) Line l3 is spoken by "priya"/);
     assert.match(repair, /\[silent-length\]/);
@@ -208,12 +158,16 @@ test("a script that fails its checks gets one repair pass, with the findings", a
   }
 });
 
-test("a script still failing after the one repair is written with a warning, and is not repaired again", async () => {
+test("a script still failing after the one repair is written with a warning, is not repaired again, and no cast is designed from it", async () => {
   const t = await room({ scripts: ["script-bad"] });
   try {
     const report = await t.make();
     assert.deepEqual(schemas(t.calls), ["premise", "loglines", "script", "script"], "one repair, never two");
-    assert.equal(report.status, "stopped");
+    // A line belongs to someone who is not a character, so the bible stage refuses the script.
+    assert.equal(report.status, "failed");
+    assert.equal(report.failed_stage, "bible");
+    assert.match(report.stages.bible.error, /gives lines to "priya", who is not in its characters \(maya, sam\)/);
+    assert.ok(!existsSync(path.join(t.project, "BIBLE.json")));
     assert.equal(report.script.check.ok, false);
     assert.ok(report.script.check.errors.includes("speaker-unknown"));
     assert.ok(report.warnings.some((warning) => /the script still fails \d+ script check\(s\): speaker-unknown/.test(warning)));
@@ -233,8 +187,8 @@ test("a script that passes the estimate but runs short once voiced spends the re
     // 30 s wanted; the fixture script is written for about 21.
     const report = await t.make({ duration: 30 });
     assert.deepEqual(schemas(t.calls), ["premise", "loglines", "script", "script"]);
-    assert.deepEqual(report.costs.items.map((item) => item.stage), ["premise", "loglines", "script", "script-repair"]);
-    const repair = t.calls[3].input;
+    assert.deepEqual(writingCosts(report), ["premise", "loglines", "script", "script-repair"]);
+    const repair = writing(t.calls)[3].input;
     assert.match(repair, /Your previous script was voiced: it ran [\d.]+ seconds at \d+ words a minute/);
     assert.match(repair, /\[under-length\]/);
     const script = await t.read("SCRIPT.json");
@@ -288,7 +242,7 @@ test("under Kokoro each character gets a voice of its own for its lines", async 
     const narration = await t.read("NARRATION.json");
     assert.deepEqual([...new Set(narration.lines.map((line) => `${line.speaker}:${line.voice}`))], ["narrator:af_heart", "maya:af_bella", "sam:am_michael"]);
     assert.ok(!report.warnings.some((warning) => /narrator's voice/.test(warning)));
-    assert.match(t.calls[2].input, /about 180 words a minute/, "the script is written for Kokoro's pace");
+    assert.match(writing(t.calls)[2].input, /about 180 words a minute/, "the script is written for Kokoro's pace");
   } finally {
     await t.done();
   }
@@ -301,13 +255,13 @@ test("with ffmpeg, the dialogue is joined into one take and a rerun reuses it", 
   try {
     delete r.adapters.synthesizeDialogue;
     const report = await r.make();
-    assert.equal(report.status, "stopped", JSON.stringify(report.stages));
+    assert.equal(report.status, "awaiting-approval", JSON.stringify(report.stages));
     const narration = await r.read("NARRATION.json");
     assert.deepEqual([...new Set(narration.words.map((word) => word.speaker))], ["narrator", "maya", "sam"]);
     assert.ok(existsSync(path.join(r.project, ".launchclip/make/narration.wav")));
     const again = await r.make();
     assert.equal(again.script.voice_reused, true);
-    assert.equal(r.calls.length, 3);
+    assert.equal(r.calls.length, 4);
   } finally {
     await r.done();
   }

@@ -1,0 +1,46 @@
+{
+  "schema": "launchclip.direction-map.v1",
+  "profile": "story-characters",
+  "sections": [
+    { "id": "setup", "title": "All morning", "beat": "setup", "set": "desk-laptop",
+      "lines": [
+        { "words": [0, 6], "line": "l1", "intent": "hook", "treatment": "insert", "scenes": ["desk"], "set": "desk-laptop",
+          "action": { "verb": "type", "who": "maya" },
+          "cast": [{ "id": "Maya", "pose": "type", "expression": "focused", "at": "start" }],
+          "why": "meet her mid-deploy" }
+      ] },
+    { "id": "problem", "title": "Red again", "beat": "problem", "set": "desk-laptop",
+      "lines": [
+        { "words": [7, 11], "line": "l2", "intent": "problem", "treatment": "insert", "scenes": ["desk"], "set": "desk-laptop",
+          "action": { "verb": "slump", "who": "maya" },
+          "cast": [{ "id": "maya", "pose": "slump", "expression": "frustrated", "at": "word:Again." }] },
+        { "words": [12, 16], "line": "l3", "intent": "turn", "treatment": "insert", "scenes": ["ask"], "set": "standing",
+          "action": { "verb": "think", "who": "sam" },
+          "cast": [{ "id": "sam", "pose": "think", "expression": "happy", "at": "word:Did" }] }
+      ] },
+    { "id": "attempt", "title": "The check is slow", "beat": "attempt", "set": "standing",
+      "lines": [
+        { "words": [17, 20], "line": "l5", "intent": "claim", "treatment": "insert", "scenes": ["ask"], "set": "standing",
+          "action": { "verb": "shrug", "who": "maya" },
+          "cast": [{ "id": "maya", "pose": "shrug", "expression": "frustrated", "at": "word:slow." }] },
+        { "words": [21, 25], "line": "l6", "intent": "turn", "treatment": "insert", "scenes": ["ask"], "set": "standing",
+          "action": { "verb": "arms-crossed", "who": "sam" },
+          "cast": [{ "id": "sam", "pose": "arms-crossed", "expression": "happy", "at": "word:Slower" }] }
+      ] },
+    { "id": "turn", "title": "It was the config", "beat": "turn", "set": "desk-laptop",
+      "lines": [
+        { "words": [26, 32], "line": "l8", "intent": "problem", "treatment": "insert", "scenes": ["run"], "set": "desk-laptop",
+          "action": { "verb": "slump", "who": "maya" },
+          "cast": [{ "id": "maya", "pose": "slump", "expression": "surprised", "at": "word:Oh." }] }
+      ] },
+    { "id": "resolution", "title": "Check first", "beat": "resolution", "set": "standing",
+      "lines": [
+        { "words": [33, 40], "line": "l9", "intent": "proof", "treatment": "insert", "scenes": ["saved"], "set": "standing",
+          "action": { "verb": "cheer", "who": "maya" },
+          "cast": [{ "id": "maya", "pose": "cheer", "expression": "delighted", "at": "word:found" }] },
+        { "words": [41, 46], "line": "l10", "intent": "cta", "treatment": "insert", "scenes": ["close"],
+          "action": { "verb": "point", "who": "sam" },
+          "cast": [{ "id": "sam", "pose": "point", "expression": "delighted", "at": "word:Then" }] }
+      ] }
+  ]
+}
