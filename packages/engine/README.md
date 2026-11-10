@@ -71,7 +71,7 @@ const report = await engine.finish('launch-001', { renderer: 'remotion', quality
 | `workDir`, `cacheDir`, `stateDir`, `adapters` | The resolved configuration. |
 
 These pure exports need no engine: `planRecordingEdit`, `normalizeRecordingTranscript`,
-`checkStoryboard`, the gates (`coverageGate`, `directionGate`, `faceGate`,
+`checkStoryboard`, the gates (`coverageGate`, `directionGate`, `faceGate`, `lipSyncGate`,
 `gateProfile`, `qualityFindings`, `prototypeCut`, `prototypeScope`,
 `readProjectDirection`), `FINISH_STAGES`, `formatFinishSummary`, `withStateDirs`,
 `engineAdapters`, `defaultEngineAdapters` and `ADAPTER_KEYS`.

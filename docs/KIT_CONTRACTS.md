@@ -4179,14 +4179,35 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
     `foreidle-*` wrappers inside the posed joints) and sways the body
     instead of shifting its weight.
   - **Speech.** `speechChanges(ranges)` → `[{time, shape, open}]`. A spoken
-    word with its text (`words: [[start, end, "word"]]`; the story resolver
-    adds the text for word anchors and `says: "auto"`) takes a mouth shape
-    per sound from its spelling (`wordVisemes`): `closed` on m, b, p; `o`
-    on o, u, w; `wide` on e, i, y; `open` on a; `small` on other
-    consonants. The shapes spread across the word (none shorter than
-    0.07 s; with more sounds than fit, the part-open consonants go first),
-    and the mouth closes when the word ends unless the next follows within
-    0.07 s. A word without text opens and closes as before (two flaps on a
+    word is `[start, end]`, `[start, end, "word"]` or `[start, end, "word",
+    "phonemes"]`; the story resolver adds the text, and the phonemes when
+    the narration has them, for word anchors and `says: "auto"`.
+    - *With phonemes* (`phonemeVisemes`). The voice's own sounds and how
+      long it held each, as `NARRATION.json` keeps them on a word:
+      `symbol:milliseconds` pairs in order from the word's start
+      (`"b:60 ˈ:45 o:70 ʊ:70 t:55"`; IPA code points as Kokoro writes them,
+      `_` for a pause inside the word). The mouth takes a shape per sound
+      for as long as the sound lasts: `closed` on m, b, p; `o` on w, u, ʊ,
+      o, ɔ; `wide` on i, ɪ, e, ɛ, j; `open` on a, ɑ, æ, ʌ, ɐ; `small` on
+      every other consonant and the neutral vowels. A stress mark or an h
+      belongs to the sound after it and a length mark to the one before.
+      The lengths are scaled to the word's span. No shape is held under
+      0.07 s: a short `small` gives its time to its neighbours, and pressed
+      lips or a vowel take time from a longer neighbour (which keeps at
+      least 0.05 s beside pressed lips) or go when there is none. A closing
+      consonant that trails off lets the mouth close 0.16 s into it. A word
+      cut by the scene's edge, or whose phonemes do not parse, uses its
+      spelling.
+    - *With text only* (`wordVisemes`): a shape per sound from the
+      spelling: `closed` on m, b, p; `o` on o, u, w; `wide` on e, i, y;
+      `open` on a; `small` on other consonants. The shapes spread evenly
+      across the word (none shorter than 0.07 s; with more sounds than fit,
+      the part-open consonants go first). This is the path for supplied
+      audio, other voice providers, and a `NARRATION.json` written before
+      phonemes were kept.
+
+    Either way the mouth closes when the word ends unless the next follows
+    within 0.07 s. A word without text opens and closes as before (two flaps on a
     long word), cycling through the open shapes; a range without word
     timings flaps every 0.24 s. The rig draws two mouths per face, so
     `closed` is the closed mouth and every other shape is that face's open
