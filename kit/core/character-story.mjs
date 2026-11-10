@@ -24,8 +24,10 @@ export function isCharacterStory(story) {
 }
 
 // A character story's captions when its overlay names no preset: the kit's
-// own word-highlight (no band, no plate), in sentence case, a little smaller
-// and a little longer a line so a short sentence stays whole on a phone.
+// own word-highlight (no band, no plate) at its full size, in sentence case
+// and in the brand's body face (a display face can be a thin serif, which
+// the first run's critic found small on a phone), with a little longer a
+// line so a short sentence stays whole.
 // White type in the preset's dark outline, whatever the brand's text colour:
 // it stands over a drawn world (sky, grass, a room), not over the brand's
 // background, and the outline carries it on any of them, so it takes no
@@ -34,6 +36,6 @@ export function isCharacterStory(story) {
 // keepPhraseEnds), so no line is a lone "gate.".
 // A style pack's caption preset is made for cards and footage in the brand's
 // colours and does not apply (a pack opts in with captions.lanes.characters).
-export const CHARACTER_CAPTIONS = Object.freeze({ preset: 'word-highlight', case: 'as-is', max_words: 4, max_chars: 22, size: 0.86, world_tone: false, keep_phrase: true, colors: Object.freeze({ idle: '#ffffff', active: 'primary' }) });
+export const CHARACTER_CAPTIONS = Object.freeze({ preset: 'word-highlight', case: 'as-is', font: 'body', max_words: 4, max_chars: 20, world_tone: false, keep_phrase: true, colors: Object.freeze({ idle: '#ffffff', active: 'primary' }) });
 // The style-pack captions lane a character story reads.
 export const CHARACTER_CAPTION_LANE = 'characters';

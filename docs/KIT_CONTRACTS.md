@@ -1366,9 +1366,9 @@ sentence ("No.") stays alone.
 `bible` reference and stages its cast (`cast-scene`, `character-cameo`), and
 is not footage-led. Its captions overlay, when it names no `preset` or
 `style`, resolves with `CHARACTER_CAPTIONS` under its own options
-(`characterCaptions`): `word-highlight` (no band, no plate) in sentence case,
-4 words and 22 letters a line with a phrase's last word kept with its phrase,
-at 0.86 of the preset's size, white type in
+(`characterCaptions`): `word-highlight` (no band, no plate) in sentence case
+and the brand's body face, 4 words and 20 letters a line with a phrase's
+last word kept with its phrase, white type in
 the preset's dark outline with the spoken word in the brand primary, and no
 world-tone recolouring (the outline carries it on any world). A style pack's
 caption preset is not filled into such a story (`packCaptionsForStory`):

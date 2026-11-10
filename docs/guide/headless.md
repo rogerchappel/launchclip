@@ -268,8 +268,8 @@ plan, so a pose that reaches off the frame is repaired before the render.
 A story planned with a bible gets three things without the planner asking:
 
 - **Captions clear of the cast.** White outlined lines with no band or
-  plate, in sentence case, up to four words a line, with the spoken word in
-  the brand colour. They sit where no character reaches in any cast scene
+  plate, in sentence case and the brand's body typeface, up to four words a
+  line, with the spoken word in the brand colour. They sit where no character reaches in any cast scene
   (above the cast in most 9:16 stories), in one place for the whole story.
   The style's own caption preset is made for cards and footage and is not
   used; a style sets one for character stories with
@@ -277,9 +277,9 @@ A story planned with a bible gets three things without the planner asking:
   (`position`) stay where it puts them.
 - **A camera that moves inside each shot.** A slow push-in on a character
   who speaks, a gentle drift across a `wide` shot, a punch-in on a
-  character who only listens. Each eases in and out with no overshoot, runs
-  for as long as the shot is up and ends on the cut. A scene's own `zooms`
-  replace its move; `"camera": {"moves": false}` turns them all off.
+  character who only listens. Each is slow, fast, slow with no overshoot and
+  runs for as long as the shot is up. A scene's own `zooms` replace its
+  move; `"camera": {"moves": false}` turns them all off.
 - **A style gate that measures what the style governs.** The bible fixes
   the world and the cast, so the render's colours are sky, grass and coats,
   not the style's palette. The gate checks the colours the storyboard sets

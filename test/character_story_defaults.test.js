@@ -57,9 +57,9 @@ test("a character story's captions: no band or plate, sentence case, sized for a
   assert.notEqual(options.layout, "band", "no band");
   assert.ok(!options.plate, "no plate");
   assert.equal(options.case, "as-is");
-  assert.deepEqual([options.maxWords, options.maxChars], [4, 22]);
-  // At least 5.5% of a 1080 frame's width: read on a phone.
-  assert.ok(options.size >= 60, `caption type is ${options.size}px`);
+  assert.deepEqual([options.maxWords, options.maxChars], [4, 20]);
+  // Heavy type in the brand's body face, at least 6.5% of a 1080 frame's width: read on a phone.
+  assert.ok(options.size >= 70 && options.weight >= 800 && options.fontRole === "body", `caption type is ${options.size}px ${options.weight} ${options.fontRole}`);
   const plan = captionPlan(chunkWords(characterWords()), story.overlays[0], { brand: story.brand, format: story.format, story, zones: castCaptionZones(story) });
   assert.ok(!plan.nodes.some((node) => /lc-cap-band/.test(node.cls ?? "")), "no band node is drawn");
   const text = plan.nodes.filter((node) => /(^| )lc-cap( |$)/.test(node.cls ?? "")).map((node) => node.children.map((child) => child.text).join(" "));

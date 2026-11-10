@@ -235,10 +235,10 @@ are the character-story treatment whatever the style's caption preset is:
 white outlined lines with no band or plate, placed where no character
 reaches (above the cast in most 9:16 shots). Write `{"type": "captions"}`
 and name no preset or position; a preset with a band or a plate fails the
-style gate. And every cast scene that arrives and leaves on a cut moves the
-camera for as long as it is up: a slow push-in on a speaker, a gentle drift
-on a `wide` shot, a punch-in on a character who only listens. Plan no
-camera for that. A scene's own `zooms` replace its move, and
+style gate. And every cast scene moves the camera for as long as it is up:
+a slow push-in on a speaker, a gentle drift on a `wide` shot, a punch-in
+on a character who only listens. Plan no camera for that, and join the
+shots with cuts (a camera move between two shots keeps both at rest). A scene's own `zooms` replace its move, and
 `"camera": {"moves": false}` turns them all off.
 
 Pin the story to the bible, then voice it:
