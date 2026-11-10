@@ -8,6 +8,9 @@
 // with glasses, hearing aids, headscarves and beards across it.
 // Characters are illustrative people, not depictions of anyone.
 //
+// After the people come animals, mascots and objects with faces (kinds.mjs):
+// original designs, none a known character or mascot.
+//
 // Imports only sibling kit/core files.
 
 import {normalizeRigParams, rigFingerprint} from './rig.mjs';
@@ -90,8 +93,35 @@ export const STARTER_CAST = Object.freeze([
   C('xena', 'Xena', 'bold explorer; braids, jacket, crossbody bag, prosthetic leg', {build: 'athletic', height: 'tall', skin: 'bronze', hair: {style: 'braids', color: 'espresso'}, outfit: {top: 'jacket', bottom: 'shorts'}, accessories: ['crossbody-bag'], mobility: 'prosthetic-leg', colors: {top: 'olive', bottom: 'khaki', shoes: 'tan', accent: 'ochre'}}, 'af_kore'),
   C('jools', 'Jools', 'dry-humoured barista; undercut, tee, nose stud', {build: 'average', skin: 'ivory', hair: {style: 'undercut', color: 'violet-dye'}, outfit: {top: 'tee', over: 'apron'}, accessories: ['nose-stud'], colors: {top: 'charcoal', bottom: 'black', shoes: 'black', accent: 'ochre'}}, 'af_alloy'),
 
+  // Animals, mascots and objects with faces (kinds.mjs): the same rig, poses and expressions as the people.
+  C('mochi', 'Mochi', 'cat; curious, pokes at everything', {kind: 'cat', colors: {body: '#f0b46a', detail: 'cream', accent: 'rose'}}, 'af_sky'),
+  C('soot', 'Soot', 'small black cat; aloof, secretly kind', {kind: 'cat', size: 'small', colors: {body: '#2b2a33', detail: '#f4efe6', accent: 'rose'}}, 'bf_lily'),
+  C('biscuit', 'Biscuit', 'dog; loyal, over-eager helper', {kind: 'dog'}, 'am_puck'),
+  C('bruno', 'Bruno', 'big bear; gentle and sleepy', {kind: 'bear', size: 'large'}, 'bm_george'),
+  C('clover', 'Clover', 'rabbit; nervous quick thinker', {kind: 'rabbit'}, 'af_nicole'),
+  C('rusty', 'Rusty', 'fox; clever shortcut-finder', {kind: 'fox'}, 'am_liam'),
+  C('puddle', 'Puddle', 'frog; unbothered optimist', {kind: 'frog'}, 'am_echo'),
+  C('pebble', 'Pebble', 'penguin; formal, does it by the book', {kind: 'penguin'}, 'bm_lewis'),
+  C('hoot', 'Hoot', 'owl; patient night-shift mentor', {kind: 'owl'}, 'bf_emma'),
+  C('bloop', 'Bloop', 'blob in the brand colour; the cheerful helper', {kind: 'blob'}, 'af_heart'),
+  C('fizz', 'Fizz', 'small blob in the accent colour; excitable sidekick', {kind: 'blob', size: 'small', colors: {body: 'accent', accent: 'primary'}}, 'af_bella'),
+  C('drip', 'Drip', 'droplet; calm, goes with the flow', {kind: 'droplet', colors: {body: 'sky'}}, 'af_river'),
+  C('twinkle', 'Twinkle', 'star; the win, always celebrating', {kind: 'star'}, 'af_jessica'),
+  C('grumble', 'Grumble', 'little monster; the problem, grumpy but harmless', {kind: 'monster', colors: {body: 'plum', accent: 'mustard'}}, 'am_onyx'),
+  C('ping', 'Ping', 'phone; always notifying, easily distracted', {kind: 'phone'}, 'af_nova'),
+  C('byte', 'Byte', 'laptop; hard-working, slightly overheated', {kind: 'laptop'}, 'am_michael'),
+  C('latte', 'Latte', 'coffee cup; warm morning person', {kind: 'cup'}, 'af_kore'),
+  C('watt', 'Watt', 'light bulb; the bright idea', {kind: 'bulb'}, 'am_eric'),
+  C('rivet', 'Rivet', 'robot; literal-minded automation', {kind: 'robot'}, 'am_adam'),
+  C('cog', 'Cog', 'small teal robot; tinkering sidekick', {kind: 'robot', size: 'small', colors: {body: '#7fc4c0', accent: 'coral'}}, 'am_fenrir'),
+  C('penny', 'Penny', 'gold coin; thrifty, counts everything', {kind: 'coin'}, 'bf_alice'),
+  C('paige', 'Paige', 'book; knows the manual by heart', {kind: 'book'}, 'bf_isabella'),
+  C('nimbus', 'Nimbus', 'cloud; soft-spoken, keeps everyone\'s files', {kind: 'cloud'}, 'af_aoede'),
+  C('ember', 'Ember', 'red fox with dark socks; bold and impatient', {kind: 'fox', size: 'small', colors: {body: '#c9482f'}}, 'af_alloy')
 ]);
 
+// The starters that are not people, by group (kinds.mjs KIND_GROUPS).
+export const STARTER_KIND_IDS = Object.freeze(STARTER_CAST.filter(entry => isKind(entry.params)).map(entry => entry.id));
 
 // Retired characters: no longer offered (not listed, not in STARTER_IDS), but
 // a story that already names one by id still draws it as it always did.

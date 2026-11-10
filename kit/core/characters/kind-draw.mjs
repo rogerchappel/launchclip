@@ -94,7 +94,7 @@ const poly = (...p) => {
   return `${d}Z`;
 };
 /** A dome: round above, a soft flat base at y = 22 (w half-width, h tall, the widest point `at` of the way up). */
-const dome = (w, h, at = 0.42) => `M${-w} ${n(-h * at)}C${-w} ${n(-h * (at + 0.4))} ${n(-w * 0.62)} ${-h} 0 ${-h}C${n(w * 0.62)} ${-h} ${w} ${n(-h * (at + 0.4))} ${w} ${n(-h * at)}L${w} -34Q${w} 22 ${w - 58} 22L${-w + 58} 22Q${-w} 22 ${-w} -34Z`;
+const dome = (w, h, at = 0.42, r = 58) => `M${-w} ${n(-h * at)}C${-w} ${n(-h * (at + 0.4))} ${n(-w * 0.62)} ${-h} 0 ${-h}C${n(w * 0.62)} ${-h} ${w} ${n(-h * (at + 0.4))} ${w} ${n(-h * at)}L${w} ${n(22 - r * 0.96)}Q${w} 22 ${w - r} 22L${-w + r} 22Q${-w} 22 ${-w} ${n(22 - r * 0.96)}Z`;
 /** A five-pointed star with round tips and soft inner corners. */
 function starPath(cx, cy, ro, ri, round = 0.7) {
   const at = (r, a) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
@@ -194,10 +194,10 @@ const SHAPES = {
   frog(d, P, F) {
     const {rx, ry} = d, hc = -d.up;
     return {
-      ...trunk(d, P), look: FUR, dy: -0.48,
-      ears: both(sx => [P.ellipse(sx * 80, hc - ry * 0.74, 66, 66, 'body')]),
+      ...trunk(d, P), look: FUR, dy: -0.36,
+      ears: both(sx => [P.ellipse(sx * 82, hc - ry * 0.78, 78, 78, 'body')]),
       head: [P.ellipse(0, hc, rx, ry, 'body')],
-      marks: [...both(sx => [P.ellipse(sx * 80, hc - ry * 0.74, 60, 60, 'body', {outline: false})]), P.ellipse(0, hc + ry * 0.5, rx * 0.56, ry * 0.3, 'detail', {outline: false})],
+      marks: both(sx => [P.ellipse(sx * 82, hc - ry * 0.78, 71, 71, 'body', {outline: false})]),
       features: []
     };
   },
@@ -215,7 +215,7 @@ const SHAPES = {
     return {
       ...t, look: {limb: 'body', hand: 'body', foot: 'accent'},
       front: [...t.front, ...[-T * 0.56, -T * 0.36].map(y => P.line(`M-30 ${n(y)}Q-15 ${n(y + 14)} 0 ${n(y)}Q15 ${n(y + 14)} 30 ${n(y)}`, 'bodyShade', 6))],
-      ears: both(sx => [P.shape(poly(sx * rx * 0.93, hc - ry * 0.36, sx * rx * 0.8, hc - ry - 44, sx * rx * 0.28, hc - ry * 0.9), 'body')]),
+      ears: both(sx => [P.shape(poly(sx * rx * 0.97, hc - ry * 0.3, sx * rx * 1.02, hc - ry * 0.98, sx * rx * 0.5, hc - ry * 0.8), 'body')]),
       head: [P.ellipse(0, hc, rx, ry, 'body')],
       features: [F.ellipse(-40, 25, 32, 34, 'detail', {outline: false}), F.ellipse(40, 25, 32, 34, 'detail', {outline: false}), beak(F)]
     };
@@ -226,7 +226,7 @@ const SHAPES = {
     return {
       look: FUR,
       behind: [P.line(`M0 ${-h + 8}Q2 ${-h - 30} 22 ${-h - 42}`, 'outline', 9), P.ellipse(40, -h - 46, 27, 16, 'accent')],
-      body: [P.shape(dome(w, h), 'body')],
+      body: [P.shape(dome(w, h, 0.44, 150), 'body')],
       front: [P.ellipse(-w * 0.5, -h * 0.78, 30, 17, 'bodyLight', {outline: false, opacity: 0.85})]
     };
   },
@@ -253,7 +253,7 @@ const SHAPES = {
       look: FUR,
       behind: both(sx => [P.shape(`M${n(sx * w * 0.66)} ${n(-h * 0.84)}Q${n(sx * w * 0.62)} ${-h - 50} ${n(sx * w * 0.44)} ${-h - 62}Q${n(sx * w * 0.4)} ${n(-h - 6)} ${n(sx * w * 0.26)} ${n(-h * 0.96)}Z`, 'accent')]),
       body: [P.shape(dome(w, h, 0.5), 'body')],
-      front: [P.ellipse(0, -h * 0.21, w * 0.6, h * 0.17, 'detail', {outline: false}), P.ellipse(-w * 0.7, -h * 0.45, 17, 23, 'accent', {outline: false}), P.ellipse(w * 0.72, -h * 0.34, 14, 19, 'accent', {outline: false}), P.ellipse(-w * 0.62, -h * 0.84, 12, 15, 'accent', {outline: false})]
+      front: [P.ellipse(0, -h * 0.17, w * 0.56, h * 0.14, 'detail', {outline: false}), P.ellipse(-w * 0.7, -h * 0.45, 17, 23, 'accent', {outline: false}), P.ellipse(w * 0.72, -h * 0.34, 14, 19, 'accent', {outline: false}), P.ellipse(-w * 0.62, -h * 0.84, 12, 15, 'accent', {outline: false})]
     };
   },
 

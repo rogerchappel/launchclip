@@ -68,6 +68,7 @@ function modelInstructions() {
     "You design an illustrated character for an animated explainer by choosing options of a drawing rig.",
     "Answer with set paths only. Each value must be one of the options listed for its path; choose the nearest option when the words name something the rig lacks, and leave a trait out when nothing is close.",
     "Set only what the text asks for. For an edit, change only what the instruction names.",
+    "kind is person unless the text asks for an animal, a mascot or an object with a face; any other kind takes only size and colors.body, colors.detail and colors.accent, so set nothing else for it. Never reproduce a known character or mascot: use only the plain traits the text states.",
     "The character is an illustrative person. If the text names a real person, do not try to reproduce their likeness: use only the plain traits it states (hair, clothes, build) and ignore the name.",
     "personality: one line of at most 160 characters when the text describes one, else null.",
     "",
@@ -146,8 +147,10 @@ export async function castCreate(id, flags = {}, hooks = {}) {
   // What nobody said: a skin tone, a hair and a voice chosen by the id, and reported.
   const assumed = [];
   const defaults = newCharacterDefaults(id, { age: draft.params.age });
-  if (draft.params.skin === undefined) { draft.params.skin = defaults.skin; assumed.push(`skin=${defaults.skin}`); }
-  if (draft.params.hair?.style === undefined) {
+  // (An animal, a mascot or an object with a face has neither.)
+  const person = draft.params.kind === undefined || draft.params.kind === "person";
+  if (person && draft.params.skin === undefined) { draft.params.skin = defaults.skin; assumed.push(`skin=${defaults.skin}`); }
+  if (person && draft.params.hair?.style === undefined) {
     draft.params.hair = { ...defaults.hair, ...(draft.params.hair ?? {}) };
     assumed.push(`hair.style=${draft.params.hair.style}`);
   }

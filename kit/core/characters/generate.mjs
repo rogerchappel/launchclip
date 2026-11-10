@@ -9,6 +9,7 @@
 //   generateCast({seed, set, count, palette}) → story cast entries
 //     [{id, name, voice, build, height, age?, skin, hair, outfit, accessories,
 //       headwear?, mobility?, colors}]
+//     (a set of animals, mascots or objects gives {id, name, voice, kind, size?, colors})
 //   castFromStyle(pack.cast) → story.cast {style, characters}
 //
 // Balance: every cast of two or more has a woman and a man, and its first
@@ -25,6 +26,7 @@ import {normalizeRigParams, rigFingerprint} from './rig.mjs';
 import {NEUTRALS, SKIN_ORDER} from './palette.mjs';
 import {STARTER_IDS} from './cast.mjs';
 import {DRAWING_STYLES} from './styles.mjs';
+import {KINDS, isKind, kindsOf} from './kinds.mjs';
 
 // ---------------------------------------------------------------------------
 // PRNG: a 32-bit string hash seeding mulberry32.
@@ -78,6 +80,8 @@ const VOICES = {
   n: ['af_alloy', 'af_river', 'am_echo', 'af_sky', 'am_puck']
 };
 
+const KIND_VOICES = [...VOICES.f, ...VOICES.m];
+
 function slug(name) {
   return name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24);
 }
@@ -110,7 +114,7 @@ const BASE = {
  * headwear and accessories), an age mix and the props its people hold;
  * the seed varies the people.
  */
-export const CHARACTER_SETS = Object.freeze({
+export const CHARACTER_SETS = ({
   'office-team': {...BASE, describe: 'an office team in smart-casual clothes, some with lanyards',
     tops: {shirt: 3, blazer: 2, sweater: 2, polo: 1, cardigan: 1, turtleneck: 1, dress: 1}, bottoms: {trousers: 4, skirt: 1}, lanyardRate: 0.3,
     accessories: {watch: 0.2, tie: 0.08, necklace: 0.1, earrings: 0.2}, props: ['phone', 'mug', 'tablet', 'clipboard']},
@@ -143,6 +147,35 @@ export const CHARACTER_SETS = Object.freeze({
     tops: {coat: 3, jacket: 3, hoodie: 2, sweater: 2, tee: 2, shirt: 1, kurta: 1, dress: 1}, bottoms: {trousers: 5, skirt: 1, 'long-skirt': 1, shorts: 1}, headwear: {beanie: 2, cap: 2, 'bucket-hat': 1, headphones: 1, beret: 1}, headwearRate: 0.25,
     accessories: {'crossbody-bag': 0.2, backpack: 0.15, scarf: 0.15, sunglasses: 0.06}, mobilityRate: 0.1, props: ['phone', 'mug']}
 });
+
+// Sets of the kinds that are not people (kinds.mjs). kinds: the kinds a
+// member may be; share: how much of the cast they are (1: all of it; under
+// 1 the rest are the set's people, taking turns).
+Object.assign(CHARACTER_SETS, {
+  'animal-friends': {...BASE, describe: 'upright animals: a cat, a dog, a bear, a rabbit, a fox, a frog, a penguin, an owl', kinds: kindsOf('animal'), share: 1, props: ['phone', 'book', 'ball']},
+  mascots: {...BASE, describe: 'soft mascots in the palette\'s colours: blobs, droplets, stars and little monsters', kinds: kindsOf('mascot'), share: 1, props: []},
+  'everyday-objects': {...BASE, describe: 'objects with faces: a phone, a laptop, a coffee cup, a light bulb, a robot, a coin, a book, a cloud', kinds: kindsOf('object'), share: 1, props: []},
+  'mixed-company': {...BASE, describe: 'people with an animal, a mascot or an object among them, turn about',
+    tops: {tee: 3, hoodie: 2, shirt: 2, sweater: 2, jacket: 1, cardigan: 1}, bottoms: {trousers: 4, skirt: 1, shorts: 1}, accessories: {watch: 0.15, earrings: 0.15}, kinds: Object.keys(KINDS), share: 0.5, props: ['phone', 'mug', 'book']}
+});
+Object.freeze(CHARACTER_SETS);
+
+// Names for generated animals, mascots and objects (none a starter id or a person's name above).
+const KIND_NAMES_POOL = ['Pip', 'Dot', 'Bean', 'Nugget', 'Pickle', 'Waffle', 'Sprout', 'Button', 'Noodle', 'Peanut', 'Tofu', 'Maple', 'Jelly', 'Pepper', 'Cricket', 'Acorn', 'Domino', 'Flick', 'Kiwi', 'Loop', 'Marble', 'Orbit', 'Pom', 'Quill', 'Tumble', 'Wisp', 'Zest', 'Dumpling']
+  .filter(name => !STARTER_IDS.includes(slug(name)) && !NAMES.some(([person]) => slug(person) === slug(name)));
+// Coats an animal may wear instead of its kind's own (body colours).
+const COATS = {cat: ['#f0b46a', '#2b2a33', '#f4efe8', '#b9a48c'], dog: ['#f3e3c8', '#8a5a3c', '#3b3a40'], bear: ['#f4efe8', '#4a3a33', '#d9a46a'], rabbit: ['#b9a48c', '#8f93a8', '#e9c9a4'], fox: ['#c9482f', '#e9e4dc'], frog: ['#3fae8a', '#9fc95a'], penguin: ['#3f5a86', '#4a4f5c'], owl: ['#d8d2c8', '#6b5a4c']};
+
+/** One generated animal, mascot or object: its kind's own colours, or a seeded variation. */
+function kindMember(rng, kind, colors) {
+  const size = rng.weighted({medium: 4, small: 1, large: 1});
+  const group = KINDS[kind].group;
+  const own = {};
+  if (group === 'animal' && rng.chance(0.5)) own.body = rng.pick(COATS[kind]);
+  if (group === 'mascot') { own.body = colors.roles.length && rng.chance(0.6) ? rng.pick(colors.roles) : rng.pick(colors.tops); if (own.body === 'accent') own.accent = 'primary'; }
+  if (group === 'object' && rng.chance(0.4)) own.accent = rng.chance(0.5) && colors.roles.length ? rng.pick(colors.roles) : rng.pick(colors.tops);
+  return {kind, ...(size !== 'medium' ? {size} : {}), colors: own};
+}
 
 export const CHARACTER_SET_NAMES = Object.freeze(Object.keys(CHARACTER_SETS));
 
@@ -254,10 +287,30 @@ export function generateCast({seed, set = 'office-team', count = 3, palette = nu
   const names = [...NAMES];
   const out = [];
   const seen = new Set();
+  // Animals, mascots and objects (a set with kinds): each kind once before any repeats.
+  const share = spec.kinds ? spec.share ?? 1 : 0;
+  const kindBag = share ? shuffle(spec.kinds) : [];
+  const kindNames = share ? shuffle(KIND_NAMES_POOL) : [];
+  let kindCount = 0;
   for (let i = 0; i < count; i++) {
+    if (Math.floor((i + 1) * share + 1e-9) > Math.floor(i * share + 1e-9)) {
+      let entry = null;
+      for (let attempt = 0; attempt < 24 && !entry; attempt++) {
+        const params = normalizeRigParams(kindMember(rng, kindBag[kindCount % kindBag.length], colors), 'generated kind');
+        const print = rigFingerprint(params);
+        if (seen.has(print)) continue;
+        seen.add(print);
+        entry = {name: kindNames[kindCount % kindNames.length], voiceKind: 'n', params};
+      }
+      if (!entry) throw new Error(`generateCast could not find ${count} distinct characters for ${set}`);
+      kindCount++;
+      out.push(entry);
+      continue;
+    }
     const age = Array.isArray(spec.ages) ? spec.ages[i % spec.ages.length] : rng.weighted(spec.ages);
     const women = out.filter(e => e.voiceKind === 'f').length, men = out.filter(e => e.voiceKind === 'm').length;
-    const wanted = count === 1 ? null : i < 2 ? pair[i] : women <= men ? 'f' : 'm';
+    const people = out.filter(e => !isKind(e.params)).length;
+    const wanted = count === 1 ? null : people < 2 ? pair[people] : women <= men ? 'f' : 'm';
     const either = i >= 2 && rng.chance(0.15);
     let entry = null;
     for (let attempt = 0; attempt < 24 && !entry; attempt++) {
@@ -267,7 +320,7 @@ export function generateCast({seed, set = 'office-team', count = 3, palette = nu
       const skin = toneFor(i, attempt);
       const params = normalizeRigParams(person(rng, spec, age, skin, voiceKind, colors), `generated ${name}`);
       const print = rigFingerprint(params);
-      if (seen.has(print) || out.some(other => likeness(other.params, params) >= 5)) continue;
+      if (seen.has(print) || out.some(other => !isKind(other.params) && likeness(other.params, params) >= 5)) continue;
       names.splice(nameIndex, 1);
       seen.add(print);
       entry = {name, voiceKind, params};
@@ -278,6 +331,7 @@ export function generateCast({seed, set = 'office-team', count = 3, palette = nu
   return out.map(({name, voiceKind, params}) => {
     const voices = VOICES[voiceKind];
     const {skin: _skin, hair: _hair, ...colors} = params.colors;
+    if (isKind(params)) return {id: slug(name), name, voice: KIND_VOICES[hashSeed(`${seed}:${name}`) % KIND_VOICES.length], ...params};
     return {id: slug(name), name, voice: voices[hashSeed(`${seed}:${name}`) % voices.length], ...params, colors};
   });
 }
