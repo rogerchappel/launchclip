@@ -80,7 +80,7 @@ export const STORY_MEDIUM_KINDS = ["none", "oil", "watercolour", "pastel", "ink"
 export const STORY_MEDIUM_KEYS = ["kind", "strength", "boil", "grain"];
 // story.look names and keys (kit/core/look.mjs LOOK_NAMES, LOOK_KEYS; kept in
 // step by test/look.test.js).
-export const STORY_LOOK_NAMES = ["none", "blueprint", "hologram", "thermal"];
+export const STORY_LOOK_NAMES = ["none", "blueprint", "hologram", "thermal", "paper-cutout"];
 export const STORY_LOOK_KEYS = ["name", "strength", "step", "furniture", "palette", "labels"];
 // story.light (kit/core/lighting.mjs LIGHT_PARAMS, LIGHT_PRESETS): ranges per
 // layer, kept in step by test/lighting.test.js.
