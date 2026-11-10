@@ -23,7 +23,7 @@
 import {createBase, r2, rt} from './catalog-b-base.mjs';
 import {abs, el, set, tw} from './catalog-b-view.mjs';
 import {PARALLAX} from './camera-world.mjs';
-import {WORLD_KINDS, WORLD_TIMES, DETAIL_LEVELS, PROP_IDS, renderWorld} from './worlds/index.mjs';
+import {WORLD_KINDS, WORLD_TIMES, DETAIL_LEVELS, PROP_IDS, PROP_STATES, renderWorld} from './worlds/index.mjs';
 import {propEntry} from './worlds/props.mjs';
 import {worldLayerNodes, WORLD_LAYERS} from './worlds/view.mjs';
 import {SCRIM_SIDES, scrimFor} from './worlds/readable.mjs';
@@ -43,6 +43,117 @@ const timing = {...WORLD_TIMING.world, gaps: [], rules: [
 
 const isObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
+// ---------------------------------------------------------------------------
+// Scene props and their cues
+//
+// A scene's params.props place props in the world it draws and cue the ones
+// with states (the starting gate: closed, then open):
+//
+//   props: ["bucket", {id: "starting-gate", cues: [{at: 2.4, state: "open"}]}]
+//
+// An entry naming a prop of story.world.props changes that prop for the scene
+// (its place, its state); any other entry adds one. `at` is seconds from the
+// scene start (a cast scene also takes a word anchor, resolved by the story
+// loader). A state lasts: a scene after the one that opened the gate draws it
+// open (propStatesBefore), with nothing written in it.
+//
+// A story can cue a prop once for the whole video instead:
+//
+//   story.world.props: [{id: "starting-gate", cues: [{at: "word:ready+0.8", state: "open"}]}]
+//
+// `at` is story time (seconds or an anchor): every scene that shows the prop
+// draws it closed before then and open after, and the scene on screen at
+// that moment plays the change. Scenes need nothing written in them.
+
+const PROP_SCENES = ['world', 'cast-scene'];
+
+/**
+ * The state each stateful prop is in when a scene starts: the last state an
+ * earlier scene gave it (a state on its entry, or its last cue). → {id: state}
+ */
+export function propStatesBefore(story, scene) {
+  const out = {};
+  if (!scene || !Array.isArray(story?.scenes)) return out;
+  const start = Number(scene.start);
+  const earlier = story.scenes.map((other, index) => ({other, index})).filter(({other}) => other !== scene && PROP_SCENES.includes(other?.module) && Number(other.start) < start - 1e-6 && Array.isArray(other.params?.props))
+    .sort((a, b) => Number(a.other.start) - Number(b.other.start) || a.index - b.index);
+  for (const {other} of earlier) for (const entry of other.params.props) {
+    if (!isObject(entry) || !PROP_STATES[entry.id]) continue;
+    const last = Array.isArray(entry.cues) ? [...entry.cues].filter(cue => isObject(cue) && PROP_STATES[entry.id].includes(cue.state)).sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0)).at(-1) : null;
+    const state = last?.state ?? (PROP_STATES[entry.id].includes(entry.state) ? entry.state : null);
+    if (state) out[entry.id] = state;
+  }
+  return out;
+}
+
+/**
+ * A scene's props: the base list (story.world.props) with the scene's own
+ * entries merged in by id, each stateful prop in the state it has when the
+ * scene starts, and the cues that change it. → {props: normalised entries,
+ * cues: [{prop (index), id, at (seconds from the scene start), from, to}]}
+ */
+export function sceneProps(check, {base = [], own = undefined, path = 'params.props', start = 0, duration, states = {}}) {
+  const list = [];
+  const cuesOf = new Map();
+  // The story's own cues (story.world.props[].cues, in story seconds): the state they leave by the scene start, and those inside the scene.
+  const storyState = new Map(), storyCues = new Map();
+  const add = (entry, where, mine) => {
+    const given = typeof entry === 'string' ? {id: entry} : entry;
+    const {cues, ...rest} = isObject(given) ? given : {};
+    let normal;
+    try { normal = propEntry(isObject(given) ? rest : given, where); } catch (error) { check.fail(where, error.message.replace(/^\S+ /, '')); }
+    if (cues !== undefined && !mine) {
+      // A story-wide cue: {at: story seconds (an anchor resolves to them), state}.
+      const timed = (Array.isArray(cues) ? cues : []).filter(cue => isObject(cue) && typeof cue.at === 'number' && PROP_STATES[normal?.id]?.includes(cue.state)).sort((a, b) => a.at - b.at);
+      const before = timed.filter(cue => cue.at <= start + 1e-6).at(-1);
+      if (before) storyState.set(list.length, before.state);
+      storyCues.set(list.length, timed.filter(cue => cue.at > start + 1e-6 && cue.at < start + duration - 1e-6).map(cue => ({at: rt(cue.at - start), state: cue.state})));
+    }
+    // A scene's entry for a prop the story already places changes that prop.
+    const at = mine ? list.findIndex(item => item.id === normal.id) : -1;
+    const merged = at >= 0 ? {...list[at], ...Object.fromEntries(Object.entries(typeof entry === 'string' ? {} : rest).filter(([key]) => key !== 'id').map(([key]) => [key, normal[key]]))} : normal;
+    const index = at >= 0 ? at : list.push(merged) - 1;
+    list[index] = merged;
+    if (cues !== undefined && mine) {
+      if (!PROP_STATES[normal.id]) check.fail(`${where}.cues`, `${normal.id} has no states to cue (props with states: ${Object.keys(PROP_STATES).join(', ')})`);
+      check.arr(cues, `${where}.cues`, 1, 4);
+      cuesOf.set(index, cues.map((cue, i) => {
+        check.obj(cue, `${where}.cues[${i}]`, ['at', 'state'], ['at', 'state']);
+        return {at: check.num(cue.at, `${where}.cues[${i}].at`, 0, duration), state: check.oneOf(cue.state, `${where}.cues[${i}].state`, PROP_STATES[normal.id])};
+      }).sort((a, b) => a.at - b.at));
+    }
+    return {index, explicit: isObject(given) && given.state !== undefined};
+  };
+  base.forEach((entry, i) => add(entry, `story.world.props[${i}]`, false));
+  const named = new Set();
+  if (own !== undefined) {
+    check.arr(own, path, 0, 12);
+    own.forEach((entry, i) => { const {index, explicit} = add(entry, `${path}[${i}]`, true); if (explicit) named.add(index); });
+  }
+  if (list.length > 12) check.fail(path, `with story.world.props makes ${list.length} props; a world holds 12`);
+  const cues = [];
+  list.forEach((entry, index) => {
+    if (!PROP_STATES[entry.id]) return;
+    // The state at the scene start: the scene's own, else the one an earlier scene left, else the prop's default.
+    let state = named.has(index) ? entry.state : states[entry.id] ?? storyState.get(index) ?? entry.state;
+    list[index] = {...entry, state};
+    for (const cue of [...(storyCues.get(index) ?? []), ...(cuesOf.get(index) ?? [])].sort((a, b) => a.at - b.at)) {
+      if (cue.state !== state) cues.push({prop: index, id: entry.id, at: cue.at, from: state, to: cue.state});
+      state = cue.state;
+    }
+  });
+  return {props: list, cues};
+}
+
+/** Ops for prop cues: at each cue the prop's old state clears and its new one shows (a starting gate springs open: a cut). */
+export function propCueOps(ops, worldId, cues, start) {
+  for (const cue of cues ?? []) {
+    set(ops, `${worldId}-prop${cue.prop}-${cue.from}`, rt(start + cue.at), {opacity: 0});
+    set(ops, `${worldId}-prop${cue.prop}-${cue.to}`, rt(start + cue.at), {opacity: 1});
+  }
+  return ops;
+}
+
 /** The world settings for a scene: params over story.world. */
 function settings(b, ctx) {
   const {check} = b;
@@ -56,12 +167,10 @@ function settings(b, ctx) {
   const rawProps = p.props ?? base.props ?? [];
   const where = p.props === undefined ? 'story.world.props' : 'params.props';
   check.arr(rawProps, where, 0, 12);
-  const props = rawProps.map((entry, i) => {
-    try { return propEntry(entry, `${where}[${i}]`); } catch (error) { check.fail(`${where}[${i}]`, error.message.replace(/^\S+ /, '')); }
-    return null;
-  });
+  // A world scene's own props replace story.world.props (as they always have); its stateful ones can be cued.
+  const {props, cues} = sceneProps(check, p.props === undefined ? {base: rawProps, start: b.start, duration: b.duration, states: ctx.propStates ?? {}} : {own: rawProps, start: b.start, duration: b.duration, states: ctx.propStates ?? {}});
   const detail = p.detail === undefined ? (base.detail ?? null) : check.oneOf(p.detail, 'params.detail', DETAIL_LEVELS);
-  return {kind, time, props, detail};
+  return {kind, time, props, detail, cues};
 }
 
 /**
@@ -160,7 +269,7 @@ export function worldCameraStates(camera, {overscan}) {
 function resolveWorld(params, ctx) {
   const b = createBase('world', params, ctx, {allowed: ['kind', 'time', 'props', 'camera', 'detail', 'scrim', 'foreground'], required: [], hidesCaptions: false});
   const {check, canvas, colors} = b;
-  const {kind, time, props, detail} = settings(b, ctx);
+  const {kind, time, props, detail, cues} = settings(b, ctx);
   const foreground = b.params.foreground === undefined ? !ctx.castAbove : check.bool(b.params.foreground, 'params.foreground');
   const camera = cameraOf(b);
   const scrimSide = b.params.scrim === undefined ? 'none' : (b.params.scrim === true ? 'auto' : b.params.scrim === false ? 'none' : check.oneOf(b.params.scrim, 'params.scrim', SCRIM_SIDES));
@@ -180,7 +289,8 @@ function resolveWorld(params, ctx) {
     light: world.light, anchors: world.anchors, quiet: world.quiet,
     // The scrim a caller can lay over the quiet area; drawn when params.scrim asks.
     scrim: {...scrim, on: scrimSide !== 'none'},
-    props: world.props, overscan: world.overscan
+    props: world.props, overscan: world.overscan,
+    ...(cues.length ? {propCues: cues} : {})
   };
   b.model.layer = 'front';
   const model = b.finish(content, {minTextPx: b.min.key});
@@ -243,6 +353,7 @@ export function worldTimeline(model) {
     set(ops, target, model.start, a);
     if (camera.move !== 'still') tw(ops, target, model.start, rt(model.duration), 'sine.inOut', a, z);
   }
+  propCueOps(ops, model.id, model.content.propCues, model.start);
   return ops;
 }
 
@@ -252,7 +363,7 @@ export const MODULES = {
     params: {
       kind: `${WORLD_KINDS.join(' | ')} (default: story.world.kind)`,
       time: `${WORLD_TIMES.join(' | ')} (default: story.world.time, else day)`,
-      props: `[id | {id, at?: left|centre|right|0..1, on?: surface|counter|ground|floor|wall|sky, scale?, layer?: back|mid|front, flip?}] ≤ 12; ids: ${PROP_IDS.join(', ')}`,
+      props: `[id | {id, at?: left|centre|right|0..1, on?: surface|counter|ground|floor|wall|sky, scale?, layer?: back|mid|front, flip?, state?, cues?: [{at: seconds from the scene start, state}]}] ≤ 12; ids: ${PROP_IDS.join(', ')}. Props with states (${Object.entries(PROP_STATES).map(([id, states]) => `${id}: ${states.join(' → ')}`).join('; ')}) keep the state a scene leaves them in`,
       camera: `${WORLD_CAMERA_MOVES.join(' | ')} or {move, amount 0..1} (default drift)`,
       detail: `${DETAIL_LEVELS.join(' | ')} (default: from story.cast.style)`,
       scrim: `${SCRIM_SIDES.join(' | ')} | true (darken the quiet area for text on top; default none)`,

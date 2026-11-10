@@ -35,6 +35,7 @@ import { approvals, validateMakeOptions } from "./options.js";
 import { animationBrief, isAnimation, isLongForm, routeLane } from "./routing.js";
 import { ANIMATION_PROFILE, checkAnimationScript, estimatedPace, repairScreenplay, standInCast, writersRoom } from "./animation.js";
 import { DEFAULT_DRAWING_STYLE, animationBriefLines, designBible, makeBible, savedForDesign } from "./show_bible.js";
+import { scriptShows, showsNotes } from "./drawable.js";
 import { BIBLE_FILE, BIBLE_SHEETS, bibleCast, withBible } from "@launchclip/core/bible.mjs";
 import { readBible } from "../bible.js";
 import { askYesNo } from "../demo/autopilot.js";
@@ -810,6 +811,13 @@ async function prepareAnimation(ctx) {
   ctx.cast = voiced.cast;
   const stats = script.check.stats.screenplay ?? {};
   report.script = { source: "model", kind: "animation", file: MAKE_PATHS.script, version: SCREENPLAY_VERSION, title: script.title, logline: script.logline, characters: script.characters.map((character) => character.id), speakers: stats.speakers ?? [], lines: { spoken: stats.spoken_lines ?? 0, silent: stats.silent_lines ?? 0 }, words: script.word_count, target_words: script.word_target, plan: { format: "story", skeleton: skeleton?.id ?? null }, passes: script.passes?.length ?? 0, reused: reuse, take: script.take, voices: voiced.voices, voice_reused: voiced.reused, check: { ok: script.check.ok, errors: script.check.errors.map((error) => error.id), warnings: script.check.warnings.map((warning) => warning.id) } };
+  // What the story shows (src/make/drawable.js): the things it turns on, each one the kit draws, and what only the narrator carries.
+  const shows = scriptShows(script);
+  report.script.shows = { world: shows.world, things: shows.things, cues: shows.cues, notes: showsNotes(script) };
+  for (const note of report.script.shows.notes) {
+    ctx.say(`script: ${note}`);
+    if (/cannot be drawn|rewritten once/.test(note)) report.warnings.push(`script: ${note}`);
+  }
   const characterVoices = Object.entries(voiced.voices).filter(([speaker]) => speaker !== NARRATOR).map(([, voice]) => voice);
   if (characterVoices.length && characterVoices.every((voice) => voice === (voiced.voices[NARRATOR] ?? narrationRequest(narrationVoice(ctx)).voice ?? null))) report.warnings.push(`every character speaks in the narrator's voice: the ${voiceProvider} voice has no voices to hand out. Give each character its own with launchclip cast edit <id> --voice <voice id> --project ${project}, then launchclip bible freeze ${project} --characters ${script.characters.map((character) => character.id).join(",")} --force`);
   if (options.duration == null && routing.duration_source === "default") report.warnings.push("no --duration and none named in the prompt; sized for 30 s");

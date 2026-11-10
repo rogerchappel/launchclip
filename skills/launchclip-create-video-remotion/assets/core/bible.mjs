@@ -6,7 +6,10 @@
 //   {schema, frozen, hash,
 //    cast: {style, colors?, characters: [{...a story cast entry with full rig
 //           params, character_file?, sheet, fingerprint, must_keep}]},
-//    world?: {kind, time?, props?, detail?, sets?},
+//    world?: {kind, time?, props?, detail?, sets?, shows?},
+//      shows: the props of world.props the story turns on (the starting gate
+//      of a story about one): the `bible` gate fails a story that never puts
+//      one of them on screen (biblePropFindings).
 //    style?: {pack?, seed?, drawing_style?},
 //    rules?: [text], inputs?: {script_hash?}}
 //
@@ -32,6 +35,7 @@
 //   withBible(story, bible, file)          → the story pinned to the bible
 //   bibleRefErrors(ref, path)              → problems with a bible: {file, hash}
 //   bibleCastFindings(story, bible)        → where a story's cast differs
+//   biblePropFindings(story, bible)        → story props that never appear on screen
 //
 // Pure ESM; imports only kit/core siblings. Canonical copy: kit/core/bible.mjs.
 
@@ -247,14 +251,19 @@ export function validateBible(bible, {script = null, exists = null} = {}) {
 
   // World: a world the kit draws and the sets the story may use.
   if (bible.world !== undefined) {
-    if (!isObj(bible.world)) err('world must be {kind, time?, props?, detail?, sets?}');
+    if (!isObj(bible.world)) err('world must be {kind, time?, props?, detail?, sets?, shows?}');
     else {
-      const {sets, ...world} = bible.world;
-      errors.push(...storyWorldErrors(world).map(message => message.replace('(kind, time, props, detail)', '(kind, time, props, detail, sets)')));
+      const {sets, shows, ...world} = bible.world;
+      errors.push(...storyWorldErrors(world).map(message => message.replace('(kind, time, props, detail)', '(kind, time, props, detail, sets, shows)')));
       if (!nonEmpty(world.kind)) err('world.kind must name a world');
       if (sets !== undefined) {
         if (!Array.isArray(sets)) err('world.sets must be a list of sets');
         else for (const name of sets) if (!SETS.includes(name)) err(`world.sets: ${JSON.stringify(name)} is not a set (${SETS.join(', ')})`);
+      }
+      if (shows !== undefined) {
+        const placed = (Array.isArray(world.props) ? world.props : []).map(entry => (typeof entry === 'string' ? entry : entry?.id));
+        if (!Array.isArray(shows)) err('world.shows must be a list of prop ids from world.props');
+        else for (const id of shows) if (!placed.includes(id)) err(`world.shows: ${JSON.stringify(id)} is not one of world.props (${placed.join(', ') || 'none'})`);
       }
     }
   }
@@ -319,5 +328,45 @@ export function bibleCastFindings(story, bible) {
     if (have.name !== want.name) findings.push(`${id}'s name is ${JSON.stringify(have.name)} in story.cast; the bible's is ${JSON.stringify(want.name)}`);
   }
   for (const id of own.members.keys()) if (!pinned.members.has(id)) findings.push(`${id} is in story.cast but not in the bible`);
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
+// Story props
+
+const propId = entry => (typeof entry === 'string' ? entry : isObj(entry) ? entry.id : null);
+const hasProp = (list, id) => Array.isArray(list) && list.some(entry => propId(entry) === id);
+// A scene that draws story.world.props: a world scene without props of its own, or a cast-scene standing in the story's world.
+const showsWorldProps = scene => (scene?.module === 'world' && scene.params?.props === undefined)
+  || (scene?.module === 'cast-scene' && scene.params?.backdrop !== 'room' && scene.params?.world === undefined);
+
+/**
+ * Where a story fails to show what the bible says it turns on: one finding
+ * per prop of the bible's world.shows that no scene puts on screen, and per
+ * state change the bible cues (the starting gate opening) that the story
+ * never plays. A prop is on screen when story.world.props lists it and a
+ * scene draws the story's world (a world scene, or a cast-scene standing in
+ * it), when a scene's own params.props places it, or when a set-prop scene
+ * shows it. → string[]
+ */
+export function biblePropFindings(story, bible) {
+  const findings = [];
+  const shows = Array.isArray(bible?.world?.shows) ? bible.world.shows : [];
+  const wanted = (Array.isArray(bible?.world?.props) ? bible.world.props : []).filter(entry => shows.includes(propId(entry)));
+  const scenes = Array.isArray(story?.scenes) ? story.scenes : [];
+  for (const entry of wanted) {
+    const id = propId(entry);
+    if (!id) continue;
+    const inWorld = hasProp(story?.world?.props, id) && scenes.some(showsWorldProps);
+    const placed = scenes.some(scene => (['world', 'cast-scene'].includes(scene?.module) && hasProp(scene.params?.props, id)) || (scene?.module === 'set-prop' && scene.params?.prop === id));
+    if (!inWorld && !placed) {
+      findings.push(`the story turns on "${id}" (the show bible's world.shows), but it never appears on screen: put it back in story.world.props with a cast-scene or world scene that draws the story's world, or place it in a scene (cast-scene or world params.props, or a set-prop scene)`);
+      continue;
+    }
+    for (const cue of isObj(entry) && Array.isArray(entry.cues) ? entry.cues : []) {
+      const cued = list => Array.isArray(list) && list.some(item => isObj(item) && item.id === id && (item.state === cue.state || (Array.isArray(item.cues) && item.cues.some(own => own?.state === cue.state))));
+      if (!cued(story?.world?.props) && !scenes.some(scene => cued(scene?.params?.props))) findings.push(`the script has the ${id} become ${cue.state}, but the story never shows it: give story.world.props' ${id} the bible's cue ({"at": ${JSON.stringify(cue.at)}, "state": "${cue.state}"}), or cue it in the scene where it happens (params.props: [{"id": "${id}", "cues": [{"at": …, "state": "${cue.state}"}]}])`);
+    }
+  }
   return findings;
 }

@@ -4301,6 +4301,14 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   its light and half its grade. The model carries `content.backdrop`,
   `content.world` and `content.drawWorld` (render inputs, or null over a
   plate).
+- **Scene props.** `params.props` (a cast-scene that draws its world; not
+  over a plate, whose own `props` take them, and not `backdrop: "room"`)
+  places story props in the world behind the cast and cues the ones with
+  states: `props: ["bucket", {id: "starting-gate", cues: [{at:
+  "word:opens", state: "open"}]}]`. An entry naming a prop of
+  `story.world.props` changes that prop for the scene; any other adds one.
+  See "Prop cues" under the world library. A story with no such prop and no
+  `params.props` passes `story.world.props` to the drawing as written.
 - **Arriving and leaving with the world.** A cast-scene or character-cameo
   that starts with the world scene beneath it arrives as that plate does: a
   cut when the plate cuts in, else a fade over the plate's own transition.
@@ -4590,7 +4598,8 @@ drawn (ANIMATION_PIPELINE_RFC.md §4.2):
         "character_file": "cast/nova.character.json",
         "sheet": "bible/sheets/nova.png", "fingerprint": "1acb77987b1a5632",
         "must_keep": ["silver locs hair", "deep skin", "red blazer", "charcoal trousers", "round glasses"] } ] },
-  "world": { "kind": "office", "time": "day", "sets": ["desk-laptop", "standing"] },
+  "world": { "kind": "office", "time": "day", "sets": ["desk-laptop", "standing"],
+    "props": [{ "id": "trophy", "on": "ground", "scale": 2.5 }], "shows": ["trophy"] },
   "style": { "pack": "project", "seed": 4821, "drawing_style": "outlined" },
   "rules": ["Rae never raises his voice."],
   "inputs": { "script_hash": "sha256:…" } }
@@ -4613,7 +4622,11 @@ drawn (ANIMATION_PIPELINE_RFC.md §4.2):
   brand's primary colour"` for a brand role). A file may add features; it
   may not drop one the params give.
 - `world` is a story world (`storyWorldErrors`) plus `sets`, the sets the
-  story may use (`SETS`). `style` names the project's style pack and seed;
+  story may use (`SETS`), and `shows`, the props of `world.props` the story
+  turns on (`launchclip bible freeze --props starting-gate,bucket`, or the
+  designer in `make`). A prop with states may carry its cue there
+  (`{id: "starting-gate", cues: [{at: "word:ready+0.8", state: "open"}]}`).
+  The `bible` gate fails a story that never shows a prop of `shows`. `style` names the project's style pack and seed;
   its `drawing_style` is the cast's. `rules` are sentences for the planner
   and the critic. `inputs.script_hash` is the SHA-256 of `SCRIPT.json`'s
   bytes when the bible was frozen.
@@ -4637,6 +4650,7 @@ export function bibleRefErrors(ref, path)        // also exported by story.mjs
 export function withBible(story, bible, file)    // → the story with the bible's cast and bible: {file, hash}
 export function directionWithBible(map, bible, file)
 export function bibleCastFindings(story, bible)  // → [text]; [] when the casts agree
+export function biblePropFindings(story, bible)  // → [text]: a prop of world.shows no scene shows, a cued change never played
 ```
 
 Validation: the cast passes `storyCastErrors` and `resolveStoryCast`; a
@@ -5187,8 +5201,8 @@ pinned. Other kinds of video report `bible` as `skipped`.
 
 **One structured call** (`designBible`, schema name
 `launchclip_animation_bible`): for each character of the script `{id, use,
-sets, position}`, plus `drawing_style`, `world: {kind, time}`, `sets` and
-`rules`. `sets` are character set paths (`{path, op, value}`, the edit
+sets, position}`, plus `drawing_style`, `world: {kind, time}`, `sets`,
+`props` (the things the story shows, from `STORY_PROP_IDS`) and `rules`. `sets` are character set paths (`{path, op, value}`, the edit
 language of `cast create`); the paths offered are `DESIGN_PATHS`: a look,
 never the name, the voice or the drawing style. `normalizeBibleDesign`
 passes every set through `checkedSets` (`src/cast_design.js`), gives each
@@ -5237,7 +5251,42 @@ terminal, or `adapters.ask`) asks instead of needing the flag.
   plan, and its findings (`cast: …`) go back to the model as repair errors.
 
 The brief (`animationBriefLines`) is the screenplay with its line ids, the
-bible's cast, world and rules, and staging notes for dialogue.
+bible's cast, world, props and rules, and staging notes for dialogue.
+
+**Drawable stories** (`src/make/drawable.js`). The kit draws everything in
+code, so a story may only turn on what it can draw:
+
+- `drawableVocabulary()` / `drawableLines()`: every world, set, story prop
+  and character kind. The premise, judge and script calls of the writers'
+  room all get the lines; the designer's schema offers the same props.
+- The script names what it shows: `SCRIPT.json` `shows: {world, things:
+  [{name, prop}]}`, where `prop` is a story prop id, `"told"` (only the
+  narrator names it) or null (the kit cannot draw it). `scriptShows(script)`
+  reads it, matches a thing to the kit by its words when the writer gave no
+  prop, adds the story props the script's own words name (a script written
+  before `shows` existed still shows its gate), and finds the line where a
+  prop changes state (`cues: [{prop, state, line}]`: the silent line "The
+  gate opens").
+- `drawableFindings(script)` joins the script check
+  (`checkAnimationScript`): `undrawable` (error) for a thing with no prop,
+  `told-acted` (error) when a silent line needs a told thing on screen,
+  `told-not-shown` (warning). An error takes the one repair pass, whose fix
+  says to move the story to the nearest drawable thing or to leave the thing
+  to the narrator. `MAKE.json` `script.shows` lists the things, the cues and
+  the notes (`showsNotes`), and a thing that cannot be drawn is a warning.
+- `normalizeBibleDesign(…, {shows})` puts the script's things first among
+  the bible's props (`MAX_BIBLE_PROPS`, 4), and moves a story with a
+  starting gate or a winning post to the racetrack unless the designer chose
+  a racing world. `makeBible` writes `world.props` (`biblePropEntry`: a
+  small prop is enlarged to read beside the cast; a prop that changes
+  carries its cue, anchored on the narration by `lineAnchor`) and
+  `world.shows` (their ids).
+- `planStoryboard` pins the bible's `world.props` into `story.world`, so
+  every cast-scene that draws the world shows them and the cue opens the
+  gate without the planner writing anything.
+- The `bible` gate (`biblePropFindings(story, bible)`) fails a story when a
+  prop of `world.shows` is on screen in no scene, or when the bible cues a
+  change the story never plays.
 
 ## World module (`kit/core/catalog-world.mjs`)
 
@@ -5268,10 +5317,21 @@ scene fails to resolve on an unknown one.
   sheets; `storyWorldErrors`; `worldCatalogue()`; `worldAnchors(kind,
   {canvas})` (anchors without drawing); `worldGrade(kind, time, strength)`
   (the time-of-day grade as hex → hex).
-- 22 worlds in three groups. Inside: office, home-desk, kitchen,
+- 25 worlds in three groups. Inside: office, home-desk, kitchen,
   living-room, classroom, cafe, workshop, server-room, studio, gym. Street:
   city-street, shopfronts, crossing, alley, rooftop, skyline. Outside: park,
-  beach, mountains, forest, space, abstract-stage. Each has `geo` (floor or
+  beach, mountains, forest, space, abstract-stage, and the racing worlds
+  (`RACING_WORLDS`, `racing.mjs`): racetrack (turf, the running rail, a dirt
+  track and far rail, a grandstand in the distance, the winning post),
+  stable-yard (a stable block with half-door stalls, a lantern, hay, a water
+  bucket) and paddock (an oval walking path round a lawn, a rail and a
+  hedge). The racing worlds are drawn at the cast's scale: their ground
+  anchor's px per metre is the kit's times `STORY_SCALE` (0.7; a mare in a
+  wide shot is about two metres of it), so a horse reads against the rail
+  and the stall doors, and what a story needs to see is in the mid layer
+  (a cast scene leaves out a world's front layer). In a racing world the
+  `standing` and `phone` sets bring no pot plant (`layoutSet` `bare`). Each
+  world has `geo` (floor or
   ground line, anchors, quiet area), `back`, `mid`, `front` and optional
   `fx`; a world never draws text.
 - Layers: back (sky or wall), mid (the room or street), front (foreground
@@ -5305,14 +5365,41 @@ scene fails to resolve on an unknown one.
   filters.
 - `common.mjs`, `furniture.mjs`, `inside.mjs`, `street.mjs`,
   `outside.mjs`: the shared pieces and the worlds.
-- `props.mjs`: 96 props (desk and table top, kitchen, floor and ground,
-  street, wall and sky). A prop is `{label, on, h, w, draw}`: `on` lists the
+- `props.mjs`: 104 props (desk and table top, kitchen, floor and ground,
+  street, wall and sky, racing and story props). A prop is `{label, on, h, w, draw}`: `on` lists the
   anchors it prefers (surface, counter, ground, floor, wall, sky), `h`/`w`
   its size in metres, drawn at the anchor's px per metre. A placement is an
   id or `{id, at?: left|centre|right|0..1, on?, scale?: 0.25..4, layer?,
   flip?}`; without `at`, props take free slots from the frame edges inward,
   keeping the centre band open. A world without the preferred anchor falls
   back along the list, then to the ground.
+- **Story props** (`STORY_PROP_IDS`): the things a character story can turn
+  on. `bucket`, `hay-bale`, `saddle`, `rosette`, `finish-post`, `jump`,
+  `sign` (a blank board with an arrow: props carry no lettering) and
+  `starting-gate` are `story: true`: on the ground of any world they are
+  drawn at the cast's scale (`STORY_SCALE`), not the world's. The list also
+  names a few older props a scene can show (trophy, ball, gift, flag, …).
+- **Props with states** (`PROP_STATES`: `starting-gate: closed, open`). A
+  placement takes `state?` (default the first). The gate is seen from the
+  front, two stalls on a portrait canvas and three on a landscape one
+  (`gateBays`), centred unless `at` says otherwise; closed, a pair of padded
+  doors meets across each stall; open, each door stands against its post and
+  the course shows through. `placeProps` draws every state in a group of its
+  own (`<world id>-prop<i>-<state>`), the others clear, so a cue switches
+  them with two opacity sets, the same in both renderers.
+- **Prop cues** (`sceneProps`, `propCueOps`, `propStatesBefore` in
+  `kit/core/catalog-world.mjs`). A `world` scene's or a `cast-scene`'s
+  `params.props` entry may carry `cues: [{at, state}]` (`at`: seconds from
+  the scene start; a cast-scene also takes a word anchor). The change is a
+  cut (a gate springs open), and the state lasts: every later scene draws
+  the prop in the state the last cue left it (`ctx.propStates`), unless its
+  own entry names a `state`. A story can cue a prop once for the whole video
+  instead: `story.world.props: [{id: "starting-gate", cues: [{at:
+  "word:ready+0.8", state: "open"}]}]`, where `at` is story time (seconds or
+  an anchor, resolved by `resolveStory`); scenes before it draw the gate
+  closed, the scene on screen then plays the change, scenes after draw it
+  open, with nothing written in them. `model.content.propCues` lists a
+  scene's changes `{prop, id, at, from, to}`.
 - `readable.mjs`: **text over a world.** Every world names a quiet area
   (plain wall, sky, a board or a menu) and the colours under it.
   `scrimFor(world, {text, bg, side})` lays the brand background over that

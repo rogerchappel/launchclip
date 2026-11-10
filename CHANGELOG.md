@@ -12,6 +12,11 @@
   limits how many model calls are in flight; `1` sends one at a time. A
   rate-limit answer is waited out instead of failing the stage, and
   `MAKE.json` `model_calls` says where calls overlapped.
+- An OpenAI model's answer is picked up sooner. A background response was
+  polled every 5 s, so each finished answer waited 2.5 s on average to be
+  seen; it is now polled after 1 s, 1 s, then every 2 s, and every 5 s once a
+  call has run two minutes. That is about 1.5 s less per call, or about 18 s
+  over the dozen calls of a `make` run, with the same answers.
 - The spending limit (`--max-cost-usd`) holds when calls overlap: a paid call
   starts beside others only when the most they can all cost fits under the
   limit, and otherwise waits its turn.
@@ -30,6 +35,30 @@
   stops the rounds.
 
 ### Added
+
+- Racing worlds and story props. Three new worlds, drawn at the cast's
+  scale: `racetrack` (turf, the running rail, a grandstand in the distance,
+  the winning post), `stable-yard` (stalls with half doors, hay, a water
+  bucket) and `paddock` (a parade ring). New props a story can turn on:
+  `bucket`, `hay-bale`, `saddle`, `rosette`, `finish-post`, `jump`, `sign`
+  and `starting-gate`, which has two states. A `cast-scene` or `world`
+  scene places props with `params.props` and cues a state change
+  (`{id: "starting-gate", cues: [{at: "word:opens", state: "open"}]}`); the
+  state lasts into later scenes. A story can cue it once for the whole
+  video in `story.world.props`. `node scripts/racing-sheet.mjs` draws stills
+  of each world with a foal and a mare.
+- `launchclip make --animation` keeps a story to what the kit can draw. The
+  writers' room and the designer are given the list of worlds, sets, props
+  and character kinds; the script names what it shows (`SCRIPT.json`
+  `shows`), and the script check fails one that turns on anything else
+  (`undrawable`), which takes the one repair pass. The show bible records
+  the story's props (`world.props`, `world.shows`) and they are pinned into
+  `story.world`, so they are on screen in every shot; a change the script
+  plays ("The gate opens.") is cued on the narration's words. The `bible`
+  gate in `finish` fails a story that never shows a prop its bible says it
+  turns on. `MAKE.json` `script.shows` says what the story shows and what
+  only the narrator carries. `launchclip bible freeze --props <ids>` does
+  the same for a bible you freeze yourself.
 
 - `launchclip make --animation` reviews its own work before the delivery
   render. After the shots are planned it renders an animatic
