@@ -4,6 +4,23 @@
 
 ### Fixed
 
+- Captions stay on screen when a style puts them in the middle of the frame
+  (or at the top, low, or at a large size). Tooling used to hide them under
+  every card that sat in their band, so a delivered video could have none
+  for most of its narration. Hiding is now the last resort, scene by scene:
+  the scene's own text or card moves out of the band (a card is moved or
+  re-fitted above or below it; a clip's label takes its other slot); content
+  that cannot move keeps its place and the captions move for that scene to
+  the nearest free band, at their size; with no band tall enough they shrink,
+  to 70% at least; only then are they hidden, and the warning says why
+  (`layout: tooling cleared the caption band: …`, `layout: tooling placed
+  captions …`, `layout: tooling hid captions …`). The planner, make's
+  storyboard stage and finish all settle this way, and both renderers draw
+  the moved captions from the same plan.
+- A video whose captions are on but hidden under cards for more than 15% of
+  its narration now fails: the storyboard check reports `captions: …` with
+  the scenes (so a repair can fix it), and finish has a `captions` gate.
+- The planner is told to plan scene text clear of the band the captions take.
 - `make` no longer fails the storyboard stage when a style puts the captions
   in the middle of the frame (or at the top, or low, or at a large size). A
   plan kept on a cadence near miss was never laid out, so every card in the
@@ -11,13 +28,18 @@
   storyboard failed its checks after make filled in audio". The layout check
   now runs whenever every module resolves and measures the band the captions
   really take; the planner is told where that band is; and the storyboard
-  stage hides the captions under a card in the band, as the planner and
-  finish do, with a `layout: tooling hid captions …` warning.
+  stage settles a card in the band, as the planner and finish do.
 - A rerun or `--replan` no longer treats clips the asset provider wrote into
   `--assets` as handed-in media. They are recognised by content
   (`.launchclip/provided-files.json`), described from the provider's answer
   with no model call, and left out of routing (`routing.provided`), so the
   concept, the story, the script and the voice are reused.
+
+### Added
+
+- A captions overlay takes `zones: [{start, end, rect, scale?}]`: for those
+  seconds its lines sit in the rect instead of the band, at `scale` (0.7–1)
+  of their size. Tooling writes them; a storyboard may too.
 
 ### Changed
 
