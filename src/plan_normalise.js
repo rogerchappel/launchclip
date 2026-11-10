@@ -112,10 +112,11 @@ function fitOverlaps(state) {
       if (times[b].start - times[a].start >= minimum(first) - EPS) {
         changed.push(`${label(first, a)} ran ${round(times[a].end - times[b].start)} s into ${label(second, b)} on track ${track}; its end moved ${round(times[a].end)} → ${round(times[b].start)} s`);
         times[a].end = times[b].start;
-        first.end = round(times[b].start);
+        // Never past the next scene's start, however it rounds (an anchored start is a time to the millisecond).
+        first.end = Math.floor(times[b].start * 1000 + 1e-6) / 1000;
       } else if (times[b].end - times[a].end >= minimum(second) - EPS) {
         changed.push(`${label(second, b)} began ${round(times[a].end - times[b].start)} s inside ${label(first, a)} on track ${track}; its start moved ${round(times[b].start)} → ${round(times[a].end)} s`);
-        moveStart(second, times[b].start, times[a].end);
+        moveStart(second, times[b].start, Math.ceil(times[a].end * 1000 - 1e-6) / 1000);
         times[b].start = times[a].end;
       }
       // Neither fits: the overlap stays for the checks to report.
@@ -125,8 +126,8 @@ function fitOverlaps(state) {
 
 // A scene's start moved: times counted from it (numeric cue and speech times of a character scene) keep their place in the video.
 function moveStart(scene, from, to) {
-  scene.start = round(to);
-  const shift = from - round(to);
+  scene.start = to;
+  const shift = from - to;
   if (!isObject(scene.params) || !["cast-scene", "character-cameo"].includes(scene.module) || Math.abs(shift) < EPS) return;
   const moved = (value) => (typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.round((value + shift) * 1000) / 1000) : value);
   const actor = (entry) => {

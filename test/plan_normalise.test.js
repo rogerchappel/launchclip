@@ -81,6 +81,16 @@ test("overlaps: the later scene's start moves when the earlier one cannot be tri
   assert.equal(scene(fixed.storyboard, "foal-mare-wide-start-together").params.cast[0].cues[0].at, 0);
 });
 
+test("overlaps: a scene that ends a few milliseconds into the next one's anchored start ends on it", () => {
+  const { storyboard, direction } = base();
+  // "Maybe" starts at 8.242 s; the scene before it ends at 8.25 s.
+  scene(storyboard, "foal-mare-wide-question-auto").end = 8.25;
+  scene(storyboard, "foal-medium-first-auto").start = "word:Maybe";
+  const fixed = tidy(storyboard, direction);
+  assert.equal(scene(fixed.storyboard, "foal-mare-wide-question-auto").end, 8.242);
+  assert.deepEqual(check(fixed.storyboard, fixed.direction).errors.filter((error) => /overlaps/.test(error)), []);
+});
+
 test("overlaps: when neither scene keeps its minimum length the overlap stays an error", () => {
   const { storyboard, direction } = base();
   // Two 2.01 s scenes, the second starting 1 s into the first.
