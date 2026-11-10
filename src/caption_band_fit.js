@@ -34,6 +34,7 @@
 import { CAPTION_ZONE_MIN_SCALE, captionsOverlayOf } from "@launchclip/core/captions.mjs";
 import { captionBandAt, checkLayout, elementsFromEditorialLayout, layoutExtras, profileGeometry } from "@launchclip/core/layout-check.mjs";
 import { catalogModules, isEditorialKind, moduleFit, resolveModule, sceneRenderEnd } from "@launchclip/core/modules.mjs";
+import { CAST_MODULES } from "@launchclip/core/character-story.mjs";
 import { FACE_CLEAR, presenterHeadLocator } from "./face_clear_fit.js";
 import { captionBandFor } from "./layout_check.js";
 
@@ -310,6 +311,8 @@ function errorsWith(picture, scene, laid, rect) {
 // A module tooling can move by rect: it takes params.rect and does not place
 // itself around a subject (as src/face_clear_fit.js placeable).
 function takesRect(scene) {
+  // A character is not a card: a cast shot keeps its staging, and the captions move instead.
+  if (CAST_MODULES.includes(scene.module)) return false;
   if (isEditorialKind(scene.module)) return true;
   const definition = catalogModules()[scene.module];
   if (!definition || definition.needs?.includes("subject")) return false;
