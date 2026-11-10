@@ -69,7 +69,7 @@ Story with characters: characters, 20–180 s, 16:9 or 9:16.
 
 - Provenance: seed
 - References: 0
-- Note: Seed ranges, not measured: set conservatively wide from the RFC placeholders and the current gate floors until a reference set is measured with launchclip profile measure. Treat the bands as guard rails, not targets to tune to.
+- Note: Seed ranges, not measured: set conservatively wide from the RFC placeholders and the current gate floors until a reference set is measured with launchclip profile measure. Treat the bands as guard rails, not targets to tune to. The four dialogue measures (speaker_turns_per_min, line_seconds, reaction_share, longest_framing_seconds) are provisional and were set by hand on 2026-11-10; no reference video was measured for them. They come from the script contract's arithmetic (150 words a minute and 0.3 s between lines, so a line of 3 to 12 words runs about 1 to 5 s and plain back-and-forth gives 12 to 30 turns a minute), widened downwards for narrated stretches and silent beats; reaction_share has a floor only, set low at 10%; longest_framing_seconds sits a little above the scene_seconds ceiling because two scenes in a row can share a framing. As a check that the bands are not absurd, not as a source, two of this repository's own example projects (a 20 s 9:16 dialogue and a 23 s 16:9 story, both hand-authored) read 15 and 10 turns a minute, median lines of 2.0 and 3.4 s, 25% and 44% reaction, and 6.4 and 6.8 s on one framing. profile measure reads pixels and cannot hear who speaks, so replacing these four needs references annotated by hand (speaker per line, shot per framing) or our own approved renders measured from their project files.
 
 ## ui-explainer-reel
 
