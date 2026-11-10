@@ -1767,6 +1767,10 @@ async function stageAnimatic(ctx) {
   return rendered ? { status: "done" } : { status: "cached", reason: "the storyboard and the show bible are the ones the animatic was rendered from" };
 }
 
+// How often a retake that fails its checks goes back to the model: the
+// validator's messages first, then the plan's own checks on what it fixed.
+const RETAKE_CORRECTIONS = 2;
+
 // The animatic's retake rounds, kept apart from the final critic's qa/retakes.json.
 export const ANIMATIC_RETAKES_FILE = "qa/animatic-retakes.json";
 
@@ -1796,7 +1800,7 @@ async function retakeRounds(ctx, { review, critique, rounds, label = "", render,
       held = { round: args.round, fields: Object.fromEntries(CRITIC_ROUND_FIELDS.map((field) => [field, structuredClone(report[field])])), finish: ctx.finish };
       ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (retake ${args.round}: ${args.step} ${args.shots.join(", ")})`);
       // The plan's own checks are part of the retake's corrective pass (redirectShots check).
-      const answer = await (ctx.adapters.redirect ?? redirectShots)({ client: ctx.model.client, ...args, ...(ctx.storyCheck ? { check: ctx.storyCheck } : {}) });
+      const answer = await (ctx.adapters.redirect ?? redirectShots)({ client: ctx.model.client, ...args, ...(ctx.storyCheck ? { check: ctx.storyCheck, maxRepairs: RETAKE_CORRECTIONS } : {}) });
       const errors = ctx.storyCheck && answer?.story?.scenes ? ctx.storyCheck(answer.story) : [];
       if (errors.length) throw new Error(`the retake failed the storyboard's checks: ${errors.slice(0, 3).join("; ")}`);
       return answer;

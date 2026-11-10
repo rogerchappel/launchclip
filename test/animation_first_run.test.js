@@ -175,3 +175,29 @@ test("acting: the plan is held to its map, and the message says whether the char
   const fixed = checkStoryboard(walking(), options);
   assert.deepEqual(fixed.errors.filter((entry) => /^(acting|lip-sync): /.test(entry)), []);
 });
+
+test("acting: a character turned to its target is looking at it; a far look with no place in the frame cannot be covered", () => {
+  // The mare's "That's right." names mare gaze-at: her scene entry targets the foal and no cue repeats it.
+  const quiet = story((scenes) => { actor(scenes["mare-playful"], "mare").cues = [{ at: "word:step", pose: "point", expression: "happy" }]; });
+  const found = actingGate(resolve(quiet), { map: MAP, words: WORDS }).findings.filter((finding) => finding.who === "mare");
+  assert.deepEqual(found, []);
+  // A cameo with a card, looking far with no world beneath: the far point has no x.
+  const cameo = story((scenes, copy) => {
+    delete copy.world;
+    Object.assign(scenes["foal-ready"], { module: "character-cameo", params: { character: "foal", side: "left", card: { title: "Ready" }, cues: [{ at: "word:ready", action: "look-far" }] } });
+  });
+  const resolved = resolve(cameo);
+  const rects = [{ id: "foal-ready", role: "text", start: 24.08, end: 26.6, rect: { x: 0, y: 0, width: 1920, height: 1080 } }];
+  assert.deepEqual(actingGate(resolved, { map: MAP, words: WORDS, rects }).findings.filter((finding) => finding.rule === "look-target-hidden"), []);
+});
+
+test("a retake is told the actions its shots must keep and the targets a cue can take", async () => {
+  let seen = "";
+  const scene = structuredClone(STORY.scenes.find((entry) => entry.id === "mare-playful"));
+  actor(scene, "foal").expression = "happy";
+  const client = { runStructured: async ({ input }) => { seen = input; return { value: { scenes_json: JSON.stringify([scene]), note: "n" }, usage: {}, model: "test" }; } };
+  const shotList = [{ id: "mare-playful", start: 21.51, end: 24.08, who: ["foal", "mare"], lines: [], actions: [{ verb: "walk-to", who: "foal", target: "another small step toward the open gate", line: "l11" }] }];
+  await redirectShots({ client, project: "/nonexistent", story: STORY, words: WORDS, shots: ["mare-playful"], shotList, problems: [] });
+  assert.match(seen, /must still happen in this shot: foal performs a cue with action "walk-to" \(another small step toward the open gate\)/);
+  assert.match(seen, /target \(a character's, or a cue's\): exactly one of far, window, horizon, street, skyline, left, right, \{"character"/);
+});

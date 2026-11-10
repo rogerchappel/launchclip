@@ -23,6 +23,7 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { directionCastLines } from "@launchclip/core/planning-prompt.mjs";
+import { ACTIONS, NAMED_TARGETS } from "@launchclip/core/characters/actions.mjs";
 import { ANIMATIC_FILE, ANIMATIC_REVIEW_FILE } from "../animatic.js";
 import { readProjectStory } from "../story_loader.js";
 import { applyProjectStyle } from "../story_style.js";
@@ -54,7 +55,8 @@ You may change, inside each scene's params: each character's opening pose and ex
 You may not change: a scene's id, module, start, end or track; who speaks ("says"); the narration; anything outside the scenes named. The timing is locked.
 
 Rules:
-- A character who speaks during the shot stays in it.
+- A character who speaks during the shot stays in it, and so does a character an action below names.
+- Keep every action listed as "must still happen" under a shot: the same character, the same action, on a word of that line. You may change its target and everything around it.
 - Use only the poses, expressions and sets listed, and only characters of the cast.
 - A cue's "at" is a word said during the shot ("word:<text>": the word as it is said in this shot, even when the narration says it earlier too), or seconds from the shot's start. Never seconds from the start of the video.
 - A walk-to goes as far toward its target as the shot leaves time for; give it at least half a second before the shot ends.
@@ -116,12 +118,16 @@ export async function redirectShots({ client, project, story, words = [], step =
     "The cast:",
     ...directionCastLines(story?.cast).map((line) => `- ${line}`),
     "- framing (params.shot): one of wide, medium, close, or leave it out.",
+    `- target (a character's, or a cue's): exactly one of ${NAMED_TARGETS.join(", ")}, {"character": "<id of someone else in the shot>"} or {"prop": "<id>"}. Nothing else: not "centre", not "front", not a description.`,
+    "- position: left, centre or right; a shot with one character takes centre only.",
     "",
     "What is said during each shot:"
   ];
   for (const shot of list.filter((entry) => wanted.has(entry.id))) {
     lines.push(`  ${shot.id} (${shot.start}–${shot.end} s, who: ${(shot.who ?? []).join(", ") || "nobody"}):`);
     for (const line of shot.lines ?? []) lines.push(`    ${line.speaker ?? "?"}: "${line.text}"${line.playing ? `  [${line.playing}]` : ""}`);
+    // The direction map's key actions: the checks hold the retake to them.
+    for (const action of shot.actions ?? []) lines.push(`    must still happen in this shot: ${action.who} ${ACTIONS.includes(action.verb) ? `performs a cue with action "${action.verb}"` : `takes the pose "${action.verb}"`}${action.target ? ` (${typeof action.target === "string" ? action.target : JSON.stringify(action.target)})` : ""}, on a word of its line`);
   }
   lines.push("", "The scenes to return, as they are now:", JSON.stringify(scenes, null, 2));
   const usage = [];
