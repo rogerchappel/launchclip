@@ -53,7 +53,7 @@ test('the starter cast: about two dozen valid characters with stable, unique ids
   assert.ok(!STARTER_IDS.includes('fatima') && starterCharacter('fatima').params.hair.style === 'headscarf');
   assert.equal(castMember(resolveStoryCast({}), 'fatima').name, 'Fatima');
   // The wider cast stays simple: one accessory at most.
-  for (const entry of STARTER_CAST.slice(STARTER_IDS.indexOf('juno'))) assert.ok(starterCharacter(entry.id).params.accessories.length <= 1, `${entry.id} keeps to one accessory`);
+  for (const entry of STARTER_CAST.slice(STARTER_IDS.indexOf('juno')).filter(one => !one.params.kind)) assert.ok(starterCharacter(entry.id).params.accessories.length <= 1, `${entry.id} keeps to one accessory`);
   assert.ok(Object.keys(SKIN_TONES).length >= 16 && HAIR_STYLES.length >= 26 && ACCESSORIES.length >= 20 && BUILDS.length >= 8 && TOPS.length >= 17);
 });
 

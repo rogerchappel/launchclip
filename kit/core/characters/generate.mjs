@@ -178,6 +178,8 @@ function kindMember(rng, kind, colors) {
 }
 
 export const CHARACTER_SET_NAMES = Object.freeze(Object.keys(CHARACTER_SETS));
+/** The sets of people only (no animals, mascots or objects): what a seed chooses among unless a set is asked for. */
+export const PEOPLE_SET_NAMES = Object.freeze(CHARACTER_SET_NAMES.filter(name => !CHARACTER_SETS[name].kinds));
 
 // ---------------------------------------------------------------------------
 // Colours from the palette

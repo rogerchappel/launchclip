@@ -147,7 +147,9 @@ const SHAPES = {
       behind: P.strand(`M${H - 26} -26C${H + 96} -10 ${H + 118} -124 ${H + 62} -176`, 'body', 30),
       ears: both(sx => [P.shape(poly(sx * rx * 0.9, hc - ry * 0.34, sx * rx * 0.68, hc - ry - 84, sx * rx * 0.16, hc - ry * 0.84), 'body'), P.shape(poly(sx * rx * 0.76, hc - ry * 0.62, sx * rx * 0.64, hc - ry - 44, sx * rx * 0.36, hc - ry * 0.86), 'accent', {outline: false})]),
       head: [P.ellipse(0, hc, rx, ry, 'body')],
-      features: [muzzle(F, 30, 21), nose(F, 'accent', 7.5, 5.5), ...both(sx => [F.line(`M${sx * 68} 45L${sx * 88} 41M${sx * 68} 53L${sx * 88} 55`, 'outline', 3.2)])]
+      // Whiskers sit on the cheeks (they turn with the head, not with the features).
+      marks: both(sx => [P.line(`M${sx * (rx - 62)} ${hc + ry * 0.3}L${sx * (rx - 22)} ${hc + ry * 0.24}M${sx * (rx - 62)} ${hc + ry * 0.42}L${sx * (rx - 22)} ${hc + ry * 0.46}`, 'whisker', 5)]),
+      features: [muzzle(F, 30, 21), nose(F, 'accent', 7.5, 5.5)]
     };
   },
   dog(d, P, F) {
@@ -184,22 +186,19 @@ const SHAPES = {
     const cheeks = `M${n(-rx * 0.95)} ${n(hc + ry * 0.36)}C${n(-rx * 0.9)} ${n(hc + ry * 0.76)} ${n(-rx * 0.5)} ${n(hc + ry * 0.95)} 0 ${n(hc + ry * 0.95)}C${n(rx * 0.5)} ${n(hc + ry * 0.95)} ${n(rx * 0.9)} ${n(hc + ry * 0.76)} ${n(rx * 0.95)} ${n(hc + ry * 0.36)}C${n(rx * 0.6)} ${n(hc + ry * 0.4)} ${n(rx * 0.2)} ${n(hc + ry * 0.36)} 0 ${n(hc + ry * 0.2)}C${n(-rx * 0.2)} ${n(hc + ry * 0.36)} ${n(-rx * 0.6)} ${n(hc + ry * 0.4)} ${n(-rx * 0.95)} ${n(hc + ry * 0.36)}Z`;
     return {
       ...trunk(d, P), look: {limb: 'body', hand: 'accent', foot: 'accent'},
-      behind: [P.shape(`M${H - 34} -16C${H + 70} 6 ${H + 184} -40 ${H + 160} -160C${H + 150} -214 ${H + 108} -244 ${H + 90} -250C${H + 104} -160 ${H + 40} -96 ${H - 34} -70Z`, 'body'), P.shape(`M${H + 163} -140C${H + 156} -208 ${H + 110} -242 ${H + 90} -250C${H + 98} -206 ${H + 86} -168 ${H + 163} -140Z`, 'detail', {width: 5})],
+      behind: [P.shape(`M${H - 34} -16C${H + 50} 6 ${H + 138} -40 ${H + 124} -160C${H + 116} -214 ${H + 84} -244 ${H + 66} -250C${H + 80} -160 ${H + 30} -96 ${H - 34} -70Z`, 'body'), P.shape(`M${H + 126} -140C${H + 120} -208 ${H + 86} -242 ${H + 66} -250C${H + 74} -206 ${H + 64} -168 ${H + 126} -140Z`, 'detail', {width: 5})],
       ears: both(sx => [P.shape(poly(sx * rx * 0.94, hc - ry * 0.28, sx * rx * 0.62, hc - ry - 112, sx * rx * 0.1, hc - ry * 0.84), 'body'), P.shape(poly(sx * rx * 0.78, hc - ry * 0.62, sx * rx * 0.6, hc - ry - 62, sx * rx * 0.32, hc - ry * 0.88), 'accent', {outline: false})]),
       head: [P.ellipse(0, hc, rx, ry, 'body')],
       marks: [P.shape(cheeks, 'detail', {outline: false}), P.ellipse(0, hc, rx, ry, null)],
       features: [nose(F, 'accent', 9, 6.4)]
     };
   },
-  frog(d, P, F) {
+  frog(d, P) {
     const {rx, ry} = d, hc = -d.up;
-    return {
-      ...trunk(d, P), look: FUR, dy: -0.36,
-      ears: both(sx => [P.ellipse(sx * 82, hc - ry * 0.78, 78, 78, 'body')]),
-      head: [P.ellipse(0, hc, rx, ry, 'body')],
-      marks: both(sx => [P.ellipse(sx * 82, hc - ry * 0.78, 71, 71, 'body', {outline: false})]),
-      features: []
-    };
+    // One outline: a wide jaw with two big domes on top, which hold the eyes.
+    const L = 108, c = 90, by = hc - 81, k = 0.552;
+    const head = `M${-rx} ${hc}C${-rx} ${hc - 70} ${-c - L} ${by + 50} ${-c - L} ${by}C${-c - L} ${n(by - k * L)} ${n(-c - k * L)} ${by - L} ${-c} ${by - L}C${n(-c + 0.5 * L)} ${by - L} -8 ${by - 88} 0 ${by - 60}C8 ${by - 88} ${n(c - 0.5 * L)} ${by - L} ${c} ${by - L}C${n(c + k * L)} ${by - L} ${c + L} ${n(by - k * L)} ${c + L} ${by}C${c + L} ${by + 50} ${rx} ${hc - 70} ${rx} ${hc}C${rx} ${n(hc + k * ry)} ${n(k * rx)} ${hc + ry} 0 ${hc + ry}C${n(-k * rx)} ${hc + ry} ${-rx} ${n(hc + k * ry)} ${-rx} ${hc}Z`;
+    return {...trunk(d, P), look: FUR, dy: -0.075, head: [P.shape(head, 'body')], features: []};
   },
   penguin(d, P, F) {
     const {rx, ry} = d, hc = -d.up;
@@ -240,11 +239,11 @@ const SHAPES = {
     };
   },
   star(d, P) {
-    const yc = -200;
+    const yc = -186;
     return {
       look: FUR,
-      body: [P.shape(starPath(0, yc, 304, 172), 'body')],
-      front: [P.line(`M-74 ${yc - 168}Q-50 ${yc - 214} -22 ${yc - 232}`, 'bodyLight', 13)]
+      body: [P.shape(starPath(0, yc, 284, 160), 'body')],
+      front: [P.line(`M-70 ${yc - 156}Q-48 ${yc - 200} -22 ${yc - 216}`, 'bodyLight', 13)]
     };
   },
   monster(d, P) {
@@ -291,7 +290,7 @@ const SHAPES = {
     const {w: R, h} = d, cy = -h + R;
     return {
       look: {limb: 'outline', hand: 'body', foot: 'accent'},
-      behind: [P.line(`M${-R - 30} ${cy - R * 0.74}L${-R - 62} ${cy - R * 0.92}M0 ${-h - 28}L0 ${-h - 66}M${R + 30} ${cy - R * 0.74}L${R + 62} ${cy - R * 0.92}`, 'accent', 13)],
+      behind: [P.line(`M${-R - 4} ${n(cy - R * 0.84)}L${-R - 28} ${n(cy - R * 1.02)}M0 ${-h - 28}L0 ${-h - 62}M${R + 4} ${n(cy - R * 0.84)}L${R + 28} ${n(cy - R * 1.02)}`, 'accent', 13)],
       body: [
         P.shape(rr(-56, -20, 56, 22, 16), 'detailShade'),
         P.shape(rr(-94, -136, 94, -6, 16), 'detail'),
@@ -331,7 +330,7 @@ const SHAPES = {
     };
   },
   cloud(d, P) {
-    const m = 1.2, x = v => n(v * m), y = v => n(v * m);
+    const m = 1.05, x = v => n(v * m), y = v => n(v * m);
     const path = `M${x(-200)} 22C${x(-296)} 22 ${x(-302)} ${y(-116)} ${x(-216)} ${y(-140)}C${x(-246)} ${y(-256)} ${x(-126)} ${y(-332)} ${x(-40)} ${y(-286)}C${x(6)} ${y(-386)} ${x(150)} ${y(-382)} ${x(172)} ${y(-268)}C${x(264)} ${y(-276)} ${x(302)} ${y(-150)} ${x(238)} ${y(-108)}C${x(294)} ${y(-40)} ${x(250)} 22 ${x(190)} 22Z`;
     return {
       look: {limb: 'outline', hand: 'body', foot: 'accent'},
@@ -416,6 +415,8 @@ const FACE_PARAMS = Object.freeze({hair: Object.freeze({style: 'bald', color: 'b
 // How far a three-quarter look carries the face, in toon head units (actions.mjs GAZE.quarter).
 const LOOK = 44;
 // Kinds whose face sits on the detail colour (a screen, a label, a white face).
+// The shape of a single body that bounds its face, where it is not the body's first (a screen, a label, the glass).
+const AREA = {phone: ['front', 0], laptop: ['front', 0], book: ['front', 0], coin: ['body', 1], bulb: ['body', 3]};
 const ON_DETAIL = new Set(['fox', 'penguin', 'owl', 'phone', 'laptop', 'robot', 'coin', 'book']);
 
 /**
@@ -434,10 +435,11 @@ export function drawKind(style, params, colors, {id, joints: j, expression = 'ne
   const k = d.faceK;
   const lineArt = LINE_ART.includes(style);
   // Line art draws every piece as paper with ink lines.
-  const c = lineArt ? {...colors, body: PAPER, detail: PAPER, accent: PAPER, bodyShade: colors.outline, detailShade: colors.outline, accentShade: colors.outline} : colors;
+  const c = lineArt ? {...colors, body: PAPER, detail: PAPER, accent: PAPER, bodyShade: colors.outline, detailShade: colors.outline, accentShade: colors.outline} : {...colors};
   const on = ON_DETAIL.has(params.kind) ? 'detail' : 'body';
   // A dark face area takes light ink, so the eyes and mouth still read.
   const dark = !lineArt && luma(c[on]) < 0.3;
+  c.whisker = dark ? c.inkLight : c.outline;
   const faceColors = {...c, blush: on === 'detail' ? c.blushDetail : c.blush, ...(dark ? {outline: c.inkLight} : {}), mixBrow: dark ? c.inkLight : c.outline, hairShade: c.outline, browDark: c.outline};
   const {P, F} = pens(style, c, faceColors, {id, light}, k);
   const shapes = SHAPES[params.kind](d, P, F);
@@ -453,11 +455,12 @@ export function drawKind(style, params, colors, {id, joints: j, expression = 'ne
   // Head frame: the pivot is the head joint's (the trunk's top, or the face area's chin).
   const centre = headed ? -d.up + (shapes.dy ?? 0.16) * d.ry : -d.ry;
   const features = [Object.assign(group([...(shapes.features ?? []), ...faces], {transform: `translate(${n(shapes.dx ?? 0)} ${n(centre - 38 * k)}) scale(${Math.round(k * 1000) / 1000})`}), {[UNIT]: true})];
-  const [outline, ...restOfHead] = shapes.head ?? [];
+  // The head's outline, for bounds checks: a head's own, or the area of a single body the face sits on.
+  const [at, index] = headed ? ['head', 0] : AREA[params.kind] ?? ['body', 0];
+  asHead(shapes[at][index]);
   const headKids = turnJoint(ctx, j, gaze, [
     ...(shapes.ears ?? []),
-    ...(outline ? [asHead(outline)] : []),
-    ...restOfHead,
+    ...(shapes.head ?? []),
     ...(shapes.marks ?? []),
     ...faceView(ctx, turns, gazeJoint(ctx, j, gaze, features, size)),
     ...backView(ctx, turns, () => (headed ? [...SHAPES[params.kind](d, P, F).head] : [])),

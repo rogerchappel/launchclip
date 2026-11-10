@@ -27,7 +27,10 @@ import {STYLE as lifelike} from './style-lifelike.mjs';
 import {STYLE as cinematic} from './style-cinematic.mjs';
 import {STYLE as avatar} from './style-avatar.mjs';
 import {STYLE as chibi, STYLE_PLAIN as chibiPlain} from './style-chibi.mjs';
-import {isKind, kindGeometry, kindHeight} from './kinds.mjs';
+import {KIND_STAGE, isKind, kindColors, kindGeometry, kindHeight} from './kinds.mjs';
+import {drawingBounds} from './bounds.mjs';
+import {castRoles} from './palette.mjs';
+import {poseJoints} from './rig.mjs';
 import {drawKind} from './kind-draw.mjs';
 
 // In order from the default to the newest; flat stays first.
@@ -68,3 +71,26 @@ export const styleHeight = (style, params) => (isKind(params) ? kindHeight(param
 
 /** The rig geometry a style draws and poses with. */
 export const styleGeometry = (style, params) => (isKind(params) ? kindGeometry(params) : styleOf(style).geometry(params));
+
+const stageCache = new Map();
+/**
+ * The height a set sizes its cast by: a person's drawn height; for a kind
+ * other than a person, no less than a person's and more the wider it
+ * reaches standing or seated (kinds.mjs KIND_STAGE), so it fits a slot.
+ */
+export function stageHeight(style, params) {
+  if (!isKind(params)) return styleOf(style).height(params);
+  const key = `${params.kind}|${params.size ?? 'medium'}`;
+  if (!stageCache.has(key)) {
+    const geometry = kindGeometry(params);
+    const colors = kindColors(params.colors, castRoles(null));
+    let reach = 0;
+    for (const pose of ['stand', 'sit']) {
+      // The same box the cast gate measures a reach with (bounds.mjs drawingBounds).
+      const box = drawingBounds(drawKind('flat', params, colors, {id: 'stage', joints: poseJoints(pose, {geometry})}));
+      reach = Math.max(reach, -box.left, box.right);
+    }
+    stageCache.set(key, Math.round(Math.max(kindHeight(params), KIND_STAGE.height * Math.max(1, reach / KIND_STAGE.reach))));
+  }
+  return stageCache.get(key);
+}
