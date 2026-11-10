@@ -2988,12 +2988,16 @@ climbs from 40% of its cruising speed in four even steps over 0.32 s,
 cruises, and comes back down the same way, all in linear keys (slow, fast,
 slow; no overshoot; the same frame whichever way the timeline is sought).
 Only the punch-in is fast enough for the camera's velocity blur to show.
-When the next shot has no move of its own, a last key puts the camera back
-at rest as the scene ends. In world mode the camera's drift is off while
-these moves are on. A `world` plate keeps its own `params.camera`. A scene
-gets no move when it is shorter than 0.8 s, when it or the next plate
-arrives on anything but a cut, or when it is the last scene of a story that
-loops back (`ending.loop_to`).
+In world mode the camera's drift is off while these moves are on, and when
+the next shot has no move of its own a last key puts the camera back at
+rest as the scene ends. A `world` plate keeps its own `params.camera`. A
+scene gets no move when it is shorter than 0.8 s; when it or the next plate
+arrives on a camera move between plates (`pan`, `pull`, `orbit`, `whip-pan`,
+and `push` or `overview` in world mode); in world mode, when it or the next
+plate arrives on anything but a cut or a transition of 0.2 s or less; or
+when it is the last scene of a story that loops back (`ending.loop_to`). In
+cuts mode a scene zooms inside its own layer, so it moves through a
+dissolve or a wipe.
 `camera.moves: false` turns every default move off.
 
 Validation (`kit/core/story.mjs` `validateZooms`; timing is checked with the

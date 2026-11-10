@@ -22,8 +22,10 @@
 // cruising speed to all of it over 0.32 s, cruises, and comes back down the
 // same way (slowKeys). The punch-in is one key on the grammar's camera ease,
 // from rest, and the only one fast enough for the camera's velocity blur to
-// show at its peak. A scene that arrives or leaves on anything but a cut (a
-// dissolve, a camera move between plates) keeps the camera at rest, as
+// show at its peak. In cuts mode a scene zooms inside its own layer, so it
+// moves through any transition but a camera move between plates. Under the
+// world camera (one camera for every plate) it moves only between cuts, or
+// transitions short enough to read as cuts; elsewhere the camera rests, as
 // before.
 //
 // How much: the finish motion gate calls a frame pair still when its mean
@@ -37,6 +39,7 @@
 import { CAST_MODULES, isCharacterStory } from './character-story.mjs';
 import { defaultShot } from './characters/framing.mjs';
 import { resolveGrammar } from './grammar.mjs';
+import { isCameraTransition } from './transitions.mjs';
 
 export const CHARACTER_CAMERA = Object.freeze({
   // A slow move travels this share of the canvas's long side each second,
@@ -54,13 +57,23 @@ export const CHARACTER_CAMERA = Object.freeze({
   // even steps of speed from `slow` (a share of the cruising speed) up to it.
   ramp: Object.freeze({ seconds: 0.32, share: 0.25, steps: 4, slow: 0.4 }),
   // A scene shorter than this keeps the camera at rest.
-  shortest: 0.8
+  shortest: 0.8,
+  // A transition this short or shorter reads as a cut.
+  cutLike: 0.2
 });
 
 const round = (value, digits = 6) => { const f = 10 ** digits; return Math.round(value * f) / f + 0; };
 const clamp = (value, lo, hi) => Math.min(hi, Math.max(lo, value));
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-const cutIn = (scene) => scene?.in === undefined || scene?.in === null || scene.in === 'cut' || scene.in?.type === 'cut';
+// The world camera is one camera for every plate; in cuts mode each scene zooms inside its own layer.
+const worldMode = (story) => story?.camera?.mode === 'world' && story?.lane !== 'footage-led';
+const transitionOf = (scene) => (typeof scene?.in === 'string' ? { type: scene.in } : isObject(scene?.in) ? scene.in : null);
+const cameraIn = (story, scene) => isCameraTransition(transitionOf(scene), worldMode(story) ? 'world' : 'cuts');
+// A cut, or a transition short enough to read as one (a 0.1 s push-blur).
+const cutIn = (scene) => { const t = transitionOf(scene); return !t || t.type === 'cut' || Number(t.dur) <= CHARACTER_CAMERA.cutLike; };
+// Whether a scene may move as it arrives: never on a camera move between plates (the plates travel at rest);
+// under the world camera only on a cut; inside its own layer (cuts mode) on any other transition.
+const movesIn = (story, scene) => !cameraIn(story, scene) && (!worldMode(story) || cutIn(scene));
 
 /** Whether a story's cast scenes take the default moves: a character story that has not turned them off. */
 export function characterCameraOn(story) {
@@ -69,9 +82,10 @@ export function characterCameraOn(story) {
 
 /**
  * The move a track-0 scene of a character story takes by default:
- * 'speaker' | 'wide' | 'reaction', or null (not a cast scene: a `world` plate
- * moves with its own params.camera; has its own zooms; too short; or does not
- * arrive and leave on a cut).
+ * 'speaker' | 'wide' | 'reaction', or null: not a cast scene (a `world` plate
+ * moves with its own params.camera); has its own zooms; too short; it or the
+ * next plate arrives on a camera move between plates; or, under the world
+ * camera, on anything but a cut (or a transition of 0.2 s or less).
  */
 export function characterMove(story, scene) {
   if (!characterCameraOn(story) || !isObject(scene) || (scene.track ?? 0) !== 0) return null;
@@ -80,7 +94,7 @@ export function characterMove(story, scene) {
   if (!(end - start >= CHARACTER_CAMERA.shortest)) return null;
   const plates = (Array.isArray(story.scenes) ? story.scenes : []).filter((item) => (item?.track ?? 0) === 0).sort((a, b) => Number(a.start) - Number(b.start));
   const next = plates[plates.indexOf(scene) + 1];
-  if (!cutIn(scene) || (next && !cutIn(next))) return null;
+  if (!movesIn(story, scene) || (next && !movesIn(story, next))) return null;
   // A last scene that loops back to the hook hands over to that move.
   if (!next && typeof story.ending?.loop_to === 'string') return null;
   if (!CAST_MODULES.includes(scene.module)) return null;
@@ -160,8 +174,9 @@ export function characterKeys(story, scene) {
   const keys = [];
   if (punch) keys.push({ start: round(start), duration: round(punch), ease: resolveGrammar(story).ease.camera, from: rest, to: from });
   keys.push(...slowKeys(start + punch, seconds, from, to));
-  // Back at rest as the scene ends, unless the next shot's own move takes over on the cut.
+  // Under the world camera: back at rest as the scene ends, unless the next shot's own move takes over on
+  // the cut. A scene that zooms inside its own layer (cuts mode) holds where it ended while the next arrives.
   const next = plates[plates.indexOf(scene) + 1];
-  if (next && characterMove(story, next)) return keys;
+  if (!worldMode(story) || (next && characterMove(story, next))) return keys;
   return [...keys, { start: round(end), duration: round(1 / 30), ease: 'none', from: rest, to: rest }];
 }

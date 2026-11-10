@@ -54,9 +54,20 @@ test("the planner adds nothing, and a story can say no: its own zooms, camera.mo
   const plain = resolved((raw) => { const { bible, ...rest } = raw; return rest; });
   assert.ok(plain.scenes.every((item) => characterKeys(plain, item).length === 0));
   assert.equal(cameraPlan(plain, { windows: sceneWindows(plain) }), null);
-  // A scene that dissolves in, and the one before it, keep the camera at rest.
-  const dissolved = resolved(withScene("foal-steps-back", (item) => ({ ...item, in: { type: "crossfade", dur: 0.4 } })));
-  assert.deepEqual(dissolved.scenes.map((item) => characterMove(dissolved, item)), [null, null, null, "speaker"].map((move, index) => (index === 0 ? "wide" : move)));
+  // Under the world camera a scene that dissolves in, and the one before it, keep the camera at rest;
+  // a transition short enough to read as a cut (the first real run's 0.1 s push-blur) does not.
+  const fade = { type: "fade", dur: 0.4 };
+  const dissolved = resolved((raw) => withScene("foal-steps-back", (item) => ({ ...item, in: fade }))({ ...raw, camera: { mode: "world" } }));
+  assert.deepEqual(dissolved.scenes.map((item) => characterMove(dissolved, item)), ["wide", null, null, "speaker"]);
+  const blurred = resolved((raw) => withScene("foal-steps-back", (item) => ({ ...item, in: { type: "push-blur", dur: 0.1 } }))({ ...raw, camera: { mode: "world" } }));
+  assert.deepEqual(blurred.scenes.map((item) => characterMove(blurred, item)), ["wide", "speaker", "wide", "speaker"]);
+  // In cuts mode each scene zooms inside its own layer: it moves through a dissolve, and holds where it ended.
+  const layered = resolved(withScene("foal-steps-back", (item) => ({ ...item, in: fade })));
+  assert.deepEqual(layered.scenes.map((item) => characterMove(layered, item)), ["wide", "speaker", "wide", "speaker"]);
+  assert.ok(characterKeys(layered, layered.scenes.at(-1)).every((key) => key.to.s > 1), "no key back to rest in cuts mode");
+  // Never on a camera move between plates, in either mode.
+  const panned = resolved(withScene("foal-steps-back", (item) => ({ ...item, in: { type: "pan", dur: 0.5, direction: "right" } })));
+  assert.deepEqual(panned.scenes.map((item) => characterMove(panned, item)), ["wide", null, null, "speaker"]);
 });
 
 test("a move is slow, fast, slow with no overshoot, no jump in speed, and never leaves the plate", () => {
@@ -86,9 +97,7 @@ test("a move is slow, fast, slow with no overshoot, no jump in speed, and never 
       for (let i = 1; i < speed.length; i += 1) assert.ok(Math.abs(speed[i] - speed[i - 1]) <= peak * 0.2, `${item.id}: the speed jumps at frame ${i} (${speed[i - 1]} → ${speed[i]})`);
       // It moves for the whole scene: across the cruise every frame travels.
       assert.ok(speed.filter((value) => value >= peak * 0.6).length >= speed.length * 0.6, `${item.id}: cruises for most of the scene`);
-      // Back at rest as the last scene ends (a shot before another takes that shot's move on the cut).
-      if (item === story.scenes.at(-1)) assert.deepEqual(at(item.end + 2 / FPS), { x: size.width / 2, y: size.height / 2, s: 1 });
-      else assert.equal(keys.at(-1).start + keys.at(-1).duration <= item.end + 1e-6, true, `${item.id}: its keys end with the scene`);
+      assert.equal(keys.at(-1).start + keys.at(-1).duration <= item.end + 1e-6, true, `${item.id}: its keys end with the scene`);
     }
   }
 });
