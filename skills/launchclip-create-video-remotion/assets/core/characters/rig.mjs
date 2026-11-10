@@ -39,7 +39,9 @@ export const HELD_AIDS = Object.freeze(['cane', 'white-cane', 'forearm-crutch'])
 
 export const POSES = Object.freeze(['stand', 'point', 'wave', 'slump', 'type', 'think', 'cheer', 'shrug', 'walk', 'sit', 'look', 'stretch',
   'arms-crossed', 'hands-on-hips', 'facepalm', 'lean-in', 'point-self']);
-export const EXPRESSIONS = Object.freeze(['neutral', 'happy', 'delighted', 'frustrated', 'confused', 'surprised', 'focused']);
+// The first seven shipped with the rig; the rest let a character act a story.
+export const EXPRESSIONS = Object.freeze(['neutral', 'happy', 'delighted', 'frustrated', 'confused', 'surprised', 'focused',
+  'sad', 'crying', 'worried', 'scared', 'angry', 'deadpan', 'side-eye', 'smirk', 'sheepish', 'in-love', 'excited', 'laughing', 'wink', 'thinking']);
 
 const PARAM_KEYS = ['build', 'height', 'age', 'skin', 'hair', 'outfit', 'accessories', 'headwear', 'mobility', 'colors'];
 
@@ -261,8 +263,16 @@ export function poseJoints(name, {facing = 'right', seated = false, geometry} = 
 // the drawing style turns them into shapes).
 //
 //   eyes   dot | wide | happy (closed arcs) | narrow (half lids) | squint
+//          droop (sad lids) | shut (closed, curving down) | shock (tiny pupils)
+//          line (flat dashes) | side (half lids, pupils toward the facing side)
+//          up (pupils up) | heart | sparkle (large and glossy)
+//          chevron (squeezed shut) | wink (one open, one closed)
 //   brows  [left, right]: {lift (units up), tilt (deg, + = inner end down)}
 //   mouth  closed and open shapes: smile | grin | flat | frown | wavy | o | small
+//          | wobble | zigzag | wail | shout | smirk | beam | awkward | pucker …
+//          (closed: the mouth at rest, which may itself be open, as a laugh's is)
+//   blush  true: flushed cheeks
+//   extra  one bold mark on the face: tears | sweat (a drop at the temple) | anger
 
 export const EXPRESSION_TABLE = Object.freeze({
   neutral: {eyes: 'dot', brows: [{lift: 0, tilt: 0}, {lift: 0, tilt: 0}], mouth: {closed: 'soft', open: 'small'}},
@@ -271,7 +281,21 @@ export const EXPRESSION_TABLE = Object.freeze({
   frustrated: {eyes: 'narrow', brows: [{lift: -6, tilt: 18}, {lift: -6, tilt: 18}], mouth: {closed: 'frown', open: 'grimace'}},
   confused: {eyes: 'dot', brows: [{lift: 12, tilt: -10}, {lift: -4, tilt: 10}], mouth: {closed: 'wavy', open: 'side'}},
   surprised: {eyes: 'wide', brows: [{lift: 18, tilt: -4}, {lift: 18, tilt: -4}], mouth: {closed: 'o', open: 'gasp'}},
-  focused: {eyes: 'squint', brows: [{lift: -3, tilt: 8}, {lift: -3, tilt: 8}], mouth: {closed: 'flat', open: 'small'}}
+  focused: {eyes: 'squint', brows: [{lift: -3, tilt: 8}, {lift: -3, tilt: 8}], mouth: {closed: 'flat', open: 'small'}},
+  sad: {eyes: 'droop', brows: [{lift: 4, tilt: -18}, {lift: 4, tilt: -18}], mouth: {closed: 'frown', open: 'small'}},
+  crying: {eyes: 'shut', brows: [{lift: 6, tilt: -22}, {lift: 6, tilt: -22}], mouth: {closed: 'wobble', open: 'wail'}, extra: 'tears'},
+  worried: {eyes: 'dot', brows: [{lift: 10, tilt: -16}, {lift: 10, tilt: -16}], mouth: {closed: 'wobble', open: 'small'}, extra: 'sweat'},
+  scared: {eyes: 'shock', brows: [{lift: 16, tilt: -14}, {lift: 16, tilt: -14}], mouth: {closed: 'zigzag', open: 'wail'}},
+  angry: {eyes: 'narrow', brows: [{lift: -10, tilt: 26}, {lift: -10, tilt: 26}], mouth: {closed: 'grimace', open: 'shout'}, extra: 'anger'},
+  deadpan: {eyes: 'line', brows: [{lift: -2, tilt: 0}, {lift: -2, tilt: 0}], mouth: {closed: 'flat', open: 'small'}},
+  'side-eye': {eyes: 'side', brows: [{lift: -4, tilt: 4}, {lift: 8, tilt: -4}], mouth: {closed: 'flat', open: 'side'}},
+  smirk: {eyes: 'squint', brows: [{lift: -2, tilt: 6}, {lift: 9, tilt: -6}], mouth: {closed: 'smirk', open: 'side'}},
+  sheepish: {eyes: 'happy', brows: [{lift: 8, tilt: -14}, {lift: 8, tilt: -14}], mouth: {closed: 'awkward', open: 'grin'}, blush: true, extra: 'sweat'},
+  'in-love': {eyes: 'heart', brows: [{lift: 10, tilt: -6}, {lift: 10, tilt: -6}], mouth: {closed: 'smile', open: 'grin'}, blush: true},
+  excited: {eyes: 'sparkle', brows: [{lift: 16, tilt: -6}, {lift: 16, tilt: -6}], mouth: {closed: 'beam', open: 'laugh'}, blush: true},
+  laughing: {eyes: 'chevron', brows: [{lift: 10, tilt: -4}, {lift: 10, tilt: -4}], mouth: {closed: 'laugh', open: 'laugh'}, blush: true},
+  wink: {eyes: 'wink', brows: [{lift: 6, tilt: -4}, {lift: -2, tilt: 4}], mouth: {closed: 'smile', open: 'grin'}, blush: true},
+  thinking: {eyes: 'up', brows: [{lift: 12, tilt: -8}, {lift: -2, tilt: 6}], mouth: {closed: 'pucker', open: 'side'}}
 });
 
 export function expressionParts(name) {

@@ -299,11 +299,30 @@ export function hairFront(ctx) {
 
 const EYE_X = 31;
 
-function eyes(kind, P) {
+// Marks an expression may add, and the colours the newer eyes use.
+const TEAR = '#8fd0f5', HEART = '#e8476a', ANGER = '#e23d3d';
+const heartPath = (x, k) => `M${x} ${r1(11 * k)}C${r1(x - 18 * k)} ${r1(-2 * k)} ${r1(x - 10 * k)} ${r1(-15 * k)} ${x} ${r1(-5 * k)}C${r1(x + 10 * k)} ${r1(-15 * k)} ${r1(x + 18 * k)} ${r1(-2 * k)} ${x} ${r1(11 * k)}Z`;
+// Half-lidded: a flat lid over a round lower eye.
+const lidded = (x, w, top, low) => `M${x - w} ${top}L${x + w} ${top}Q${x + w} ${low} ${x} ${low}Q${x - w} ${low} ${x - w} ${top}Z`;
+
+// dir: +1 when the character faces right, -1 left (where a sideways look goes).
+function eyes(kind, P, dir = 1) {
   const out = [];
   for (const sx of [-1, 1]) {
     const x = sx * EYE_X;
-    if (kind === 'dot') out.push(P.ellipse(x, 0, 9.5, 12, 'outline', {outline: false}), P.ellipse(x + 3, -4, 3.2, 3.2, '#ffffff', {outline: false}));
+    const dot = () => out.push(P.ellipse(x, 0, 9.5, 12, 'outline', {outline: false}), P.ellipse(x + 3, -4, 3.2, 3.2, '#ffffff', {outline: false}));
+    const arc = () => out.push(P.line(`M${x - 12} 5Q${x} -12 ${x + 12} 5`, 'outline', 6.5));
+    if (kind === 'droop') out.push(P.ellipse(x, 3, 9, 8.5, 'outline', {outline: false}), P.ellipse(x + 3, 1, 2.6, 2.6, '#ffffff', {outline: false}), P.line(`M${x - 13} ${sx < 0 ? -1 : -9}L${x + 13} ${sx < 0 ? -9 : -1}`, 'outline', 5.5));
+    else if (kind === 'shut') out.push(P.line(`M${x - 12} -3Q${x} 12 ${x + 12} -3`, 'outline', 6.5));
+    else if (kind === 'shock') out.push(P.ellipse(x, 0, 15, 17, 'eyeWhite', {width: 4.5}), P.ellipse(x, 1, 3.8, 4.2, 'outline', {outline: false}));
+    else if (kind === 'line') out.push(P.line(`M${x - 12} 1L${x + 12} 1`, 'outline', 6.5));
+    else if (kind === 'side') out.push(P.shape(lidded(x, 14, -4, 13), 'eyeWhite', {width: 4.5}), P.ellipse(x + dir * 7, 3, 5.5, 6, 'outline', {outline: false}));
+    else if (kind === 'up') out.push(P.ellipse(x, 0, 14, 15.5, 'eyeWhite', {width: 4.5}), P.ellipse(x + dir * 4, -6.5, 6, 6.5, 'outline', {outline: false}));
+    else if (kind === 'heart') out.push(P.shape(heartPath(x, 1), HEART, {width: 4}));
+    else if (kind === 'sparkle') out.push(P.ellipse(x, 0, 13, 15.5, 'outline', {outline: false}), P.ellipse(x + 4, -5, 4.8, 5.2, '#ffffff', {outline: false}), P.ellipse(x - 4, 6, 2.6, 2.6, '#ffffff', {outline: false}));
+    else if (kind === 'chevron') out.push(P.line(`M${x + sx * 10} -9L${x - sx * 9} 0L${x + sx * 10} 9`, 'outline', 6.5));
+    else if (kind === 'wink') { if (sx < 0) dot(); else arc(); }
+    else if (kind === 'dot') out.push(P.ellipse(x, 0, 9.5, 12, 'outline', {outline: false}), P.ellipse(x + 3, -4, 3.2, 3.2, '#ffffff', {outline: false}));
     else if (kind === 'wide') out.push(P.ellipse(x, 0, 15, 17, 'eyeWhite', {width: 4.5}), P.ellipse(x, 1, 8, 8.5, 'outline', {outline: false}), P.ellipse(x + 3, -3, 2.6, 2.6, '#ffffff', {outline: false}));
     else if (kind === 'happy') out.push(P.line(`M${x - 12} 5Q${x} -12 ${x + 12} 5`, 'outline', 6.5));
     else if (kind === 'narrow') out.push(P.ellipse(x, 2, 9.5, 7, 'outline', {outline: false}), P.line(`M${x - 13} ${sx < 0 ? -8 : -3}L${x + 13} ${sx < 0 ? -3 : -8}`, 'outline', 5.5));
@@ -317,12 +336,23 @@ function eyes(kind, P) {
 // and part ids as the plain face, so expressions, blinks and speech act alike.
 const CUTE = Object.freeze({eyeX: 40, eyeY: 26, browY: -6, mouthY: 54, mouth: 0.8, glasses: 1.28});
 
-function cuteEyes(kind, P) {
+function cuteEyes(kind, P, dir = 1) {
   const out = [];
   for (const sx of [-1, 1]) {
     const x = sx * CUTE.eyeX;
     const shine = (dy = 0) => [P.ellipse(x + 5, -8 + dy, 5.6, 6.4, '#ffffff', {outline: false}), P.ellipse(x - 5, 8 + dy, 2.6, 2.6, '#ffffff', {outline: false, opacity: 0.85})];
-    if (kind === 'dot') out.push(P.ellipse(x, 0, 15, 19, 'outline', {outline: false}), ...shine());
+    const arc = () => out.push(P.line(`M${x - 16} 7Q${x} -15 ${x + 16} 7`, 'outline', 7.5));
+    if (kind === 'droop') out.push(P.ellipse(x, 5, 14.5, 14, 'outline', {outline: false}), P.ellipse(x + 5, 1, 4.2, 4.2, '#ffffff', {outline: false}), P.line(`M${x - 19} ${sx < 0 ? -2 : -13}L${x + 19} ${sx < 0 ? -13 : -2}`, 'outline', 7));
+    else if (kind === 'shut') out.push(P.line(`M${x - 16} -4Q${x} 16 ${x + 16} -4`, 'outline', 7.5));
+    else if (kind === 'shock') out.push(P.ellipse(x, -1, 18.5, 22.5, 'eyeWhite', {width: 5.5}), P.ellipse(x, 0, 5.5, 6.5, 'outline', {outline: false}));
+    else if (kind === 'line') out.push(P.line(`M${x - 16} 2L${x + 16} 2`, 'outline', 7.5));
+    else if (kind === 'side') out.push(P.shape(lidded(x, 18, -5, 18), 'eyeWhite', {width: 5.5}), P.ellipse(x + dir * 8, 5, 8, 9, 'outline', {outline: false}), P.ellipse(x + dir * 8 + 3, 1, 2.8, 2.8, '#ffffff', {outline: false}));
+    else if (kind === 'up') out.push(P.ellipse(x, 0, 17.5, 21, 'eyeWhite', {width: 5.5}), P.ellipse(x + dir * 5, -8.5, 8.5, 9.5, 'outline', {outline: false}), P.ellipse(x + dir * 5 + 3, -12, 3, 3, '#ffffff', {outline: false}));
+    else if (kind === 'heart') out.push(P.shape(heartPath(x, 1.5), HEART, {width: 5}), P.ellipse(x + 7, -7, 3.6, 4.2, '#ffffff', {outline: false, opacity: 0.9}));
+    else if (kind === 'sparkle') out.push(P.ellipse(x, -1, 17.5, 21.5, 'outline', {outline: false}), P.ellipse(x + 5, -9, 7.2, 8.2, '#ffffff', {outline: false}), P.ellipse(x - 6, 9, 4, 4, '#ffffff', {outline: false}), P.ellipse(x + 8, 9, 2.2, 2.2, '#ffffff', {outline: false, opacity: 0.85}));
+    else if (kind === 'chevron') out.push(P.line(`M${x + sx * 14} -11L${x - sx * 11} 0L${x + sx * 14} 11`, 'outline', 7.5));
+    else if (kind === 'wink') { if (sx < 0) out.push(P.ellipse(x, 0, 15, 19, 'outline', {outline: false}), ...shine()); else arc(); }
+    else if (kind === 'dot') out.push(P.ellipse(x, 0, 15, 19, 'outline', {outline: false}), ...shine());
     else if (kind === 'wide') out.push(P.ellipse(x, -1, 18.5, 22.5, 'outline', {outline: false}), ...shine(-2), P.ellipse(x - 1, 12, 9, 4.5, 'eyeWhite', {outline: false, opacity: 0.22}));
     else if (kind === 'happy') out.push(P.line(`M${x - 16} 7Q${x} -15 ${x + 16} 7`, 'outline', 7.5));
     else if (kind === 'narrow') out.push(P.ellipse(x, 5, 15, 12, 'outline', {outline: false}), P.ellipse(x + 5, 1, 4, 4, '#ffffff', {outline: false}), P.line(`M${x - 19} ${sx < 0 ? -11 : -3}L${x + 19} ${sx < 0 ? -3 : -11}`, 'outline', 7));
@@ -353,8 +383,44 @@ const MOUTHS = {
   laugh: P => [P.shape('M-32 -7Q0 46 32 -7Z', 'mouth', {width: 6}), P.shape('M-27 -5L27 -5L23 4L-23 4Z', 'teeth', {outline: false}), P.ellipse(0, 22, 13, 7, 'tongue', {outline: false})],
   grimace: P => [P.shape('M-24 -8L24 -8Q28 -8 28 -2L28 6Q28 12 24 12L-24 12Q-28 12 -28 6L-28 -2Q-28 -8 -24 -8Z', 'teeth', {width: 5}), P.line('M-26 2L26 2', 'outline', 3.5)],
   side: P => [P.ellipse(8, 2, 10, 8, 'mouth', {width: 5})],
-  gasp: P => [P.ellipse(0, 4, 15, 19, 'mouth', {width: 5.5}), P.ellipse(0, 14, 8, 5, 'tongue', {outline: false})]
+  gasp: P => [P.ellipse(0, 4, 15, 19, 'mouth', {width: 5.5}), P.ellipse(0, 14, 8, 5, 'tongue', {outline: false})],
+  // A trembling frown, chattering teeth, a wail (an open frown), a shout.
+  wobble: P => [P.line('M-19 7Q-10 -6 0 3Q10 -6 19 7', 'outline', 6)],
+  zigzag: P => [P.line('M-23 3L-14 -4L-5 4L5 -4L14 4L23 -3', 'outline', 5.5)],
+  wail: P => [P.shape('M-22 15Q-26 -11 0 -11Q26 -11 22 15Q0 5 -22 15Z', 'mouth', {width: 5.5}), P.ellipse(0, 3, 9, 4.5, 'tongue', {outline: false})],
+  shout: P => [P.shape('M-26 -10L26 -10Q31 -10 29 -4L23 16Q21 21 15 21L-15 21Q-21 21 -23 16L-29 -4Q-31 -10 -26 -10Z', 'mouth', {width: 5.5}), P.shape('M-23 -8L23 -8L21 -1L-21 -1Z', 'teeth', {outline: false}), P.ellipse(0, 14, 10, 5, 'tongue', {outline: false})],
+  // One corner up; a strained, toothy smile; a small mouth pushed to one side.
+  smirk: P => [P.line('M-18 5Q4 9 21 -8', 'outline', 6.5), P.line('M18 -13L25 -6', 'outline', 5)],
+  awkward: P => [P.shape('M-27 -7Q0 3 27 -7L24 7Q0 18 -24 7Z', 'teeth', {width: 5}), P.line('M-25 1Q0 11 25 1', 'outline', 3.5)],
+  pucker: P => [P.line('M-3 4Q9 5 18 -3', 'outline', 6)]
 };
+// A beam is the open grin at rest.
+MOUTHS.beam = MOUTHS.grin_open;
+
+/** A drop (a tear, a bead of sweat) with its point up, centred on (x, y), k times 18 units tall. */
+const drop = (P, x, y, k) => [
+  P.shape(`M${r1(x)} ${r1(y - 10 * k)}C${r1(x + 5 * k)} ${r1(y - 3 * k)} ${r1(x + 8 * k)} ${r1(y + k)} ${r1(x + 8 * k)} ${r1(y + 4 * k)}C${r1(x + 8 * k)} ${r1(y + 11 * k)} ${r1(x - 8 * k)} ${r1(y + 11 * k)} ${r1(x - 8 * k)} ${r1(y + 4 * k)}C${r1(x - 8 * k)} ${r1(y + k)} ${r1(x - 5 * k)} ${r1(y - 3 * k)} ${r1(x)} ${r1(y - 10 * k)}Z`, TEAR, {width: 4}),
+  P.ellipse(x - 2.6 * k, y + 3.4 * k, 1.8 * k, 2.6 * k, '#ffffff', {outline: false, opacity: 0.8})
+];
+
+/**
+ * An expression's mark, in the head frame: tears under both eyes, a bead of
+ * sweat at the temple, an anger mark beside the brow. Each keeps inside the
+ * head's outline at every look (the gaze test), on a child's head too.
+ */
+function faceMark(ctx, kind, cute) {
+  const {g, P} = ctx;
+  const {rx, cy} = g.head;
+  if (kind === 'tears') return [-1, 1].flatMap(sx => (cute ? drop(P, sx * 42, cy + 58, 1.25) : drop(P, sx * 34, cy + 33, 0.85)));
+  // Beside the eye, below where a fringe or curls come down over the temple.
+  if (kind === 'sweat') return cute ? drop(P, rx * 0.68, cy + 14, 1.2) : drop(P, rx * 0.58, cy + 2, 0.85);
+  if (kind === 'anger') {
+    const k = cute ? 1.3 : 0.9, x = r1(rx * (cute ? 0.68 : 0.56)), y = r1(cy + (cute ? 6 : -4));
+    const arm = (ax, ay) => `M${r1(x + ax * 10 * k)} ${r1(y + ay * 3 * k)}Q${r1(x + ax * 3 * k)} ${r1(y + ay * 3 * k)} ${r1(x + ax * 3 * k)} ${r1(y + ay * 10 * k)}`;
+    return [P.line(`${arm(-1, -1)}${arm(1, -1)}${arm(1, 1)}${arm(-1, 1)}`, ANGER, cute ? 6 : 5)];
+  }
+  return [];
+}
 const mouthShape = (name, P) => (MOUTHS[name] ?? MOUTHS.soft)(P);
 
 export function face(ctx, name) {
@@ -363,7 +429,8 @@ export function face(ctx, name) {
   const parts = expressionParts(name);
   const browColor = p.hair.style === 'headscarf' ? 'browDark' : GREY_HAIR.includes(p.hair.color) ? 'hairShade' : 'mixBrow';
   const cute = Boolean(ctx.cute);
-  const eyeParts = cute ? cuteEyes(parts.eyes, P) : eyes(parts.eyes, P);
+  const dir = ctx.facing === 'left' ? -1 : 1;
+  const eyeParts = cute ? cuteEyes(parts.eyes, P, dir) : eyes(parts.eyes, P, dir);
   const eyeGroup = joint(ctx, `eyes-${name}`, 0, cy + (cute ? CUTE.eyeY : 10), {}, ctx.eyeScale && ctx.eyeScale !== 1 ? [group(eyeParts, {transform: `scale(${k3(ctx.eyeScale)})`})] : eyeParts);
   const kids = [];
   // The cute cheeks keep inside the head's edge when the face turns to look.
@@ -371,6 +438,7 @@ export function face(ctx, name) {
   if (cute) for (const sx of [-1, 1]) kids.push(P.ellipse(sx * r1(g.head.rx * 0.52), cy + 48, 14, 9, 'blush', {outline: false, opacity: parts.blush ? 0.7 : 0.42}));
   else if (parts.blush) for (const sx of [-1, 1]) kids.push(P.ellipse(sx * 52, cy + 36, 15, 9, 'blush', {outline: false, opacity: 0.55}));
   kids.push(eyeGroup, ...brows(parts.brows, P, browColor, cy, cute));
+  if (parts.extra) kids.push(...faceMark(ctx, parts.extra, cute));
   // The mouth's group only moves it to its centre (the view pivots an open
   // mouth there for speech, view.mjs); the cute mouth's size is a group inside.
   const mouthAt = `translate(0 ${cy + (cute ? CUTE.mouthY : 47)})`;

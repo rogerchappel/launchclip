@@ -833,7 +833,7 @@ export function directionCastLines(cast) {
   return [
     ...lines,
     `pose: exactly one of ${POSES.join(', ')}.`,
-    `expression: exactly one of ${EXPRESSIONS.join(', ')}.`,
+    `expression: exactly one of ${EXPRESSIONS.join(', ')}. Pick the one the line's feeling calls for, and cue a new one when the feeling turns.`,
     `set: exactly one of ${SETS.join(', ')}, or none.`,
     `action.verb: one of ${ACTIONS.join(', ')}, or a pose. Say where someone stands or what they look at with the action's target, not in the pose.`
   ];
