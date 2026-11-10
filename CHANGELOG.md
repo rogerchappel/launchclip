@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Added
+
+- Plan-only mode: `launchclip make --stop-after storyboard` stops once the
+  video is planned and renders nothing. The project then holds what a
+  browser player needs (the resolved story, the narration and its word
+  timings, the captions, the mix with the music bed and sound effects, and
+  every media file), and `PLAYER-MANIFEST.json` lists each file with its
+  role, size and sha256. The checks that need no rendered pixels are in
+  `MAKE.json` `plan.checks`, the time planning took in `plan.timings`. The
+  run ends `awaiting-approval` (exit 3); the same command with `--approve
+  storyboard`, or `launchclip finish <project>`, renders the planned story
+  and reuses every finished step. `launchclip finish --plan-only` does the
+  same for any project with a storyboard. See docs/guide/headless.md, "Plan
+  first, render on demand".
+
 ### Fixed
 
 - `make` no longer fails the storyboard stage when a style puts the captions
