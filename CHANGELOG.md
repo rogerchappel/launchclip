@@ -4,6 +4,17 @@
 
 ### Changed
 
+- `make` runs independent work at the same time: the descriptions of the
+  files in `--assets`, the planner's opening while the second opening is
+  designed, the two candidates of a comparison, and a show bible's reference
+  sheets. The files a run writes and its progress lines are unchanged.
+  `--model-concurrency <n>` (default 4, or `LAUNCHCLIP_MODEL_CONCURRENCY`)
+  limits how many model calls are in flight; `1` sends one at a time. A
+  rate-limit answer is waited out instead of failing the stage, and
+  `MAKE.json` `model_calls` says where calls overlapped.
+- The spending limit (`--max-cost-usd`) holds when calls overlap: a paid call
+  starts beside others only when the most they can all cost fits under the
+  limit, and otherwise waits its turn.
 - `make` treats `--duration` as a ceiling. It still trims a script or a
   chapter that runs more than 15% over, but it no longer asks the model to
   add words to one that runs short: the video is shorter instead. In a long

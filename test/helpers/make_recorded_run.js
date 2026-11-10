@@ -24,12 +24,13 @@ const wait = (ms) => (ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms))
 /**
  * options: {callMs (a model call's time), stillMs (one still's), finishMs,
  * jitter (true: a later call of the same kind answers sooner, so answers
- * arrive out of order when calls overlap)}.
+ * arrive out of order when calls overlap), screenshots (the handed-in
+ * screenshots beside the fixture's clip and logo; [] for none)}.
  * → {run(makeOptions, {sleep, now, refuse}) → {report, lines, calls, peak}, project, cwd, assets, cleanup()}
  */
-export async function recordedRun({ callMs = 0, stillMs = 0, finishMs = 0, jitter = false } = {}) {
+export async function recordedRun({ callMs = 0, stillMs = 0, finishMs = 0, jitter = false, screenshots = SCREENSHOTS } = {}) {
   const assets = await assetsDir();
-  for (const name of SCREENSHOTS) await writeFile(path.join(assets, name), `screenshot ${name}`);
+  for (const name of screenshots) await writeFile(path.join(assets, name), `screenshot ${name}`);
   const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-recorded-run-"));
   const project = path.join(cwd, "video");
   const calls = [];
@@ -73,7 +74,7 @@ export async function recordedRun({ callMs = 0, stillMs = 0, finishMs = 0, jitte
   };
   const inventory = async (dir) => {
     const base = await fakeInventory(dir);
-    for (const [index, name] of SCREENSHOTS.entries()) base.entries.push({ path: name, kind: "image", role: "screenshot", confidence: 0.8, signals: ["size:1920x1080"], description: "Screenshot (1920×1080) of the product UI to show in a media window", media: { kind: "image", width: 1920, height: 1080, alpha: false }, fingerprint: String(10 + index) });
+    for (const [index, name] of screenshots.entries()) base.entries.push({ path: name, kind: "image", role: "screenshot", confidence: 0.8, signals: ["size:1920x1080"], description: "Screenshot (1920×1080) of the product UI to show in a media window", media: { kind: "image", width: 1920, height: 1080, alpha: false }, fingerprint: String(10 + index) });
     return base;
   };
   const still = async (story, at, out, { dir }) => {
