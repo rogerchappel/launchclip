@@ -79,11 +79,11 @@ import { CANDIDATE_OUTPUT, candidateAudio, FREE_VOICE_PROVIDERS, recordCandidate
 import { COVER_PATH, renderCover } from "./cover.js";
 import { writePublishManifest } from "./publish_manifest.js";
 import { guardRejections } from "./rejection_guard.js";
-import { fitCaptionBand } from "./caption_band_fit.js";
+import { captionBandWarnings, fitCaptionBand } from "./caption_band_fit.js";
+import { captionVisibilityGate } from "./caption_visibility.js";
 import { fitFaceClear } from "./face_clear_fit.js";
 import { fitSceneTimings } from "./timing_fit.js";
 
-// Rounds of hiding captions under cards before the layout check fails the render.
 // Validate's layout repairs (repairLayout) run at most this many times: one
 // repair can expose the next (a timing fixed draws a card that sits on the
 // face; a card moved off the face lands in the caption band).
@@ -1101,7 +1101,7 @@ const STAGES = [
       // paid plan (repairLayout). The checks stay strict: a repaired story is
       // checked again, and anything left fails below.
       for (let pass = 0; pass < LAYOUT_REPAIR_PASSES && layout.status === "failed"; pass += 1) {
-        const repaired = await repairLayout(ctx, layout, { resolveOptions, infos: () => subjectInfos(ctx.project, ctx.resolved) });
+        const repaired = await repairLayout(ctx, layout, { resolveOptions, infos: () => subjectInfos(ctx.project, ctx.resolved), check: (story) => checkLayoutProject(ctx.project, { ...layoutOptions(), story }) });
         if (!repaired.changes.length) break;
         ctx.copy = repaired.storyboard;
         ctx.resolved = resolveStory(ctx.copy, resolveOptions());
@@ -1615,11 +1615,14 @@ function timingLine(moved) {
  *   - a card on the presenter's face (subject-face) moves beside, above or
  *     below the head, or, for a module made to sit behind the presenter
  *     that the scene put in front, goes back behind (fitFaceClear);
- *   - a card in the caption band while captions show hides the captions
- *     under it (fitCaptionBand), whatever other errors there are.
+ *   - a card in the caption band while captions show moves out of it, else
+ *     the captions move for that scene, and only then are they hidden under
+ *     it (fitCaptionBand), whatever other errors there are. check(storyboard)
+ *     → the layout report: a move that leaves more errors of another kind is
+ *     taken back and the captions move instead.
  * → {storyboard, changes: [warning lines]}; no changes when nothing applied.
  */
-export async function repairLayout(ctx, layout, { resolveOptions, infos = async () => [] }) {
+export async function repairLayout(ctx, layout, { resolveOptions, infos = async () => [], check = null }) {
   const errors = (layout.findings ?? []).filter((finding) => finding.severity === "error");
   let storyboard = ctx.copy;
   const changes = [];
@@ -1640,10 +1643,15 @@ export async function repairLayout(ctx, layout, { resolveOptions, infos = async 
     }
   }
   const lines = errors.map((finding) => `layout: ${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail ?? ""}`.trim());
-  const fitted = fitCaptionBand(storyboard, lines);
-  if (fitted.hidden.length) {
+  const resolve = (candidate) => resolveStory(candidate, resolveOptions());
+  let fitted = fitCaptionBand(storyboard, lines, { resolve });
+  if (fitted.moved.length && check) {
+    const others = (report) => (report.findings ?? []).filter((finding) => finding.severity === "error" && finding.rule !== "caption-band").length;
+    if (others(await check(fitted.storyboard)) > others(layout)) fitted = fitCaptionBand(storyboard, lines, { resolve, from: 2 });
+  }
+  if (fitted.changes.length) {
     storyboard = fitted.storyboard;
-    changes.push(`layout: tooling hid ${fitted.hidden.join("; ")}`);
+    changes.push(...captionBandWarnings(fitted));
   }
   return { storyboard, changes };
 }
@@ -1862,6 +1870,14 @@ async function runGates(ctx) {
     gates.states = stateGate(ctx.resolved);
   } catch (error) {
     gates.holds ??= { status: "failed", error: error.message };
+  }
+
+  // Captions that are on are seen: hidden under cards for at most a small share of the narration.
+  try {
+    const captions = captionVisibilityGate(ctx.resolved, ctx.words ?? []);
+    if (captions.status !== "skipped") gates.captions = captions;
+  } catch (error) {
+    gates.captions = { status: "failed", error: error.message };
   }
 
   const master = ctx.state.stages?.master?.details;
