@@ -80,3 +80,18 @@ test("a repair that fixes its finding and breaks a scene nobody named passes: th
   assert.ok(report.warnings.includes("repair: tooling kept the params of 1 scene the findings did not reach (foal-medium-understands-auto)"));
   assert.match(calls[1].input, /gets its previous params back/);
 });
+
+test("a plan with more shots than its runtime holds passes: merged shots hand their characters and actions to the shot that takes their place", async () => {
+  const saved = JSON.parse(readFileSync(new URL("merged-shots.json", dir), "utf8"));
+  assert.ok(saved.errors.every((error) => error.startsWith("acting: ")));
+  const calls = [];
+  const client = { provider: "openai", async runStructured(request) { calls.push(request); return { model: "gpt-5.6-luna", value: { storyboard_json: JSON.stringify(saved.storyboard), direction_json: "" }, usage: { input_tokens: 100, output_tokens: 50, total_tokens: 150 } }; } };
+  const report = await planStoryboard({ brief: "A foal learns why the starting gate opens", words: saved.words, lane: "motion", format: saved.format, brand: saved.brand, audio: { words: "NARRATION.json" }, tier: "structured", model: "openai:gpt-5.6-luna", client, direction: saved.direction, bible: saved.bible, maxRepairs: 0 });
+  assert.equal(report.status, "passed", report.errors.join("\n"));
+  assert.equal(calls.length, 1);
+  const said = report.warnings.join("\n");
+  assert.match(said, /foal-asks-why \(1\.19 s\) merged into mare-names-gate, which takes foal from it/);
+  assert.match(said, /acting: tooling gave foal the map's turn-to-look in mare-names-gate/);
+  assert.match(said, /normalise: mare-names-gate ran 0\.002 s into mare-explains-start on track 0; its end moved 21\.29 → 21\.288 s/);
+  assert.deepEqual(report.storyboard.scenes.find((entry) => entry.id === "mare-names-gate").params.cast.map((entry) => entry.id), ["mare", "foal"]);
+});

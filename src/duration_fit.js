@@ -151,7 +151,8 @@ export function fitDurations(storyboard, errors, { words = [], beats = null, dir
       touched.add(host.i);
       const hostId = copy.scenes[host.i]?.id;
       if (scene.id && hostId) renamed.set(scene.id, hostId);
-      changed.push(`${scene.id ?? `scenes[${index}]`} (${round(before)} s) merged into ${hostId ?? `scenes[${host.i}]`}`);
+      const joined = joinCast(copy.scenes[host.i], scene);
+      changed.push(`${scene.id ?? `scenes[${index}]`} (${round(before)} s) merged into ${hostId ?? `scenes[${host.i}]`}${joined.length ? `, which takes ${joined.join(" and ")} from it` : ""}`);
     } else {
       if (scene.id) renamed.set(scene.id, null);
       changed.push(`${scene.id ?? `scenes[${index}]`} (${round(before)} s, no room) dropped`);
@@ -165,6 +166,22 @@ export function fitDurations(storyboard, errors, { words = [], beats = null, dir
   }
   copy.scenes = copy.scenes.filter((_, i) => !removed.has(i));
   return { storyboard: copy, direction: direction && renamed.size ? renameScenes(direction, renamed) : direction, changed };
+}
+
+// A cast scene merged into another: whoever was on screen for its words still is. The host takes the characters it lacks
+// (while it has room for them), so a line spoken or acted in the merged shot is not left to a shot without its character.
+const CAST_ROOM = 3;
+function joinCast(host, merged) {
+  if (host?.module !== "cast-scene" || merged?.module !== "cast-scene" || !Array.isArray(host.params?.cast) || !Array.isArray(merged.params?.cast)) return [];
+  const joined = [];
+  for (const entry of merged.params.cast) {
+    if (!entry || typeof entry.id !== "string" || host.params.cast.some((member) => member?.id === entry.id) || host.params.cast.length >= CAST_ROOM) continue;
+    host.params.cast.push({ id: entry.id, ...(entry.expression !== undefined ? { expression: entry.expression } : {}), ...(entry.says !== undefined ? { says: entry.says } : {}) });
+    joined.push(entry.id);
+  }
+  // Two characters have no centre: each takes its side from the story's cast.
+  if (joined.length && host.params.cast.length === 2) for (const member of host.params.cast) if (member && ["centre", "center"].includes(member.position)) delete member.position;
+  return joined;
 }
 
 // Every `scenes: [id…]` list in the direction map, with merged ids pointed at
