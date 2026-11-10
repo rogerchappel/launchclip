@@ -19,7 +19,7 @@ import { commandHelp, helpText, USAGE_GROUPS, wantsHelp } from "./cli_usage.js";
 import { parseSubjectInvocation } from "./subject/cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "queue", "library", "skills", "style", "profile", "skeletons", "cast", "bible", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "publish-manifest", "make", "research", "history", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "queue", "library", "skills", "style", "profile", "skeletons", "cast", "bible", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "preview", "publish-manifest", "make", "research", "history", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -207,6 +207,20 @@ export async function runCli(argv, io = {}) {
         stdout.write(formatLayoutReport(report));
         return;
       }
+      result = report;
+    } else if (command === "preview") {
+      const { buildPreview, servePreview, formatPreviewSummary } = await import("./preview.js");
+      const target = required(firstArg, "story project path");
+      const exportDir = typeof flags.export === "string" ? flags.export : null;
+      // --export writes the static folder and stops; otherwise it is served until interrupted.
+      const built = exportDir
+        ? await buildPreview(target, { out: exportDir }, productionAdapters.preview)
+        : await servePreview(target, { port: flags.port, open: !flags["no-open"] }, productionAdapters.preview);
+      if (!flags.json) {
+        stdout.write(formatPreviewSummary(built));
+        return;
+      }
+      const { close, ...report } = built;
       result = report;
     } else if (command === "finish") {
       const { runFinish, formatFinishSummary } = await import("./finish.js");
