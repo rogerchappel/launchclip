@@ -19,6 +19,20 @@
 
 ### Fixed
 
+- A transition between two full-frame footage scenes no longer drops the
+  picture. On the world camera a `push` into a `clip` showed the new clip
+  whole and inset for the first 40 % of the move, removed it, showed the
+  empty background for a frame or two, then faded it up at full frame (both
+  renderers); a `pull`, `fade`, `iris` and `glow-wipe` showed the background
+  in the same way. A clip now counts as a full-frame picture, like a photo
+  plate: it arrives over the outgoing scene, which stays whole under it, an
+  incoming fade that starts late is hidden until it starts, and a push grows
+  the new picture out of the old one on the camera's ease. Crossfades into a
+  picture (morph, light-sweep, push-blur) no longer dip to the background.
+  Between two footage scenes `card-to-card`, `rack-focus` and `morph` play as
+  a fade, `story validate` warns, and the planner is told not to pick them.
+  `kit/core/transition-frames.mjs` checks every transition type for a frame
+  the two scenes do not cover, a scene that sits still mid-move, and a pop.
 - `make` no longer fails the storyboard stage when a style puts the captions
   in the middle of the frame (or at the top, or low, or at a large size). A
   plan kept on a cadence near miss was never laid out, so every card in the
