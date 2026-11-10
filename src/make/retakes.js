@@ -23,6 +23,7 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { directionCastLines } from "@launchclip/core/planning-prompt.mjs";
+import { ACTIONS, NAMED_TARGETS } from "@launchclip/core/characters/actions.mjs";
 import { ANIMATIC_FILE, ANIMATIC_REVIEW_FILE } from "../animatic.js";
 import { readProjectStory } from "../story_loader.js";
 import { applyProjectStyle } from "../story_style.js";
@@ -54,7 +55,8 @@ You may change, inside each scene's params: each character's opening pose and ex
 You may not change: a scene's id, module, start, end or track; who speaks ("says"); the narration; anything outside the scenes named. The timing is locked.
 
 Rules:
-- A character who speaks during the shot stays in it.
+- A character who speaks during the shot stays in it, and so does a character an action below names.
+- Keep every action listed as "must still happen" under a shot: the same character, the same action, on a word of that line. You may change its target and everything around it.
 - Use only the poses, expressions and sets listed, and only characters of the cast.
 - A cue's "at" is a word said during the shot ("word:<text>": the word as it is said in this shot, even when the narration says it earlier too), or seconds from the shot's start. Never seconds from the start of the video.
 - A walk-to goes as far toward its target as the shot leaves time for; give it at least half a second before the shot ends.
@@ -97,12 +99,15 @@ async function storyErrors(project, story, words) {
  * written), words, step ("redirect"|"replan-beat"), shots (scene ids it may
  * change), shotList (the shot list's shots), problems (retakeProblems),
  * check(story) → [errors] (the caller's own checks on the retaken storyboard,
- * answered in the same corrective call)}
+ * answered in the same corrective call), tidy(story) → story (the caller's
+ * deterministic fixes to the retaken storyboard, before it is checked)}
  * → {story, changed, ignored, note, attempts, rejected: [{attempt, errors}],
- * usage: [..], model}; throws when the result changes no shot or still does
- * not validate, with the same attempts, rejected and usage on the error.
+ * usage: [..], model}. When the last answer still fails, the shots of it that
+ * pass every check on their own are kept and the others are listed in
+ * `ignored`; it throws when none does (or no shot changed), with the same
+ * attempts, rejected and usage on the error.
  */
-export async function redirectShots({ client, project, story, words = [], step = "redirect", shots = [], shotList: list = [], problems = [], maxRepairs = 1, check = null } = {}) {
+export async function redirectShots({ client, project, story, words = [], step = "redirect", shots = [], shotList: list = [], problems = [], maxRepairs = 1, check = null, tidy = null } = {}) {
   if (!client || typeof client.runStructured !== "function") throw new Error("a retake needs a model client with runStructured(), or its own redirect hook");
   const wanted = new Set(shots);
   const scenes = (story?.scenes ?? []).filter((scene) => wanted.has(scene.id));
@@ -116,12 +121,16 @@ export async function redirectShots({ client, project, story, words = [], step =
     "The cast:",
     ...directionCastLines(story?.cast).map((line) => `- ${line}`),
     "- framing (params.shot): one of wide, medium, close, or leave it out.",
+    `- target (a character's, or a cue's): exactly one of ${NAMED_TARGETS.join(", ")}, {"character": "<id of someone else in the shot>"} or {"prop": "<id>"}. Nothing else: not "centre", not "front", not a description.`,
+    "- position: left, centre or right; a shot with one character takes centre only.",
     "",
     "What is said during each shot:"
   ];
   for (const shot of list.filter((entry) => wanted.has(entry.id))) {
     lines.push(`  ${shot.id} (${shot.start}–${shot.end} s, who: ${(shot.who ?? []).join(", ") || "nobody"}):`);
     for (const line of shot.lines ?? []) lines.push(`    ${line.speaker ?? "?"}: "${line.text}"${line.playing ? `  [${line.playing}]` : ""}`);
+    // The direction map's key actions: the checks hold the retake to them.
+    for (const action of shot.actions ?? []) lines.push(`    must still happen in this shot: ${action.who} ${ACTIONS.includes(action.verb) ? `performs a cue with action "${action.verb}"` : `takes the pose "${action.verb}"`}${action.target ? ` (${typeof action.target === "string" ? action.target : JSON.stringify(action.target)})` : ""}, on a word of its line`);
   }
   lines.push("", "The scenes to return, as they are now:", JSON.stringify(scenes, null, 2));
   const usage = [];
@@ -129,6 +138,7 @@ export async function redirectShots({ client, project, story, words = [], step =
   let model = null;
   let errors = [];
   let attempts = 0;
+  let last = null;
   for (let attempt = 0; attempt <= maxRepairs; attempt += 1) {
     const input = errors.length ? `${lines.join("\n")}\n\nYour last answer did not validate. Fix these and return every scene again:\n${errors.map((error) => `- ${error}`).join("\n")}\n` : `${lines.join("\n")}\n`;
     const result = await client.runStructured({ instructions: REDIRECT_INSTRUCTIONS, input, schema: REDIRECT_SCHEMA, schemaName: "launchclip_retake", maxOutputTokens: 6000 });
@@ -142,14 +152,30 @@ export async function redirectShots({ client, project, story, words = [], step =
     if (!Array.isArray(proposed)) errors = ["scenes_json is not a JSON array of scenes"];
     else {
       scoped = scopedRetake(story, { scenes: proposed }, shots);
+      // The caller's deterministic fixes (make: a map action the retake left without its cue) before anything is checked.
+      if (scoped.changed.length && typeof tidy === "function") scoped = { ...scoped, story: tidy(scoped.story) ?? scoped.story };
       if (!scoped.changed.length) errors = ["no scene was changed; change the acting, the framing or the set of the shots named"];
       else {
         errors = await storyErrors(project, scoped.story, words);
         if (!errors.length && typeof check === "function") errors = [...(check(scoped.story) ?? [])];
       }
     }
-    if (!errors.length) return { ...scoped, note: String(result?.value?.note ?? "").trim() || null, attempts, rejected, usage, model };
+    const note = String(result?.value?.note ?? "").trim() || null;
+    if (!errors.length) return { ...scoped, note, attempts, rejected, usage, model };
     rejected.push({ attempt: attempts, errors: errors.slice(0, RETAKE_ERRORS) });
+    last = scoped?.changed.length ? { scoped, note } : last;
+  }
+  // Out of corrective passes: the shots that pass every check on their own
+  // are kept and the rest stay as they were, rather than losing the lot.
+  if (last && last.scoped.changed.length > 1) {
+    const failing = async (candidate) => { const found = await storyErrors(project, candidate, words); return found.length || typeof check !== "function" ? found : [...(check(candidate) ?? [])]; };
+    const good = [];
+    for (const id of last.scoped.changed) if (!(await failing(scopedRetake(story, last.scoped.story, [id]).story)).length) good.push(id);
+    const partial = good.length ? scopedRetake(story, last.scoped.story, good) : null;
+    if (partial?.changed.length && !(await failing(partial.story)).length) {
+      const dropped = last.scoped.changed.filter((id) => !good.includes(id));
+      return { ...partial, ignored: [...partial.ignored, ...dropped.map((id) => `scene ${id}'s retake (it did not pass the checks; the shot stays as it was)`)], note: last.note, attempts, rejected, usage, model };
+    }
   }
   throw Object.assign(new Error(`the retake did not validate after ${attempts} attempt${attempts === 1 ? "" : "s"}: ${errors.slice(0, 3).join("; ")}`), { attempts, rejected, usage, model });
 }

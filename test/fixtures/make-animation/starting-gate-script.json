@@ -1,0 +1,121 @@
+{
+  "schema_version": "launchclip.make-script.v2",
+  "title": "The Starting Gate",
+  "logline": "A foal fears the starting gate opening means time is up, until a mare explains that it means the run can begin.",
+  "premise": {
+    "want": "The foal wants to understand the starting gate.",
+    "obstacle": "The foal doesn't know what the gate opening means.",
+    "change": "The foal understands that the opening signals a start."
+  },
+  "characters": [
+    {
+      "id": "foal",
+      "role": "Lead",
+      "want": "To understand why the starting gate opens",
+      "speech": "Curious, quick, full of questions",
+      "voice_type": "either"
+    },
+    {
+      "id": "mare",
+      "role": "Guide",
+      "want": "To help Foal feel ready to start",
+      "speech": "Patient, playful, reassuring",
+      "voice_type": "female"
+    }
+  ],
+  "beats": [
+    {
+      "beat": "setup",
+      "lines": [
+        {
+          "id": "l1",
+          "speaker": "narrator",
+          "text": "The foal watched the starting gate."
+        }
+      ]
+    },
+    {
+      "beat": "problem",
+      "lines": [
+        {
+          "id": "l2",
+          "speaker": "foal",
+          "text": "Why does it open? Is our time up?",
+          "playing": "worried"
+        },
+        {
+          "id": "l3",
+          "speaker": "narrator",
+          "text": "The foal stepped back from the gate."
+        },
+        {
+          "id": "l4",
+          "speaker": "foal",
+          "text": "Do we have to go home?"
+        }
+      ]
+    },
+    {
+      "beat": "turn",
+      "lines": [
+        {
+          "id": "l5",
+          "speaker": "mare",
+          "text": "No. When it opens, the run can begin.",
+          "playing": "reassuring"
+        },
+        {
+          "id": "l6",
+          "speaker": "foal",
+          "text": "So it doesn't mean we're too late?"
+        }
+      ]
+    },
+    {
+      "beat": "resolution",
+      "lines": [
+        {
+          "id": "l7",
+          "speaker": "mare",
+          "text": "Not at all. It means you can start."
+        },
+        {
+          "id": "l8",
+          "speaker": "narrator",
+          "text": "The foal looked at the gate again."
+        },
+        {
+          "id": "l9",
+          "speaker": "foal",
+          "text": "When it opens, I get to run!",
+          "playing": "delighted"
+        },
+        {
+          "id": "l10",
+          "speaker": null,
+          "action": "The gate opens, and the foal steps forward.",
+          "seconds": 1
+        },
+        {
+          "id": "l11",
+          "speaker": "mare",
+          "text": "That's right. One step, then another.",
+          "playing": "playful"
+        },
+        {
+          "id": "l12",
+          "speaker": "narrator",
+          "text": "The foal was ready for the start."
+        }
+      ]
+    }
+  ],
+  "narration": "The foal watched the starting gate. Why does it open? Is our time up? The foal stepped back from the gate. Do we have to go home? No. When it opens, the run can begin. So it doesn't mean we're too late? Not at all. It means you can start. The foal looked at the gate again. When it opens, I get to run! That's right. One step, then another. The foal was ready for the start.",
+  "title_options": [
+    "Why the Starting Gate Opens",
+    "The Foal and the Starting Gate",
+    "A Start, Not an Ending",
+    "The Gate Means Go",
+    "The Foal Gets Ready to Run"
+  ]
+}

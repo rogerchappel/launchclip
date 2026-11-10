@@ -38,6 +38,7 @@ import { fitDirectionCast, normalizeCastCues, plannedCast } from "./cast_fit.js"
 import { bibleCast, bibleRef, directionWithBible } from "@launchclip/core/bible.mjs";
 import { castGate } from "./cast.js";
 import { actingGate } from "./direction_guardrails.js";
+import { placeActions } from "./acting_place.js";
 import { lipSyncGate } from "./quality_gates.js";
 import { SHORT_FORM_HOLD, fitDurations, paceErrors } from "./duration_fit.js";
 import { fitCaptionBand } from "./caption_band_fit.js";
@@ -187,7 +188,7 @@ export async function planStoryboard(options = {}) {
     fixed.cast = bibleCast(bible);
     fixed.bible = bibleRef(bible);
     // The bible's world is the story's place (its sets stay the bible's own list).
-    if (typeof bible.world?.kind === "string") fixed.world = { kind: bible.world.kind, ...(bible.world.time ? { time: bible.world.time } : {}) };
+    if (typeof bible.world?.kind === "string") fixed.world = { kind: bible.world.kind, ...(bible.world.time ? { time: bible.world.time } : {}), ...(Array.isArray(bible.world.props) && bible.world.props.length ? { props: bible.world.props } : {}) };
     if (style?.cast) planStyle = { ...style, cast: { ...style.cast, drawing_style: fixed.cast.style, members: fixed.cast.characters } };
     direction = pinMap(direction);
   }
@@ -338,10 +339,19 @@ export async function planStoryboard(options = {}) {
         pinned.warnings = [...pinned.warnings, ...diagrams.changed.map((entry) => `diagrams: tooling ${entry}`)];
       }
       // One copy of a character at a time: a join between two character scenes that share one is a cut (src/cast_cut_fit.js).
-      const cuts = fitCastCuts(pinned.storyboard);
+      // An explainer's character scenes sit on track 0 with transitions of their own; a character story's ride their world plates, which the kit already handles.
+      const cuts = explainer ? fitCastCuts(pinned.storyboard) : { changed: [] };
       if (cuts.changed.length) {
         pinned.storyboard = cuts.storyboard;
         pinned.warnings = [...pinned.warnings, ...cuts.changed.map((entry) => `cast: tooling made ${entry}`)];
+      }
+      // A character story: a map action whose character is in the shot without the cue is tooling's to add (src/acting_place.js).
+      if (bible && direction) {
+        const placed = placeActions(pinned.storyboard, { direction, words: wordList });
+        if (placed.changed.length) {
+          pinned.storyboard = placed.storyboard;
+          pinned.warnings = [...pinned.warnings, ...placed.changed.map((entry) => `acting: tooling ${entry}`)];
+        }
       }
       const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints, minHold: SHORT_FORM_HOLD, ...(script ? { script } : {}), ...(bible || explainer ? { castGate: true } : {}) };
       checked = checkStoryboard(pinned.storyboard, checkOptions);
