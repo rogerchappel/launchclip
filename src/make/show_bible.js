@@ -291,3 +291,44 @@ function parseText(value) {
   if (start < 0 || end <= start) return null;
   try { return JSON.parse(value.slice(start, end + 1)); } catch { return null; }
 }
+
+/**
+ * The planner's brief for a character story: the screenplay with its line
+ * ids, the frozen bible, and how to stage talk. → markdown lines.
+ * A talk-heavy two-shot that never changes fails finish's density and motion
+ * gates, so the staging notes ask for a change of shot and for acting.
+ */
+export function animationBriefLines({ script, bible }) {
+  const lines = [];
+  const cast = Array.isArray(bible?.cast?.characters) ? bible.cast.characters : [];
+  const role = new Map((script?.characters ?? []).map((character) => [character.id, character]));
+  lines.push("## Screenplay (SCRIPT.json; already voiced, one voice a speaker, and the word timings carry each word's speaker)", "");
+  if (script?.logline) lines.push(`Logline: ${script.logline}`, "");
+  for (const beat of script?.beats ?? []) {
+    lines.push(`${beat.beat}${beat.place ? ` (place: ${beat.place})` : ""}:`);
+    for (const entry of beat.lines ?? []) lines.push(entry.speaker === null ? `- ${entry.id} [silent, ${entry.seconds}s] ${entry.action}` : `- ${entry.id} ${entry.speaker}: ${entry.text}${entry.playing ? ` (playing: ${entry.playing})` : ""}`);
+    lines.push("");
+  }
+  lines.push("A direction-map line that plays a script line names it (`\"line\": \"l3\"`); its section's `beat` is the script's beat. A silent line has no words: play it as an acting cue in the pause after the spoken line before it.", "");
+  if (cast.length) {
+    lines.push(`## Show bible (${bible.hash ? "frozen; " : ""}the cast is fixed)`, "");
+    for (const member of cast) {
+      const who = role.get(member.id);
+      lines.push(`- ${member.id}${member.name ? ` (${member.name})` : ""}${member.position ? `, stands ${member.position}` : ""}: ${[who?.role, who?.want ? `wants ${who.want}` : "", who?.speech ? `speaks ${who.speech}` : ""].filter(Boolean).join("; ") || "a character"}. Look: ${(member.must_keep ?? []).join(", ") || "see the sheet"}.`);
+    }
+    if (bible.world?.kind) lines.push(`- World: ${bible.world.kind}${bible.world.time ? `, ${bible.world.time}` : ""}.${bible.world.sets?.length ? ` Sets: ${bible.world.sets.join(", ")}.` : ""}`);
+    for (const rule of bible.rules ?? []) lines.push(`- Rule: ${rule}`);
+    lines.push("", `Drawn ${bible.cast.style}. Never add, drop, rename or restyle a character; a scene names who is in it by id.`, "");
+  }
+  lines.push(
+    "## Staging (a story told by its characters)",
+    "",
+    "- Every beat is played by the cast: cast-scene shots on the sets above (character-cameo for one character beside a card). No slideshow of cards over a voice.",
+    "- While a character speaks, a shot with that character is on screen, with `says: \"auto\"` so the mouth moves on its own lines. The narrator's lines play over the cast acting what is told.",
+    "- Change the shot with the story: a new shot when the place, the speaker or the feeling changes, and no shot longer than about six seconds. Move between a wide two-shot and a medium or close shot of one character (`shot`), and give each shot a pose or expression cue on a word, so nobody stands frozen while someone talks.",
+    "- The listener reacts: a look, a change of expression or a pose on the line that lands on them.",
+    "- Keep each character on its side of the frame in every shot it shares.",
+    ""
+  );
+  return lines;
+}
