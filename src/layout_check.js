@@ -15,8 +15,8 @@ import { emptyPlates, sceneWindows } from "@launchclip/core/transitions.mjs";
 import { storyBase } from "@launchclip/core/story.mjs";
 import { brandFrameLayout, intersectRects } from "@launchclip/core/brand-frame.mjs";
 import { checkBehindText, checkSubjectFace, sceneLayerOf, subjectCameraAt, subjectCameraOps, subjectLocator } from "@launchclip/core/subject-layer.mjs";
-import { castCaptionZones } from "@launchclip/core/cast-captions.mjs";
-import { captionZones, layoutPlan, layoutStateAt, withLayoutCameras } from "@launchclip/core/footage-layout.mjs";
+import { layoutCaptionZones } from "@launchclip/core/cast-captions.mjs";
+import { layoutPlan, layoutStateAt, withLayoutCameras } from "@launchclip/core/footage-layout.mjs";
 import { probeFullFrameMedia } from "./media_presence.js";
 
 // A scene stays on screen through the next scene's transition, so it is drawn
@@ -162,7 +162,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
     if (!produced || !shownEnd.has(scene.id)) return produced;
     // Only the scene's own element: a part (clip callouts) keeps its own timing.
     return (Array.isArray(produced) ? produced : [produced]).map((element) => (element && (element.id ?? scene.id) === scene.id ? { ...element, shownEnd: shownEnd.get(scene.id) } : element));
-  }, profile, captionBand, captionZones: resolved.base ? captionZones(resolved) : castCaptionZones(resolved) });
+  }, profile, captionBand, captionZones: layoutCaptionZones(resolved) });
   // Footage-led: the recording fills the frame under everything (media, never a collision).
   if (resolved.base) elements.unshift({ id: "base", role: "media", rect: { x: 0, y: 0, width: canvas.width, height: canvas.height }, start: 0, end: Number(resolved.resolved?.duration ?? resolved.format?.duration), allowOcclusion: ["*"] });
   const report = checkLayout({ canvas, elements, profile, captionBand, duration: Number(resolved.resolved?.duration ?? resolved.format?.duration) || undefined });

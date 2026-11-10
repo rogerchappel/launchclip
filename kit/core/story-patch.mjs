@@ -8,8 +8,7 @@
 //
 // Canonical copy: kit/core/story-patch.mjs.
 
-import { castCaptionZones } from './cast-captions.mjs';
-import { captionZones } from './footage-layout.mjs';
+import { layoutCaptionZones } from './cast-captions.mjs';
 import { checkLayout, elementsFromEditorialLayout, elementsFromStory, layoutExtras } from './layout-check.mjs';
 import { validateModuleParams } from './module-schemas.mjs';
 import { knownModules, resolveModule, sceneRenderEnd } from './modules.mjs';
@@ -244,7 +243,7 @@ export function applyStoryPatch(story, patch, { words = [], beats = null, layout
           hidesCaptions
         }), ...extras.parts];
       },
-      captionZones: resolved.base ? captionZones(resolved) : castCaptionZones(resolved)
+      captionZones: layoutCaptionZones(resolved)
     });
     const report = checkLayout({ canvas, elements, duration: Number(resolved.resolved?.duration) || undefined });
     layoutReport.findings = report.findings;

@@ -774,8 +774,19 @@ export function validateStory(story, { modules, moduleParams } = {}) {
             if (from !== null && to !== null && !(from < to)) err(`${rangePath} start must be before its end`);
           }
         }
+        // zones: for these seconds the lines sit in the rect instead of the band (cast-captions.mjs placedCaptionZones).
+        if (overlay.zones !== undefined) {
+          if (!Array.isArray(overlay.zones)) err(`${path}.zones must be an array of {start, end, rect, scale?}`);
+          else for (const [z, zone] of overlay.zones.entries()) {
+            const zonePath = `${path}.zones[${z}]`;
+            if (!isObject(zone)) { err(`${zonePath} must be an object {start, end, rect, scale?}`); continue; }
+            if (!(typeof zone.start === "number" && typeof zone.end === "number" && zone.start >= 0 && zone.start < zone.end)) err(`${zonePath} needs start and end in seconds, start before end`);
+            if (!isObject(zone.rect) || !["x", "y", "width", "height"].every((key) => typeof zone.rect[key] === "number" && Number.isFinite(zone.rect[key])) || !(zone.rect.width > 0 && zone.rect.height > 0)) err(`${zonePath}.rect must be {x, y, width, height} in canvas px`);
+            if (zone.scale !== undefined && !(typeof zone.scale === "number" && zone.scale >= 0.7 && zone.scale <= 1)) err(`${zonePath}.scale must be between 0.7 and 1`);
+          }
+        }
       } else {
-        for (const key of ["src", "hide"]) if (overlay[key] !== undefined) warn(`${path}.${key} is only read for captions overlays`);
+        for (const key of ["src", "hide", "zones"]) if (overlay[key] !== undefined) warn(`${path}.${key} is only read for captions overlays`);
       }
       if (overlay.start !== undefined) anchorField(overlay.start, `${path}.start`);
       if (overlay.end !== undefined) anchorField(overlay.end, `${path}.end`);

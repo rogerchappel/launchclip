@@ -18,7 +18,7 @@
 // that is still illegible after that.
 
 import { spawn } from "node:child_process";
-import { castCaptionZones } from "@launchclip/core/cast-captions.mjs";
+import { castCaptionZones, withPlacedZones } from "@launchclip/core/cast-captions.mjs";
 import { captionOptions, captionPlan, captionZoneIndex, captionsOverlayOf, chunksForCaptions } from "@launchclip/core/captions.mjs";
 import { decodePng } from "./visual_snapshot.js";
 import { renderedModels } from "./direction_guardrails.js";
@@ -44,7 +44,7 @@ export function captionLines(story, chunks) {
   const hide = (Array.isArray(overlay.hide) ? overlay.hide : []).map((range) => [Number(range[0]), Number(range[1])]);
   try { for (const { entry, model } of renderedModels(story).entries.values()) if (model.hidesCaptions) hide.push([entry.start, entry.renderEnd]); } catch { /* unresolvable story: no scene hides */ }
   // A character story's captions sit clear of its cast (castCaptionZones), as both compilers draw them.
-  const plan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide, zones: castCaptionZones(story) });
+  const plan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide, zones: withPlacedZones(story, castCaptionZones(story)) });
   const o = plan.options;
   // The plan's own lines: a preset with its own chunk size re-chunks the words.
   const byId = new Map(chunksForCaptions(chunks, o).map((chunk) => [chunk.id, chunk]));
@@ -313,7 +313,7 @@ export async function measureCaptionLegibility(video, story, { chunks, frame = v
   const { lines, options } = captionLines(story, chunks);
   if (!lines.length) return { lines: [], failed: [] };
   const format = { width: Number(story.format.width), height: Number(story.format.height) };
-  const zones = castCaptionZones(story);
+  const zones = withPlacedZones(story, castCaptionZones(story));
   const out = [];
   for (const line of lines) {
     const rect = lineBandRect(options, format, line, zones);
@@ -336,7 +336,7 @@ const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b
 export function predictCaptionPlates(story, chunks, elements = []) {
   const { lines, options } = captionLines(story, chunks);
   if (!lines.length || outlinedCaptions(options)) return [];
-  const zones = castCaptionZones(story);
+  const zones = withPlacedZones(story, castCaptionZones(story));
   // Characters and media under the band (a card in the band is already a layout collision).
   // A photo-scene's picture (fullFrame, src/layout_check.js) is judged on the render, as before.
   const busy = elements.filter((element) => element.role === "media" && element.rect && element.id !== "base" && !element.fullFrame);
