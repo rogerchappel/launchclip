@@ -45,6 +45,8 @@ export const CAPTION_BAND_FIT = Object.freeze({
   fullFrame: 0.85,
   // A card re-fitted above or below the band keeps at least this share of its area; a smaller one stays and the captions move instead.
   minArea: 0.5,
+  // A clash shorter than this (seconds) is hidden outright: no caption line is lost to it.
+  sliver: 0.1,
   // The least a caption block shrinks to (step 3).
   minScale: CAPTION_ZONE_MIN_SCALE
 });
@@ -126,7 +128,10 @@ export function fitCaptionBand(storyboard, errors, { resolve = null, from = 1, l
       if (!overlay.zones.length) delete overlay.zones;
     }
     let why = picture ? "" : resolve && from < 4 ? "the story could not be laid out" : "";
-    if (picture && owner && !inPlaced) {
+    // A clash shorter than a caption line can show (two timings rounded apart) is not worth a move: the captions skip it.
+    const sliver = clashes.every((clash) => clash.end - clash.start < CAPTION_BAND_FIT.sliver);
+    if (sliver) why = "";
+    if (picture && owner && !inPlaced && !sliver) {
       const rect = clashes[0].rect ?? picture.band;
       if (from <= 1) {
         const move = moveContent(picture, owner, rect);
@@ -396,7 +401,8 @@ function rectMoves(picture, scene, laid, band) {
 function placeCaptions(picture, scene, clashRect) {
   const { safe, gap, band } = picture;
   const duration = Number(picture.resolved.resolved?.duration ?? picture.resolved.format?.duration);
-  const start = round(Math.max(0, Number(scene.start))), end = round(Number.isFinite(duration) ? Math.min(duration, Number(scene.end)) : Number(scene.end));
+  // Rounded outward, so the zone covers the scene's whole time.
+  const start = Math.max(0, Math.floor(Number(scene.start) * 100) / 100), end = Math.ceil((Number.isFinite(duration) ? Math.min(duration, Number(scene.end)) : Number(scene.end)) * 100) / 100;
   if (!(end > start)) return null;
   const keyed = [...(picture.elements.get(scene.id) ?? []), ...picture.around(scene.id, start, end)]
     .filter((element) => (element.role === "text" || element.role === "hero") && !element.hidesCaptions && element.rect && element.rect.x < band.x + band.width && element.rect.x + element.rect.width > band.x);

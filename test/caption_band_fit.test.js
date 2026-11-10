@@ -200,3 +200,11 @@ test("captions are not moved twice for one clash: a zone already over it, or an 
   const own = { ...bandStory((scenes) => [scenes[5]]), overlays: [{ type: "captions", rect: { x: 65, y: 826, width: 853, height: 269 } }] };
   assert.match(fitCaptionBand(own, [mixClash], { resolve }).hidden[0], /the captions have a rect of their own$/);
 });
+
+test("a clash of a few milliseconds (two timings rounded apart) is hidden outright, with no move", () => {
+  const resolve = (story) => resolveChecked(story, { words: BAND_WORDS, style: bandStyle() });
+  const sliver = "layout: caption-band @15s [mix-text, captions] mix-text sits in the caption band 65,826 853×269 while captions are visible (15s–15.002s); move it or set hidesCaptions";
+  const fitted = fitCaptionBand(bandStory((scenes) => [scenes[5]]), [sliver], { resolve });
+  assert.deepEqual(fitted.changes, ["captions 14.98–15.02 s under mix-text"]);
+  assert.deepEqual(fitted.storyboard.overlays, [{ type: "captions", hide: [[14.98, 15.02]] }]);
+});
