@@ -55,27 +55,104 @@ const ANTHROPIC_RATES = [
 
 export const DEFAULT_MAX_COST_USD = 50;
 
+// A response asking for more output than this is not expected from any listed
+// model; a request that names no output limit is bounded by it.
+const UNSTATED_OUTPUT_TOKENS = 128_000;
+// No listed model reads one image as more tokens than this.
+const IMAGE_TOKEN_BOUND = 5_000;
+// A background response nothing has polled for this long was given up on.
+const STALE_BACKGROUND_MS = 120_000;
+const BACKGROUND_STATES = new Set(["queued", "in_progress"]);
+
+/**
+ * options: {fetch, limitUsd (null: no limit), now (ms; tests)}.
+ *
+ * The limit with calls in flight. A paid call is refused once the spending
+ * has reached the limit, as before. A call that would start beside others
+ * starts only when the most the calls in flight can still cost, plus the most
+ * it can cost itself (costBound), fits under the limit; otherwise it waits,
+ * in the order asked, until that is true or nothing else is in flight. So
+ * overlapping calls can never take the total past the limit: the one way past
+ * it is the last call of a run sent one at a time, by at most its own cost.
+ */
 export function createCostTracker(options = {}) {
   const originalFetch = options.fetch ?? globalThis.fetch;
   if (typeof originalFetch !== "function") throw new Error("Cost tracking requires fetch");
   const limitUsd = options.limitUsd ?? null;
+  const now = options.now ?? (() => Date.now());
   let limitError = null;
   const items = [];
   const seen = new Set();
   let anonymousId = 0;
+  // Paid calls in flight: token → {bound, id (a background response's, until it ends), seen}.
+  const inFlight = new Map();
+  const queue = [];
+  let staleTimer = null;
+
+  const spentUsd = () => summarize(items).total_usd;
+  const heldUsd = () => [...inFlight.values()].reduce((sum, entry) => sum + entry.bound, 0);
+
+  function pump() {
+    for (const [token, entry] of inFlight) if (entry.id && now() - entry.seen > STALE_BACKGROUND_MS) inFlight.delete(token);
+    while (queue.length) {
+      const head = queue[0];
+      const spent = spentUsd();
+      if (spent >= limitUsd) {
+        queue.shift();
+        head.reject(limitError = costLimitError(spent, limitUsd));
+        continue;
+      }
+      if (inFlight.size && spent + heldUsd() + head.bound > limitUsd) break;
+      queue.shift();
+      const token = Symbol("paid call");
+      inFlight.set(token, { bound: head.bound, id: null, seen: now() });
+      head.resolve(token);
+    }
+    // Only an abandoned background response can leave the queue waiting on nothing: look again when it goes stale.
+    clearTimeout(staleTimer);
+    staleTimer = queue.length && [...inFlight.values()].some((entry) => entry.id) ? setTimeout(pump, STALE_BACKGROUND_MS / 4) : null;
+  }
+  const admit = (bound) => new Promise((resolve, reject) => { queue.push({ bound, resolve, reject }); pump(); });
+  const settle = (token) => { if (inFlight.delete(token)) pump(); };
+
+  // An OpenAI background response is paid for when a later poll sees it end, so its share is held until then.
+  // → the calls this answer ends (settled once its cost is counted).
+  function watchBackground(token, payload) {
+    if (limitUsd == null || !payload?.id) return [];
+    if (token && BACKGROUND_STATES.has(payload.status)) {
+      const entry = inFlight.get(token);
+      if (entry) entry.id = String(payload.id);
+      return [];
+    }
+    const ended = [];
+    for (const [held, entry] of inFlight) {
+      if (entry.id !== String(payload.id)) continue;
+      entry.seen = now();
+      if (!BACKGROUND_STATES.has(payload.status)) ended.push(held);
+    }
+    return ended;
+  }
 
   async function trackedFetch(input, init) {
     const request = await describeRequest(input, init);
     // Only a POST to a paid provider starts new work; polling a background response must still finish it.
     // A web search is new paid work even as a GET (Brave).
-    if (limitUsd != null && (requestMethod(input, init) === "POST" || isWebSearch(request.url)) && providerForUrl(request.url) !== "unknown") {
-      const spent = summarize(items).total_usd;
-      if (spent >= limitUsd) throw (limitError = costLimitError(spent, limitUsd));
-    }
-    const response = await originalFetch(input, init);
-    if (!response?.ok) return response;
+    const gated = limitUsd != null && (requestMethod(input, init) === "POST" || isWebSearch(request.url)) && providerForUrl(request.url) !== "unknown";
+    const token = gated ? await admit(costBound(request)) : null;
+    let response;
     try {
-      const item = await lineItemFor(request, response);
+      response = await originalFetch(input, init);
+    } catch (error) {
+      settle(token);
+      throw error;
+    }
+    if (!response?.ok) {
+      settle(token);
+      return response;
+    }
+    let ended = [];
+    try {
+      const item = await lineItemFor(request, response, (payload) => { ended = watchBackground(token, payload); });
       if (item) {
         const key = item.request_id ? `${item.provider}:${item.request_id}` : `${item.provider}:anonymous:${anonymousId++}`;
         if (!seen.has(key)) {
@@ -92,6 +169,9 @@ export function createCostTracker(options = {}) {
         warning: `Cost classification failed: ${String(error?.message ?? error)}`
       }));
     }
+    // The call's cost is counted: its share is free, unless it is a background response still running.
+    if (token && !inFlight.get(token)?.id) settle(token);
+    for (const held of ended) settle(held);
     return response;
   }
 
@@ -102,6 +182,64 @@ export function createCostTracker(options = {}) {
     limitError: () => limitError,
     lineItems: () => structuredClone(items)
   };
+}
+
+/**
+ * The most one paid request can add to the tally, in USD, from the request
+ * alone: what lets calls overlap without passing the spending limit.
+ * Infinity when nothing in the request bounds it (the call then runs alone).
+ *
+ * A model call is its whole body read as input tokens (a token is never less
+ * than a byte; an attached image counts as IMAGE_TOKEN_BOUND) at the model's
+ * highest input rate, plus the output it may ask for at its highest output
+ * rate. An OpenRouter route that reports its own cost is bounded at the
+ * vendor's rates, as the tally prices it when it reports none.
+ */
+export function costBound(request) {
+  let url;
+  try { url = new URL(request.url); } catch { return 0; }
+  if (isOpenAi(url) || isOpenRouter(url) || isAnthropic(url)) {
+    const model = String(request.json?.model ?? "unknown").replace(isOpenRouter(url) ? /^[^/]+\// : /^$/, "");
+    const anthropic = isAnthropic(url) || (isOpenRouter(url) && (/^anthropic\//.test(String(request.json?.model ?? "")) || /^claude-/.test(model)));
+    const known = (anthropic ? ANTHROPIC_RATES : OPENAI_RATES).find((entry) => entry.pattern.test(model)) ?? FALLBACK_RATES[anthropic ? "anthropic" : "openai"];
+    const rates = known.longContext ?? known;
+    const input = Math.max(rates.input, rates.cacheWrite ?? 0, rates.cacheWrite1h ?? 0, rates.cacheWrite5m ?? 0);
+    const asked = Number(request.json?.max_output_tokens ?? request.json?.max_completion_tokens ?? request.json?.max_tokens);
+    const output = Number.isFinite(asked) && asked > 0 ? asked : UNSTATED_OUTPUT_TOKENS;
+    return (inputTokenBound(request) * input + output * rates.output) / 1_000_000;
+  }
+  if (isElevenLabs(url)) {
+    if (/\/text-to-speech\//.test(url.pathname)) return [...String(request.json?.text ?? "")].length / 1_000 * .1;
+    if (url.pathname.endsWith("/music")) {
+      const sections = request.json?.composition_plan?.sections ?? request.json?.composition_plan?.chunks;
+      const planMs = Array.isArray(sections) ? sections.reduce((sum, section) => sum + Number(section?.duration_ms ?? 0), 0) : 0;
+      const seconds = Number(request.json?.music_length_ms ?? planMs) / 1_000;
+      return Number.isFinite(seconds) ? seconds / 60 * .15 : Infinity;
+    }
+    // A transcription is priced from the audio's length, which the request does not state.
+    if (url.pathname.endsWith("/speech-to-text")) return Infinity;
+    return 0;
+  }
+  // A Tavily search is at most two credits (advanced); the others are one request.
+  if (isTavily(url)) return 2 * WEB_SEARCH_RATES.tavily;
+  if (isBrave(url)) return WEB_SEARCH_RATES.brave;
+  if (isSerper(url)) return WEB_SEARCH_RATES.serper;
+  return 0;
+}
+
+// The body's bytes, with each attached image counted as IMAGE_TOKEN_BOUND instead of its base64 text.
+function inputTokenBound(request) {
+  let saved = 0;
+  const visit = (value, parent) => {
+    if (typeof value === "string") {
+      const image = /^data:image\//.test(value) || (parent?.type === "base64" && /^image\//.test(String(parent.media_type ?? "")));
+      if (image && value.length > IMAGE_TOKEN_BOUND) saved += value.length - IMAGE_TOKEN_BOUND;
+    } else if (Array.isArray(value)) for (const item of value) visit(item, value);
+    else if (value && typeof value === "object") for (const item of Object.values(value)) visit(item, value);
+  };
+  if (request.bytes == null) return Infinity;
+  visit(request.json, null);
+  return Math.max(0, request.bytes - saved);
 }
 
 export function estimateOpenAiUsageCost(model, usage = {}) {
@@ -140,7 +278,7 @@ export function estimateModelUsageCost(provider, model, usage = {}) {
   };
 }
 
-// A runaway guard for one command: in-flight calls still finish, so the total can pass the limit by what they cost.
+// A runaway guard for one command: a call that started under the limit still finishes, so the total can pass it by that one call's cost (never by several in flight: createCostTracker).
 function costLimitError(spent, limit) {
   const error = new Error(`API spending reached the $${limit.toFixed(2)} limit for this command ($${spent.toFixed(2)} so far), so no new paid call was started. Raise it with --max-cost-usd <amount> or LAUNCHCLIP_MAX_COST_USD, or pass none to remove it.`);
   error.code = "LAUNCHCLIP_COST_LIMIT";
@@ -168,18 +306,33 @@ async function describeRequest(input, init = {}) {
   const body = init?.body;
   let json = null;
   let form = null;
-  if (typeof body === "string") json = parseJson(body);
+  // bytes: the body's size, 0 with no body, null when it cannot be read here (a form, a stream).
+  let bytes = body == null ? 0 : null;
+  if (typeof body === "string") { json = parseJson(body); bytes = Buffer.byteLength(body); }
+  else if (body instanceof Uint8Array || body instanceof ArrayBuffer) {
+    const text = Buffer.from(body).toString("utf8");
+    json = parseJson(text);
+    bytes = Buffer.byteLength(text);
+  }
   else if (isFormData(body)) form = Object.fromEntries([...body.entries()].filter(([, value]) => typeof value === "string"));
   else if (!body && input && typeof input !== "string" && !(input instanceof URL) && typeof input.clone === "function") {
     const contentType = input.headers?.get?.("content-type") ?? "";
-    if (contentType.includes("application/json")) json = parseJson(await input.clone().text());
+    if (contentType.includes("application/json")) {
+      const text = await input.clone().text();
+      json = parseJson(text);
+      bytes = Buffer.byteLength(text);
+    }
   }
-  return { url, json, form };
+  return { url, json, form, bytes };
 }
 
-async function lineItemFor(request, response) {
+async function lineItemFor(request, response, onOpenAi = null) {
   const url = new URL(request.url);
-  if (isOpenAi(url)) return openAiLineItem(request, await responseJson(response));
+  if (isOpenAi(url)) {
+    const payload = await responseJson(response);
+    onOpenAi?.(payload);
+    return openAiLineItem(request, payload);
+  }
   if (isOpenRouter(url)) return openRouterLineItem(request, await responseJson(response));
   if (isAnthropic(url)) return anthropicLineItem(request, await responseJson(response));
   if (isElevenLabs(url)) return elevenLabsLineItem(url, request, response);
