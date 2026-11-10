@@ -71,9 +71,23 @@ export const EXPRESSION_KEYWORDS = Object.freeze([
   ["delighted", ["delight", "thrill", "overjoy", "ecstat", "joy", "elat"]],
   ["happy", ["happy", "hopeful", "smil", "glad", "relie", "warm", "confident", "proud", "pleased", "content", "kind", "open", "understanding"]],
   ["surprised", ["surpris", "shock", "astonish", "stun", "startl", "amaz", "wide-eyed", "realis", "realiz"]],
-  ["frustrated", ["frustrat", "annoy", "angry", "anger", "defensive", "irritat", "accus", "upset", "exasperat", "indignant", "stubborn", "tense", "fed up", "hurt"]],
-  ["confused", ["confus", "wary", "unsure", "uncertain", "puzzl", "doubt", "hesitant", "skeptic", "sceptic", "suspicious", "lost"]],
-  ["focused", ["focus", "concentrat", "determin", "certain", "intent", "serious", "careful", "curious", "reflect", "thought", "attentive", "anticipat", "expectant"]]
+  ["frustrated", ["frustrat", "annoy", "defensive", "irritat", "accus", "upset", "exasperat", "indignant", "stubborn", "tense", "fed up", "hurt"]],
+  ["confused", ["confus", "wary", "unsure", "uncertain", "puzzl", "doubt", "hesitant", "lost"]],
+  ["focused", ["focus", "concentrat", "determin", "certain", "intent", "serious", "careful", "curious", "attentive", "anticipat", "expectant"]],
+  ["sad", ["sad", "unhappy", "disappoint", "glum", "miserable", "heartbroken", "lonely", "gloomy", "sorrow", "deject", "downcast", "griev"]],
+  ["crying", ["cry", "cries", "tears", "tearful", "sob", "weep"]],
+  ["worried", ["worr", "nervous", "anxious", "uneasy", "concern", "apprehens", "fret"]],
+  ["scared", ["scared", "afraid", "fear", "terrif", "frighten", "panic", "horrif", "alarm"]],
+  ["angry", ["angry", "anger", "furious", "fury", "rage", "raging", "livid", "outrage", "fuming"]],
+  ["deadpan", ["deadpan", "unimpress", "unamused", "bored", "blank", "expressionless", "flat\\b"]],
+  ["side-eye", ["side-eye", "side eye", "skeptic", "sceptic", "suspicious", "distrust", "dubious", "judging"]],
+  ["smirk", ["smirk", "smug", "sly", "cocky", "mischie", "knowing"]],
+  ["sheepish", ["sheepish", "embarrass", "awkward", "guilty", "apolog", "bashful", "shy"]],
+  ["in-love", ["in love", "in-love", "smitten", "ador", "infatuat", "lovestruck", "swoon"]],
+  ["excited", ["excit", "eager", "enthusias", "pumped"]],
+  ["laughing", ["laugh", "giggl", "chuckl", "hilari"]],
+  ["wink", ["wink", "playful", "cheeky", "flirt"]],
+  ["thinking", ["thinking", "thought", "reflect", "ponder", "wonder", "mull", "weigh"]]
 ]);
 
 export const SET_KEYWORDS = Object.freeze([
