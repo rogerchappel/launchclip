@@ -193,7 +193,8 @@ export function lipSyncGate({ resolved, words }) {
     let model;
     try { model = resolveModule(scene, resolved); } catch { continue; /* validation reports a bad module */ }
     const start = Number(scene.start), end = Number(scene.end);
-    const heard = timed.filter((word) => word.start >= start - 1e-6 && word.start < end - 1e-6).map((word) => ({ ...word, end: Math.min(word.end, end) }));
+    // The words heard during the scene, each cut to it: a word the cut falls inside is heard on both sides.
+    const heard = timed.filter((word) => word.end > start + 1e-6 && word.start < end - 1e-6).map((word) => ({ ...word, start: Math.max(word.start, start), end: Math.min(word.end, end) }));
     checked += 1;
     for (const actor of model?.content?.actors ?? []) {
       const open = mouthOpenSpans(actor.speech ?? [], start, end);

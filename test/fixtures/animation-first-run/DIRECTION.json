@@ -1,0 +1,471 @@
+{
+ "schema": "launchclip.direction-map.v1",
+ "profile": "explainer-motion",
+ "sections": [
+  {
+   "id": "s1",
+   "title": "Watching the gate",
+   "beat": "setup",
+   "layout": "full",
+   "lines": [
+    {
+     "line": "l1",
+     "words": [
+      0,
+      5
+     ],
+     "intent": "hook",
+     "treatment": "insert",
+     "scenes": [
+      "gate-wide"
+     ],
+     "set": "standing",
+     "cast": [
+      {
+       "id": "foal",
+       "pose": "look",
+       "expression": "thinking",
+       "at": "word:watched"
+      },
+      {
+       "id": "mare",
+       "pose": "stand",
+       "expression": "neutral",
+       "at": "word:gate"
+      }
+     ],
+     "action": {
+      "verb": "gaze-at",
+      "who": "foal",
+      "target": "the closed starting gate"
+     }
+    }
+   ]
+  },
+  {
+   "id": "s2",
+   "title": "Is time up?",
+   "beat": "problem",
+   "layout": "full",
+   "lines": [
+    {
+     "line": "l2",
+     "words": [
+      6,
+      9
+     ],
+     "intent": "claim",
+     "treatment": "insert",
+     "scenes": [
+      "foal-questions"
+     ],
+     "set": "standing",
+     "cast": [
+      {
+       "id": "foal",
+       "pose": "look",
+       "expression": "confused",
+       "at": "word:Why"
+      }
+     ],
+     "action": {
+      "verb": "gaze-at",
+      "who": "foal",
+      "target": "the closed gate"
+     }
+    },
+    {
+     "line": "l2",
+     "words": [
+      10,
+      13
+     ],
+     "intent": "claim",
+     "treatment": "insert",
+     "scenes": [
+      "foal-questions"
+     ],
+     "set": "standing",
+     "cast": [
+      {
+       "id": "foal",
+       "pose": "look",
+       "expression": "worried",
+       "at": "word:time"
+      }
+     ],
+     "action": {
+      "verb": "turn-to-look",
+      "who": "foal",
+      "target": "mare offscreen"
+     }
+    },
+    {
+     "line": "l3",
+     "words": [
+      14,
+      20
+     ],
+     "intent": "claim",
+     "treatment": "insert",
+     "scenes": [
+      "foal-steps-back"
+     ],
+     "set": "standing",
+     "cast": [
+      {
+       "id": "foal",
+       "pose": "walk",
+       "expression": "worried",
+       "at": "word:stepped"
+      },
+      {
+       "id": "mare",
+       "pose": "look",
+       "expression": "worried",
+       "at": "word:back"
+      }
+     ],
+     "action": {
+      "verb": "walk-to",
+      "who": "foal",
+      "target": "a spot just back from the closed gate"
+     }
+    },
+    {
+     "line": "l4",
+     "words": [
+      21,
+      26
+     ],
+     "intent": "claim",
+     "treatment": "insert",
+     "scenes": [
+      "foal-steps-back"
+     ],
+     "set": "standing",
+     "cast": [
+      {
+       "id": "foal",
+       "pose": "look",
+       "expression": "worried",
+       "at": "word:home"
+      },
+      {
+       "id": "mare",
+       "pose": "lean-in",
+       "expression": "focused",
+       "at": "word:home"
+      }
+     ],
+     "action": {
+      "verb": "gaze-at",
+      "who": "foal",
+      "target": "mare"
+     }
+    }
+   ]
+  },
+  {
+   "id": "s3",
+   "title": "The run can begin",
+   "beat": "turn",
+   "layout": "full",
+   "lines": [
+    {
+     "line": "l5",
+     "words": [
+      27,
+      27
+     ],
+     "intent": "claim",
+     "treatment": "insert",
+     "scenes": [
+      "mare-reassures"
+     ],
+     "set": "standing",
+     "cast": [
+      {
+       "id": "mare",
+       "pose": "look",
+       "expression": "happy",
+       "at": "word:No"
+      }
+     ],
+     "action": {
+      "verb": "gaze-at",
+      "who": "mare",
+      "target": "foal offscreen"
+     }
+    },
+    {
+     "line": "l5",
+     "words": [
+      28,
+      34
+     ],
+     "intent": "process",
+     "treatment": "insert",
+     "scenes": [
+      "mare-reassures"
+     ],
+     "set": "standing",
+     "cast": [
+      {
+       "id": "mare",
+       "pose": "point",
+       "expression": "happy",
+       "at": "word:opens"
+      }
+     ],
+     "action": {
+      "verb": "point-at",
+      "who": "mare",
+      "target": "the still-closed starting gate"
+     }
+    },
+    {
+     "line": "l6",
+     "words": [
+      35,
+      41
+     ],
+     "intent": "turn",
+     "treatment": "insert",
+     "scenes": [
+      "foal-hopeful"
+     ],
+     "set": "standing",
+     "cast": [
+      {
+       "id": "foal",
+       "pose": "lean-in",
+       "expression": "surprised",
+       "at": "word:So"
+      }
+     ],
+     "action": {
+      "verb": "turn-to-look",
+      "who": "foal",
+      "target": "mare offscreen"
+     }
+    }
+   ]
+  },
+  {
+   "id": "s4",
+   "title": "Ready to start",
+   "beat": "resolution",
+   "layout": "full",
+   "lines": [
+    {
+     "line": "l7",
+     "words": [
+      42,
+      44
+     ],
+     "intent": "claim",
+     "treatment": "insert",
+     "scenes": [
+      "mare-encourages"
+     ],
+     "set": "standing",
+     "cast": [
+      {
+       "id": "mare",
+       "pose": "look",
+       "expression": "happy",
+       "at": "word:Not"
+      }
+     ],
+     "action": {
+      "verb": "gaze-at",
+      "who": "mare",
+      "target": "foal offscreen"
+     }
+    },
+    {
+     "line": "l7",
+     "words": [
+      45,
+      49
+     ],
+     "intent": "claim",
+     "treatment": "insert",
+     "scenes": [
+      "mare-encourages"
+     ],
+     "set": "standing",
+     "cast": [
+      {
+       "id": "mare",
+       "pose": "point",
+       "expression": "happy",
+       "at": "word:start"
+      }
+     ],
+     "action": {
+      "verb": "point-at",
+      "who": "mare",
+      "target": "the still-closed gate"
+     }
+    },
+    {
+     "line": "l8",
+     "words": [
+      50,
+      56
+     ],
+     "intent": "claim",
+     "treatment": "insert",
+     "scenes": [
+      "foal-realizes"
+     ],
+     "set": "standing",
+     "cast": [
+      {
+       "id": "foal",
+       "pose": "look",
+       "expression": "thinking",
+       "at": "word:looked"
+      },
+      {
+       "id": "mare",
+       "pose": "look",
+       "expression": "happy",
+       "at": "word:again"
+      }
+     ],
+     "action": {
+      "verb": "turn-to-look",
+      "who": "foal",
+      "target": "the closed starting gate"
+     }
+    },
+    {
+     "line": "l9",
+     "words": [
+      57,
+      63
+     ],
+     "intent": "personal",
+     "treatment": "insert",
+     "scenes": [
+      "foal-realizes",
+      "gate-opens"
+     ],
+     "set": "standing",
+     "cast": [
+      {
+       "id": "foal",
+       "pose": "cheer",
+       "expression": "delighted",
+       "at": "word:run"
+      },
+      {
+       "id": "mare",
+       "pose": "look",
+       "expression": "delighted",
+       "at": "word:run"
+      }
+     ],
+     "action": {
+      "verb": "cheer",
+      "who": "foal",
+      "target": "the closed gate"
+     }
+    },
+    {
+     "line": "l11",
+     "words": [
+      64,
+      65
+     ],
+     "intent": "claim",
+     "treatment": "insert",
+     "scenes": [
+      "mare-playful"
+     ],
+     "set": "standing",
+     "cast": [
+      {
+       "id": "mare",
+       "pose": "look",
+       "expression": "happy",
+       "at": "word:right"
+      },
+      {
+       "id": "foal",
+       "pose": "look",
+       "expression": "delighted",
+       "at": "word:right"
+      }
+     ],
+     "action": {
+      "verb": "gaze-at",
+      "who": "mare",
+      "target": "foal"
+     }
+    },
+    {
+     "line": "l11",
+     "words": [
+      66,
+      69
+     ],
+     "intent": "process",
+     "treatment": "insert",
+     "scenes": [
+      "mare-playful"
+     ],
+     "set": "standing",
+     "cast": [
+      {
+       "id": "mare",
+       "pose": "point",
+       "expression": "happy",
+       "at": "word:step"
+      },
+      {
+       "id": "foal",
+       "pose": "walk",
+       "expression": "focused",
+       "at": "word:another"
+      }
+     ],
+     "action": {
+      "verb": "walk-to",
+      "who": "foal",
+      "target": "another small step toward the open gate"
+     }
+    },
+    {
+     "line": "l12",
+     "words": [
+      70,
+      76
+     ],
+     "intent": "claim",
+     "treatment": "insert",
+     "scenes": [
+      "foal-ready"
+     ],
+     "set": "standing",
+     "cast": [
+      {
+       "id": "foal",
+       "pose": "stand",
+       "expression": "excited",
+       "at": "word:ready"
+      }
+     ],
+     "action": {
+      "verb": "gaze-at",
+      "who": "foal",
+      "target": "the open starting gate"
+     }
+    }
+   ]
+  }
+ ]
+}

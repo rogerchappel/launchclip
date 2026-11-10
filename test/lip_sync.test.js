@@ -213,13 +213,16 @@ test('lip-sync gate: fails a scene whose speaking character\'s mouth does not mo
   const passed = gate([{id: 'maya', says: 'auto'}, {id: 'theo', says: 'auto'}]);
   assert.equal(passed.status, 'passed', passed.errors?.join('\n'));
   assert.deepEqual([passed.scenes, passed.lines, passed.findings], [1, 2, []]);
-  // Theo's scene entry leaves `says` out: his line plays over a still mouth.
-  const silent = gate([{id: 'maya', says: 'auto'}, {id: 'theo'}]);
+  // Theo's scene entry leaves `says` out: his mouth still moves on his own words.
+  const left = gate([{id: 'maya', says: 'auto'}, {id: 'theo'}]);
+  assert.equal(left.status, 'passed', left.errors?.join('\n'));
+  // An empty `says` keeps his mouth shut: his line plays over a still mouth.
+  const silent = gate([{id: 'maya', says: 'auto'}, {id: 'theo', says: []}]);
   assert.equal(silent.status, 'failed');
   assert.deepEqual(silent.findings.map(finding => [finding.rule, finding.scene, finding.character, finding.at, finding.end]), [['mouth-closed', 'talk', 'theo', 2.6, 3]]);
   assert.match(silent.errors[0], /talk: theo says "Why\?" \(2\.6–3 s\) with its mouth closed; give it says: "auto"/);
   // Nobody's mouth moves at all.
-  const still = gate([{id: 'maya'}, {id: 'theo'}]);
+  const still = gate([{id: 'maya', says: []}, {id: 'theo', says: []}]);
   assert.deepEqual(still.findings.map(finding => [finding.rule, finding.character]), [['mouth-closed', 'maya'], ['mouth-closed', 'theo']]);
   // Maya's mouth is timed to Theo's line as well as her own: open with no speech of hers under it.
   const wrong = gate([{id: 'maya', says: [{from: 0.5, to: 3.6}]}, {id: 'theo', says: 'auto'}]);
