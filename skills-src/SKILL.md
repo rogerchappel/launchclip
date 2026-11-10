@@ -26,6 +26,8 @@ Read a reference when its step comes up, not all at once.
   `DIRECTION.json` you write before the storyboard: an intent and a treatment
   for every narration line, the shared intent rules, and what `story validate`
   checks.
+- [references/animation.md](references/animation.md): the animation branch:
+  script, show bible, shot list, animatic, retakes and the two approval stops.
 - [references/profiles.md](references/profiles.md): the cadence profiles
   (coverage, face time, pacing and motion bands per format) that the map and
   the gates measure against.
