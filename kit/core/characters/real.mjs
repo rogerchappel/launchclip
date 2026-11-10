@@ -281,7 +281,7 @@ function faceMark(ctx, kind) {
   // Beside the eye, below where the hair comes down over the temple.
   if (kind === 'sweat') return drop(rx * 0.74, look.eyeY - look.eh * 0.5, k * 0.5);
   if (kind === 'anger') {
-    const x = rx * 0.74, y = look.eyeY - look.eh * 1.1, u = k * 0.5;
+    const x = rx * 0.64, y = look.eyeY - look.eh * 1.3, u = k * 0.46;
     const arm = (ax, ay) => `M${r1(x + ax * 10 * u)} ${r1(y + ay * 3 * u)}Q${r1(x + ax * 3 * u)} ${r1(y + ay * 3 * u)} ${r1(x + ax * 3 * u)} ${r1(y + ay * 10 * u)}`;
     return [strokeLine(`${arm(-1, -1)}${arm(1, -1)}${arm(1, 1)}${arm(-1, 1)}`, '#c8323c', 2.6 * u)];
   }

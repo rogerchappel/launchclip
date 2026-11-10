@@ -95,6 +95,36 @@ test('cast-styles: a sheet for every style builds from the same cast', async () 
   }
 });
 
+test('expressions: every one draws its own face in every style, and the sheet shows them all', async () => {
+  const {params} = starterCharacter('maya');
+  const {colors} = characterLook(params, {});
+  assert.ok(EXPRESSIONS.length >= 20, 'enough expressions to act a story');
+  for (const style of DRAWING_STYLES) {
+    const joints = poseJoints('stand', {geometry: styleGeometry(style, params)});
+    const faces = new Map();
+    for (const expression of EXPRESSIONS) {
+      // The op-list drawing: the face group with its closed and open mouths.
+      const drawing = drawCharacter(style, params, colors, {id: 'c', joints, expression, expressions: [expression]});
+      let face = null;
+      const walk = node => { if (!node || typeof node !== 'object') return; if (node.id === `c-face-${expression}`) face = node; (node.children ?? []).forEach(walk); };
+      walk(drawing);
+      assert.ok(face, `${style} draws a face for ${expression}`);
+      const ids = [];
+      const collect = node => { if (!node || typeof node !== 'object') return; if (node.id) ids.push(node.id); (node.children ?? []).forEach(collect); };
+      collect(face);
+      for (const part of ['eyes', 'mouth', 'open']) assert.ok(ids.includes(`c-${part}-${expression}`), `${style} ${expression} has its ${part}`);
+      // Ids aside (clip paths and gradients carry the expression's name), no two faces are the same drawing.
+      const shape = JSON.stringify(face).replace(/"(id|clipPath)":"[^"]*",?/g, '').replaceAll(expression, '');
+      for (const [other, seen] of faces) assert.notEqual(shape, seen, `${style}: ${expression} draws differently from ${other}`);
+      faces.set(expression, shape);
+    }
+  }
+  const {expressionSheetHtml} = await import('../scripts/cast-styles.mjs');
+  const html = expressionSheetHtml('chibi', 'maya');
+  for (const expression of EXPRESSIONS) assert.ok(html.includes(`<figcaption>${expression}</figcaption>`), `the sheet shows ${expression}`);
+  assert.ok(!/undefined|NaN/.test(html));
+});
+
 test('stick-classic: black and white only (ink lines, paper head), coloured stick unchanged beside it', () => {
   assert.ok(DRAWING_STYLES.includes('stick') && DRAWING_STYLES.includes('stick-classic'));
   for (const id of ['maya', 'kwame', 'fatima', 'nia']) {
