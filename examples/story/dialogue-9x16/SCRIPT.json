@@ -1,0 +1,39 @@
+{
+  "schema_version": "launchclip.make-script.v2",
+  "title": "Test the rollback",
+  "logline": "Maya is about to ship on a Friday; Sam asks the one question she skipped.",
+  "premise": { "want": "ship before the weekend", "obstacle": "a rollback nobody has tested", "change": "she tests before she ships" },
+  "characters": [
+    { "id": "maya", "role": "lead", "want": "to ship and go home", "speech": "short, sure of herself" },
+    { "id": "sam", "role": "foil", "want": "a quiet weekend for both of them", "speech": "calm, a little dry" }
+  ],
+  "beats": [
+    { "beat": "setup", "place": "desk-laptop",
+      "lines": [
+        { "id": "l1", "speaker": "narrator", "text": "Maya is about to ship on a Friday." }
+      ] },
+    { "beat": "problem", "place": "standing",
+      "lines": [
+        { "id": "l2", "speaker": "sam", "text": "Did you test the rollback?", "playing": "light, as if in passing" },
+        { "id": "l3", "speaker": "maya", "text": "It worked last month.", "playing": "breezy" },
+        { "id": "l4", "speaker": null, "action": "Sam says nothing and waits.", "seconds": 1 }
+      ] },
+    { "beat": "attempt", "place": "standing",
+      "lines": [
+        { "id": "l5", "speaker": "maya", "text": "Fine. One quick test.", "playing": "giving in" }
+      ] },
+    { "beat": "turn", "place": "desk-laptop",
+      "lines": [
+        { "id": "l6", "speaker": null, "action": "Maya runs the rollback. It fails.", "seconds": 1.2 },
+        { "id": "l7", "speaker": "maya", "text": "Oh. It's broken.", "playing": "quiet" },
+        { "id": "l8", "speaker": "sam", "text": "Better now than at midnight.", "playing": "kind, from behind her" }
+      ] },
+    { "beat": "resolution", "place": "standing",
+      "lines": [
+        { "id": "l9", "speaker": "narrator", "text": "Ten minutes of testing saved her weekend." },
+        { "id": "l10", "speaker": "sam", "text": "Test the rollback. Then ship.", "playing": "to us, the moral" }
+      ] }
+  ],
+  "narration": "Maya is about to ship on a Friday. Did you test the rollback? It worked last month. Fine. One quick test. Oh. It's broken. Better now than at midnight. Ten minutes of testing saved her weekend. Test the rollback. Then ship.",
+  "title_options": ["Test the rollback", "She almost shipped on a Friday", "The ten-minute test that saved a weekend", "It worked last month", "Better now than at midnight"]
+}

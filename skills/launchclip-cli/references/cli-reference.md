@@ -1595,6 +1595,12 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip story compile <project> --renderer hyperframes|remotion [--out dir]
   ```
 
+- `story shots`: Print a character story's shot list, a view of storyboard.json and DIRECTION.json: each character scene with its time and frames, who is in it, the set and framing, the key action, the pose each character opens in and every change, and the lines said while it is up (the script line id, the speaker, and whether the speaker is on screen). Lines of SCRIPT.json that no map line plays are listed after the shots. --json prints the same as data, for an agent to review or a host to plan from.
+
+  ```text
+  launchclip story shots <project> [--direction DIRECTION.json] [--json]
+  ```
+
 - `story long-form`: Give a long video its structure: chapters from DIRECTION.json's sections, an opening promise, a section card at each chapter start and a progress line with chapter ticks. Rewrites storyboard.json and DIRECTION.json; safe to run again.
 
   ```text

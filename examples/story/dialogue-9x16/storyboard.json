@@ -1,0 +1,71 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Test the rollback: a two-character dialogue",
+  "lane": "voiceover-motion",
+  "format": {"width": 1080, "height": 1920, "fps": 30, "duration": 20.5, "platform": "youtube-shorts"},
+  "brand": {
+    "colors": {"bg": "#14122b", "primary": "#6d5dfc", "accent": "#ffb547", "ink": "#14122b", "paper": "#f6f3ee"},
+    "fonts": {"display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono"}
+  },
+  "cast": {
+    "style": "flat",
+    "characters": [
+      {"id": "maya", "voice": "af_heart", "position": "left"},
+      {"id": "sam", "voice": "am_michael", "position": "right"}
+    ]
+  },
+  "audio": {
+    "words": "NARRATION.json",
+    "narration": {
+      "provider": "kokoro",
+      "voice": "bf_emma",
+      "lines": [
+        {"speaker": "narrator", "text": "Maya is about to ship on a Friday."},
+        {"speaker": "sam", "text": "Did you test the rollback?"},
+        {"speaker": "maya", "text": "It worked last month.", "gap": 1},
+        {"speaker": "maya", "text": "Fine. One quick test.", "gap": 1.2},
+        {"speaker": "maya", "text": "Oh. It's broken."},
+        {"speaker": "sam", "text": "Better now than at midnight."},
+        {"speaker": "narrator", "text": "Ten minutes of testing saved her weekend."},
+        {"speaker": "sam", "text": "Test the rollback. Then ship."}
+      ]
+    }
+  },
+  "scenes": [
+    {"id": "desk", "module": "cast-scene", "start": 0, "end": "word:Did-0.25",
+      "params": {"set": "desk-laptop", "cast": [
+        {"id": "maya", "pose": "type", "expression": "focused"}
+      ]}},
+    {"id": "ask", "module": "cast-scene", "start": "word:Did-0.25", "end": "word:Oh.-1",
+      "params": {"set": "standing", "cast": [
+        {"id": "maya", "pose": "stand", "expression": "neutral", "says": "auto", "cues": [
+          {"at": "word:It", "pose": "shrug", "expression": "happy"},
+          {"at": "word:Fine.", "pose": "hands-on-hips", "expression": "frustrated"}
+        ]},
+        {"id": "sam", "pose": "stand", "expression": "neutral", "says": "auto", "cues": [
+          {"at": "word:Did", "pose": "think", "expression": "happy"},
+          {"at": "word:month.", "pose": "arms-crossed", "expression": "neutral"}
+        ]}
+      ]}},
+    {"id": "test", "module": "cast-scene", "start": "word:Oh.-1", "end": "word:Ten-0.25",
+      "params": {"set": "desk-laptop", "shot": "medium", "cast": [
+        {"id": "maya", "pose": "type", "expression": "focused", "says": "auto", "cues": [
+          {"at": "word:Oh.", "pose": "slump", "expression": "surprised"},
+          {"at": "word:Better", "pose": "think", "expression": "frustrated"}
+        ]}
+      ]}},
+    {"id": "saved", "module": "cast-scene", "start": "word:Ten-0.25", "end": "word:Test#3-0.25",
+      "params": {"set": "standing", "cast": [
+        {"id": "maya", "pose": "stand", "expression": "happy", "cues": [
+          {"at": "word:saved", "pose": "cheer", "expression": "delighted"}
+        ]},
+        {"id": "sam", "pose": "arms-crossed", "expression": "happy"}
+      ]}},
+    {"id": "close", "module": "character-cameo", "start": "word:Test#3-0.25", "end": 20.2,
+      "params": {"character": "sam", "pose": "stand", "expression": "happy", "side": "left", "says": "auto",
+        "card": {"kicker": "Before you ship", "title": "Test the rollback", "body": "Ten minutes now, or midnight later."},
+        "cues": [{"at": "word:Then", "pose": "point", "expression": "delighted"}]}}
+  ],
+  "overlays": [{"type": "captions", "style": "word-highlight"}],
+  "ending": {"final": "hold"}
+}

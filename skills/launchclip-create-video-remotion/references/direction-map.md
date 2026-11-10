@@ -22,6 +22,7 @@ Write `DIRECTION.json` (launchclip.direction-map.v1) beside `storyboard.json` be
 - dress and insert lines name the scene ids that will show them ("scenes": ["s3"]); face and camera lines give a short why ("the turn lands on his face").
 - Dress every line whose intent calls for a visual (hook, claim, problem, proof, number, list, process, product, quote, cta) unless it works better on the presenter, and then say why. A character story's lines may add cast cues ({id, pose, expression, at: "word:<text>"}) and a set.
 - A character story's line with cast cues names its key action, and every beat (section) has at least one: action {verb: look-far | turn-to-look | gaze-at | point-at | walk-to | stand-up | stretch | a pose, who, target?}. It is what a character does on screen to show the line (looking far away, standing up, pointing at the proof). The acting gate fails when no cast scene performs it on that line.
+- A character story keeps a speaking character on screen: while a character (not the narrator) speaks a line, a scene that draws that character is up for those words. To hold the picture elsewhere (the listener's reaction, a prop), give the line a why ("we stay on Maya as it sinks in"). A line may also carry line: the id of the script line it plays (SCRIPT.json, "l3") when the story has a script; the word range stays the source of timing.
 
 ## Intent rules (first match wins)
 
@@ -44,6 +45,9 @@ Write `DIRECTION.json` (launchclip.direction-map.v1) beside `storyboard.json` be
 
 A story told by characters uses story beats as sections (`beat`: setup, problem, attempt, turn, resolution, cta), and each line says who acts: `cast: [{id, pose, expression, at: "word:<text>"}]` and a `set`. Cast cues name characters from the story's cast and poses, expressions and sets from the character kit; validation checks them when the kit is present.
 Each line with cast cues names its key action, `action: {verb, who, target?}` (an acting cue such as look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch, or a pose), and each beat names at least one. If the idea is an action, someone does it on screen, toward what it is about. `launchclip finish` fails the acting gate when no cast scene performs it on its line.
+With a script (`SCRIPT.json`, speakers and silent lines), give each line `line`: the id of the script line it plays, e.g. `"line": "l3"`. Validation checks the id names a spoken line of the script and that the words in its range are voiced by that line's speaker. A script line may be played by more than one map line; a silent line (`speaker: null`) is played by no map line, so act it with a cue in the pause it leaves.
+While a character speaks, a scene that draws that character is on screen: every spoken word (its midpoint) falls inside a `cast-scene`, `character-cameo` or `sprite-scene` with the speaker in it. A line whose picture stays elsewhere says so in `why` (`"why": "we stay on Maya's reaction"`); without one, `story validate` and the direction gate fail it. The narrator is never held to this.
+`launchclip story shots <project> [--json]` prints the shot list from the two files: each character scene with its time and frames, who is in it, the set and framing, the key actions, every pose change, and the lines said while it is up (script line id, speaker, on screen or off). Read it before rendering: a shot with nothing said, a speaker off screen, or a script line no map line plays shows there.
 
 ## Long form
 

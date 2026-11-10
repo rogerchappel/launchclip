@@ -4454,6 +4454,75 @@ entry that names a starter or a saved character by id matches while that
 character is unchanged. A story that names no bible in a project with no
 frozen bible skips the gate.
 
+### Shot fields (`kit/core/direction.mjs`, `src/story_shots.js`)
+
+There is no shot-list file. A shot is a character scene in
+`storyboard.json`, and `DIRECTION.json` says why it exists
+(`docs/ANIMATION_PIPELINE_RFC.md` §4.3). Two things make the pair read as a
+shot list.
+
+**`line` on a map line.** A direction-map line may carry `"line": "l3"`,
+the id of the `SCRIPT.json` line it plays (`beats[].lines[].id`). The word
+range stays the source of truth for timing. `validateDirection` checks the
+shape always, and with `options.script` (the project's `SCRIPT.json`, which
+`story validate` reads from beside the storyboard):
+
+- the id names a line of the script (error);
+- the line is spoken: a silent line (`speaker: null`) has no words, so no
+  map line plays it (error);
+- the words in the range are voiced by that line's speaker, when the words
+  carry speakers (error);
+- the words read as part of the script line's text (warning).
+
+Several map lines may name one script line (a long line cut into two
+shots).
+
+**The speaker is on screen.** In a narrative map (sections with a `beat`),
+while a character speaks, a scene that draws that character is up. A word
+is a character's when its `speaker` (on the narration word) is not
+`"narrator"`; words with no speaker take the speaker of the script line the
+map line names. A spoken word is on screen when its midpoint falls inside a
+`cast-scene`, `character-cameo` or `sprite-scene` whose cast has the
+speaker. A line with any word off screen is an error unless it has a `why`
+(`"why": "we stay on Maya's reaction"`). The check needs the resolved
+storyboard and the narration words, so it runs in `story validate`, the
+planner's storyboard pass and finish's direction gate, and not while
+`deferScenes` is set. Only `story validate` passes the script today.
+
+```js
+export const NARRATOR = 'narrator';
+export function scriptLines(script)   // → [{id, speaker | null, text?, action?, seconds?, playing?, beat}]
+export function sceneCharacters(scene) // → [id]: who a resolved scene draws
+export function offScreenSpeech(line, {words, story, script})
+// → [{speaker, words: [first, last], count, text, start, end, missing: [index], missing_text}]
+```
+
+`scriptLines` reads `SCRIPT.json` loosely (lines without an id are left
+out, so a version 1 script gives `[]`); the script's own contract and
+validator are `kit/core/screenplay.mjs`.
+
+**`launchclip story shots <project> [--direction file] [--json]`** prints
+the shot list (`shotList(resolved, {map, words, script})` in
+`src/story_shots.js`). A shot is a character scene on track 0, or on any
+track outside the footage-led lane (a cast standing on track 1 over a world
+plate is a shot; a cameo over the presenter is an overlay). Per shot:
+
+| Field | Meaning |
+| --- | --- |
+| `id`, `shot`, `module`, `track` | the scene id, its number in time order, its module and track |
+| `start`, `end`, `seconds` | story seconds |
+| `frames`, `first_frame`, `last_frame` | how many frames, and the range at the story's fps; shots that meet share no frame |
+| `who`, `set`, `framing` | character ids, the set, and the shot the module resolves to (`wide`, `medium`, `close`), defaults included |
+| `sections`, `beats`, `actions` | the map sections and story beats over it, and the key actions of the lines that name it (`{verb, who, target?, line?}`) |
+| `poses` | `{<id>: [{at, frame, pose, expression, action?, shot?}]}`: the state each character opens in and every change, from the resolved module (what both renderers draw) |
+| `lines` | what is said while the shot is up: `{line?, speaker, on_screen, text, words, start, end, section, beat, intent, why?, playing?}`. A word belongs to the shot its midpoint falls in, so a line cut across two shots is listed in both with its own words. `on_screen` is false for the narrator |
+
+The report also carries `fps`, `duration`, the files it read, and with a
+script `script_lines: {lines, played, unplaced: [...]}`: the script lines no
+map line plays, which always includes the silent ones. Without a map, lines
+are grouped by speaker. The command prints text; `--json` prints the report.
+`examples/story/dialogue-9x16` is a two-character dialogue with a script.
+
 ### Sprite casts (`cast.sprites.json`, `launchclip cast sprites`)
 
 ```json

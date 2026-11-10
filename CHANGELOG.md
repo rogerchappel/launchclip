@@ -20,6 +20,16 @@
 
 ### Added
 
+- Shot fields for character stories. A direction-map line may name the
+  script line it plays (`"line": "l3"`, checked against `SCRIPT.json`). In a
+  story told in beats, a character who speaks must be in a scene on screen
+  for those words, unless the line says why the picture stays elsewhere.
+  `launchclip story shots <project> [--json]` prints the shot list from
+  `storyboard.json` and `DIRECTION.json`: each character scene with its
+  frames, who is in it, the set and framing, key actions, pose changes and
+  the lines said. `examples/story/dialogue-9x16` is a two-character dialogue
+  with a script.
+
 - `launchclip doctor --models` reports what your keys cover before you
   spend anything: whether you have a model that can write (script, cast,
   storyboard) and one that can see (the critic), and what to set if not. It

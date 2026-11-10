@@ -129,3 +129,157 @@ test("a narrative map names the key action of every line with cast cues, and of 
   // A map without beats (not narrative) needs no action.
   assert.deepEqual(validateDirection({ schema: "launchclip.direction-map.v1", sections: [{ id: "s", lines: [line({})] }] }, { words, deferScenes: true }).errors, []);
 });
+
+// Shot fields (docs/ANIMATION_PIPELINE_RFC.md §4.3): a map line names its
+// script line, a speaking character is on screen, and the shot list.
+const DIALOGUE = fileURLToPath(new URL("../examples/story/dialogue-9x16/", import.meta.url));
+const dialogue = async () => {
+  const read = async (name) => JSON.parse(await readFile(`${DIALOGUE}${name}`, "utf8"));
+  return {
+    map: await read("DIRECTION.json"),
+    script: await read("SCRIPT.json"),
+    words: (await read("NARRATION.json")).words,
+    story: (await runStoryCommand("resolve", `${DIALOGUE}storyboard.json`)).story_resolved
+  };
+};
+const mapLine = (map, id) => map.sections.flatMap((section) => section.lines).find((line) => line.line === id);
+
+test("the dialogue example validates, with a script line id on every map line", async () => {
+  const report = await runStoryCommand("validate", `${DIALOGUE}storyboard.json`);
+  assert.deepEqual(report.errors, []);
+  assert.equal(report.direction.status, "valid");
+  const { map, script } = await dialogue();
+  const { scriptLines } = await import("@launchclip/core/direction.mjs");
+  const spoken = scriptLines(script).filter((line) => line.speaker !== null).map((line) => line.id);
+  assert.deepEqual(map.sections.flatMap((section) => section.lines.map((line) => line.line)), spoken, "each spoken script line is played once, in order");
+  // The voice lines the storyboard carries are the script's spoken lines.
+  const story = JSON.parse(await readFile(`${DIALOGUE}storyboard.json`, "utf8"));
+  assert.deepEqual(story.audio.narration.lines.map(({ speaker, text }) => ({ speaker, text })), scriptLines(script).filter((line) => line.speaker !== null).map(({ speaker, text }) => ({ speaker, text })));
+});
+
+test("a map line's line names a spoken line of the script, said by the same speaker", async () => {
+  const { map, script, words, story } = await dialogue();
+  const check = (edit, options = {}) => {
+    const copy = structuredClone(map);
+    edit(copy);
+    return validateDirection(copy, { words, story, script, ...options });
+  };
+  assert.deepEqual(check(() => {}).errors, []);
+  assert.match(check((copy) => { mapLine(copy, "l2").line = ""; }).errors.join("\n"), /\.line must be the id of the script line it plays/);
+  assert.match(check((copy) => { mapLine(copy, "l2").line = "l99"; }).errors.join("\n"), /\.line "l99" is not a line of the script \(l1, l2/);
+  assert.match(check((copy) => { mapLine(copy, "l2").line = "l4"; }).errors.join("\n"), /\.line "l4" is a silent line of the script/);
+  assert.match(check((copy) => { mapLine(copy, "l3").line = "l2"; }).errors.join("\n"), /\.line "l2" is spoken by sam in the script, but its words \[13, 16\] are voiced by maya/);
+  // The same speaker, other words: a warning to check the range.
+  assert.match(check((copy) => { mapLine(copy, "l5").line = "l7"; }).warnings.join("\n"), /\.line "l7" reads "Oh\. It's broken\." in the script, but its words \[17, 20\] say "Fine\. One quick test\."/);
+  // Without a script the id is only checked for shape.
+  assert.deepEqual(check((copy) => { mapLine(copy, "l2").line = "l99"; }, { script: undefined }).errors, []);
+});
+
+test("a line a character speaks off screen fails unless it says why", async () => {
+  const { map, script, words, story } = await dialogue();
+  // l8: Sam speaks over Maya's reaction shot, and the line says why.
+  assert.ok(mapLine(map, "l8").why);
+  assert.deepEqual(validateDirection(map, { words, story, script }).errors, []);
+  const silent = structuredClone(map);
+  delete mapLine(silent, "l8").why;
+  const errors = validateDirection(silent, { words, story, script }).errors;
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /sections\[3\] \(turn\)\.lines\[1\]: sam speaks words \[24, 28\] \("Better now than at midnight\.", [\d.]+–[\d.]+ s\), but no scene with sam is on screen then; put sam in a character scene over the line, or say why/);
+  // The narrator is never on screen, and a map without story beats is not held to the rule.
+  assert.equal(errors.some((error) => /narrator speaks/.test(error)), false);
+  const plain = structuredClone(silent);
+  for (const section of plain.sections) delete section.beat;
+  assert.deepEqual(validateDirection(plain, { words, story, script }).errors, []);
+  // While the storyboard is not planned yet there are no scenes to check.
+  assert.deepEqual(validateDirection(silent, { words, script, lane: "voiceover-motion", deferScenes: true }).errors, []);
+  // Part of a line: the character leaves before the line ends.
+  const short = structuredClone(story);
+  short.scenes.find((scene) => scene.id === "ask").end = words[18].start - 0.01;
+  assert.match(validateDirection(map, { words, story: short, script }).errors.join("\n"), /maya speaks words \[17, 20\] .* but no scene with maya is on screen for 3 of those 4 words \(from "One quick test\."\)/);
+});
+
+test("words with no speaker take the speaker of the script line the map names", async () => {
+  const { offScreenSpeech } = await import("@launchclip/core/direction.mjs");
+  const { map, script, words, story } = await dialogue();
+  const bare = words.map(({ speaker, ...word }) => word);
+  const line = mapLine(map, "l8");
+  assert.deepEqual(offScreenSpeech(line, { words: bare, story }), [], "nobody is known to speak");
+  const [found] = offScreenSpeech(line, { words: bare, story, script });
+  assert.equal(found.speaker, "sam");
+  assert.deepEqual(found.words, [24, 28]);
+  assert.deepEqual(found.missing, [24, 25, 26, 27, 28]);
+  assert.deepEqual(offScreenSpeech(mapLine(map, "l2"), { words: bare, story, script }), [], "sam is in the scene over l2");
+});
+
+test("sceneCharacters names who a scene draws", async () => {
+  const { sceneCharacters } = await import("@launchclip/core/direction.mjs");
+  const { story } = await dialogue();
+  assert.deepEqual(story.scenes.map((scene) => [scene.id, sceneCharacters(scene)]), [["desk", ["maya"]], ["ask", ["maya", "sam"]], ["test", ["maya"]], ["saved", ["maya", "sam"]], ["close", ["sam"]]]);
+  assert.deepEqual(sceneCharacters({ module: "concept-card", params: { cast: [{ id: "maya" }] } }), []);
+});
+
+test("story shots lists each shot with frames, who, set, framing, poses and lines", async () => {
+  const report = await runStoryCommand("shots", DIALOGUE);
+  assert.equal(report.action, "shots");
+  assert.deepEqual(report.warnings, []);
+  assert.deepEqual(report.shots.map((shot) => shot.id), ["desk", "ask", "test", "saved", "close"]);
+  // Frames tile the story: each shot starts on the frame after the last one.
+  for (const [i, shot] of report.shots.entries()) {
+    assert.equal(shot.frames, shot.last_frame - shot.first_frame + 1);
+    if (i) assert.equal(shot.first_frame, report.shots[i - 1].last_frame + 1);
+  }
+  const ask = report.shots[1];
+  const board = JSON.parse(await readFile(`${DIALOGUE}storyboard.json`, "utf8"));
+  assert.deepEqual({ who: ask.who, set: ask.set, framing: ask.framing, beats: ask.beats }, { who: ["maya", "sam"], set: "standing", framing: "medium", beats: ["problem", "attempt"] });
+  assert.equal(board.scenes[1].params.shot, undefined, "the scene names no shot: the list gives the framing it resolves to");
+  assert.equal(report.shots.at(-1).last_frame, Math.round(board.scenes.at(-1).end * report.fps) - 1);
+  assert.deepEqual(ask.lines.map(({ line, speaker, on_screen, text }) => ({ line, speaker, on_screen, text })), [
+    { line: "l2", speaker: "sam", on_screen: true, text: "Did you test the rollback?" },
+    { line: "l3", speaker: "maya", on_screen: true, text: "It worked last month." },
+    { line: "l5", speaker: "maya", on_screen: true, text: "Fine. One quick test." }
+  ]);
+  assert.equal(ask.lines[0].playing, "light, as if in passing");
+  assert.deepEqual(ask.poses.maya.map(({ pose, expression }) => [pose, expression]), [["stand", "neutral"], ["shrug", "happy"], ["hands-on-hips", "frustrated"]]);
+  assert.deepEqual(ask.poses.sam.map(({ pose }) => pose), ["stand", "think", "arms-crossed"]);
+  assert.equal(ask.poses.maya[1].frame, Math.round(ask.poses.maya[1].at * report.fps));
+  assert.deepEqual(ask.actions, [{ verb: "think", who: "sam", line: "l2" }, { verb: "shrug", who: "maya", line: "l3" }, { verb: "hands-on-hips", who: "maya", line: "l5" }]);
+  // The reaction shot: Sam's line is listed, off screen, with the map's why.
+  const off = report.shots[2].lines.find((line) => line.line === "l8");
+  assert.deepEqual({ speaker: off.speaker, on_screen: off.on_screen }, { speaker: "sam", on_screen: false });
+  assert.match(off.why, /we stay on Maya/);
+  assert.equal(report.shots[0].lines[0].on_screen, false, "the narrator is not on screen");
+  // The script's silent lines are the ones no map line plays.
+  assert.deepEqual(report.script_lines.unplaced.map((line) => line.id), ["l4", "l6"]);
+  assert.equal(report.script_lines.played, 8);
+
+  const { formatShots } = await import("../src/story_shots.js");
+  const text = formatShots(report);
+  assert.match(text, /5 shots, [\d.]+ s at 30 fps/);
+  assert.match(text, / 2 {2}ask {2}[\d.]+–[\d.]+ s {2}frames \d+–\d+ \(\d+\)/);
+  assert.match(text, /l8 sam \(off screen\): "Better now than at midnight\."/);
+  assert.match(text, /sam: [\d.]+ stand, neutral → [\d.]+ think, happy/);
+  assert.match(text, /Script lines no map line plays \(2 of 10\)/);
+});
+
+test("the shot list works without a map or a script, and the CLI prints text or JSON", async () => {
+  const { shotList } = await import("../src/story_shots.js");
+  const { words, story } = await dialogue();
+  const bare = shotList(story, { words });
+  assert.equal(bare.script_lines, undefined);
+  assert.deepEqual(bare.shots[1].lines.map(({ speaker, text }) => [speaker, text]), [["sam", "Did you test the rollback?"], ["maya", "It worked last month. Fine. One quick test."]]);
+  assert.deepEqual(bare.shots[1].beats, []);
+  // In the footage-led lane a character scene above track 0 is an overlay, not a shot.
+  const { isShot } = await import("../src/story_shots.js");
+  assert.equal(isShot({ module: "character-cameo", track: 1 }, { lane: "footage-led" }), false);
+  assert.equal(isShot({ module: "cast-scene", track: 1 }, { lane: "motion" }), true);
+  assert.equal(isShot({ module: "concept-card" }, { lane: "motion" }), false);
+
+  const { runCli } = await import("../src/cli.js");
+  const run = async (args) => {
+    let out = "";
+    await runCli(["story", "shots", DIALOGUE, ...args], { stdout: { write: (text) => { out += text; } }, stderr: { write: () => {} } });
+    return out;
+  };
+  assert.match(await run([]), /^Test the rollback: a two-character dialogue: 5 shots/);
+  assert.equal(JSON.parse(await run(["--json"])).shots.length, 5);
+});

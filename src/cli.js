@@ -168,6 +168,12 @@ export async function runCli(argv, io = {}) {
       result = await runSfxCommand(sfxInvocation.action, sfxInvocation.name, flags, { log: (line) => stderr.write(`${line}\n`) });
     } else if (command === "story") {
       result = await runStoryCommand(storyInvocation.action, storyInvocation.file, flags, productionAdapters.story ?? {});
+      // The shot list reads as text; --json prints the report.
+      if (storyInvocation.action === "shots") {
+        const { formatShots } = await import("./story_shots.js");
+        stdout.write(flags.json ? `${JSON.stringify(result, null, 2)}\n` : formatShots(result));
+        return;
+      }
     } else if (command === "cinematic-check") {
       result = await checkCinematicProject(required(firstArg, "project path"), {
         ...flags,
@@ -470,11 +476,11 @@ function parseSfxInvocation(action, rest) {
 }
 
 function parseStoryInvocation(action, rest) {
-  if (!action) throw new Error("Missing story action; use validate, resolve, compile, plan or long-form");
-  if (!new Set(["validate", "resolve", "compile", "plan", "long-form"]).has(action)) throw new Error(`Unknown story action: ${action}`);
+  if (!action) throw new Error("Missing story action; use validate, resolve, compile, shots, plan or long-form");
+  if (!new Set(["validate", "resolve", "compile", "shots", "plan", "long-form"]).has(action)) throw new Error(`Unknown story action: ${action}`);
   if (action === "plan") return { action, file: null, flagArgs: rest };
   const file = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
-  return { action, file: required(file, action === "compile" || action === "long-form" ? "story project path" : "story.json path"), flagArgs: rest.slice(1) };
+  return { action, file: required(file, action === "compile" || action === "long-form" || action === "shots" ? "story project path" : "story.json path"), flagArgs: rest.slice(1) };
 }
 
 async function runStyleCommand(action, name, flags, names = []) {
