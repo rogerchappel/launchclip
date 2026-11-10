@@ -263,7 +263,8 @@ export async function castFromDesign({ project, script, design, style, voices = 
  * `bible freeze`, which draws the sheets and writes the hash. An earlier
  * bible in the project is replaced: this is a new bible.
  * options: {project, script, design, style (the drawing style), voices,
- *   narratorVoice, own, pack (the project's style pack name), seed, chromium}
+ *   narratorVoice, own, pack (the project's style pack name), seed, chromium,
+ *   sheetConcurrency (reference sheets drawn side by side)}
  * hooks: {render(html, png) (stands in for Chromium), home}
  * → {bible: freezeBible's result, characters, style}
  */
@@ -279,7 +280,7 @@ export async function makeBible(options = {}, hooks = {}) {
     ...(design.rules.length ? { rules: design.rules } : {})
   };
   await writeFile(path.join(project, BIBLE_FILE), `${JSON.stringify(draft, null, 2)}\n`);
-  const frozen = await freezeBible(project, { style, force: true, pin: false, ...(options.pack ? { pack: options.pack } : {}), ...(options.seed != null ? { seed: options.seed } : {}), ...(options.chromium ? { chromium: options.chromium } : {}) }, hooks);
+  const frozen = await freezeBible(project, { style, force: true, pin: false, ...(options.pack ? { pack: options.pack } : {}), ...(options.seed != null ? { seed: options.seed } : {}), ...(options.chromium ? { chromium: options.chromium } : {}), ...(options.sheetConcurrency ? { sheetConcurrency: options.sheetConcurrency } : {}) }, hooks);
   return { bible: frozen, characters: cast.characters, style };
 }
 

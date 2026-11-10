@@ -71,6 +71,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["quality", { setting: true }],
   // Cores per render: a property of the machine, not of a recipe.
   ["concurrency", {}],
+  // Model calls in flight at once (default 4, or LAUNCHCLIP_MODEL_CONCURRENCY): a property of the provider's rate limit, not of a recipe.
+  ["model-concurrency", {}],
   ["out", {}],
   ["replan", { boolean: true }],
   // Concept and story before the script: on (default) or off (one script pass from the brief).
@@ -152,6 +154,7 @@ export function makeOptionsFromFlags(flags = {}) {
     renderer: flags.renderer,
     quality: flags.quality,
     concurrency: flags.concurrency,
+    modelConcurrency: flags["model-concurrency"],
     goal: flags.goal,
     format: flags.format,
     awareness: flags.awareness,

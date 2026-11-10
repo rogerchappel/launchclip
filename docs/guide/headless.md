@@ -75,6 +75,7 @@ Useful flags:
 | `--renderer` | `remotion` | Or `hyperframes`. |
 | `--quality` | `draft` | `high` renders `renders/final.mp4`. |
 | `--out <dir>` | `./launchclip-<slug>/` | The project folder. |
+| `--model-concurrency <n>` | `4` | How many model calls may be in flight at once (1–32), or set `LAUNCHCLIP_MODEL_CONCURRENCY`. `1` sends one call at a time. The video is the same at any value. See [What runs at the same time](#what-runs-at-the-same-time). |
 | `--research` | `auto` | Check the brief against primary sources before the script is written. `auto` turns it on for a news or research brief (news wording such as "this week" or "just announced", a dated event, a named release, a question of fact) and leaves it off for a product video or a brief with its own script; `on` and `off` decide it yourself. `MAKE.json` says which and why under `research_decision`. It needs no key: with no web search key, stories come from company feeds, Hacker News, GDELT and Wikipedia's current events, and a brief that asks for "this week" or "the latest" leaves out anything older. Recording source pages needs the optional `playwright` dependency and a Chromium; without them the video is still made, and `MAKE.json`, the warnings and the `research` gate say which claims have no page to show and how to fix it (`launchclip doctor` checks the recorder). See [Research](../RESEARCH.md#in-make). |
 | `--replan` | off | Plan a new storyboard on a rerun. |
 | `--candidates` | `on` | `off` skips the rendered candidates for the opening and one transition. They need a model that can see. |
@@ -575,6 +576,68 @@ It reads the history and any project folder inside it that has a
 `storyboard.json`, and lists every pair whose hooks or structure are too
 close. It exits 1 when it finds one; `--json` gives the full report.
 
+## What runs at the same time
+
+`make` runs work side by side where one piece does not need another's
+result. The video, the files in the project and the progress lines are the
+same as when everything runs one at a time; only the wall time changes.
+
+One setting limits model calls: `--model-concurrency <n>` (default 4), or
+`LAUNCHCLIP_MODEL_CONCURRENCY`. Every model call of the run goes through
+that one limit, whichever stage sends it. Lower it if your provider's rate
+limit is tight; `1` sends one call at a time.
+
+What overlaps today:
+
+- **Asset descriptions.** Each image and clip in `--assets` is described by
+  its own call, several at once.
+- **Candidates.** The planner's opening is rendered while the second opening
+  is designed, and the two candidates of a comparison render side by side
+  when the machine has room for two renders.
+- **Reference sheets** (`--animation`). The show bible's sheets are drawn
+  side by side, four at most.
+- **Long-form direction and copy.** The chunks were already directed several
+  at a time; they now share the one limit.
+- **Source page recordings** (`--research`) were already recorded while the
+  script is written and voiced.
+
+Most of a short video's writing is a chain, and a chain cannot overlap: the
+judge needs the five concepts (they come from one call), the story needs the
+winner, the script needs the story, the voice needs the script, and the
+direction map and the storyboard need the voice's word timings. Those calls
+still run one after another.
+
+Side-by-side renders stay inside the render budget: `--concurrency` when you
+pass it, otherwise the tabs one render may open on this machine. With room
+for one, they run one at a time. `--concurrency` itself means what it did.
+
+If the provider answers a call with a rate limit (HTTP 429), the stage does
+not fail. Every call waits for the provider's `Retry-After` (or 2 s, then
+4 s, doubling up to a minute), the limit drops by one for the rest of the
+run, and the call is sent again, up to five times.
+
+`MAKE.json` keeps one wall time per stage in `timings`, as before, and says
+how the calls ran in `model_calls`:
+
+```json
+"model_calls": {
+  "concurrency": 4,
+  "calls": 19,
+  "peak": 4,
+  "overlapped": 7,
+  "stages": {
+    "inventory": { "calls": 7, "call_seconds": 41.3, "peak": 4, "overlapped": 7 },
+    "prepare": { "calls": 5, "call_seconds": 148.2, "peak": 1, "overlapped": 0 },
+    "candidates": { "calls": 3, "call_seconds": 52.0, "peak": 1, "overlapped": 0, "side_by_side": ["candidate stills: 2 at a time"] }
+  }
+}
+```
+
+`call_seconds` adds up each call's own time, so a stage whose calls
+overlapped shows more `call_seconds` than its wall time in `timings`.
+`peak` is the most calls open at once and `overlapped` how many ran beside
+another. After a rate limit, `rate_limit` records the waits.
+
 ## Cost
 
 - Every paid call is announced before it is made (`model: PAID call to …`),
@@ -582,7 +645,10 @@ close. It exits 1 when it finds one; `--json` gives the full report.
 - Each command stops starting paid calls once it has spent $50. Change the
   limit with `--max-cost-usd <amount>` or `LAUNCHCLIP_MAX_COST_USD`, or pass
   `none` to remove it. Calls already running finish, and a rerun starts a new
-  $50 budget.
+  $50 budget. Overlapping calls cannot take a run past the limit: a call
+  starts beside others only when the most they can all cost still fits under
+  it, and otherwise waits its turn. The last call of a run can still pass
+  the limit by its own cost, as it could before.
 - With `gpt-5.6-luna`, one run costs roughly $0.05–0.15 of model time: one
   script pass, maybe one repair and one resize, one storyboard pass plus up to four repairs
   (about $0.015 each), and one critic pass over the contact sheets ($0.02–0.04).

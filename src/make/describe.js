@@ -13,7 +13,7 @@ import { storySrc } from "../constraints.js";
 export async function describeMakeAssets(ctx, inventory) {
   const { adapters, options, report } = ctx;
   const mode = String(options.assetDescriptions ?? "auto").toLowerCase();
-  const settings = { root: ctx.assetsDir, mode, client: ctx.model?.client ?? null, vision: Boolean(ctx.model?.vision), model: ctx.model?.spec ?? null, env: ctx.env, notice: ctx.say };
+  const settings = { root: ctx.assetsDir, mode, client: ctx.model?.client ?? null, vision: Boolean(ctx.model?.vision), model: ctx.model?.spec ?? null, env: ctx.env, notice: ctx.say, concurrency: ctx.gate?.limit ?? 1 };
   let result;
   try {
     result = await (adapters.describeAssets ?? describeInventory)(inventory, settings);

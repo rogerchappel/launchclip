@@ -74,6 +74,9 @@ import { COVER_PATH } from "../cover.js";
 import { DEFAULT_VISUAL_HISTORY_LIMIT, DEFAULT_VISUAL_SIMILARITY_LIMIT, assessVariety, fingerprintStory, historyAvoid, historyPrompt, readHistoryIndex, recordHistoryEntry, varyStory } from "../visual_history.js";
 import { progressLine } from "../progress.js";
 import { measureMachine, renderBudget } from "../capacity.js";
+import { createModelGate, modelConcurrency } from "./model_calls.js";
+import { createLimiter } from "../concurrency.js";
+import { CANDIDATE_DIR } from "../candidate_receipt.js";
 
 export const MAKE_VERSION = "launchclip.make.v1";
 export const MAKE_MAX_REPAIRS = 4;
@@ -127,7 +130,8 @@ export function slugify(prompt) {
  *   visualHistoryLimit (recent entries the planner sees, default 8),
  *   visualSimilarityLimit (the variety lint's limit, default 0.6),
  *   animation (a character story), stopAfter ("bible": end awaiting approval once the show bible is frozen),
- *   approve ("bible": the approval, so the run goes on)}
+ *   approve ("bible": the approval, so the run goes on),
+ *   modelConcurrency (model calls in flight at once; src/make/model_calls.js)}
  * adapters: {env, client ({client, provider, model, vision}), clientOptions
  * (passed to the client make builds from the keys: {apiKey, sdk, fetch}), fetch
  * (the model check asks a local Ollama for its model list through it), transcribe,
@@ -136,7 +140,8 @@ export function slugify(prompt) {
  *   (runFinish replacement or adapters for it: finishAdapters), notice, now, clock,
  *   ask (question → yes/no: the attended approvals, demo flows and the show bible),
  *   renderSheet ((html, png): draws a bible reference sheet instead of Chromium),
- *   home (the character library's root), synthesizeDialogue}
+ *   home (the character library's root), synthesizeDialogue,
+ *   sleep (ms → a promise: the wait after a rate-limit answer)}
  * Returns the MAKE.json report. Throws only on bad options; stage failures
  * are reported with status "failed" and a next step.
  */
@@ -149,6 +154,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   const text = String(prompt ?? "").trim();
   if (!text) throw new Error("launchclip make needs a prompt: launchclip make \"A 30-second launch video for …\" [--assets ./assets]");
   const { voice: voiceProvider, renderer, quality, script: scriptOptions } = validateMakeOptions(options);
+  const modelLimit = modelConcurrency(options.modelConcurrency, env);
   const cwd = path.resolve(options.cwd ?? process.cwd());
   // Inside a library (options.library, src/library.js) a project without
   // --out goes under storage.projects, and its drive is checked first.
@@ -173,6 +179,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     stages: {},
     timings: {},
     costs: { items: [], estimated_usd: 0, complete: true },
+    model_calls: null,
     repairs: null,
     gates: null,
     candidates: null,
@@ -185,7 +192,9 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   };
   const say = (line) => { report.notices.push(line); notice(line); };
   const state = { ...previousState, assets_dir: assetsDir };
-  const ctx = { project, env, adapters, options, report, state, say, progress, voiceProvider, renderer, quality, text, assetsDir };
+  // Every model call of the run goes through one gate: at most --model-concurrency in flight, and a rate limit is waited out.
+  const gate = createModelGate({ limit: modelLimit, now, say, ...(adapters.sleep ? { sleep: adapters.sleep } : {}) });
+  const ctx = { project, env, adapters, options, report, state, say, progress, voiceProvider, renderer, quality, text, assetsDir, gate };
 
   const stages = [
     ["model", stageModel],
@@ -210,6 +219,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
       continue;
     }
     const t0 = now();
+    gate.stage(name);
     progress({ stage: name, done: index, total: stages.length });
     try {
       const result = await fn(ctx);
@@ -231,6 +241,8 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   report.timings.total = round1((now() - started) / 1000);
   report.costs.estimated_usd = round4(report.costs.items.reduce((sum, item) => sum + (item.estimated_usd ?? 0), 0));
   report.costs.complete = report.costs.items.every((item) => item.estimated_usd != null);
+  // How the model calls ran: a stage whose calls overlapped has more call_seconds than its wall time in timings.
+  report.model_calls = gate.report();
   if (ctx.stop && report.status !== "failed") {
     report.status = ctx.stop.status;
     report.stopped = { after: ctx.stop.after, reason: ctx.stop.reason };
@@ -270,6 +282,7 @@ async function stageModel(ctx) {
     const { spec, source } = selectMakeModel(options.model, env);
     ctx.model = { ...createMakeClient(spec, adapters.clientOptions ?? {}), spec, source };
   }
+  ctx.model.client = ctx.gate.wrap(ctx.model.client);
   report.model = { spec: ctx.model.spec, source: ctx.model.source, provider: ctx.model.provider, model: ctx.model.model, reasoning: ctx.model.reasoning ?? null, vision: Boolean(ctx.model.vision) };
   // Which roles this run's model can play (text and vision), so an app can
   // show what the run will and will not check. No paid call (models.js).
@@ -918,7 +931,7 @@ async function stageBible(ctx) {
     const call = await designBible({ client: ctx.model.client, provider: ctx.model.provider, model: ctx.model.model, prompt: ctx.text, notes, rules, script, saved: (await savedForDesign(project, hooks)).filter((entry) => !own.includes(entry.id)), styleFixed: packStyle });
     addCost(report, "bible", ctx.model, call);
     const drawing = packStyle ?? call.design.drawing_style ?? DEFAULT_DRAWING_STYLE;
-    const made = await makeBible({ project, script, design: call.design, style: drawing, voices, narratorVoice, own, pack: style?.name ?? null, seed: ctx.generatedStyle?.generated?.seed ?? null, chromium: hooks.render ? null : await sheetBrowser(ctx.env) }, hooks);
+    const made = await makeBible({ project, script, design: call.design, style: drawing, voices, narratorVoice, own, pack: style?.name ?? null, seed: ctx.generatedStyle?.generated?.seed ?? null, chromium: hooks.render ? null : await sheetBrowser(ctx.env), sheetConcurrency: sideBySide(ctx, 4, "reference sheets") }, hooks);
     for (const member of made.characters) if (member.rejected?.length) report.warnings.push(`bible: the rig has no ${member.rejected.map((set) => `${set.path}=${set.value}`).join(", ")} for ${member.id}; left out`);
     for (const warning of made.bible.warnings ?? []) report.warnings.push(`bible: ${warning}`);
     designed = made.characters.map(({ rejected: _rejected, ...member }) => member);
@@ -1545,9 +1558,17 @@ async function stageCandidates(ctx) {
         return judged;
       } catch (error) { if (error.cost) addCost(report, `candidate-judge-${kind}`, ctx.model, error.cost); throw error; }
     };
+    // A comparison's two candidates render side by side when the machine has room for two renders (sideBySide).
+    const slots = sideBySide(ctx, 2, "candidate stills");
+    const render = createLimiter(slots);
     // The opening: the planner's scene against one designed without seeing it.
     const opening = openingScene(resolved);
     if (opening) {
+      // The planner's opening needs nothing from the second one, so it renders while that is designed.
+      const times = sceneTimes(opening);
+      const planned = render(() => renderCandidate({ project, id: "open-a", story: resolved, times, fps, still }));
+      planned.catch(() => {});
+      let compared = false;
       try {
         ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (a second opening, designed without the first)`);
         const line = (ctx.words ?? []).filter((word) => word.start >= opening.start - 0.05 && word.start < opening.end).map((word) => word.text).join(" ");
@@ -1560,15 +1581,21 @@ async function stageCandidates(ctx) {
         const errors = ctx.storyCheck(variantRaw);
         const variant = storyWith(resolved, opening.id, design);
         if (errors.length || !sceneResolves(variant, opening.id)) throw new Error(`the second opening does not pass the storyboard checks (${errors[0] ?? "its module does not resolve"})`);
-        const times = sceneTimes(opening);
-        const a = { ...(await renderCandidate({ project, id: "open-a", story: resolved, times, fps, still })), source: `the planner's opening (${opening.module})` };
-        const b = { ...(await renderCandidate({ project, id: "open-b", story: variant, times, fps, still })), source: `a separately designed opening (${design.module})` };
+        compared = true;
+        const [first, second] = await bothRendered([planned, render(() => renderCandidate({ project, id: "open-b", story: variant, times, fps, still }))]);
+        const a = { ...first, source: `the planner's opening (${opening.module})` };
+        const b = { ...second, source: `a separately designed opening (${design.module})` };
         const judged = await judge("opening", [a, b], "The opening line is: " + (line || "(no narration)"));
         const selected = selectCandidate(["open-a", "open-b"], judged.scores);
         if (!selected) throw new Error("the judge found no admissible opening");
         comparisons.push(comparisonEntry({ id: "opening", kind: "opening", candidates: [a, b], judged: judged.scores, selected, rationale: judged.rationale }));
         if (selected === "open-b") { raw = variantRaw; resolved = variant; applied.push(`opening: ${opening.module} → ${design.module}`); }
       } catch (error) { notes.push(`opening: ${String(error?.message ?? error).split("\n")[0]}`); }
+      // No second opening to compare it with: the planner's stills are not kept, as when they were rendered after the design.
+      if (!compared) {
+        await planned.catch(() => {});
+        await rm(path.join(project, CANDIDATE_DIR, "open-a"), { recursive: true, force: true });
+      }
     } else notes.push("opening: the storyboard has no base scene");
     // One risky transition: the planner's move against a different kind of move.
     const boundary = riskyBoundary(resolved);
@@ -1582,8 +1609,9 @@ async function stageCandidates(ctx) {
         const variant = storyWith(resolved, scene.id, { in: move });
         const duration = Number(resolved.resolved?.duration ?? resolved.format?.duration);
         const times = transitionTimes(scene, { dur: Math.max(Number(scene.in?.dur) || 0, move.dur) }, duration);
-        const a = { ...(await renderCandidate({ project, id: "trans-a", story: resolved, times, fps, still })), source: `the planner's ${scene.in?.type ?? "cut"}` };
-        const b = { ...(await renderCandidate({ project, id: "trans-b", story: variant, times, fps, still })), source: `a ${move.type}` };
+        const [first, second] = await bothRendered([render(() => renderCandidate({ project, id: "trans-a", story: resolved, times, fps, still })), render(() => renderCandidate({ project, id: "trans-b", story: variant, times, fps, still }))]);
+        const a = { ...first, source: `the planner's ${scene.in?.type ?? "cut"}` };
+        const b = { ...second, source: `a ${move.type}` };
         const judged = await judge("transition", [a, b], `It joins scene ${boundary.boundary_id.replace(/-in$/, "")} to the scene before it.`);
         const selected = selectCandidate(["trans-a", "trans-b"], judged.scores);
         if (!selected) throw new Error("the judge found no admissible transition");
@@ -1610,6 +1638,30 @@ async function stageCandidates(ctx) {
   for (const change of applied) ctx.say(`candidates: ${change} (scored higher from the rendered frames)`);
   state.candidates = { story: hashValue(raw), report: report.candidates };
   return { status: "done" };
+}
+
+// Both candidates of a comparison, once both renders have ended: the first one's error when either failed.
+async function bothRendered(renders) {
+  const results = await Promise.allSettled(renders);
+  const failed = results.find((result) => result.status === "rejected");
+  if (failed) throw failed.reason;
+  return results.map((result) => result.value);
+}
+
+/**
+ * How many local renders (candidate stills, reference sheets) run side by
+ * side: `most`, within the render budget the machine has (--concurrency when
+ * given, else the tabs one render may open). 1 on a machine with room for one.
+ */
+function sideBySide(ctx, most, what) {
+  let room = 1;
+  try {
+    const asked = Number(ctx.options.concurrency);
+    room = Number.isInteger(asked) && asked > 0 ? asked : renderBudget({ machine: measureMachine() }).tabs;
+  } catch { room = 1; }
+  const slots = Math.max(1, Math.min(most, room));
+  if (slots > 1) ctx.gate.sideBySide(what, slots);
+  return slots;
 }
 
 // Matte exactly the source ranges the planned subject scenes cover (padded),
