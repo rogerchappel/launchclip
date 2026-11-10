@@ -3,7 +3,8 @@
 //
 //   inventory → demo (--repo: demo autopilot) → route → prepare (base edit + presenter probe | voiceover prep | script + voice)
 //     → bible (--animation: the cast and the world, designed and frozen) → storyboard (planner + repair loop) → candidates (the opening and one risky transition, scored from rendered frames)
-//     → animatic (--animation: the draft cut, its staging review and retakes) → subject (matte the planned ranges) → finish → critic → MAKE.json
+//     → animatic (--animation: the draft cut, its staging review and retakes) → subject (matte the planned ranges)
+//     → plan (--stop-after storyboard: the playable plan, and the stop) → finish → critic → MAKE.json
 //
 // Every stage is resumable: ASSETS.json entries are reused while a file's size
 // and mtime match, the script and storyboard while their inputs hash the same
@@ -33,9 +34,10 @@ import { VOICE_SETTINGS, narrationCacheKey, narrationDocument, narrationRequest,
 import { normalizePronunciation } from "../voice/pronunciation.js";
 import { inventoryAssets } from "./assets.js";
 import { describeMakeAssets, featuredForMake } from "./describe.js";
-import { approvals, makeSpeed, validateMakeOptions } from "./options.js";
+import { PLAN_STOP, approvals, makeSpeed, validateMakeOptions } from "./options.js";
 import { DRAFT_REASONING, DRAFT_VERSION, RULES_MODEL, applyDraftDirection, deadlineProvider, draftDirection, draftModelSpec, draftVoiceConcurrency, draftWaits, joinSentenceTakes, ruleClient, takeCached } from "./draft.js";
 import { draftStoryboard } from "./draft_plan.js";
+import { PLAYER_MANIFEST_FILE } from "../player_manifest.js";
 import { animationBrief, isAnimation, isLongForm, routeLane } from "./routing.js";
 import { ANIMATION_PROFILE, checkAnimationScript, estimatedPace, repairScreenplay, standInCast, writersRoom } from "./animation.js";
 import { DEFAULT_DRAWING_STYLE, animationBriefLines, designBible, makeBible, savedForDesign } from "./show_bible.js";
@@ -139,8 +141,9 @@ export function slugify(prompt) {
  *   visualHistoryDir (the series' history index: plan against it, record into it),
  *   visualHistoryLimit (recent entries the planner sees, default 8),
  *   visualSimilarityLimit (the variety lint's limit, default 0.6),
- *   animation (a character story), stopAfter ("bible": end awaiting approval once the show bible is frozen),
- *   approve ("bible": the approval, so the run goes on),
+ *   animation (a character story), stopAfter ("bible": end awaiting approval once the show bible is frozen;
+ *   "storyboard": plan only, end awaiting approval with a story a browser player can show and nothing rendered),
+ *   approve ("bible": the approval, so the run goes on; "storyboard": render the planned story),
  *   modelConcurrency (model calls in flight at once; src/make/model_calls.js)}
  * adapters: {env, client ({client, provider, model, vision}), clientOptions
  * (passed to the client make builds from the keys: {apiKey, sdk, fetch}), fetch
@@ -165,6 +168,9 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   if (!text) throw new Error("launchclip make needs a prompt: launchclip make \"A 30-second launch video for …\" [--assets ./assets]");
   const { voice: voiceProvider, renderer, quality, script: scriptOptions } = validateMakeOptions(options);
   const speed = makeSpeed(options.speed);
+  // A draft and its refine end at the plan-only stop (--stop-after storyboard): the project is left playable, and nothing is rendered.
+  // A draft's sound is the kind made here and now (the synth bed, the kit's effects) unless the flags ask for more.
+  if ((speed === "draft" || options.refine) && options.stopAfter == null) options = { ...options, stopAfter: PLAN_STOP, ...(speed === "draft" ? { music: options.music ?? "synth", sfx: options.sfx ?? "kit" } : {}) };
   const modelLimit = modelConcurrency(options.modelConcurrency, env);
   const cwd = path.resolve(options.cwd ?? process.cwd());
   // Inside a library (options.library, src/library.js) a project without
@@ -234,6 +240,8 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     // The animation path's cheap cut: reviewed for story, staging and acting before the delivery render.
     ["animatic", stageAnimatic],
     ["subject", stageSubject],
+    // Plan-only mode (--stop-after storyboard, --approve storyboard): the playable plan, and the stop before any render.
+    ...(planMode(options) ? [["plan", stagePlan]] : []),
     ["finish", stageFinish],
     ["critic", stageCritic]
   ];
@@ -268,6 +276,12 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   report.costs.complete = report.costs.items.every((item) => item.estimated_usd != null);
   // How the model calls ran: a stage whose calls overlapped has more call_seconds than its wall time in timings.
   report.model_calls = gate.report();
+  // Plan-only: how long the planning took, per make stage and per step of the plan stage.
+  if (report.plan) {
+    const { total: _total, ...byStage } = report.timings;
+    report.plan.timings = { seconds: round1(Object.values(byStage).reduce((sum, seconds) => sum + seconds, 0)), stages: byStage, steps: report.plan.steps };
+    delete report.plan.steps;
+  }
   if (ctx.stop && report.status !== "failed") {
     report.status = ctx.stop.status;
     report.stopped = { after: ctx.stop.after, reason: ctx.stop.reason };
@@ -1459,7 +1473,7 @@ async function synthesize(ctx, text) {
   return take;
 }
 
-// The storyboard stage. A fast draft and its refine end the run here (src/make/draft.js): the plan is the result, and nothing is rendered.
+// The storyboard stage, and what a fast draft and its refine record about it (src/make/draft.js).
 async function stageStoryboard(ctx) {
   const { project, report, state, options } = ctx;
   // --refine plans over the draft's storyboard: the draft's own is kept beside it.
@@ -1475,16 +1489,8 @@ async function stageStoryboard(ctx) {
     if (options.refine && existsSync(path.join(project, MAKE_PATHS.draftStory))) report.draft.draft_storyboard = MAKE_PATHS.draftStory;
     report.draft.parts.render = "none";
     ctx.progress({ stage: "storyboard", step: "plan", status: "ready", seconds });
-    const again = `launchclip make ${JSON.stringify(ctx.text)} --out ${project}`;
-    ctx.stop = {
-      after: "storyboard",
-      status: "awaiting-approval",
-      reason: ctx.draft ? "a fast draft ends at the plan (--speed draft): nothing is rendered" : "the refined plan is ready (--refine): nothing is rendered",
-      next: [
-        ...(ctx.draft ? [`The full-quality plan on this script and voice: ${again} --refine (the direction map and the storyboard are planned the ordinary way; ${MAKE_PATHS.story} is replaced when it is ready).`] : []),
-        `Render the plan as it is: launchclip finish ${project} --renderer ${ctx.renderer}.`
-      ]
-    };
+    // The run goes on to the plan stage (the captions, the sound, the player's manifest) and stops there.
+    if (ctx.draft) report.next_steps.push(`The full-quality plan on this script and voice: launchclip make ${JSON.stringify(ctx.text)} --out ${project} --refine (the direction map and the storyboard are planned the ordinary way; ${MAKE_PATHS.story} is replaced when it passes).`);
   }
   return result;
 }
@@ -1841,6 +1847,8 @@ export function worldLook(story, prompt = "") {
 async function stageCandidates(ctx) {
   const { project, report, state, options } = ctx;
   const skip = (reason) => { report.candidates = { status: "skipped", reason }; return { status: "skipped", reason }; };
+  // Plan-only: nothing renders before the stop, and the story that was shown is the one rendered after it.
+  if (planMode(options)) return skip(`--stop-after ${PLAN_STOP}: candidates are scored from rendered stills, and the planned story is rendered as it was shown`);
   if (candidatesMode(options.candidates) === "off") return skip("--candidates off");
   if (ctx.routing.lane === "footage-led") return skip("footage-led: the opening is the recording itself");
   if (ctx.longForm) return skip("long form: its storyboard comes from the beat map, which candidates do not change yet");
@@ -1989,6 +1997,7 @@ function sideBySide(ctx, most, what) {
  */
 async function stageAnimatic(ctx) {
   if (!isAnimation(ctx.routing)) return { status: "skipped", reason: "not a character story (--animation)" };
+  if (stopsAtPlan(ctx)) return { status: "skipped", reason: `--stop-after ${PLAN_STOP}: the run stops before any render; the animatic is made after --approve ${PLAN_STOP}` };
   const { project, report, state, options, adapters } = ctx;
   const { finishOptions, finishAdapters, run, musicNote, sfxNote } = await finishInputs(ctx, "animatic");
   const render = async (scenes = null) => {
@@ -2171,6 +2180,81 @@ function addSoundCosts(report, finish) {
   if (Number.isFinite(sfxCost) && sfxCost > 0) report.costs.items.push({ stage: "sfx", provider: "elevenlabs", model: "eleven_text_to_sound_v2", sounds: Number(sound.details.sfx_generated.new ?? 0), estimated_usd: sfxCost, fallback: false });
   const musicCost = Number(sound?.details?.music?.cost_usd ?? sound?.details?.music_cost_usd);
   if (Number.isFinite(musicCost) && musicCost > 0 && !sound?.details?.music?.cached) report.costs.items.push({ stage: "music", provider: "elevenlabs", model: sound?.details?.music?.model ?? sound?.details?.music?.generation?.model ?? null, generated_seconds: Number(sound?.details?.music?.generated_seconds ?? sound?.details?.music?.generation?.generated_seconds ?? 0), estimated_usd: musicCost, fallback: false });
+}
+
+// Plan-only mode: --stop-after storyboard, or its approval.
+function planMode(options) {
+  return String(options.stopAfter ?? "").toLowerCase() === PLAN_STOP || approvals(options.approve).includes(PLAN_STOP);
+}
+
+// The run stops at the plan stage unless the storyboard is approved, and an
+// approval is of a storyboard that exists: one this run had to plan has not
+// been seen, so it stops again.
+function stopsAtPlan(ctx) {
+  if (!planMode(ctx.options)) return false;
+  return !(approvals(ctx.options.approve).includes(PLAN_STOP) && ctx.report.stages.storyboard?.status === "cached");
+}
+
+/**
+ * Plan-only (--stop-after storyboard): finish runs up to its render and stops
+ * (src/finish.js planOnly), so the project holds what a browser player needs:
+ * the resolved story, the narration and its word timings, the captions, the
+ * mix (music and effects), every media file, and PLAYER-MANIFEST.json listing
+ * them. The gates that need no rendered pixels are in report.plan.checks. No
+ * renderer or browser starts. The run ends awaiting-approval; --approve
+ * storyboard (or launchclip finish) renders the story, reusing all of it.
+ */
+async function stagePlan(ctx) {
+  const { project, report, options } = ctx;
+  if (!stopsAtPlan(ctx)) return { status: "skipped", reason: `approved (--approve ${PLAN_STOP}): the planned story is rendered` };
+  const { finishOptions, finishAdapters, run, musicNote, sfxNote } = await finishInputs(ctx, "plan");
+  ctx.say(`plan: voice, captions and sound for a browser player, and the checks that need no render; nothing is rendered; music: ${musicNote}; sfx: ${sfxNote}`);
+  const finish = await run(project, { ...finishOptions, planOnly: true }, finishAdapters);
+  report.warnings.push(...(finish.warnings ?? []));
+  addSoundCosts(report, finish);
+  const stages = finish.stages ?? [];
+  if (finish.status === "failed" || !finish.plan) {
+    const failed = stages.find((stage) => stage.status === "failed");
+    throw new Error(`the plan failed at the ${failed?.name ?? "unknown"} step: ${errorSummary(failed?.error ?? "finish wrote no plan")}`);
+  }
+  const gates = Object.fromEntries(Object.entries(finish.plan.checks.gates ?? {}).map(([name, gate]) => [name, { status: gate.status, ...(gate.error ? { error: String(gate.error).split("\n")[0] } : {}), ...(gate.reason ? { reason: gate.reason } : {}), ...(gate.errors?.length ? { errors: gate.errors.slice(0, 8) } : {}), ...(gate.findings?.length ? { findings: gate.findings.slice(0, 8) } : {}) }]));
+  if (ctx.baseEditQa) gates.base_edit_qa = ctx.baseEditQa;
+  if (ctx.researchGate) gates.research = ctx.researchGate;
+  const failedChecks = Object.entries(gates).filter(([, gate]) => gate.status === "failed").map(([name]) => name);
+  report.plan = {
+    status: "planned",
+    story: finish.plan.story,
+    storyboard: MAKE_PATHS.story,
+    manifest: PLAYER_MANIFEST_FILE,
+    files: finish.plan.files,
+    bytes: finish.plan.bytes,
+    missing: finish.plan.missing,
+    audio: finish.plan.audio,
+    checks: {
+      status: failedChecks.length ? "failed" : "passed",
+      failed: failedChecks,
+      // The script's own checks (reading time against the clock, the brief) ran in the prepare stage; the storyboard's in its stage.
+      script: report.script?.check ?? null,
+      storyboard: report.repairs ? { valid_first_attempt: report.repairs.valid_first_attempt, repairs: report.repairs.used } : null,
+      gates,
+      needs_render: finish.plan.checks.needs_render ?? []
+    },
+    steps: Object.fromEntries(stages.filter((stage) => !["skipped", "blocked"].includes(stage.status) || stage.name === "sound").map((stage) => [stage.name, stage.seconds]))
+  };
+  for (const name of failedChecks) report.warnings.push(`plan: the ${name} check fails on the planned story (plan.checks.gates.${name} in ${MAKE_PATHS.report}); the render's gate would fail the same way`);
+  const flags = [`--renderer ${ctx.renderer}`, ...(ctx.quality !== "draft" ? [`--quality ${ctx.quality}`] : []), ...(options.music != null ? [`--music ${String(options.music).toLowerCase()}`] : []), `--sfx ${finishOptions.sfx}`].join(" ");
+  // A draft's last milestone: the project is playable in a browser player.
+  if (report.draft) ctx.mark("player");
+  ctx.stop = {
+    after: PLAN_STOP,
+    status: "awaiting-approval",
+    reason: `stopped with the video planned and nothing rendered (${ctx.draft ? "--speed draft" : options.refine ? "--refine" : `--stop-after ${PLAN_STOP}`})`,
+    next: [
+      `Play the planned story in a browser player: ${path.join(project, PLAYER_MANIFEST_FILE)} lists every file it needs (role, size, sha256) and ${path.join(project, finish.plan.story)} is the story for storyPlayerProps (@launchclip/remotion).`,
+      `To render it, run the same command with --approve ${PLAN_STOP} (the script, the voice, the storyboard, the captions and the sound are reused; the critic runs as usual), or run: launchclip finish ${project} ${flags}. After an edit to storyboard.json, launchclip finish ${project} --plan-only ${flags} refreshes the plan and the manifest without rendering.`
+    ]
+  };
+  return { status: "done" };
 }
 
 async function stageFinish(ctx) {
@@ -2681,6 +2765,7 @@ export function formatMakeSummary(report) {
     const detail = report.subject.status === "usable" ? `${report.subject.framing ?? "?"} framing, ${report.subject.mattes?.length ?? 0} matte(s)` : report.subject.reason ?? report.subject.reasons?.join("; ") ?? "";
     lines.push(`subject: ${report.subject.status}${detail ? ` (${detail})` : ""}`);
   }
+  if (report.plan) lines.push(`plan: ${report.plan.manifest} (${report.plan.files} file${report.plan.files === 1 ? "" : "s"} for a player); checks ${report.plan.checks.status}${report.plan.checks.failed.length ? ` (${report.plan.checks.failed.join(", ")})` : ""}; planned in ${report.plan.timings?.seconds ?? "?"}s; nothing rendered`);
   if (report.gates) {
     lines.push("gates:");
     for (const [name, gate] of Object.entries(report.gates)) lines.push(`  ${name.padEnd(17)} ${gate.status}${gate.verdict ? ` (${gate.verdict})` : ""}${gate.error ? `  ${gate.error}` : ""}`);

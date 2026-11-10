@@ -92,15 +92,17 @@ const TITLE_SCORES_SCHEMA = Object.freeze({
 const POST_CAPTION_SCHEMA = Object.freeze({ type: "string", description: "The post text under the video: the hook line, then the list written out in full (one line per item, numbered), then the call to action, then \"Save this\" with a reason. Plain text, line breaks allowed, no hashtags." });
 
 // A fast draft's script (make --speed draft): one streamed call, so only what the draft needs is asked for, in the order a
-// host can show it: the title, the narration beat by beat, the call to action. No angle, title scores or post caption.
+// host can show it: the title, the narration beat by beat, the call to action, then the title options the structure
+// gate counts (five for a short). No angle, title scores or post caption.
 export const DRAFT_SCRIPT_SCHEMA = Object.freeze({
   type: "object",
   additionalProperties: false,
-  required: ["title", "beats", "call_to_action"],
+  required: ["title", "beats", "call_to_action", "title_options"],
   properties: {
     title: SCRIPT_SCHEMA.properties.title,
     beats: { ...SCRIPT_SCHEMA.properties.beats, description: "The narration, split into the plan's beats, in order: the beats' text joined is the whole voiceover." },
-    call_to_action: CALL_TO_ACTION_SCHEMA
+    call_to_action: CALL_TO_ACTION_SCHEMA,
+    title_options: SCRIPT_SCHEMA.properties.title_options
   }
 });
 
@@ -110,6 +112,7 @@ export function draftScriptInstructions(plan) {
 - title: a short working title.
 - beats: the narration split by beat id, in the plan's order; their text joined is the whole script. Plain spoken sentences only.
 - call_to_action: the sentence the narration ends on that asks the viewer to act, word for word.
+- title_options: ${titleCount(plan) === 5 ? "five" : "three"} publish-ready titles the video pays off, the best first, a line each.
 - Length is a hard limit: ${plan.word_ceiling} words at most, about ${plan.word_target} is right. Tooling cuts whole sentences from a script that is over.
 - Return only the JSON object.`].join("\n");
 }

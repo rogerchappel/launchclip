@@ -4,14 +4,26 @@
 
 ### Added
 
+- Plan-only mode: `launchclip make --stop-after storyboard` stops once the
+  video is planned and renders nothing. The project then holds what a
+  browser player needs (the resolved story, the narration and its word
+  timings, the captions, the mix with the music bed and sound effects, and
+  every media file), and `PLAYER-MANIFEST.json` lists each file with its
+  role, size and sha256. The checks that need no rendered pixels are in
+  `MAKE.json` `plan.checks`, the time planning took in `plan.timings`. The
+  run ends `awaiting-approval` (exit 3); the same command with `--approve
+  storyboard`, or `launchclip finish <project>`, renders the planned story
+  and reuses every finished step. `launchclip finish --plan-only` does the
+  same for any project with a storyboard. See docs/guide/headless.md, "Plan
+  first, render on demand".
 - `launchclip make --speed draft`: a fast draft for a first look. The script
   is one streamed model call on a hard word budget (each sentence is a
   progress line as it arrives), the voice is a take per sentence started
   while the script is still being written, the storyboard is made by rule
   (a small cast carries the lines) with at most one fast direction call
   beside it, every shot is asked of the asset provider at once with a short
-  deadline (a late clip's scene is drawn), and the run stops at the plan:
-  no candidates, render or critic. Every check that needs no pixels still
+  deadline (a late clip's scene is drawn), and the run stops at the plan-only
+  stop: no candidates, render or critic. Every check that needs no pixels still
   runs. `--refine` continues a draft project to the full-quality plan on the
   same script and voice. `MAKE.json` then has `draft` (what was draft-made) and
   `milestones` (seconds to the script, the voice and the plan). See docs/guide/headless.md and benchmarks/MAKE_FAST_DRAFT.md.
@@ -20,6 +32,20 @@
 
 ### Fixed
 
+- A transition between two full-frame footage scenes no longer drops the
+  picture. On the world camera a `push` into a `clip` showed the new clip
+  whole and inset for the first 40 % of the move, removed it, showed the
+  empty background for a frame or two, then faded it up at full frame (both
+  renderers); a `pull`, `fade`, `iris` and `glow-wipe` showed the background
+  in the same way. A clip now counts as a full-frame picture, like a photo
+  plate: it arrives over the outgoing scene, which stays whole under it, an
+  incoming fade that starts late is hidden until it starts, and a push grows
+  the new picture out of the old one on the camera's ease. Crossfades into a
+  picture (morph, light-sweep, push-blur) no longer dip to the background.
+  Between two footage scenes `card-to-card`, `rack-focus` and `morph` play as
+  a fade, `story validate` warns, and the planner is told not to pick them.
+  `kit/core/transition-frames.mjs` checks every transition type for a frame
+  the two scenes do not cover, a scene that sits still mid-move, and a pop.
 - `make` no longer fails the storyboard stage when a style puts the captions
   in the middle of the frame (or at the top, or low, or at a large size). A
   plan kept on a cadence near miss was never laid out, so every card in the

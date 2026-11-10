@@ -35,6 +35,7 @@ export { applyJsonPatch, applyStoryPatch, diffSegments, parsePointer, formatPoin
 export { SEGMENT_SCHEMA, planSegments, hashSegments } from './render-segments.mjs';
 export { chunkWords, captionChunksFrom, narrationWords, visibleChunks, captionPlan, CAPTION_PRESETS, CAPTION_PRESET_NAMES } from './captions.mjs';
 export { TRANSITION_TYPES, sceneWindows, layerStateAt, layerStyle } from './transitions.mjs';
+export { TRANSITION_CHECK, transitionFindings, transitionFrames } from './transition-frames.mjs';
 export { resolveCamera, cameraPlan, cameraStateAt } from './camera-world.mjs';
 export { SAFE_ZONE_PROFILES, checkLayout, elementsFromStory } from './layout-check.mjs';
 export { CADENCE_TARGETS, storyboardMeasures, cadenceTarget, cadenceGate, cadenceReport } from './cadence.mjs';

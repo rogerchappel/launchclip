@@ -32,12 +32,20 @@ test("--speed draft: one streamed script call, a take per sentence, a rule-made 
     assert.deepEqual(report.stopped.after, "storyboard");
     for (const stage of ["candidates", "animatic", "subject", "finish", "critic"]) assert.equal(report.stages[stage].status, "skipped", stage);
     assert.equal(report.gates, null);
+    // It ends at the plan-only stop: the project is playable (PLAYER-MANIFEST.json), on the sound made here and now.
+    assert.equal(report.stages.plan.status, "done");
+    assert.equal(report.plan.status, "planned");
+    assert.deepEqual([report.plan.checks.status, report.plan.checks.failed], ["passed", []], "every check that needs no pixels passes on a draft");
+    assert.equal((await draft.read("SCRIPT.json")).title_options.length, 5);
+    assert.ok(existsSync(path.join(draft.project, "PLAYER-MANIFEST.json")));
+    assert.deepEqual([report.options.stop_after, report.options.music, report.options.sfx], ["storyboard", "synth", "kit"]);
+    assert.match(report.stopped.reason, /--speed draft/);
     assert.equal(report.concept.status, "off");
     assert.equal(report.research_decision.run, false);
-    assert.match(report.next_steps[0], /--refine/);
-    assert.match(report.next_steps[1], /launchclip finish /);
+    assert.match(report.next_steps.join("\n"), /--refine/);
+    assert.match(report.next_steps.join("\n"), /launchclip finish /);
     // A host can show the script as it is written: a line a sentence, then the script, the voice and the plan.
-    const steps = events.filter((event) => event.step).map((event) => event.step);
+    const steps = events.filter((event) => event.step && event.stage !== "plan").map((event) => event.step);
     assert.deepEqual(steps, [...DRAFT_SENTENCES.map(() => "sentence"), "script", "voice", "plan"]);
     assert.deepEqual(events.filter((event) => event.step === "sentence").map((event) => event.text), DRAFT_SENTENCES);
     assert.equal(events.find((event) => event.step === "script").status, "ready");
@@ -69,7 +77,7 @@ test("--speed draft: one streamed script call, a take per sentence, a rule-made 
     assert.equal(report.draft.storyboard.source, "rules+direction");
     assert.equal(report.draft.storyboard.direction.status, "applied");
     assert.deepEqual(report.draft.voice, { sentences: DRAFT_SENTENCES.length, at_once: 4, joined: true });
-    assert.deepEqual(Object.keys(report.milestones), ["first_sentence_seconds", "script_seconds", "voice_seconds", "plan_seconds"]);
+    assert.deepEqual(Object.keys(report.milestones), ["first_sentence_seconds", "script_seconds", "voice_seconds", "plan_seconds", "player_seconds"]);
     assert.deepEqual(report.costs.items.map((item) => item.stage), ["draft-script", "draft-direction"]);
     assert.equal(report.options.speed, "draft");
 
@@ -194,7 +202,8 @@ test("--refine keeps the draft's script and voice and plans the storyboard the o
     assert.equal(report.script.reused, true);
     assert.equal(report.script.draft, true);
     assert.equal(report.concept.status, "off");
-    assert.match(report.next_steps.at(-1), /launchclip finish /);
+    assert.match(report.next_steps.join("\n"), /launchclip finish /);
+    assert.match(report.stopped.reason, /--refine/);
     // A refine again reuses the refined plan.
     const again = await draft.run({ refine: true });
     assert.equal(again.report.stages.storyboard.status, "cached");

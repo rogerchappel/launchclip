@@ -119,10 +119,12 @@ test("an overview holds only the top shot of each spot, so two cards never stack
 
 test("world fades hand over: the outgoing plate clears before the incoming one is up", () => {
   const { in: incoming, out } = transitionTweens({ type: "fade", dur: 1 }, { width: W, height: H, mode: "world" });
-  assert.ok(out[0].start + out[0].duration <= incoming[0].start + 0.1 + 1e-9);
+  // The incoming fade starts late and holds 0 until then (in[0] is the hold).
+  assert.deepEqual([incoming[0].from, incoming[0].to, incoming[0].start], [0, 0, 0]);
+  assert.ok(out[0].start + out[0].duration <= incoming.at(-1).start + 0.1 + 1e-9);
   for (const type of ["push", "pull"]) {
     const tweens = transitionTweens({ type, dur: 1 }, { width: W, height: H, mode: "world" });
-    assert.ok(tweens.out[0].start + tweens.out[0].duration <= tweens.in[0].start + 0.06 + 1e-9, type);
+    assert.ok(tweens.out[0].start + tweens.out[0].duration <= tweens.in.at(-1).start + 0.06 + 1e-9, type);
   }
   // Cuts mode keeps the plain crossfade over an opaque plate.
   assert.equal(transitionTweens({ type: "fade", dur: 1 }, { width: W, height: H, mode: "cuts" }).in[0].start, 0);

@@ -8,6 +8,7 @@ import { runMake } from "../../src/make/index.js";
 import { draftStoryboard } from "../../src/make/draft_plan.js";
 import { parseProgressLine } from "../../src/progress.js";
 import { getVoiceProvider } from "../../src/voice/index.js";
+import { animaticAdapters } from "./finish_offline.js";
 
 export const DRAFT_PROMPT = "A 30-second explainer on why sourdough bread needs a starter";
 export const DRAFT_SENTENCES = [
@@ -22,7 +23,7 @@ export const DRAFT_SENTENCES = [
 ];
 export const DRAFT_NARRATION = DRAFT_SENTENCES.join(" ");
 // The script as the model streamed it: a title, the beats, the call to action.
-export const DRAFT_SCRIPT = { title: "Why sourdough needs a starter", beats: [{ beat: "hook", text: DRAFT_SENTENCES.slice(0, 2).join(" ") }, { beat: "body", text: DRAFT_SENTENCES.slice(2, 7).join(" ") }, { beat: "cta", text: DRAFT_SENTENCES[7] }], call_to_action: DRAFT_SENTENCES[7] };
+export const DRAFT_SCRIPT = { title: "Why sourdough needs a starter", beats: [{ beat: "hook", text: DRAFT_SENTENCES.slice(0, 2).join(" ") }, { beat: "body", text: DRAFT_SENTENCES.slice(2, 7).join(" ") }, { beat: "cta", text: DRAFT_SENTENCES[7] }], call_to_action: DRAFT_SENTENCES[7], title_options: ["Why sourdough needs a starter", "The jar that makes bread rise", "What a starter really does", "Two tiny workers in your bread", "Sourdough starts in a jar"] };
 // The direction call's answer: the subject and its part as characters, and the hook acted and reworded.
 export const DRAFT_DIRECTION = {
   cast: [{ id: "jar", kind: "cup", plays: "the starter" }, { id: "yeast", kind: "blob", plays: "the wild yeast" }],
@@ -85,7 +86,8 @@ export async function draftRun({ direction = DRAFT_DIRECTION, directionMs = 0, e
       client: { client, provider: "openai", model: "gpt-5.6-luna", spec: "openai:gpt-5.6-luna", vision: true },
       voiceProvider,
       notice: (line) => lines.push(line),
-      finish: async () => { throw new Error("a draft renders nothing: finish must not run"); },
+      // The real finish, offline, up to its plan: a renderer or a master fails the test.
+      finishAdapters: { ...animaticAdapters(), renderer: () => { throw new Error("a draft renders nothing: it asked for a renderer"); }, withSlot: () => { throw new Error("a draft renders nothing: it asked for a render slot"); }, master: () => { throw new Error("a draft renders nothing: it mastered") } },
       ...adapters
     });
     return { report, lines, events: lines.map(parseProgressLine).filter(Boolean) };

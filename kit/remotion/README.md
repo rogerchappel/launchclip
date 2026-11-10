@@ -68,6 +68,12 @@ const props = await storyPlayerProps(resolvedStory, { customModules: { BrandBadg
 <Player {...props} controls style={{ width: '100%' }} />;
 ```
 
+`launchclip make --stop-after storyboard` (or `launchclip finish --plan-only`)
+writes that resolved story without rendering, with `PLAYER-MANIFEST.json`
+beside it: every file the story names, with its size and sha256, to upload
+and hand to `setAssetResolver` (docs/guide/headless.md, "Plan first, render
+on demand").
+
 ## Media: `setAssetResolver`
 
 A story names its media as project-relative paths (`assets/clip.mp4`,

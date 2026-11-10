@@ -50,7 +50,7 @@ A faster first look has to make fewer calls, and smaller ones.
 | 12–13, 15 | no call: the storyboard is made by rule and goes through the same tooling and checks |
 | 12 | one optional call beside the rule-made plan (the cast, the acting, the card words), with a 12 s deadline |
 | 14 | every request at once, 8 s each, a late one drawn instead |
-| 16–18 | not run: the run stops at the plan |
+| 16–18 | not run: the run ends at the plan-only stop (captions, the mix on the synth bed, the player's manifest), about 3 s |
 
 ## Measured
 
@@ -73,6 +73,12 @@ refine of the draft.
 The draft's 28.9 s narration was planned in 51.5 s of wall time: under a
 minute, and 7.6 times sooner than the ordinary run's plan.
 
+That run was made before plan-only mode reached `main`, so it stopped at the
+storyboard. A draft now goes on to the plan-only stop, which makes the
+project playable in a browser player (captions, the mix, the manifest).
+Measured afterwards on the same project with no model call, that stage is
+2.8 s; with it the first run would have been about 54 s.
+
 Where the draft's 50.9 s went: the script call 11.2 s (9.5 s of it before
 the first sentence: the model's own thinking), the voice 31.9 s, the
 direction call and the plan 7.7 s.
@@ -91,11 +97,15 @@ called:
 |---|---|---|
 | The voice (8 sentence takes, levelled, joined) | 31.9 s | 9.1 s |
 | The rule-made plan and its checks | 0.1 s | 0.1 s |
+| The plan-only stage (captions, synth bed and kit effects, the mix, the manifest) | not in that run | 2.8 s |
 
 Put together from parts measured apart, not from one run: 11.2 s (script)
-+ 9.1 s (voice) + 7.7 s (direction and plan) is about 28 s, and about 20 s
-with `LAUNCHCLIP_DRAFT_DIRECTION_MS=0`. The three runs were spent before the
-fix, so no end-to-end run confirms that figure yet.
++ 9.1 s (voice) + 7.7 s (direction and plan) + 2.8 s (the player's files)
+is about 31 s, and about 23 s with `LAUNCHCLIP_DRAFT_DIRECTION_MS=0`. The
+three runs were spent before the fix, so no end-to-end run confirms that
+figure yet. The draft script also returns five title options now (the
+structure check counts them), a few more output tokens than the measured
+call wrote.
 
 ### The refine
 
@@ -111,10 +121,11 @@ minutes and to fail sometimes, and keep showing the draft when it does.
 
 ## Was under a minute reached, and what stands before 30 seconds
 
-Under a minute: yes, 50.9 s end to end, measured, with the slow voice
-included.
+Under a minute: yes. 50.9 s to the storyboard, measured end to end with the
+slow voice included; about 54 s with the player's files added.
 
-Under 30 seconds is not shown by a full run. What stands in the way, in
+Under 30 seconds was not reached, and the estimate after the voice fix
+(about 31 s) is just over it. What stands in the way, in
 order of size:
 
 1. **The model's time to the first word, 9.5 s.** At low reasoning this
