@@ -51,7 +51,7 @@ export function retryAfterMs(error) {
 
 /**
  * options: {limit, now (ms), sleep(ms), say(line), retries}.
- * → {limit, wrap(client), run(call), stage(name), report()}
+ * → {limit, wrap(client), run(call), stage(name), sideBySide(what, slots), report()}
  *
  * wrap(client) is the client with runStructured() behind the gate; stage(name)
  * names the make stage the calls that follow belong to; report() is MAKE.json's
@@ -76,7 +76,7 @@ export function createModelGate({ limit = DEFAULT_MODEL_CONCURRENCY, now = () =>
   const acquire = () => new Promise((resolve) => { waiting.push(resolve); pump(); });
   const release = () => { active -= 1; pump(); };
   const stageEntry = (name) => {
-    if (!stages.has(name)) stages.set(name, { calls: 0, call_ms: 0, peak: 0, overlapped: 0 });
+    if (!stages.has(name)) stages.set(name, { calls: 0, call_ms: 0, peak: 0, overlapped: 0, local: [] });
     return stages.get(name);
   };
 
@@ -123,6 +123,12 @@ export function createModelGate({ limit = DEFAULT_MODEL_CONCURRENCY, now = () =>
     limit,
     run,
     stage(name) { current = name; },
+    // Local work the current stage runs side by side (candidate stills, reference sheets), for the report.
+    sideBySide(what, slots) {
+      const entry = stageEntry(current ?? "run");
+      const line = `${what}: ${slots} at a time`;
+      if (!entry.local.includes(line)) entry.local.push(line);
+    },
     wrap(client) {
       // The client's own fields (provider, model, supportsImages) read through; only the call is gated.
       const gated = Object.create(client);
@@ -137,7 +143,7 @@ export function createModelGate({ limit = DEFAULT_MODEL_CONCURRENCY, now = () =>
         peak: totals.peak,
         overlapped: totals.overlapped,
         ...(totals.waits ? { rate_limit: { waits: totals.waits, waited_seconds: seconds(totals.waited_ms), concurrency_after: allowed } } : {}),
-        stages: Object.fromEntries([...stages].filter(([, entry]) => entry.calls).map(([name, entry]) => [name, { calls: entry.calls, call_seconds: seconds(entry.call_ms), peak: entry.peak, overlapped: entry.overlapped }]))
+        stages: Object.fromEntries([...stages].filter(([, entry]) => entry.calls || entry.local.length).map(([name, entry]) => [name, { calls: entry.calls, call_seconds: seconds(entry.call_ms), peak: entry.peak, overlapped: entry.overlapped, ...(entry.local.length ? { side_by_side: entry.local } : {}) }]))
       };
     }
   };

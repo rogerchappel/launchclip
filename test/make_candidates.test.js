@@ -1,5 +1,6 @@
 // Rendered candidates for the opening and one risky transition (docs/MAKE_SKILL_PARITY.md, phase 6).
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -122,13 +123,13 @@ function candidateModel({ opening = "b", transition = "a" } = {}) {
   return { ...fake, seen };
 }
 
-async function make(t, model, options = {}) {
+async function make(t, model, options = {}, { still = null } = {}) {
   const assets = await assetsDir();
   const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-candidates-make-"));
   t.after(() => Promise.all([rm(assets, { recursive: true, force: true }), rm(cwd, { recursive: true, force: true })]));
   const stills = [];
   const critic = async () => ({ status: "written", verdict: "ship", findings: 0, reviewed: 1, unreviewed: 0, warnings: [], model: "gpt-5.6-luna", critique: { verdict: "ship", summary: "", findings: [] } });
-  const adapters = { env: {}, client: model, inventory: fakeInventory, finish: fakeFinish([]), critic, candidateStill: fakeStill(stills), notice() {} };
+  const adapters = { env: {}, client: model, inventory: fakeInventory, finish: fakeFinish([]), critic, candidateStill: still ?? fakeStill(stills), notice() {} };
   const run = () => runMake(PROMPT, { assets, voice: "test", music: "synth", concepts: "off", cwd, out: "video", ...options }, adapters);
   return { run, stills, project: path.join(cwd, "video") };
 }
@@ -143,7 +144,8 @@ test("make renders two openings and two transitions, scores them from the frames
   assert.equal(report.candidates.receipt_ok, true, JSON.stringify(report.candidates.receipt_errors));
   // Twelve stills: three per candidate, the same times for both sides of a comparison.
   assert.equal(stills.length, 12);
-  assert.deepEqual([...new Set(stills.map((still) => still.dir))], ["open-a", "open-b", "trans-a", "trans-b"]);
+  // (The two sides of a comparison render side by side, so the order their stills start in is not fixed.)
+  assert.deepEqual([...new Set(stills.map((still) => still.dir))].sort(), ["open-a", "open-b", "trans-a", "trans-b"]);
   assert.deepEqual(stills.filter((still) => still.dir === "open-a").map((still) => still.at), stills.filter((still) => still.dir === "open-b").map((still) => still.at));
   const [opening, transition] = report.candidates.comparisons;
   assert.deepEqual({ id: opening.id, selected: opening.selected, means: opening.candidates.map((candidate) => candidate.mean) }, { id: "opening", selected: "open-b", means: [6, 8] });
@@ -200,4 +202,66 @@ test("candidates are skipped, with the reason, when off or when the model cannot
   assert.ok(report.warnings.some((warning) => /candidates: none compared .* the planner's opening and transitions stand/.test(warning)));
   const story = JSON.parse(await readFile(path.join(silent.project, "storyboard.json"), "utf8"));
   assert.equal(story.scenes[0].params.title, "Payouts never match your books");
+});
+
+// A still that takes a moment, and a log of what was running when: which candidates rendered together, and whether a model call was open.
+function tracedRun(t, { opening = "b", transition = "a", concurrency, failDesign = false } = {}) {
+  const fake = candidateModel({ opening, transition });
+  const events = [];
+  const rendering = new Set();
+  let designing = false;
+  let peak = 0;
+  const inner = fake.model.client.runStructured.bind(fake.model.client);
+  fake.model.client.runStructured = async (request) => {
+    if (request.schemaName !== "launchclip_make_opening_candidate") return inner(request);
+    designing = true;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    designing = false;
+    if (failDesign) throw new Error("the model is down");
+    return inner(request);
+  };
+  const write = fakeStill();
+  const still = async (story, at, out, extra) => {
+    const id = path.basename(extra.dir);
+    rendering.add(id);
+    peak = Math.max(peak, rendering.size);
+    events.push({ id, beside: [...rendering].filter((other) => other !== id).sort(), designing });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await write(story, at, out, extra);
+    rendering.delete(id);
+  };
+  return make(t, fake.model, concurrency ? { concurrency } : {}, { still }).then((made) => ({ ...made, events, peak: () => peak }));
+}
+
+test("the planner's opening renders while the second is designed, and the two sides of a comparison render side by side", async (t) => {
+  const side = await tracedRun(t, { concurrency: 2 });
+  const report = await side.run();
+  assert.equal(report.stages.candidates.status, "done", JSON.stringify(report.candidates));
+  assert.equal(side.peak(), 2);
+  assert.ok(side.events.some((event) => event.id === "open-a" && event.designing), "open-a was rendering while the design call was open");
+  assert.ok(side.events.some((event) => event.id === "trans-b" && event.beside.includes("trans-a")), "the two transitions rendered together");
+  assert.ok(side.events.filter((event) => event.id.startsWith("trans-")).every((event) => !event.beside.some((other) => other.startsWith("open-"))), "the transitions wait for the opening's verdict: they are rendered on the winner");
+  assert.deepEqual(report.model_calls.stages.candidates.side_by_side, ["candidate stills: 2 at a time"]);
+
+  // --concurrency 1 (a machine with room for one render): one candidate at a time, and the same result.
+  const single = await tracedRun(t, { concurrency: 1 });
+  const alone = await single.run();
+  assert.equal(single.peak(), 1);
+  assert.ok(single.events.every((event) => event.beside.length === 0));
+  assert.ok(single.events.some((event) => event.id === "open-a" && event.designing), "the design call still overlaps the first render: it is not a render");
+  assert.equal(alone.model_calls.stages.candidates.side_by_side, undefined);
+  assert.deepEqual(alone.candidates, report.candidates);
+  for (const file of ["storyboard.json", "qa/rendered-candidates.json"]) assert.equal(await readFile(path.join(single.project, file), "utf8"), await readFile(path.join(side.project, file), "utf8"), file);
+  assert.deepEqual(alone.costs.items.map((item) => item.stage), report.costs.items.map((item) => item.stage));
+});
+
+test("a second opening that cannot be designed leaves no stills of the planner's opening behind", async (t) => {
+  const failed = await tracedRun(t, { failDesign: true, concurrency: 2 });
+  const report = await failed.run();
+  assert.notEqual(report.status, "failed", JSON.stringify(report.stages));
+  assert.deepEqual(report.candidates.notes, ["opening: the model is down"]);
+  assert.equal(report.candidates.comparisons.length, 1, "the transition is still compared");
+  assert.equal(existsSync(path.join(failed.project, "qa/rendered-candidates/open-a")), false);
+  assert.equal(existsSync(path.join(failed.project, "qa/rendered-candidates/trans-a")), true);
+  assert.ok(failed.events.filter((event) => event.id.startsWith("trans-")).every((event) => !event.beside.includes("open-a")), "the transition renders start once the opening's is over");
 });

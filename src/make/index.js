@@ -75,6 +75,8 @@ import { DEFAULT_VISUAL_HISTORY_LIMIT, DEFAULT_VISUAL_SIMILARITY_LIMIT, assessVa
 import { progressLine } from "../progress.js";
 import { measureMachine, renderBudget } from "../capacity.js";
 import { createModelGate, modelConcurrency } from "./model_calls.js";
+import { createLimiter } from "../concurrency.js";
+import { CANDIDATE_DIR } from "../candidate_receipt.js";
 
 export const MAKE_VERSION = "launchclip.make.v1";
 export const MAKE_MAX_REPAIRS = 4;
@@ -1556,9 +1558,17 @@ async function stageCandidates(ctx) {
         return judged;
       } catch (error) { if (error.cost) addCost(report, `candidate-judge-${kind}`, ctx.model, error.cost); throw error; }
     };
+    // A comparison's two candidates render side by side when the machine has room for two renders (sideBySide).
+    const slots = sideBySide(ctx, 2, "candidate stills");
+    const render = createLimiter(slots);
     // The opening: the planner's scene against one designed without seeing it.
     const opening = openingScene(resolved);
     if (opening) {
+      // The planner's opening needs nothing from the second one, so it renders while that is designed.
+      const times = sceneTimes(opening);
+      const planned = render(() => renderCandidate({ project, id: "open-a", story: resolved, times, fps, still }));
+      planned.catch(() => {});
+      let compared = false;
       try {
         ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (a second opening, designed without the first)`);
         const line = (ctx.words ?? []).filter((word) => word.start >= opening.start - 0.05 && word.start < opening.end).map((word) => word.text).join(" ");
@@ -1571,15 +1581,21 @@ async function stageCandidates(ctx) {
         const errors = ctx.storyCheck(variantRaw);
         const variant = storyWith(resolved, opening.id, design);
         if (errors.length || !sceneResolves(variant, opening.id)) throw new Error(`the second opening does not pass the storyboard checks (${errors[0] ?? "its module does not resolve"})`);
-        const times = sceneTimes(opening);
-        const a = { ...(await renderCandidate({ project, id: "open-a", story: resolved, times, fps, still })), source: `the planner's opening (${opening.module})` };
-        const b = { ...(await renderCandidate({ project, id: "open-b", story: variant, times, fps, still })), source: `a separately designed opening (${design.module})` };
+        compared = true;
+        const [first, second] = await bothRendered([planned, render(() => renderCandidate({ project, id: "open-b", story: variant, times, fps, still }))]);
+        const a = { ...first, source: `the planner's opening (${opening.module})` };
+        const b = { ...second, source: `a separately designed opening (${design.module})` };
         const judged = await judge("opening", [a, b], "The opening line is: " + (line || "(no narration)"));
         const selected = selectCandidate(["open-a", "open-b"], judged.scores);
         if (!selected) throw new Error("the judge found no admissible opening");
         comparisons.push(comparisonEntry({ id: "opening", kind: "opening", candidates: [a, b], judged: judged.scores, selected, rationale: judged.rationale }));
         if (selected === "open-b") { raw = variantRaw; resolved = variant; applied.push(`opening: ${opening.module} → ${design.module}`); }
       } catch (error) { notes.push(`opening: ${String(error?.message ?? error).split("\n")[0]}`); }
+      // No second opening to compare it with: the planner's stills are not kept, as when they were rendered after the design.
+      if (!compared) {
+        await planned.catch(() => {});
+        await rm(path.join(project, CANDIDATE_DIR, "open-a"), { recursive: true, force: true });
+      }
     } else notes.push("opening: the storyboard has no base scene");
     // One risky transition: the planner's move against a different kind of move.
     const boundary = riskyBoundary(resolved);
@@ -1593,8 +1609,9 @@ async function stageCandidates(ctx) {
         const variant = storyWith(resolved, scene.id, { in: move });
         const duration = Number(resolved.resolved?.duration ?? resolved.format?.duration);
         const times = transitionTimes(scene, { dur: Math.max(Number(scene.in?.dur) || 0, move.dur) }, duration);
-        const a = { ...(await renderCandidate({ project, id: "trans-a", story: resolved, times, fps, still })), source: `the planner's ${scene.in?.type ?? "cut"}` };
-        const b = { ...(await renderCandidate({ project, id: "trans-b", story: variant, times, fps, still })), source: `a ${move.type}` };
+        const [first, second] = await bothRendered([render(() => renderCandidate({ project, id: "trans-a", story: resolved, times, fps, still })), render(() => renderCandidate({ project, id: "trans-b", story: variant, times, fps, still }))]);
+        const a = { ...first, source: `the planner's ${scene.in?.type ?? "cut"}` };
+        const b = { ...second, source: `a ${move.type}` };
         const judged = await judge("transition", [a, b], `It joins scene ${boundary.boundary_id.replace(/-in$/, "")} to the scene before it.`);
         const selected = selectCandidate(["trans-a", "trans-b"], judged.scores);
         if (!selected) throw new Error("the judge found no admissible transition");
@@ -1621,6 +1638,30 @@ async function stageCandidates(ctx) {
   for (const change of applied) ctx.say(`candidates: ${change} (scored higher from the rendered frames)`);
   state.candidates = { story: hashValue(raw), report: report.candidates };
   return { status: "done" };
+}
+
+// Both candidates of a comparison, once both renders have ended: the first one's error when either failed.
+async function bothRendered(renders) {
+  const results = await Promise.allSettled(renders);
+  const failed = results.find((result) => result.status === "rejected");
+  if (failed) throw failed.reason;
+  return results.map((result) => result.value);
+}
+
+/**
+ * How many local renders (candidate stills, reference sheets) run side by
+ * side: `most`, within the render budget the machine has (--concurrency when
+ * given, else the tabs one render may open). 1 on a machine with room for one.
+ */
+function sideBySide(ctx, most, what) {
+  let room = 1;
+  try {
+    const asked = Number(ctx.options.concurrency);
+    room = Number.isInteger(asked) && asked > 0 ? asked : renderBudget({ machine: measureMachine() }).tabs;
+  } catch { room = 1; }
+  const slots = Math.max(1, Math.min(most, room));
+  if (slots > 1) ctx.gate.sideBySide(what, slots);
+  return slots;
 }
 
 // Matte exactly the source ranges the planned subject scenes cover (padded),
