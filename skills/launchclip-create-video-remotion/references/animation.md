@@ -64,9 +64,9 @@ Three small steps, as the writers' room in `make` takes them:
 
 1. **Premise.** One sentence each: what the lead wants, what is in the way,
    what changes.
-2. **Loglines.** Write three to five one-sentence versions of the story. Have
-   them judged in a fresh context (a subagent given only the brief and the
-   loglines) and take the winner.
+2. **Loglines.** Write five one-sentence versions of the story. Have them
+   judged in a fresh context (a subagent given only the brief and the
+   loglines) and take the winner. They are this path's five concepts.
 3. **Script.** Write `SCRIPT.json`:
 
 ```json
@@ -204,6 +204,8 @@ it unchanged:
   "title": "Test the rollback",
   "lane": "motion",
   "format": { "width": 1080, "height": 1920, "fps": 30, "duration": 30, "platform": "youtube-shorts" },
+  "world": { "kind": "office", "time": "day" },
+  "motion": { "grammar": "cinematic", "feel": "kinetic" },
   "audio": { "narration": { "provider": "kokoro", "voice": "bf_emma", "lines": [
     { "speaker": "narrator", "text": "Pia is about to ship on a Friday." },
     { "speaker": "dov", "text": "Did you test the rollback?" },
@@ -213,8 +215,10 @@ it unchanged:
 }
 ```
 
-`audio.narration.voice` is the narrator's voice. Do not write a `cast`:
-the bible supplies it. Pin the story to the bible, then voice it:
+`audio.narration.voice` is the narrator's voice. `world` is the bible's
+world (its kind and time): the cast then stands in that place, full frame,
+and not in a small room of its own. `motion` keeps the camera alive under
+people who stand and talk. Do not write a `cast`: the bible supplies it. Pin the story to the bible, then voice it:
 
 ```bash
 launchclip bible freeze <project>     # changes nothing in the bible; writes the story's cast and "bible": {file, hash}
@@ -285,16 +289,21 @@ per spoken script line:
 - Cut on a speaker change or a story beat, not on every line: three to six
   shots for 30 seconds. A two-shot (both characters, `standing`) carries an
   exchange; a single carries a reaction.
-- Frame with `shot`: `medium` or `close` so faces read on a phone. A
-  character at a desk or seated needs `medium` or `close`; `wide` there
-  can leave the frame.
-- Give every shot something to watch: a pose or expression change on the key
-  word of each line, taken from the script's `playing` notes. Two people
-  standing still while they talk fails the motion and density gates.
+- Frame with `shot`. In 9:16 use `close` for talk: faces read on a phone
+  and sit in the top third of the frame, which the density gate wants filled
+  for most of the story. A character at a desk or seated needs `medium` or
+  `close`; `wide` there can leave the frame.
+- Give every shot something to watch. Cue a pose or expression change on the
+  key word of each line (from the script's `playing` notes) and a reaction
+  from the listener on the line that lands on them, so nobody holds one pose
+  for more than a second or two. Two people standing still while they talk
+  fail the motion gate.
 - Use only the bible's characters, sets and world. Do not edit the story's
   `cast` or `bible`.
 - A closing `character-cameo` with a card carries a moral or a call to
-  action.
+  action. Keep the card to a kicker and a short title, and let the scene run
+  a second or two past the last word: text must stay up long enough to read
+  (0.22 seconds a word, the ghosting gate).
 
 Check, then read the shot list:
 
@@ -327,7 +336,8 @@ step uses.
 1. **Gates first.** `gates_failed` in `ANIMATIC.json` must be empty. A failing
    gate names its fix (`cast`, `bible`, `direction`, `acting`,
    `lip-sync`, `layout`, `motion`, `density`…). Repair the storyboard,
-   never the gate.
+   never the gate. `motion` is the hard one for dialogue: it lists each
+   still span in `qa/finish/motion.json`; put a cue inside each.
 2. **Review from the frames**, in a fresh context where you can: the contact
    sheets beside each character's reference sheet, with the shot list as
    text. Judge story, staging and acting only, in these categories:
@@ -351,16 +361,18 @@ it.
 
 ## 7. Draft, critic and retakes
 
-Go back to the quick path at its **Draft** step and follow it to the end: the
-draft render (`launchclip finish <project>`, which adds music, sound and the
-master), a fresh-context critic that writes `qa/critic.json`, and the gate:
+Go back to the quick path at step 5 and follow it to the end: the
+candidates, the draft render (`launchclip finish <project>`, which adds
+music, sound and the master), a fresh-context critic that writes
+`qa/critic.json`, and the gate:
 
 ```bash
 launchclip cinematic-check <project> --video renders/draft.mp4 --critique qa/critic.json --expect-audio
 ```
 
-The loglines you judged are this story's concepts and the script is its
-story: record them where the gate expects them, in the formats
+The gate reads the quick path's planning files too. The five loglines you
+judged are this story's concepts (`CONCEPTS.json`) and the script's beats
+are its story (`STORY.json`): write both in the formats
 [cinematic-production.md](cinematic-production.md) gives. The critic of a
 character story also puts each reference sheet beside the frames and uses the
 `acting`, `character-consistency` and `lip-sync` categories.
