@@ -196,7 +196,8 @@ export function lineAnchor(script, lineId) {
   if (!before) return 0.5;
   const words = before.words;
   let k = words.length - 1;
-  for (let j = words.length - 1; j >= Math.max(0, words.length - 5); j--) if (count(words[j]) === 1) { k = j; break; }
+  // A plain word (letters only: a voice may split "it's" or "3-year-old" its own way) the script says once.
+  for (let j = words.length - 1; j >= Math.max(0, words.length - 5); j--) if (count(words[j]) === 1 && /^\p{L}{2,}$/u.test(words[j])) { k = j; break; }
   // About 0.3 s a word to the line's end, then a beat into the pause.
   const offset = Math.round((0.3 * (words.length - k) + 0.35) * 100) / 100;
   return `word:${words[k]}#${occurrence(before.i, k)}+${offset}`;
