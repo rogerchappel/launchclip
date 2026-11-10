@@ -119,6 +119,7 @@ test("prices the Claude 5.x models at their published rates, Haiku's long prompt
   assert.match(costs.line_items[3].note, /100K/);
   assert.equal(costs.line_items[0].pricing.source, "https://platform.claude.com/docs/en/about-claude/pricing");
   assert.equal(estimateModelUsageCost("anthropic", "anthropic/claude-sonnet-5-5", { input_tokens: 0, output_tokens: 0, cached_tokens: 1_000_000 }).estimated_usd, .1);
+  assert.equal(estimateModelUsageCost("openrouter", "anthropic/claude-opus-5.5", { input_tokens: 1_000_000, output_tokens: 0 }).estimated_usd, 4);
 });
 
 test("totals ElevenLabs transcription, speech, and music usage", async () => {
