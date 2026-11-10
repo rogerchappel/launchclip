@@ -1376,7 +1376,9 @@ function validateSocialSources(story, warn) {
 function validateCamera(camera, { err, warn, lane }) {
   if (camera === undefined || camera === null) return "cuts";
   if (!isObject(camera)) { err("camera must be an object {mode, layout?, spacing?, parallax?, blur?}"); return "cuts"; }
-  for (const key of Object.keys(camera)) if (!["mode", "layout", "spacing", "parallax", "blur", "kicks"].includes(key)) err(`camera.${key} is not supported (allowed: mode, layout, spacing, parallax, blur, kicks)`);
+  for (const key of Object.keys(camera)) if (!["mode", "layout", "spacing", "parallax", "blur", "kicks", "moves"].includes(key)) err(`camera.${key} is not supported (allowed: mode, layout, spacing, parallax, blur, kicks, moves)`);
+  // moves: false turns off a character story's default moves inside its shots (kit/core/character-camera.mjs).
+  if (camera.moves !== undefined && typeof camera.moves !== "boolean") err("camera.moves must be true or false");
   const mode = camera.mode ?? "cuts";
   if (!STORY_CAMERA_MODES.includes(mode)) err(`camera.mode must be one of ${STORY_CAMERA_MODES.join(", ")}`);
   if (camera.layout !== undefined && !STORY_CAMERA_LAYOUTS.includes(camera.layout)) err(`camera.layout must be one of ${STORY_CAMERA_LAYOUTS.join(", ")}`);

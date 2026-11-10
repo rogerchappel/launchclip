@@ -189,8 +189,9 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
 - `states` on a scene (1–5 entries, each `{at, set}`) advances one module
   instance through timed states; see "Shot states and the focus device".
 - `motion.grammar` (a grammar name or `{base, ...overrides}`), `motion.feel` (see "Story feel") and `camera`
-  (`{mode, layout?, spacing?, parallax?, blur?, kicks?}`): see "Motion grammar" and
-  "World camera".
+  (`{mode, layout?, spacing?, parallax?, blur?, kicks?, moves?}`): see "Motion grammar" and
+  "World camera"; `moves: false` turns off a character story's default moves
+  ("Zooms inside a shot").
 - Assets are project-relative paths under `assets/`.
 - `audio.narration` = `{text, provider?, voice?, speed?}` is narration that
   `launchclip finish` synthesises into `audio.voice` and `audio.words` (text
@@ -963,7 +964,8 @@ A style pack is `.launchclip/styles/<name>/style.json`:
   mean, or a string grammar, to replace them); `motion: {blur: {samples:
   4}}` keeps the pack's `shutter` 1.5. The captions
   overlay gets the pack's preset (with `captions.lanes[story.lane]` on top,
-  `packCaptionsFor`) only when it names neither `preset` nor `style`, and its
+  `packCaptionsFor`; a character story takes only `captions.lanes.characters`,
+  `packCaptionsForStory`) only when it names neither `preset` nor `style`, and its
   other options per key (a story with no `overlays` at all
   gets one captions overlay); `sound` lands on `audio.sfx_density`,
   `audio.sfx_library` and `audio.music_hints` (finish filters cues by density
@@ -1342,10 +1344,43 @@ colors?, stroke?, shadow?, entrance?, exit?, offset?, hide_during_moves?}`; lega
 presets; `STORY_CAPTION_PRESETS` in `story.mjs` mirrors the names. An overlay
 that names neither gets `captionDefaultPreset(story)`: `quiet-accent` in a
 footage-led story that names no style pack, `word-highlight` everywhere else
-(a pack's caption defaults arrive through `applyStyle`). `quiet-accent` is
+(a pack's caption defaults arrive through `applyStyle`). A character story
+has its own treatment: see "Character stories" below. `quiet-accent` is
 sentence case in the body face with no stroke, and colours at most one accent
 word per line (`accents: 1`): the line's first emphasis word, else its longest
 word of six letters or more.
+
+**Chunking.** `chunkWords(words, {maxWords, maxChars, gapSeconds})` fills a
+line until the next word would pass a limit, and ends it on a full stop, a
+comma (after two words or more) or a pause. A phrase's last word is kept with
+its phrase: when a line was cut for size one word short of the phrase's end
+("The foal watched the starting" / "gate."), it hands words from its end to
+the lone word until the two are about even ("The foal watched the" /
+"starting gate."). Only when the line before keeps two words or more, the two
+were spoken without a pause, and the new line fits the limits; a one-word
+sentence ("No.") stays alone.
+
+**Character stories** (`kit/core/character-story.mjs`,
+`kit/core/cast-captions.mjs`). `isCharacterStory(story)`: the story carries a
+`bible` reference and stages its cast (`cast-scene`, `character-cameo`), and
+is not footage-led. Its captions overlay, when it names no `preset` or
+`style`, resolves with `CHARACTER_CAPTIONS` under its own options
+(`characterCaptions`): `word-highlight` (no band, no plate) in sentence case,
+4 words and 22 letters a line, at 0.86 of the preset's size, white type in
+the preset's dark outline with the spoken word in the brand primary, and no
+world-tone recolouring (the outline carries it on any world). A style pack's
+caption preset is not filled into such a story (`packCaptionsForStory`):
+only what the pack sets under `captions.lanes.characters` applies.
+`castCaptionZones(story)` places the captions clear of the cast: over every
+cast scene it scores the usual band, the band 58% down, the middle and the
+top by how much of the band each character's reach covers (a head counting
+three times a body), takes the first place with the lowest score for the
+whole story, and returns one zone per run of cast scenes (`[]` when that
+place is the usual band, when the overlay sets `position` or `rect`, or when
+the story is not a character story). Both compilers, the segment renderer,
+the caption legibility check and the layout check take their zones from
+`storyCaptionZones(story, layout)` (a footage layout's zones first), so the
+captions are drawn, measured and checked in the same place.
 
 **Over worlds.** A line spoken mostly over a track-0 `world` scene sits on
 the world, not the brand background. Its tone is the world's time of day
@@ -2925,6 +2960,28 @@ without a cut. The shape matches `evidence-clip`'s `focus`.
   eases back out at `until`; without `until` it hands straight over to the
   next zoom (the camera travels box to box) or, on the last zoom, eases out
   so it is back at rest when the shot ends, before the next shot's move.
+
+**A character story's default moves** (`kit/core/character-camera.mjs`). In
+a character story (`isCharacterStory`) a track-0 cast scene with no `zooms`
+of its own takes one move for as long as it is up; `shotZooms` returns its
+keys, so both compilers play it through the same code as a zoom (camera
+moves flagged `zoom: true` in world mode, which leave the captions alone;
+the scene's zoom wrappers in cuts mode). `characterMove(story, scene)`
+chooses it from the storyboard alone:
+
+| Move | When | What |
+|---|---|---|
+| `speaker` | a `medium` or `close` shot where a character `says` a line | a push-in from rest, 2.8% a second, 4.5% to 12% in all |
+| `wide` | a `wide` shot (and a `world` plate) | a drift across at 1.05× (2% of the width a second, 4.4% at most; right on even plates, left on odd) with 40% of a push |
+| `reaction` | a `medium` or `close` shot where nobody speaks | a punch-in to 1.07× over 0.42 s on the grammar's camera ease, then a slow creep |
+
+A slow move is three keys with one velocity through the joins (`power1.in`,
+linear, `power1.out`; ramps of 0.3 s, at most a quarter of the move), so it
+is slow, fast, slow with no overshoot; a last key puts the camera back at
+rest as the scene ends. The view never leaves the plate. A scene gets no
+move when it is shorter than 0.8 s, when it or the next plate arrives on
+anything but a cut, or when it is the last scene before an `ending`.
+`camera.moves: false` turns every default move off.
 
 Validation (`kit/core/story.mjs` `validateZooms`; timing is checked with the
 longest move, 0.8 s, so it holds in every grammar):

@@ -182,6 +182,11 @@ motion video:
 launchclip make "A 30-second short: Maya keeps shipping a fix that fails, and Sam shows her the check she skipped" --animation --aspect 9:16
 ```
 
+A character story is a Short: with no `--aspect` it comes out 9:16. Pass
+`--aspect 16:9` (or `1:1`), or name the shape in the prompt ("a landscape
+cartoon", "16:9", "widescreen"), for another one. Every other video still
+defaults to 16:9.
+
 It writes a script with speakers, voices it, designs the cast and the
 world, plans the shots with that cast, renders an animatic and has it
 reviewed, retakes the shots the review fails, then renders the video and
@@ -234,13 +239,38 @@ After the voice, one model call designs the cast and the world, and
 - **The world**: a kind of place, a time of day, the sets the story plays
   on, and up to three continuity rules.
 - **A reference sheet** per character in `bible/sheets/<id>.png` (drawn in
-  Chromium, like `launchclip cast sheet`).
+  Chromium, like `launchclip cast sheet`). The browser is the first one
+  found of: `LAUNCHCLIP_CHROMIUM`, Playwright's own Chromium, a system
+  Chrome, then the headless shell a renderer already installed (Remotion's,
+  then HyperFrames'), so a machine that can render can draw its sheets. If
+  there is none, the error lists every place it looked.
 
 The shots are then planned with the bible pinned: `storyboard.json` and
 `DIRECTION.json` name it (`"bible": {"file", "hash"}`), the story's cast is
 copied from it after every model pass, and the cast check runs inside the
 plan, so a pose that reaches off the frame is repaired before the render.
 `--replan` plans new shots; it never designs a new cast.
+
+A story planned with a bible gets three things without the planner asking:
+
+- **Captions clear of the cast.** White outlined lines with no band or
+  plate, in sentence case, up to four words a line, with the spoken word in
+  the brand colour. They sit where no character reaches in any cast scene
+  (above the cast in most 9:16 stories), in one place for the whole story.
+  The style's own caption preset is made for cards and footage and is not
+  used; a style sets one for character stories with
+  `captions.lanes.characters`. Captions the storyboard places itself
+  (`position`) stay where it puts them.
+- **A camera that moves inside each shot.** A slow push-in on a character
+  who speaks, a gentle drift across a `wide` shot, a punch-in on a
+  character who only listens. Each eases in and out with no overshoot, runs
+  for as long as the shot is up and ends on the cut. A scene's own `zooms`
+  replace its move; `"camera": {"moves": false}` turns them all off.
+- **A style gate that measures what the style governs.** The bible fixes
+  the world and the cast, so the render's colours are sky, grass and coats,
+  not the style's palette. The gate checks the colours the storyboard sets
+  itself (captions, brand frame, cards) against the brand colours, and a
+  caption preset with a band or a plate over the cast fails it.
 
 To look before any shot is planned:
 

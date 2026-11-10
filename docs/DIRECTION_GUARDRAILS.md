@@ -180,6 +180,10 @@ entrances and variants. The clamps only cap their timing.
   the layout check's element rects:
   - a region (top, middle or bottom third in 9:16; left, centre or right in
     16:9) with only the plate in it for longer than 4 s;
+  - in a character story (one made with a show bible) the captions fill the
+    third they sit in while they are up: they are placed clear of the cast
+    (`kit/core/cast-captions.mjs`), so the sky over a character holds the
+    words;
   - a full-frame `photo-scene` counts as content, not plate, when its asset
     is detailed or moving. `src/media_presence.js` measures the asset's
     pixels: edges for detail, changed pixels between samples for motion. A

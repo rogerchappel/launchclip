@@ -470,10 +470,11 @@ export function cameraPlan(story, { windows, objects } = {}) {
   const warnings = [];
   if (camera.mode === 'world') {
     for (const entry of plates) {
-      if (!Array.isArray(entry.scene.zooms) || !entry.scene.zooms.length) continue;
+      // Its own zooms, else (a character story's cast scene) its default move (character-camera.mjs).
+      const { keys, warnings: dropped } = shotZooms(story, entry, objects?.zoomRects?.(entry.id) ?? null);
+      if (!keys.length && !dropped.length) continue;
       const placement = layout.placements.get(entry.id);
       const rest = restState(placement, size);
-      const { keys, warnings: dropped } = shotZooms(story, entry, objects?.zoomRects?.(entry.id) ?? null);
       warnings.push(...dropped);
       const at = (state) => { const point = worldPoint(placement, state); return { x: round(point.x, 4), y: round(point.y, 4), zoom: round(rest.zoom * state.s, 6), rotation: rest.rotation }; };
       for (const key of keys) moves.push({ sceneId: entry.id, type: 'zoom', zoom: true, start: key.start, duration: key.duration, ease: key.ease, blur: blurFor('zoom'), from: at(key.from), to: at(key.to) });

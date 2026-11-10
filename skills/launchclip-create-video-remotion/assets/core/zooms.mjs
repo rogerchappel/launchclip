@@ -1,7 +1,7 @@
 // Zooms inside a shot: the camera dives into one bar, row, number or box of a
 // track-0 shot as the narration names it, holds, and eases back out. Shared by
 // the HyperFrames compiler and the Remotion StoryComposition. Plain ESM;
-// imports only grammar.mjs. Contract: docs/KIT_CONTRACTS.md, "Zooms inside a
+// imports only grammar.mjs and character-camera.mjs. Contract: docs/KIT_CONTRACTS.md, "Zooms inside a
 // shot".
 //
 //   scene.zooms = [{at, box | target | object, scale?, until?}]
@@ -30,6 +30,7 @@
 // - Captions sit outside the camera and the wrappers, so a zoom never moves
 //   or dips them.
 
+import { characterKeys } from './character-camera.mjs';
 import { resolveGrammar } from './grammar.mjs';
 
 export const ZOOM = Object.freeze({
@@ -98,7 +99,8 @@ export function shotZooms(story, entry, rects = null) {
   const size = { width, height };
   const list = Array.isArray(entry?.scene?.zooms) ? entry.scene.zooms : [];
   const out = { zooms: [], keys: [], warnings: [] };
-  if (!list.length) return out;
+  // A character story's cast scene with no zooms of its own takes its default move (character-camera.mjs).
+  if (!list.length) return { ...out, keys: characterKeys(story, entry?.scene) };
   const { duration, ease } = zoomTiming(story);
   for (const [index, zoom] of list.entries()) {
     const found = isRect(zoom?.box) ? { rect: zoom.box } : rects?.[index] ?? { error: 'its rect was not resolved' };

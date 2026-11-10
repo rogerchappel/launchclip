@@ -442,6 +442,19 @@ and colour clusters are kept.
 - that the cadence measures sit inside the style's band;
 - that the brand frame is present where the style says.
 
+A character story (one made with a show bible) is drawn by the bible: its
+frames are the world and the cast, whose colours the bible fixes and the
+`bible` gate checks. Comparing those pixels with the style's palette failed
+every correct character story (the first real run measured 0.2059 against a
+limit of 0.12 on a park, a foal and a mare). There the palette check reads
+the storyboard instead: every colour the story sets itself for what the
+style still governs (the captions, the brand frame, the params of its cards)
+must be a brand colour or a neutral. The share of pixels near the brand
+primary stays as a warning. The captions must be the character-story
+treatment (a preset with a band or a plate over the cast is an error), and
+the motion grammar's shot range is left out, because the shots are cut on
+the dialogue.
+
 ## 10. By format
 
 ### 10.1 Shorts (≤ 60 s, 9:16)

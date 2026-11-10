@@ -16,6 +16,7 @@
 // Canonical copy: kit/core/style.mjs.
 
 import { CAPTION_PRESET_NAMES } from './captions.mjs';
+import { CHARACTER_CAPTION_LANE, isCharacterStory } from './character-story.mjs';
 import { FONT_REGISTRY, fontFamilyName, registeredFamily } from './fonts.mjs';
 import { CADENCE_PROFILE_SCHEMA, validateProfile } from './profiles.mjs';
 import { DRAWING_STYLES, storyCastErrors } from './characters/cues.mjs';
@@ -81,7 +82,8 @@ function storyMotionOf(motion) {
   return Object.keys(out).length ? out : null;
 }
 
-export const STYLE_CAPTION_LANES = Object.freeze(['motion', 'voiceover-motion', 'footage-led']);
+// The story lanes, and `characters`: a character story (character-story.mjs), which reads only that entry.
+export const STYLE_CAPTION_LANES = Object.freeze(['motion', 'voiceover-motion', 'footage-led', CHARACTER_CAPTION_LANE]);
 export const STYLE_FRAME_POSITIONS = Object.freeze(['top-left', 'top-right', 'bottom-left', 'bottom-right']);
 export { CADENCE_PROFILE_SCHEMA };
 
@@ -618,6 +620,19 @@ export function packCaptionsFor(pack, lane) {
   return Object.keys(merged).length ? merged : null;
 }
 
+/**
+ * A pack's caption defaults for a story: packCaptionsFor its lane, except a
+ * character story (character-story.mjs), which takes only what the pack sets
+ * for it (captions.lanes.characters). A pack's caption preset is made for
+ * cards and footage; over a cast it would put a band or a plate on the
+ * characters, so without that entry the kit's character-story captions apply.
+ */
+export function packCaptionsForStory(pack, story) {
+  if (!isCharacterStory(story)) return packCaptionsFor(pack, story?.lane);
+  const own = pack?.captions?.lanes?.[CHARACTER_CAPTION_LANE];
+  return isObject(own) && Object.keys(own).length ? { ...own } : null;
+}
+
 function usesAnchors(story) {
   const anchor = (value) => typeof value === 'string';
   for (const scene of story.scenes ?? []) {
@@ -735,7 +750,7 @@ export function applyStyle(story, pack, options = {}) {
   // Captions: the pack's preset and options, with its defaults for the
   // story's lane on top (v3 captions.lanes), fill the story's captions overlay
   // (added when the story declares no overlays at all).
-  const captions = packCaptionsFor(pack, out.lane);
+  const captions = packCaptionsForStory(pack, out);
   if (captions && captions.preset !== 'none') {
     if (out.overlays === undefined) {
       out.overlays = [{ type: 'captions', ...clone(captions) }];
@@ -1003,7 +1018,7 @@ export function stylePromptLines(pack, { lane, story } = {}) {
   lines.push('Set "style": "' + pack.name + '" at the top level. The pack fills brand, captions, motion, camera, ambient and sound; do not restate them unless the brief demands an exception.');
   if (pack.modules?.prefer?.length) lines.push(`Prefer these modules where the script allows: ${pack.modules.prefer.join(', ')}.`);
   if (pack.modules?.avoid?.length) lines.push(`Avoid these modules: ${pack.modules.avoid.join(', ')}.`);
-  const captions = packCaptionsFor(pack, lane);
+  const captions = story ? packCaptionsForStory(pack, { lane, ...story }) : packCaptionsFor(pack, lane);
   if (captions?.preset) lines.push(`Captions use the ${captions.preset} preset${pack.captions?.lanes?.[lane]?.preset ? ` (the pack's ${lane} default)` : ''}: write {"type": "captions"} without a style or preset.`);
   const layouts = pack.layouts;
   const named = (map) => Object.entries(map ?? {}).map(([key, value]) => `${key} → ${value}`).join(', ');
