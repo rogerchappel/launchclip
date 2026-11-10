@@ -182,11 +182,10 @@ launchclip make "A 30-second short: Maya keeps shipping a fix that fails, and Sa
 ```
 
 It writes a script with speakers, voices it, designs the cast and the
-world, plans the shots with that cast and renders the video. The stages
-are in [ANIMATION_PIPELINE_RFC.md](../ANIMATION_PIPELINE_RFC.md); the
-animatic review and the critic's retakes for character stories are still
-being built, so today the video goes from the shot list straight to
-`finish`.
+world, plans the shots with that cast, renders an animatic and has it
+reviewed, retakes the shots the review fails, then renders the video and
+has the critic look at it. The stages are in
+[ANIMATION_PIPELINE_RFC.md](../ANIMATION_PIPELINE_RFC.md).
 
 What it does write:
 
@@ -262,6 +261,59 @@ To change a character before you approve: `launchclip cast edit <id>
 write is always used as it is (make designs a cast only when there is
 none), so you can also bring your own: design the characters, freeze the
 bible, then run make.
+
+### The animatic, its review and retakes
+
+Before the delivery render, make renders the whole story at draft quality
+to `renders/animatic.mp4` and writes `ANIMATIC.json` (its shots, its gates
+and the hashes of the storyboard and the bible). This is `launchclip finish
+--animatic`; nothing about it is special to make.
+
+With a model that takes images, a **staging review** then looks at the
+animatic for story, staging and acting only, with each character's
+reference sheet beside the frames (`qa/animatic-critic.json`). While it
+does not say `ship`, make **retakes** the shots its blocking and major
+findings name: one small model call redirects those shots (their cues,
+framing or set; the timing is locked), only those shots render again, and
+the review looks again. A round that does not lower the findings is undone
+and the rounds stop. The rounds are in `qa/animatic-retakes.json`.
+
+Then the video is rendered. At draft quality (the default) it is the
+animatic's cut, so no shot renders twice; `--quality high` renders it
+again for delivery. The critic reviews the video as it does for any other
+kind, and on this path its repair rounds are retakes too
+(`qa/retakes.json`).
+
+`--critic-repairs` (3 by default, 0 for none) is one budget for both: a
+round spent on the animatic is not spent again on the video.
+
+| The run ends | When | Exit code |
+| --- | --- | --- |
+| `ready` | every gate passed and the critic said `ship` | 0 |
+| `needs-repair` | a gate failed, or the critic still does not say `ship` once the rounds are spent. The video is rendered, not finished | 2 |
+| `awaiting-approval` | it stopped after the bible or the animatic | 3 |
+| `ready-for-review` | no model could look at it (no vision model, or `--no-critic`) | 4 |
+| `failed` | a stage failed | 1 |
+
+To watch the animatic before the delivery render:
+
+```bash
+launchclip make "<prompt>" --animation --out ./short --stop-after animatic   # ends awaiting-approval, exit 3
+open ./short/renders/animatic.mp4                                            # the review is ./short/qa/animatic-critic.json
+launchclip make "<prompt>" --animation --out ./short --approve animatic      # renders the video; nothing earlier runs again
+```
+
+In a terminal make asks at that point without the flag; with no terminal
+it goes on unless you pass `--stop-after animatic`. A headless run goes on
+even when the review still asks for a repair: the video is rendered, the
+critic has the last word, and the run ends `needs-repair` if it agrees. An
+approval is of that storyboard's animatic: change a shot and it is asked
+again. `--approve bible,animatic` approves both.
+
+To change a shot yourself before you approve, edit its scene in
+`storyboard.json` (or run `launchclip finish ./short --animatic --retake`)
+and run the same make command again: the animatic renders only what
+changed.
 
 `--animation` needs the motion lane, so it refuses an assets folder that
 holds a voiceover or a recording with speech, and a length over 180 seconds.

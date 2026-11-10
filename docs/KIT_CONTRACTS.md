@@ -4736,6 +4736,48 @@ call (`redirectShots`) whose answer must validate as a story; `runRetakes`
 takes `redirect`, `render` and `critic` hooks, so `make` can pass its own
 planner and stages.
 
+**In `make`** (`stageAnimatic`, `criticRetakes` in `src/make/index.js`).
+The stage list of `launchclip make` is `model, inventory, demo, route,
+prepare, bible, storyboard, candidates, animatic, subject, finish, critic`;
+`animatic` is `skipped` for a video that is not `--animation`.
+
+- **Render.** `runFinish(project, {…make's finish options, quality:
+  "draft", animatic: true})`. A fresh `ANIMATIC.json` (`readAnimatic`) is
+  reused, with its review, and the stage reports `cached`.
+- **Review.** With a vision model and no `--no-critic`: `reviewAnimatic`
+  with the shot list (`retakeProject(project).shots`) and make's rules.
+- **Retakes.** While the review does not say `ship`: `runRetakes({review:
+  "animatic", rounds: --critic-repairs})`. The redirect is the default
+  model call, and the retaken storyboard is also held to the plan's own
+  checks (the bible pin, the cast gate) when this run planned it. make
+  moves the record to `qa/animatic-retakes.json`, so `qa/retakes.json` is
+  the final critic's.
+- **Approval.** `--stop-after animatic` sets `stopped: {after: "animatic"}`
+  and the status `awaiting-approval`; `--approve animatic` approves that
+  storyboard's animatic (its `story_hash`, kept in
+  `.launchclip/make-state.json` under `animatic.approved`). An attended run
+  asks through `adapters.ask`. A headless run goes on whatever the review
+  says; a review that still asks for a repair is a warning, and the critic
+  decides.
+- **The critic's rounds** on this path are `runRetakes({review: "final"})`
+  in place of the scene repair loop: `render` is make's finish stage with
+  `scenes` set to the retaken shots, `critic` is make's critic. The rounds
+  left are `--critic-repairs` minus the rounds the animatic spent. A round
+  that is undone also puts `MAKE.json`'s gates, critic and final back.
+- **`MAKE.json`** gains `animatic: {file, video, story_hash, bible_hash,
+  shots, gates_failed, review: {verdict, file} | {verdict: null, reason},
+  retakes?: {file, rounds, kept, status}, approved}` and, when the critic
+  retook shots, `retakes: {file, review: "final", rounds, kept, status}`;
+  `critic_repairs` lists those rounds (each a `qa/retakes.json` round with
+  `mode` set to its step).
+- **Costs** are filed under `animatic-review`, `animatic-review-<round>`,
+  `animatic-retake-<round>-<step>`, `critic`, `critic-<round>` and
+  `retake-<round>-<step>`.
+- **Status and exit code**: `ready` (0) on a `ship` verdict with every gate
+  passed; `needs-repair` (2) when a gate failed or the rounds are spent;
+  `awaiting-approval` (3); `ready-for-review` (4) when nothing could review
+  it.
+
 ### Sprite casts (`cast.sprites.json`, `launchclip cast sprites`)
 
 ```json

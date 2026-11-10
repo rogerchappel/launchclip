@@ -3,7 +3,7 @@
 //
 //   inventory → demo (--repo: demo autopilot) → route → prepare (base edit + presenter probe | voiceover prep | script + voice)
 //     → bible (--animation: the cast and the world, designed and frozen) → storyboard (planner + repair loop) → candidates (the opening and one risky transition, scored from rendered frames)
-//     → subject (matte the planned ranges) → finish → critic → MAKE.json
+//     → animatic (--animation: the draft cut, its staging review and retakes) → subject (matte the planned ranges) → finish → critic → MAKE.json
 //
 // Every stage is resumable: ASSETS.json entries are reused while a file's size
 // and mtime match, the script and storyboard while their inputs hash the same
@@ -59,8 +59,10 @@ import { SCRIPT_SKELETONS, chooseScriptPlan, scriptPlanOptions } from "@launchcl
 import { chooseSkeleton, skeletonPlanLines, skeletonScriptPlan, storyboardStructureErrors } from "@launchclip/core/skeleton-library.mjs";
 import { loadSkeletonLibrary } from "../skeletons.js";
 import { talkingHeadLayout } from "../talking_head_layout.js";
-import { runHeadlessCritic } from "./critic.js";
-import { changedScenes, criticBriefSection, criticFindings, criticImproved, criticProblems, criticRepairBudget, criticRepairRoute, criticScore, findingScenes } from "./critic_repair.js";
+import { reviewAnimatic, runHeadlessCritic } from "./critic.js";
+import { ANIMATIC_FILE, ANIMATIC_VIDEO, readAnimatic } from "../animatic.js";
+import { redirectShots, retakeProject, runRetakes } from "./retakes.js";
+import { RETAKES_FILE, changedScenes,criticBriefSection, criticFindings, criticImproved, criticProblems, criticRepairBudget, criticRepairRoute, criticScore, findingScenes } from "./critic_repair.js";
 import { readProjectStory } from "../story_loader.js";
 import { plannedSubjectRanges } from "../subject/plan.js";
 import { TRACK_FILE, appFacesTrack, fileProjectMatte, fileProjectTrack, readStoryTrack } from "../subject/project.js";
@@ -195,6 +197,8 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     ["bible", stageBible],
     ["storyboard", stageStoryboard],
     ["candidates", stageCandidates],
+    // The animation path's cheap cut: reviewed for story, staging and acting before the delivery render.
+    ["animatic", stageAnimatic],
     ["subject", stageSubject],
     ["finish", stageFinish],
     ["critic", stageCritic]
@@ -1611,6 +1615,152 @@ async function stageCandidates(ctx) {
 // Matte exactly the source ranges the planned subject scenes cover (padded),
 // filed in the project so base.subject "auto" picks them up. A failed matte
 // is a warning: its scenes render, without the presenter in front.
+/**
+ * The animatic (docs/ANIMATION_PIPELINE_RFC.md §4.4, §4.7, §6.3): the whole
+ * story at draft quality (finish --animatic → renders/animatic.mp4 and
+ * ANIMATIC.json), reviewed by a vision model for story, staging and acting,
+ * with retake rounds while the review does not say ship. A retake re-renders
+ * only the shots it changed. The animatic of an unchanged storyboard and
+ * bible is reused, with its review.
+ *
+ * An attended run asks before the delivery render; a headless run goes on
+ * unless --stop-after animatic. --approve animatic approves this storyboard's
+ * animatic (its story hash). A review that still does not say ship does not
+ * stop a headless run: the delivery render goes ahead and the critic, with
+ * the retake rounds that are left, has the last word.
+ */
+async function stageAnimatic(ctx) {
+  if (!isAnimation(ctx.routing)) return { status: "skipped", reason: "not a character story (--animation)" };
+  const { project, report, state, options, adapters } = ctx;
+  const { finishOptions, finishAdapters, run, musicNote, sfxNote } = await finishInputs(ctx, "animatic");
+  const render = async (scenes = null) => {
+    const finish = await run(project, { ...finishOptions, quality: "draft", animatic: true, ...(scenes ? { scenes } : {}) }, finishAdapters);
+    addSoundCosts(report, finish);
+    return finish;
+  };
+  let found = await readAnimatic(project);
+  const rendered = !found.fresh;
+  if (rendered) {
+    ctx.say(`animatic: the whole story at draft quality (${ctx.renderer}) to ${ANIMATIC_VIDEO}, for review before the delivery render; music: ${musicNote}; sfx: ${sfxNote}`);
+    ctx.say(machineLine(options.concurrency));
+    const finish = await render();
+    if (finish.status === "failed") {
+      const failed = (finish.stages ?? []).find((stage) => stage.status === "failed");
+      throw new Error(`the animatic failed at the ${failed?.name ?? "unknown"} stage: ${errorSummary(failed?.error)}`);
+    }
+    found = await readAnimatic(project);
+    if (!found.animatic) throw new Error(`the animatic rendered but ${ANIMATIC_FILE} was not written (${found.reasons.join("; ")})`);
+  }
+  const sees = options.critic !== false && Boolean(ctx.model.vision);
+  const budget = criticRepairBudget(options.criticRepairs);
+  let retakes = state.animatic?.retakes ?? null;
+  let unreviewed = options.critic === false ? "--no-critic" : !ctx.model.vision ? `${ctx.model.spec} cannot take images` : null;
+  if (rendered || !found.animatic.review?.verdict || state.animatic?.story !== found.animatic.story_hash) retakes = null;
+  if (sees && !found.animatic.review?.verdict) {
+    const review = await reviewCut(ctx, "animatic-review");
+    if (review.status !== "written") {
+      unreviewed = review.reason ?? "the staging review did not run";
+      report.warnings.push(`animatic: the staging review did not run (${unreviewed})`);
+    } else if (review.verdict !== "ship" && budget) {
+      const result = await retakeRounds(ctx, {
+        review: "animatic",
+        critique: review.critique,
+        rounds: budget,
+        label: "animatic-",
+        render: ({ scenes }) => render(scenes),
+        critic: ({ round, shots }) => reviewCut(ctx, `animatic-review-${round}`, shots)
+      });
+      // qa/retakes.json is the final critic's; the animatic's rounds keep their own file.
+      await cp(result.file, path.join(project, ANIMATIC_RETAKES_FILE));
+      await rm(result.file, { force: true });
+      retakes = { file: ANIMATIC_RETAKES_FILE, rounds: result.rounds.length, kept: result.rounds.filter((round) => round.kept).length, status: result.status };
+    }
+    found = await readAnimatic(project);
+  }
+  const animatic = found.animatic;
+  const verdict = animatic.review?.verdict ?? null;
+  const video = path.join(project, animatic.video ?? ANIMATIC_VIDEO);
+  state.animatic = { story: animatic.story_hash, ...(retakes ? { retakes } : {}), ...(state.animatic?.approved ? { approved: state.animatic.approved } : {}) };
+  if (approvals(options.approve).includes("animatic")) state.animatic.approved = animatic.story_hash;
+  let approved = state.animatic.approved === animatic.story_hash;
+  ctx.retakesUsed = retakes?.rounds ?? 0;
+  report.animatic = {
+    file: ANIMATIC_FILE, video: animatic.video ?? ANIMATIC_VIDEO, story_hash: animatic.story_hash, bible_hash: animatic.bible_hash ?? null,
+    shots: (animatic.shots ?? []).length, gates_failed: animatic.gates_failed ?? [],
+    review: verdict ? { verdict, file: animatic.review.file } : { verdict: null, reason: unreviewed ?? "not reviewed" },
+    ...(retakes ? { retakes } : {}),
+    approved
+  };
+  ctx.say(`animatic: ${video} (${report.animatic.shots} shot${report.animatic.shots === 1 ? "" : "s"}); staging review: ${verdict ?? `none (${report.animatic.review.reason})`}${retakes ? `, after ${retakes.rounds} retake round${retakes.rounds === 1 ? "" : "s"} (${retakes.kept} kept)` : ""}${report.animatic.gates_failed.length ? `; gates failed: ${report.animatic.gates_failed.join(", ")}` : ""}`);
+  if (!approved) {
+    let stop = String(options.stopAfter ?? "").toLowerCase() === "animatic";
+    let reason = "stopped for approval of the animatic (--stop-after animatic)";
+    // An attended run asks; a headless run goes on unless --stop-after animatic.
+    const attended = Boolean(adapters.ask) || Boolean(process.stdin.isTTY && process.stderr.isTTY);
+    if (!stop && attended) {
+      if (await (adapters.ask ?? askYesNo)(`animatic: watch ${video}${verdict ? ` (the staging review says ${verdict})` : ""}. Render the finished video from it?`)) { state.animatic.approved = animatic.story_hash; approved = true; report.animatic.approved = true; }
+      else { stop = true; reason = "stopped for approval of the animatic (declined when asked)"; }
+    }
+    if (stop) {
+      const again = `launchclip make ${JSON.stringify(ctx.text)} --animation --out ${project} --approve animatic`;
+      ctx.stop = {
+        after: "animatic",
+        status: "awaiting-approval",
+        reason,
+        next: [`Watch the animatic (${video}${verdict ? `; the staging review is in ${path.join(project, animatic.review.file)}` : ""}). To render the finished video from it, run the same command with --approve animatic (${again}): everything up to the animatic is reused. To change a shot first: edit its scene in storyboard.json, or have the review retake it (launchclip finish ${project} --animatic --retake), then run the command again.`]
+      };
+    }
+  }
+  if (!ctx.stop && verdict && verdict !== "ship") report.warnings.push(`animatic: the staging review still asks for ${verdict}${retakes ? ` after ${retakes.rounds} retake round${retakes.rounds === 1 ? "" : "s"}` : ""} (${animatic.review.file}); the delivery render goes ahead and the critic has the last word`);
+  return rendered ? { status: "done" } : { status: "cached", reason: "the storyboard and the show bible are the ones the animatic was rendered from" };
+}
+
+// The animatic's retake rounds, kept apart from the final critic's qa/retakes.json.
+export const ANIMATIC_RETAKES_FILE = "qa/animatic-retakes.json";
+
+// One staging review of the animatic (src/make/critic.js reviewAnimatic), its cost in the report.
+async function reviewCut(ctx, label, shots = null) {
+  const { project, report } = ctx;
+  ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (staging review of the animatic: story, staging and acting)`);
+  const result = await (ctx.adapters.animaticCritic ?? reviewAnimatic)({ project, client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, shots: shots ?? (await retakeProject(project)).shots, rules: rulesText(ctx) });
+  if (result.cost_usd !== undefined) addCost(report, label, ctx.model, { cost_usd: result.cost_usd, usage: result.usage, model: result.model });
+  return result;
+}
+
+/**
+ * Retake rounds on a character story (src/make/retakes.js runRetakes), for
+ * the animatic's review or the final critic: the model redirects the failing
+ * shots, `render` renders only those and `critic` looks again. The retaken
+ * storyboard is held to the plan's own checks when this run planned it. A
+ * round that is undone also puts the report back as it was.
+ */
+async function retakeRounds(ctx, { review, critique, rounds, label = "", render, critic }) {
+  const { project, report } = ctx;
+  let held = null;
+  const result = await runRetakes({
+    project, review, critique, rounds, say: ctx.say,
+    client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider,
+    redirect: async (args) => {
+      held = { round: args.round, fields: Object.fromEntries(CRITIC_ROUND_FIELDS.map((field) => [field, structuredClone(report[field])])), finish: ctx.finish };
+      ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (retake ${args.round}: ${args.step} ${args.shots.join(", ")})`);
+      const answer = await (ctx.adapters.redirect ?? redirectShots)({ client: ctx.model.client, ...args });
+      const errors = ctx.storyCheck && answer?.story?.scenes ? ctx.storyCheck(answer.story) : [];
+      if (errors.length) throw new Error(`the retake failed the storyboard's checks: ${errors.slice(0, 3).join("; ")}`);
+      return answer;
+    },
+    render,
+    critic
+  });
+  const last = result.rounds.at(-1);
+  if (held && last?.round === held.round && !last.kept) {
+    Object.assign(report, held.fields);
+    ctx.finish = held.finish;
+  }
+  // The reviews price themselves (reviewCut, runCritic); the redirect calls are priced here.
+  for (const item of result.usage) if (!String(item.stage).endsWith("-critic")) addCost(report, `${label}${item.stage}`, ctx.model, item);
+  return result;
+}
+
 async function stageSubject(ctx) {
   const { project, report, adapters } = ctx;
   if (ctx.routing.lane !== "footage-led") return { status: "skipped", reason: "not footage-led" };
@@ -1635,18 +1785,36 @@ async function stageSubject(ctx) {
   return report.subject.mattes.length ? { status: "done" } : { status: "skipped", reason: "every matte failed (see the warnings); subject scenes render without the presenter in front" };
 }
 
-async function stageFinish(ctx) {
-  const { project, report, adapters, options } = ctx;
+// What make hands finish: its options, its adapters and the function itself
+// (the delivery render and the animatic both go through these). `stage` names
+// the progress events.
+async function finishInputs(ctx, stage = "finish") {
+  const { adapters, options } = ctx;
   // A run that cannot have its ElevenLabs track still finishes, on the synth bed (src/finish.js musicFallback).
   const finishOptions = { renderer: ctx.renderer, quality: ctx.quality, musicFallback: true, ...(options.concurrency != null ? { concurrency: options.concurrency } : {}), ...(options.music != null ? { music: String(options.music).toLowerCase() } : {}), ...(options.musicVolume != null ? { musicVolume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { musicDuck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { musicPrompt: String(options.musicPrompt) } : {}), sfx: makeSfxMode(options.sfx, ctx.env), ...(ctx.finishScenes?.length ? { scenes: ctx.finishScenes } : {}) };
   const musicNote = options.music != null ? `--music ${options.music}` : ctx.routing.music ? `the supplied track assets/${ctx.routing.music.path}` : (ctx.env.ELEVENLABS_API_KEY ? "ElevenLabs (ELEVENLABS_API_KEY is set; PAID unless the music lock or cache has the track)" : "the synth bed (no ELEVENLABS_API_KEY)");
   const sfxNote = finishOptions.sfx === "generated" ? "generated per event (ElevenLabs sound effects; PAID unless the project lock or cache has them)" : finishOptions.sfx;
-  ctx.say(`finish: voice, captions, sound, render (${ctx.renderer}, ${ctx.quality}), master, evidence, gates; music: ${musicNote}; sfx: ${sfxNote}`);
-  ctx.say(machineLine(options.concurrency));
-  const finishAdapters = { env: ctx.env, notice: ctx.say, progress: (event) => ctx.progress?.({ stage: "finish", ...event }), ...(adapters.finishAdapters ?? {}) };
+  const finishAdapters = { env: ctx.env, notice: ctx.say, progress: (event) => ctx.progress?.({ stage, ...event }), ...(adapters.finishAdapters ?? {}) };
   if (adapters.voiceProvider) finishAdapters.voiceProvider = adapters.voiceProvider;
   if (adapters.normalizeVoice) finishAdapters.normalizeVoice = adapters.normalizeVoice;
   const run = adapters.finish ?? (await import("../finish.js")).runFinish;
+  return { finishOptions, finishAdapters, run, musicNote, sfxNote };
+}
+
+// The sound a finish paid for (generated effects, a generated track): once, where it was made.
+function addSoundCosts(report, finish) {
+  const sound = (finish.stages ?? []).find((stage) => stage.name === "sound");
+  const sfxCost = Number(sound?.details?.sfx_generated?.cost_usd);
+  if (Number.isFinite(sfxCost) && sfxCost > 0) report.costs.items.push({ stage: "sfx", provider: "elevenlabs", model: "eleven_text_to_sound_v2", sounds: Number(sound.details.sfx_generated.new ?? 0), estimated_usd: sfxCost, fallback: false });
+  const musicCost = Number(sound?.details?.music?.cost_usd ?? sound?.details?.music_cost_usd);
+  if (Number.isFinite(musicCost) && musicCost > 0 && !sound?.details?.music?.cached) report.costs.items.push({ stage: "music", provider: "elevenlabs", model: sound?.details?.music?.model ?? sound?.details?.music?.generation?.model ?? null, generated_seconds: Number(sound?.details?.music?.generated_seconds ?? sound?.details?.music?.generation?.generated_seconds ?? 0), estimated_usd: musicCost, fallback: false });
+}
+
+async function stageFinish(ctx) {
+  const { project, report, options } = ctx;
+  const { finishOptions, finishAdapters, run, musicNote, sfxNote } = await finishInputs(ctx);
+  ctx.say(`finish: voice, captions, sound, render (${ctx.renderer}, ${ctx.quality}), master, evidence, gates; music: ${musicNote}; sfx: ${sfxNote}`);
+  ctx.say(machineLine(options.concurrency));
   const finish = await run(project, finishOptions, finishAdapters);
   ctx.finish = finish;
   report.finish = { status: finish.status, report: "finish.json", seconds: finish.seconds, stages: finish.stages.map((stage) => ({ name: stage.name, status: stage.status, seconds: stage.seconds, ...(stage.error ? { error: stage.error.split("\n")[0] } : {}) })) };
@@ -1657,11 +1825,7 @@ async function stageFinish(ctx) {
   // finish wrote publish.json (and the cover) with SCRIPT.json's titles.
   if (finish.publish) report.publish = finish.publish;
   report.warnings.push(...(finish.warnings ?? []));
-  const sound = finish.stages.find((stage) => stage.name === "sound");
-  const sfxCost = Number(sound?.details?.sfx_generated?.cost_usd);
-  if (Number.isFinite(sfxCost) && sfxCost > 0) report.costs.items.push({ stage: "sfx", provider: "elevenlabs", model: "eleven_text_to_sound_v2", sounds: Number(sound.details.sfx_generated.new ?? 0), estimated_usd: sfxCost, fallback: false });
-  const musicCost = Number(sound?.details?.music?.cost_usd ?? sound?.details?.music_cost_usd);
-  if (Number.isFinite(musicCost) && musicCost > 0 && !sound?.details?.music?.cached) report.costs.items.push({ stage: "music", provider: "elevenlabs", model: sound?.details?.music?.model ?? sound?.details?.music?.generation?.model ?? null, generated_seconds: Number(sound?.details?.music?.generated_seconds ?? sound?.details?.music?.generation?.generated_seconds ?? 0), estimated_usd: musicCost, fallback: false });
+  addSoundCosts(report, finish);
   if (finish.status === "failed") {
     const failed = finish.stages.find((stage) => stage.status === "failed");
     throw new Error(`finish failed at the ${failed?.name ?? "unknown"} stage: ${errorSummary(failed?.error)}`);
@@ -1716,7 +1880,9 @@ async function runCritic(ctx, label = "critic") {
   const { project, report } = ctx;
   ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (headless critic over qa/critic-sheets/)`);
   const quality = ctx.finish?.gates?.coverage?.findings ?? [];
-  const result = await (ctx.adapters.critic ?? runHeadlessCritic)({ project, client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, quality, rules: rulesText(ctx) });
+  // A character story's critic reads the shot list beside the frames (and the bible's reference sheets, which it finds itself).
+  const shots = isAnimation(ctx.routing) ? { shots: (await retakeProject(project)).shots } : {};
+  const result = await (ctx.adapters.critic ?? runHeadlessCritic)({ project, client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, quality, rules: rulesText(ctx), ...shots });
   if (result.cost_usd !== undefined) addCost(report, label, ctx.model, { cost_usd: result.cost_usd, usage: result.usage, model: result.model });
   if (result.status !== "written") return result;
   report.critic = { status: "written", file: "qa/critic.json", verdict: result.verdict, findings: result.findings, reviewed: result.reviewed, unreviewed: result.unreviewed, warnings: result.warnings, model: result.model, note: "headless model critic over contact sheets; a human or fresh-agent review is still the definition of done" };
@@ -1772,6 +1938,7 @@ async function criticRepairs(ctx, first) {
   const { project, report, options } = ctx;
   const budget = criticRepairBudget(options.criticRepairs);
   if (!budget) return;
+  if (isAnimation(ctx.routing)) return criticRetakes(ctx, first, budget);
   report.critic_repairs = [];
   // Long form on the rule-made cards has no model direction for a round to change.
   if (ctx.longForm && longFormVisuals(options) === "rules") {
@@ -1829,6 +1996,41 @@ async function criticRepairs(ctx, first) {
     break;
   }
   await rm(path.join(project, ".launchclip", "critic-repair"), { recursive: true, force: true });
+}
+
+/**
+ * A character story's --critic-repairs rounds (docs/ANIMATION_PIPELINE_RFC.md
+ * §4.7): retakes instead of the scene repair loop. While the critic does not
+ * say ship, the shots its blocking and major findings name are redirected
+ * (then their story beat replanned), only those shots render again and the
+ * critic looks again; a round that does not help is undone. The rounds are
+ * one budget with the animatic's: what its review spent is not spent again.
+ * Each round lands in qa/retakes.json and report.critic_repairs.
+ */
+async function criticRetakes(ctx, first, budget) {
+  const { report } = ctx;
+  const spent = Math.min(budget, ctx.retakesUsed ?? 0);
+  const critique = await critiqueOf(ctx, first);
+  report.critic_repairs = [];
+  if (critique.verdict === "ship") return;
+  if (spent >= budget) {
+    report.warnings.push(`critic retakes skipped: the ${budget} repair round${budget === 1 ? " was" : "s were"} spent on the animatic (${ANIMATIC_RETAKES_FILE})`);
+    return;
+  }
+  const result = await retakeRounds(ctx, {
+    review: "final",
+    critique,
+    rounds: budget - spent,
+    render: async ({ scenes }) => {
+      ctx.finishScenes = scenes;
+      try { await stageFinish(ctx); } finally { ctx.finishScenes = null; }
+      return ctx.finish;
+    },
+    critic: ({ round }) => runCritic(ctx, `critic-${round}`)
+  });
+  report.critic_repairs = result.rounds.map((round) => ({ ...round, mode: round.step ?? "none", scenes: round.scenes ?? round.shots }));
+  report.retakes = { file: RETAKES_FILE, review: "final", rounds: result.rounds.length, kept: result.rounds.filter((round) => round.kept).length, status: result.status };
+  for (const round of result.rounds.filter((entry) => !entry.kept)) report.warnings.push(`critic retake ${round.round}: undone, the earlier cut is kept (${round.error ?? `no better: ${round.verdict_after}`})`);
 }
 
 // ---------------------------------------------------------------------------
@@ -2082,6 +2284,7 @@ function nextStepFor(stage, error, ctx) {
     case "prepare": return `Fix the inputs (${message}) and run the same launchclip make command again; finished steps are reused.`;
     case "bible": return `The show bible was not frozen (${message}). Fix that and run the same launchclip make command again (the script and the voice are reused), or design the cast yourself: launchclip cast create, then launchclip bible freeze ${project}.`;
     case "storyboard": return `The model's storyboard did not pass the checks; see ${path.join(project, MAKE_PATHS.plan)} and storyboard.rejected.json. Run launchclip make again with --replan (or a stronger --model).`;
+    case "animatic": return `The animatic was not made (${message}). See ${path.join(project, "finish.json")}; fix that and run the same launchclip make command again (the script, the voice, the bible and the storyboard are reused), or render it yourself: launchclip finish ${project} --animatic.`;
     case "subject": return `Check the presenter cut-out (launchclip doctor; launchclip subject probe ${path.join(project, ctx.subject?.src ?? MAKE_PATHS.base)}), or run launchclip make again with --no-subject. (${message})`;
     case "finish": return `See ${path.join(project, "finish.json")}; fix the failing stage and run launchclip finish ${project} (or launchclip make again; finished stages are reused).`;
     default: return `Run launchclip make again after fixing: ${message}`;

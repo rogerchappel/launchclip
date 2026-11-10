@@ -119,7 +119,7 @@ test("make writes, voices and plans a 7-minute video in chapters, and a rerun re
     assert.equal(report.status, "ready", JSON.stringify(report.stages));
     // Progress lines: each stage starts and ends, and each chapter is counted.
     const events = lines.map(parseProgressLine).filter(Boolean);
-    assert.deepEqual(events.filter((event) => event.done !== undefined && !event.step).map((event) => event.stage), ["model", "inventory", "demo", "route", "prepare", "bible", "storyboard", "candidates", "subject", "finish", "critic"]);
+    assert.deepEqual(events.filter((event) => event.done !== undefined && !event.step).map((event) => event.stage), ["model", "inventory", "demo", "route", "prepare", "bible", "storyboard", "candidates", "animatic", "subject", "finish", "critic"]);
     assert.deepEqual(events.filter((event) => event.step === "chapter").map((event) => `${event.done}/${event.total}`), ["0/4", "1/4", "2/4", "3/4"]);
     assert.ok(events.some((event) => event.stage === "finish" && event.status === "done" && Number.isFinite(event.seconds)));
     assert.ok(lines.some((line) => line.startsWith("machine: ")), "the finish notice names the machine");
