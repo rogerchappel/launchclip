@@ -27,16 +27,19 @@ import {vignette, grade} from './common.mjs';
 import {INSIDE} from './inside.mjs';
 import {STREET} from './street.mjs';
 import {OUTSIDE} from './outside.mjs';
-import {PROPS, PROP_IDS, placeProps, propEntry} from './props.mjs';
+import {RACING} from './racing.mjs';
+import {PROPS, PROP_IDS, PROP_STATES, STORY_PROP_IDS, placeProps, propEntry} from './props.mjs';
 import {propMotion} from '../physics.mjs';
 
-export {WORLD_TIMES, DETAIL_LEVELS, STYLE_DETAIL, PROPS, PROP_IDS, worldPalette};
+export {WORLD_TIMES, DETAIL_LEVELS, STYLE_DETAIL, PROPS, PROP_IDS, PROP_STATES, STORY_PROP_IDS, worldPalette};
 export {TOPIC_FIT, suggestWorld} from './fit.mjs';
 
-/** World definitions keyed by kind, in group order (inside, street, outside). */
-export const WORLDS = Object.freeze({...INSIDE, ...STREET, ...OUTSIDE});
+/** World definitions keyed by kind, in group order (inside, street, outside, then the racing worlds, which are outside). */
+export const WORLDS = Object.freeze({...INSIDE, ...STREET, ...OUTSIDE, ...RACING});
 export const WORLD_KINDS = Object.freeze(Object.keys(WORLDS));
-export const WORLD_GROUPS = Object.freeze({inside: Object.keys(INSIDE), street: Object.keys(STREET), outside: Object.keys(OUTSIDE)});
+export const WORLD_GROUPS = Object.freeze({inside: Object.keys(INSIDE), street: Object.keys(STREET), outside: [...Object.keys(OUTSIDE), ...Object.keys(RACING)]});
+/** The racing worlds (worlds/racing.mjs), drawn at the cast's scale. */
+export const RACING_WORLDS = Object.freeze(Object.keys(RACING));
 
 /** Overscan past each side, as a share of the canvas width. */
 export const OVERSCAN = 0.08;
@@ -101,7 +104,7 @@ export function renderWorld({id = 'world', kind, time = 'day', colors = {}, canv
   return {
     kind, group: def.group, label: def.label, time, detail: spec, canvas: {width: k.W, height: k.H}, overscan: k.ov,
     layers, defs, anchors: geo.anchors, quiet: geo.quiet, light: worldLight(kind, time), palette: k.pal,
-    props: placed.map(({id: pid, anchor, x, y, scale, layer, rect}) => ({id: pid, anchor, x, y, scale, layer, rect, motion: propMotion(pid)}))
+    props: placed.map(({id: pid, anchor, x, y, scale, layer, rect, state, groups}) => ({id: pid, anchor, x, y, scale, layer, rect, motion: propMotion(pid), ...(groups ? {state, groups} : {})}))
   };
 }
 
@@ -150,7 +153,7 @@ export function worldFocus(kind, {canvas = {width: 1920, height: 1080}, time = '
  * One prop on its own, fitted into box {x, y, width, height} (canvas px):
  * for prop sheets and previews. → {nodes, defs}.
  */
-export function drawProp({id, time = 'day', colors = {}, style = null, detail = null, box, canvas = {width: 1920, height: 1080}, key = 'prop'} = {}) {
+export function drawProp({id, time = 'day', colors = {}, style = null, detail = null, box, canvas = {width: 1920, height: 1080}, key = 'prop', state = undefined} = {}) {
   propEntry(id);
   const spec = detailSpec(detail ?? detailForStyle(style), style);
   const k = worldKit({id: key, kind: 'park', time, colors, canvas, detail: spec, seed: `${id}|${time}`});
@@ -159,7 +162,7 @@ export function drawProp({id, time = 'day', colors = {}, style = null, detail = 
   const s = Math.min(box.height * 0.8 / def.h, box.width * 0.8 / def.w);
   const anchor = def.on[0] === 'wall' ? 'wall' : def.on[0];
   const y = anchor === 'wall' ? box.y + box.height / 2 : box.y + box.height * 0.9;
-  const nodes = def.draw(k, box.x + box.width / 2, y, s, anchor).flat(Infinity).filter(Boolean);
+  const nodes = def.draw(k, box.x + box.width / 2, y, s, anchor, {state}).flat(Infinity).filter(Boolean);
   return {nodes, defs: k.p.defsOf('mid')};
 }
 
@@ -169,13 +172,13 @@ export function drawProp({id, time = 'day', colors = {}, style = null, detail = 
  * flip: a set prop (kit/core/catalog-d-set-prop.mjs). → {nodes, defs}
  * (canvas coordinates).
  */
-export function drawPropAt({id, kind = 'park', time = 'day', colors = {}, style = null, detail = null, x, y, s, anchor = null, flip = false, canvas = {width: 1920, height: 1080}, key = 'prop'} = {}) {
+export function drawPropAt({id, kind = 'park', time = 'day', colors = {}, style = null, detail = null, x, y, s, anchor = null, flip = false, canvas = {width: 1920, height: 1080}, key = 'prop', state = undefined} = {}) {
   propEntry(id);
   const spec = detailSpec(detail ?? detailForStyle(style), style);
   const k = worldKit({id: key, kind: WORLDS[kind] ? kind : 'park', time, colors, canvas, detail: spec, seed: `${id}|${time}|${kind}`});
   k.p.at('mid');
   const def = PROPS[id];
-  let nodes = def.draw(k, x, y, s, anchor ?? def.on[0]).flat(Infinity).filter(Boolean);
+  let nodes = def.draw(k, x, y, s, anchor ?? def.on[0], {state}).flat(Infinity).filter(Boolean);
   if (flip) nodes = [k.p.g(nodes, {transform: `translate(${Math.round(2 * x * 10) / 10} 0) scale(-1 1)`})];
   return {nodes, defs: k.p.defsOf('mid')};
 }
@@ -193,7 +196,19 @@ export function storyWorldErrors(world, path = 'world') {
   if (world.detail !== undefined && !DETAIL_LEVELS.includes(world.detail)) errors.push(`${path}.detail must be one of ${DETAIL_LEVELS.join(', ')}`);
   if (world.props !== undefined) {
     if (!Array.isArray(world.props) || world.props.length > 12) errors.push(`${path}.props must be a list of up to 12 props`);
-    else world.props.forEach((entry, i) => { try { propEntry(entry, `${path}.props[${i}]`); } catch (error) { errors.push(error.message); } });
+    else world.props.forEach((entry, i) => {
+      // A story-wide cue for a prop with states: {at: story seconds or an anchor, state}.
+      const {cues, ...rest} = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry : {};
+      try { propEntry(cues === undefined ? entry : rest, `${path}.props[${i}]`); } catch (error) { errors.push(error.message); return; }
+      if (cues === undefined) return;
+      const states = PROP_STATES[rest.id];
+      if (!states) errors.push(`${path}.props[${i}].cues: ${rest.id} has no states to cue (props with states: ${Object.keys(PROP_STATES).join(', ')})`);
+      else if (!Array.isArray(cues) || !cues.length || cues.length > 4) errors.push(`${path}.props[${i}].cues must be a list of 1 to 4 cues {at, state}`);
+      else cues.forEach((cue, j) => {
+        if (!cue || typeof cue !== 'object' || !(typeof cue.at === 'number' ? cue.at >= 0 : typeof cue.at === 'string' && cue.at.trim())) errors.push(`${path}.props[${i}].cues[${j}].at must be story seconds or a time anchor ("word:<text>[#n][+/-s]")`);
+        if (!states.includes(cue?.state)) errors.push(`${path}.props[${i}].cues[${j}].state must be one of ${states.join(', ')}`);
+      });
+    });
   }
   return errors;
 }

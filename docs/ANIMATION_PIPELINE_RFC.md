@@ -247,14 +247,19 @@ character, not a description of it.
   against the rig's own options, so it can only choose what the rig can draw
   (`src/cast_design.js`).
 - It gives each speaking character a different voice.
-- It picks the world, the sets and the drawing style.
+- It picks the world, the sets and the drawing style, and lists the props
+  the story turns on (`world.props`, `world.shows`). The script says what it
+  shows (`SCRIPT.json` `shows`), and the script check fails a story that
+  turns on something the kit cannot draw (`src/make/drawable.js`;
+  [KIT_CONTRACTS.md](KIT_CONTRACTS.md) "Drawable stories").
 - Tooling then renders the sheets and writes the hash.
 
 **Validator.** A new `kit/core/bible.mjs`:
 
 - `storyCastErrors` and `resolveStoryCast` pass (`kit/core/characters/cues.mjs`);
 - every script character has an entry, a voice and a sheet on disk;
-- every set and world exists;
+- every set, world and prop exists, and every prop of `world.shows` is one
+  of `world.props`;
 - the hash matches the content.
 
 **Frozen means pinned.** Once frozen, `story.cast` is copied from the bible

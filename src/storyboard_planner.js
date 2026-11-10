@@ -172,7 +172,7 @@ export async function planStoryboard(options = {}) {
     fixed.cast = bibleCast(bible);
     fixed.bible = bibleRef(bible);
     // The bible's world is the story's place (its sets stay the bible's own list).
-    if (typeof bible.world?.kind === "string") fixed.world = { kind: bible.world.kind, ...(bible.world.time ? { time: bible.world.time } : {}) };
+    if (typeof bible.world?.kind === "string") fixed.world = { kind: bible.world.kind, ...(bible.world.time ? { time: bible.world.time } : {}), ...(Array.isArray(bible.world.props) && bible.world.props.length ? { props: bible.world.props } : {}) };
     if (style?.cast) planStyle = { ...style, cast: { ...style.cast, drawing_style: fixed.cast.style, members: fixed.cast.characters } };
     direction = pinMap(direction);
   }
