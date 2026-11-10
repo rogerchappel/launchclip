@@ -177,7 +177,7 @@ function directActor(b, actor, path, scene) {
     if (view === 'back') turns = true;
     // A point aims the arm at its target, bent short of another character and inside the safe zone (characters/aim.mjs).
     const other = target && typeof target === 'object' && target.character !== undefined ? scene.actors.find(one => one.id === target.character) ?? null : null;
-    const aim = state.pose === 'point' ? pointAim({actor: here, facing, point, other, safe: scene.safe ?? null, standing}) : null;
+    const aim = state.pose === 'point' && !actor.geometry?.noAim ? pointAim({actor: here, facing, point, other, safe: scene.safe ?? null, standing}) : null;
     const directed = {...state, target, facing, standing, gaze, view, x, ...(point ? {point: {x: point.x ?? null, y: point.y ?? null, far: Boolean(point.far), ...(point.toward ? {toward: point.toward} : {})}} : {}), ...(aim ? {aim} : {})};
     out.push(directed);
     if (action === 'walk-to' && point) {
@@ -489,7 +489,7 @@ function resolveCastScene(params, ctx) {
   // frame stand in narrow slots: a wide kind (an open laptop, a cloud) then sets the scale by its reach.
   const tight = canvas.height > canvas.width && p.cast.length > 1;
   const heights = p.cast.map((entry, i) => {
-    try { const member = castMember(cast, entry?.id, `params.cast[${i}].id`); return stageHeight(member.style, member.params, {tight, alone: canvas.height > canvas.width}); } catch { return 1000; }
+    try { const member = castMember(cast, entry?.id, `params.cast[${i}].id`); return stageHeight(member.style, member.params, {tight, alone: canvas.height > canvas.width, shared: p.cast.length > 1}); } catch { return 1000; }
   });
   const inWorldSet = stage.backdrop === 'world';
   const layout = layoutSet(setName, {canvas, colors: b.colors, count: p.cast.length, heights, screen: Boolean(screen), unit: b.unit, backdrop: stage.backdrop,
