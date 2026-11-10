@@ -31,7 +31,7 @@ test("the intake and evidence make gives the tournament: the brief and notes may
   assert.equal(intake.brief.rules, "No superlatives.");
   assert.deepEqual(intake.model, { provider: "anthropic", id: "claude-opus-4-8", reasoning_effort: "high", reasoning_mode: "standard" });
   const evidence = conceptEvidence({ prompt: "A video", notes: ["It shipped in May."], rules: "No superlatives.", assets: ["assets/ui.mp4 — video"] });
-  assert.deepEqual(evidence.items.map((item) => [item.id, item.claims_allowed]), [["brief", true], ["note-1", true], ["rules", false], ["assets", false]]);
+  assert.deepEqual(evidence.items.map((item) => [item.id, item.claims_allowed]), [["brief", true], ["note-1", true], ["general-knowledge", true], ["rules", false], ["assets", false]]);
   assert.equal(conceptsMode(undefined), "on");
   assert.equal(conceptsMode("OFF"), "off");
   assert.throws(() => conceptsMode("maybe"), /--concepts must be on or off/);
@@ -116,10 +116,10 @@ test("--concepts off writes the script from the brief in one pass, as before", a
 });
 
 test("a concept stage that fails is a warning: the script is written from the brief and the calls made are costed", async (t) => {
-  // The judge keeps recommending a concept that is not the top score, so its two attempts both fail validation.
+  // The judge keeps leaving a candidate unscored, so its two attempts both fail validation.
   const wrap = (model) => ({ ...model, client: { ...model.client, async runStructured(request) {
     const result = await model.client.runStructured(request);
-    return request.schemaName === "launchclip_cinematic_concept_judgment" ? { ...result, value: { ...result.value, recommended_id: "concept-5" } } : result;
+    return request.schemaName === "launchclip_cinematic_concept_judgment" ? { ...result, value: { ...result.value, evaluations: result.value.evaluations.slice(0, -1) } } : result;
   } } });
   const { run, seen } = await shortMake(t, { wrap });
   const report = await run();

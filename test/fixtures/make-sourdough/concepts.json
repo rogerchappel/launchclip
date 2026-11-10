@@ -1,0 +1,96 @@
+{
+  "schema_version": "launchclip.cinematic-tournament.v1",
+  "candidates": [
+    {
+      "hook": {
+        "promised_payoff": "See where the starter fits in the process, not just when it is added.",
+        "proof_tease": "A continuous tabletop pathway leads from jar to loaf; its causal links require verified evidence.",
+        "spoken_line": "What does a starter actually set in motion? Follow its path to the loaf.",
+        "open_loop": "Which part of the journey depends on the starter?"
+      },
+      "id": "c2",
+      "art_direction_seed": {
+        "sound_world": "Rolling wood, muted impacts and a gently building mechanical rhythm.",
+        "transition_logic": "Each moving object physically carries the camera into the next stage.",
+        "spatial_world": "A long bakery counter becomes a miniature cause-and-effect pathway.",
+        "motion_language": "Continuous forward tracking and linked, mechanical movement.",
+        "visual_metaphor": "A chain of bakery tools representing connected stages."
+      },
+      "audience_tension": "Recipe instructions say to add starter, but the process can feel like disconnected steps.",
+      "narrative_engine": "cause-and-effect",
+      "causal_beats": [
+        {
+          "resource_ids": [],
+          "evidence_ids": [
+            "brief"
+          ],
+          "id": "c2b1",
+          "sound_opportunity": "One wooden object starts rolling.",
+          "role": "hook",
+          "turn": "0–5s: Begin at the jar and pose the question of what it sets in motion.",
+          "visual_opportunity": "A single object travels away from the starter along the counter."
+        },
+        {
+          "resource_ids": [],
+          "evidence_ids": [
+            "brief"
+          ],
+          "id": "c2b2",
+          "sound_opportunity": "A second object makes contact.",
+          "role": "promise",
+          "turn": "5–10s: Establish that the viewer will follow the starter's place in the process.",
+          "visual_opportunity": "The moving object guides the camera toward a bowl."
+        },
+        {
+          "resource_ids": [],
+          "evidence_ids": [],
+          "id": "c2b3",
+          "sound_opportunity": "A soft, synchronized series of taps.",
+          "role": "mechanism",
+          "turn": "10–18s: Populate the pathway with only independently verified causal steps.",
+          "visual_opportunity": "Tools join the pathway; their arrangement is designed after the mechanism is sourced."
+        },
+        {
+          "resource_ids": [],
+          "evidence_ids": [],
+          "id": "c2b4",
+          "sound_opportunity": "The rhythm opens into a quieter close-up.",
+          "role": "proof",
+          "turn": "18–24s: Insert sourced evidence that supports the crucial link in the chain.",
+          "visual_opportunity": "The camera pauses on a verified demonstration rather than a symbolic tool movement."
+        },
+        {
+          "resource_ids": [],
+          "evidence_ids": [],
+          "id": "c2b5",
+          "sound_opportunity": "The rolling sound resolves against the workbench.",
+          "role": "payoff",
+          "turn": "24–30s: Reveal the whole pathway and summarize the verified connection.",
+          "visual_opportunity": "A pullback shows jar, bowl and loaf occupying one continuous counter."
+        }
+      ],
+      "differentiators": [
+        "A linked physical pathway makes causality the organizing principle.",
+        "The payoff is a process map rather than a single mystery reveal."
+      ],
+      "thesis": "Make the starter's place in the baking process legible as a sequence of supported connections.",
+      "title": "The Path to the Loaf",
+      "risks": [
+        "The causal sequence and proof are not supplied and must be researched.",
+        "Mechanical movement is a metaphor, not evidence of a physical process."
+      ]
+    }
+  ],
+  "selected_id": "c2",
+  "selection": {
+    "judge_recommended_id": "c2",
+    "rationale": "After the specified weights and penalties, c2 scores 5.12, ahead of c3 at 4.64 and c4 at 4.60. Its continuous pathway best fits a short beginner explainer and gives the next writer room to build a causal account without relying on a complex comparison shoot. The mechanism and proof remain unsupplied and must be researched before production.",
+    "required_improvements": [
+      "Open with a concrete payoff: explain that starter supplies a microbial culture that helps sourdough rise and develop acidity.",
+      "Replace symbolic links with a researched sequence connecting the culture, fermentation, gas production and dough expansion.",
+      "Use documented dough expansion as an observation, while sourcing the microbial mechanism and acidity separately; expansion alone does not prove either.",
+      "Clarify that other leavening methods can raise bread, but starter provides the culture used for sourdough fermentation.",
+      "Resolve the explanation within 30 seconds, using approximately 45–82 spoken words."
+    ]
+  }
+}

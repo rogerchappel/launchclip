@@ -1,0 +1,96 @@
+{
+  "title": "Why Sourdough Starter Gives Bread Rise and Tang",
+  "narration": "Why does sourdough need that jar of starter? You might think that jar just gives your loaf its sour taste. But the jar holds wild yeast and bacteria in flour and water. That's more than flavor. In the dough, yeast makes gas. The dough traps that gas in bubbles, making the loaf rise. Bacteria make acids that give the bread its tang. That jar gives your loaf both its lift and its flavor. Save this before your next sourdough bake.",
+  "beats": [
+    {
+      "beat": "hook",
+      "text": "Why does sourdough need that jar of starter?"
+    },
+    {
+      "beat": "belief",
+      "text": "You might think that jar just gives your loaf its sour taste."
+    },
+    {
+      "beat": "break",
+      "text": "But the jar holds wild yeast and bacteria in flour and water. That's more than flavor."
+    },
+    {
+      "beat": "model",
+      "text": "In the dough, yeast makes gas. The dough traps that gas in bubbles, making the loaf rise. Bacteria make acids that give the bread its tang."
+    },
+    {
+      "beat": "payoff",
+      "text": "That jar gives your loaf both its lift and its flavor. Save this before your next sourdough bake."
+    }
+  ],
+  "plan": {
+    "format": "explainer",
+    "goal": "reach",
+    "awareness": "problem",
+    "skeleton": "misconception-first",
+    "pace": "standard",
+    "voice_speed": 1,
+    "wpm": 150,
+    "word_target": 75,
+    "word_ceiling": 82,
+    "reasons": [
+      "format explainer: the brief explains how or why something works",
+      "goal reach: the default",
+      "awareness problem: the default for explainer",
+      "pace standard: the default for explainer"
+    ]
+  },
+  "take": {
+    "seconds": 25.375,
+    "words": 80,
+    "wpm": 189,
+    "cached": false,
+    "short_of_target_seconds": 4.6
+  },
+  "check": {
+    "schema_version": "launchclip.script-check.v1",
+    "ok": false,
+    "errors": [
+      {
+        "id": "fits-clock",
+        "message": "80 words cannot be read in 25s: the ceiling is 68 (2.75 words a second).",
+        "fix": "Cut to about 60 words (explainer at the standard pace reads at 130–160 wpm)."
+      },
+      {
+        "id": "cta-missing",
+        "message": "No call to action found.",
+        "fix": "End with one clear imperative: \"Try <product> free\", \"Download it today\", \"Book a demo at <site>\"."
+      }
+    ],
+    "warnings": [],
+    "stats": {
+      "words": 80,
+      "sentences": 9,
+      "duration": 25,
+      "wpm": 192,
+      "word_ceiling": 68,
+      "word_target": 60,
+      "wpm_band": [
+        130,
+        160
+      ],
+      "pace": "standard",
+      "hook_words": 8,
+      "hook_max": 12,
+      "mean_sentence_words": 8.9,
+      "max_sentence_words": 12,
+      "syllables_per_word": 1.18,
+      "grade": 1.7,
+      "grade_max": 7,
+      "numbers": 0,
+      "ctas": [],
+      "format": "explainer",
+      "format_source": "given",
+      "goal": "reach",
+      "awareness": "problem",
+      "audience": "consumer",
+      "brief": true
+    }
+  },
+  "word_count": 80
+}

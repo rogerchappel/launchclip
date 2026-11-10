@@ -244,6 +244,84 @@ export function validateConceptJudgment(value, conceptSet) {
   return result(errors);
 }
 
+/** The role names a story beat may carry. */
+export const STORY_BEAT_ROLE_NAMES = Object.freeze([...STORY_BEAT_ROLES]);
+
+/**
+ * The structure validateCinematicStory holds a story of this length to, as
+ * lines a writer can follow before it writes (the same rules, stated up
+ * front, so a draft passes first time instead of meeting them as errors).
+ */
+export function storyStructureRules(duration) {
+  const seconds = Number(duration);
+  const rules = [
+    `Every beat's role is one of: ${STORY_BEAT_ROLES.join(", ")}.`,
+    'The first beat has role "hook".',
+    'At least one beat has role "proof" and at least one has role "payoff".'
+  ];
+  if (seconds >= 20) rules.push('At least one beat near the middle has role "rehook", and open_loop.midpoint_rehook_beat_id is its id.', 'At least one beat has role "escalation" (the stakes or the scale rise after the rehook).');
+  if (seconds >= 30) rules.push("At least six beats.");
+  rules.push(
+    `Beat timings start at 0, each beat starts where the one before it ends, and the last ends at ${seconds}.`,
+    "narration.full_text is the beats' spoken_text joined in order, and narration.target_wpm is its word count over the duration.",
+    "open_loop.resolved_by_beat_id is the id of the beat that answers the question (usually the payoff).",
+    'Every claim cites at least one eligible evidence id, unless its confidence is "creative".'
+  );
+  return rules;
+}
+
+/**
+ * The bookkeeping a story repeats from its own beats and the request, set by
+ * tooling so a slip in it never costs a model retry: the format and concept
+ * id echoed back, full_text and target_wpm derived from the beats, timings
+ * butt-joined, and the open loop's beat ids when the beats make them certain.
+ * Words, roles, claims and evidence are never touched. → a new story.
+ */
+export function normalizeCinematicStory(value, context = {}) {
+  if (!isObject(value) || !isObject(value.narration) || !Array.isArray(value.narration.beats)) return value;
+  const story = JSON.parse(JSON.stringify(value));
+  const beats = story.narration.beats.filter(isObject);
+  const expected = context.expectedFormat ?? {};
+  if (context.conceptId) story.concept_id = context.conceptId;
+  if (isObject(story.format)) {
+    for (const key of ["aspect", "width", "height", "language"]) if (expected[key] != null) story.format[key] = expected[key];
+    if (context.expectedDuration != null) story.format.duration_seconds = Number(context.expectedDuration);
+  }
+  const duration = Number(story.format?.duration_seconds);
+  // Timings: only when the model's own order is sound (every beat ends after it starts once joined).
+  if (beats.length && Number.isFinite(duration) && duration > 0) {
+    const ends = beats.map((beat) => Number(beat.target_end_seconds));
+    ends[ends.length - 1] = duration;
+    const joined = ends.every((end, index) => Number.isFinite(end) && end > (index ? ends[index - 1] : 0));
+    if (joined) beats.forEach((beat, index) => { beat.target_start_seconds = index ? ends[index - 1] : 0; beat.target_end_seconds = ends[index]; });
+  }
+  if (context.suppliedTranscript == null) {
+    story.narration.full_text = beats.map((beat) => String(beat.spoken_text ?? "").trim()).filter(Boolean).join(" ");
+  }
+  if (duration > 0) {
+    const wpm = wordCount(story.narration.full_text) * 60 / duration;
+    if (wpm > 0) story.narration.target_wpm = Math.round(wpm * 10) / 10;
+  }
+  if (isObject(story.open_loop)) {
+    const ids = new Set(beats.map((beat) => beat.id));
+    const rehooks = beats.filter((beat) => beat.role === "rehook");
+    const named = beats.find((beat) => beat.id === story.open_loop.midpoint_rehook_beat_id);
+    if (rehooks.length && named?.role !== "rehook") story.open_loop.midpoint_rehook_beat_id = rehooks[0].id;
+    const payoffs = beats.filter((beat) => beat.role === "payoff");
+    if (!ids.has(story.open_loop.resolved_by_beat_id) && payoffs.length) story.open_loop.resolved_by_beat_id = payoffs[payoffs.length - 1].id;
+  }
+  return story;
+}
+
+/** The judge's bookkeeping: recommended_id is the deterministic top score, so tooling sets it. → a new judgment. */
+export function normalizeConceptJudgment(value, conceptSet) {
+  if (!isObject(value) || !Array.isArray(value.evaluations)) return value;
+  const candidateIds = (conceptSet?.candidates ?? []).map((candidate) => candidate.id);
+  let winner = null;
+  try { winner = rankConceptEvaluations(value, candidateIds)[0]?.candidate_id ?? null; } catch { winner = null; }
+  return winner && candidateIds.includes(winner) && value.recommended_id !== winner ? { ...value, recommended_id: winner } : value;
+}
+
 export function validateCinematicStory(value, context = {}) {
   const errors = schemaErrors(value, CINEMATIC_STORY_SCHEMA, "story");
   if (!isObject(value)) return result(errors);

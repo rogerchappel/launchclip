@@ -1,0 +1,807 @@
+{
+  "schema": "launchclip.story.v1",
+  "lane": "motion",
+  "format": {
+    "fps": 30,
+    "width": 1920,
+    "height": 1080,
+    "duration": 26.2
+  },
+  "brand": {
+    "colors": {
+      "bg": "#312033",
+      "paper": "#eeeaef",
+      "ink": "#312033",
+      "primary": "#cb9bd1",
+      "accent": "#72c9d4"
+    },
+    "fonts": {
+      "display": "dm-serif-display",
+      "body": "outfit",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "audio": {
+    "words": "NARRATION.json",
+    "sfx": "auto",
+    "sfx_density": "normal",
+    "music_hints": {
+      "genre": "ambient",
+      "bpm": 82,
+      "key": "D",
+      "progression": 0,
+      "prompt_hints": [
+        "light percussion"
+      ],
+      "bpm_range": [
+        64,
+        84
+      ]
+    },
+    "narration": {
+      "text": "Why does sourdough need that jar of starter? You might think that jar just gives your loaf its sour taste. But the jar holds wild yeast and bacteria in flour and water. That's more than flavor. In the dough, yeast makes gas. The dough traps that gas in bubbles, making the loaf rise. Bacteria make acids that give the bread its tang. That jar gives your loaf both its lift and its flavor. Save this before your next sourdough bake.",
+      "provider": "kokoro"
+    }
+  },
+  "scenes": [
+    {
+      "id": "starter-jar-and-loaf",
+      "module": "line-diagram",
+      "start": 0,
+      "end": 2.72,
+      "energy": 1,
+      "params": {
+        "title": "Why Does Sourdough Need That Starter Jar?",
+        "points": {
+          "jl": [
+            12,
+            24
+          ],
+          "jr": [
+            35,
+            24
+          ],
+          "bl": [
+            12,
+            75
+          ],
+          "br": [
+            35,
+            75
+          ],
+          "lt": [
+            62,
+            40
+          ],
+          "rt": [
+            90,
+            40
+          ],
+          "lb": [
+            62,
+            75
+          ],
+          "rb": [
+            90,
+            75
+          ],
+          "q1": [
+            43,
+            46
+          ],
+          "q2": [
+            53,
+            46
+          ]
+        },
+        "lines": [
+          {
+            "from": "jl",
+            "to": "jr",
+            "weight": "heavy",
+            "at": 0
+          },
+          {
+            "from": "jl",
+            "to": "bl",
+            "at": 0
+          },
+          {
+            "from": "jr",
+            "to": "br",
+            "at": 0
+          },
+          {
+            "from": "bl",
+            "to": "br",
+            "at": 0
+          },
+          {
+            "from": "lt",
+            "to": "rt",
+            "bend": -0.7,
+            "weight": "heavy",
+            "at": 0
+          },
+          {
+            "from": "lt",
+            "to": "lb",
+            "at": 0
+          },
+          {
+            "from": "rt",
+            "to": "rb",
+            "at": 0
+          },
+          {
+            "from": "lb",
+            "to": "rb",
+            "at": 0
+          },
+          {
+            "from": "q1",
+            "to": "q2",
+            "style": "dashed",
+            "accent": true,
+            "label": "?",
+            "at": 0
+          }
+        ],
+        "marks": [
+          {
+            "point": "bl",
+            "label": "Starter"
+          },
+          {
+            "point": "rb",
+            "label": "Sourdough"
+          }
+        ],
+        "at": 0
+      }
+    },
+    {
+      "id": "sour-taste-assumption",
+      "module": "process-steps",
+      "start": 2.72,
+      "end": 5.95,
+      "energy": 1,
+      "in": {
+        "type": "fade",
+        "dur": 0.35
+      },
+      "params": {
+        "title": "Just For Sour Taste?",
+        "steps": [
+          {
+            "label": "Starter Jar",
+            "at": 0.49
+          },
+          {
+            "label": "Sourdough Loaf",
+            "at": 0.9
+          },
+          {
+            "label": "Sour Taste",
+            "at": 1.65
+          }
+        ],
+        "layout": "horizontal",
+        "numbered": false
+      }
+    },
+    {
+      "id": "starter-ingredients-and-microbes",
+      "module": "line-diagram",
+      "start": 5.95,
+      "end": 9.13,
+      "energy": "build",
+      "in": {
+        "type": "push",
+        "dur": 0.7
+      },
+      "params": {
+        "title": "Inside The Starter Jar",
+        "points": {
+          "jl": [
+            20,
+            15
+          ],
+          "jr": [
+            80,
+            15
+          ],
+          "bl": [
+            20,
+            85
+          ],
+          "br": [
+            80,
+            85
+          ],
+          "y1": [
+            32,
+            40
+          ],
+          "y2": [
+            45,
+            40
+          ],
+          "b1": [
+            55,
+            60
+          ],
+          "b2": [
+            70,
+            60
+          ]
+        },
+        "lines": [
+          {
+            "from": "jl",
+            "to": "jr",
+            "weight": "heavy",
+            "at": 0
+          },
+          {
+            "from": "jl",
+            "to": "bl",
+            "at": 0.1
+          },
+          {
+            "from": "jr",
+            "to": "br",
+            "at": 0.2
+          },
+          {
+            "from": "bl",
+            "to": "br",
+            "at": 0.3
+          },
+          {
+            "from": "y1",
+            "to": "y2",
+            "bend": -0.9,
+            "accent": true,
+            "at": 0.74
+          },
+          {
+            "from": "y2",
+            "to": "y1",
+            "bend": -0.9,
+            "accent": true,
+            "at": 0.9
+          },
+          {
+            "from": "b1",
+            "to": "b2",
+            "bend": -0.6,
+            "at": 1.04
+          },
+          {
+            "from": "b2",
+            "to": "b1",
+            "bend": -0.6,
+            "at": 1.5
+          }
+        ],
+        "marks": [
+          {
+            "point": "y1",
+            "label": "Wild Yeast"
+          },
+          {
+            "point": "b2",
+            "label": "Bacteria"
+          }
+        ],
+        "note": "Suspended In Flour And Water",
+        "at": 0
+      }
+    },
+    {
+      "id": "two-jobs-reveal",
+      "module": "compare",
+      "start": 9.13,
+      "end": 11.64,
+      "energy": "build",
+      "in": {
+        "type": "cut",
+        "dur": 0.1
+      },
+      "params": {
+        "left": {
+          "title": "Yeast",
+          "items": [
+            "Makes Gas"
+          ]
+        },
+        "right": {
+          "title": "Bacteria",
+          "items": [
+            "Make Acids"
+          ]
+        },
+        "mode": "columns",
+        "stagger": 0.1,
+        "at": 0
+      }
+    },
+    {
+      "id": "yeast-makes-gas",
+      "module": "process-steps",
+      "start": 11.64,
+      "end": 14.15,
+      "energy": 2,
+      "in": {
+        "type": "cut",
+        "dur": 0.1
+      },
+      "params": {
+        "title": "Yeast Makes Gas In Dough",
+        "steps": [
+          {
+            "label": "Yeast In Dough",
+            "at": 0.49
+          },
+          {
+            "label": "Gas",
+            "at": 0.9
+          }
+        ],
+        "layout": "horizontal",
+        "numbered": false
+      }
+    },
+    {
+      "id": "bubbles-raise-dough",
+      "module": "line-diagram",
+      "start": 14.15,
+      "end": 17.1,
+      "energy": 2,
+      "in": {
+        "type": "push",
+        "dur": 0.7
+      },
+      "params": {
+        "title": "Trapped Bubbles Lift The Dough",
+        "points": {
+          "l": [
+            16,
+            72
+          ],
+          "r": [
+            84,
+            72
+          ],
+          "topl": [
+            16,
+            46
+          ],
+          "topr": [
+            84,
+            46
+          ],
+          "b1": [
+            32,
+            60
+          ],
+          "b2": [
+            40,
+            60
+          ],
+          "b3": [
+            57,
+            59
+          ],
+          "b4": [
+            69,
+            59
+          ],
+          "up1": [
+            49,
+            37
+          ],
+          "up2": [
+            49,
+            16
+          ],
+          "ul": [
+            43,
+            22
+          ],
+          "ur": [
+            55,
+            22
+          ]
+        },
+        "lines": [
+          {
+            "from": "l",
+            "to": "r",
+            "weight": "heavy",
+            "at": 0
+          },
+          {
+            "from": "l",
+            "to": "topl",
+            "at": 0.1
+          },
+          {
+            "from": "r",
+            "to": "topr",
+            "at": 0.2
+          },
+          {
+            "from": "topl",
+            "to": "topr",
+            "bend": -0.65,
+            "weight": "heavy",
+            "at": 0.3
+          },
+          {
+            "from": "b1",
+            "to": "b2",
+            "bend": -1,
+            "accent": true,
+            "at": 0.6
+          },
+          {
+            "from": "b2",
+            "to": "b1",
+            "bend": -1,
+            "accent": true,
+            "at": 0.7
+          },
+          {
+            "from": "b3",
+            "to": "b4",
+            "bend": -1,
+            "accent": true,
+            "at": 1
+          },
+          {
+            "from": "b4",
+            "to": "b3",
+            "bend": -1,
+            "accent": true,
+            "at": 1.1
+          },
+          {
+            "from": "up1",
+            "to": "up2",
+            "accent": true,
+            "at": 1.16
+          },
+          {
+            "from": "up2",
+            "to": "ul",
+            "accent": true,
+            "at": 1.6
+          },
+          {
+            "from": "up2",
+            "to": "ur",
+            "accent": true,
+            "at": 1.7
+          }
+        ],
+        "marks": [
+          {
+            "point": "b1",
+            "label": "Gas Bubbles"
+          },
+          {
+            "point": "up2",
+            "label": "Rise"
+          }
+        ],
+        "at": 0
+      }
+    },
+    {
+      "id": "bacteria-make-acids",
+      "module": "process-steps",
+      "start": 17.1,
+      "end": 19.97,
+      "energy": 2,
+      "in": {
+        "type": "whip-pan",
+        "dur": 0.35,
+        "direction": "right"
+      },
+      "params": {
+        "title": "Bacteria Give Bread Its Tang",
+        "steps": [
+          {
+            "label": "Bacteria",
+            "at": 0.49
+          },
+          {
+            "label": "Acids",
+            "at": 0.9
+          },
+          {
+            "label": "Tangy Bread",
+            "at": 1.65
+          }
+        ],
+        "layout": "horizontal",
+        "numbered": false
+      }
+    },
+    {
+      "id": "starter-rise-and-tang",
+      "module": "line-diagram",
+      "start": 19.97,
+      "end": 23.23,
+      "energy": 3,
+      "in": {
+        "type": "pull",
+        "dur": 0.65
+      },
+      "params": {
+        "title": "One Starter, Both Lift And Flavor",
+        "points": {
+          "jl": [
+            12,
+            30
+          ],
+          "jr": [
+            30,
+            30
+          ],
+          "bl": [
+            12,
+            70
+          ],
+          "br": [
+            30,
+            70
+          ],
+          "root": [
+            30,
+            50
+          ],
+          "lift": [
+            66,
+            25
+          ],
+          "tang": [
+            66,
+            75
+          ],
+          "breadl": [
+            72,
+            43
+          ],
+          "breadr": [
+            91,
+            43
+          ],
+          "breadbl": [
+            72,
+            65
+          ],
+          "breadbr": [
+            91,
+            65
+          ]
+        },
+        "lines": [
+          {
+            "from": "jl",
+            "to": "jr",
+            "weight": "heavy",
+            "at": 0
+          },
+          {
+            "from": "jl",
+            "to": "bl",
+            "at": 0
+          },
+          {
+            "from": "jr",
+            "to": "br",
+            "at": 0
+          },
+          {
+            "from": "bl",
+            "to": "br",
+            "at": 0
+          },
+          {
+            "from": "root",
+            "to": "lift",
+            "accent": true,
+            "at": 0.4
+          },
+          {
+            "from": "root",
+            "to": "tang",
+            "at": 0.8
+          },
+          {
+            "from": "breadl",
+            "to": "breadr",
+            "bend": -0.7,
+            "weight": "heavy",
+            "at": 1
+          },
+          {
+            "from": "breadl",
+            "to": "breadbl",
+            "at": 1.1
+          },
+          {
+            "from": "breadr",
+            "to": "breadbr",
+            "at": 1.1
+          },
+          {
+            "from": "breadbl",
+            "to": "breadbr",
+            "at": 1.2
+          }
+        ],
+        "marks": [
+          {
+            "point": "bl",
+            "label": "Starter"
+          },
+          {
+            "point": "lift",
+            "label": "Lift"
+          },
+          {
+            "point": "tang",
+            "label": "Tang"
+          }
+        ],
+        "at": 0
+      }
+    },
+    {
+      "id": "save-for-next-bake",
+      "module": "cta",
+      "start": 23.23,
+      "end": 26.2,
+      "energy": 1,
+      "in": {
+        "type": "fade",
+        "dur": 0.35
+      },
+      "params": {
+        "action": "Save This Before Your Next",
+        "detail": "Sourdough Bake.",
+        "icon": "none"
+      }
+    }
+  ],
+  "overlays": [
+    {
+      "type": "captions",
+      "preset": "minimal-line",
+      "position": "auto"
+    }
+  ],
+  "camera": {
+    "mode": "world",
+    "layout": "path",
+    "spacing": 0.21,
+    "parallax": true
+  },
+  "cast": {
+    "style": "stick-classic",
+    "characters": [
+      {
+        "id": "ananya",
+        "name": "Ananya",
+        "voice": "af_aoede",
+        "build": "curvy",
+        "height": "average",
+        "age": "teen",
+        "skin": "ebony",
+        "hair": {
+          "style": "long",
+          "color": "jet"
+        },
+        "outfit": {
+          "top": "hoodie",
+          "bottom": "trousers"
+        },
+        "accessories": [],
+        "colors": {
+          "top": "primary",
+          "bottom": "stone",
+          "shoes": "white",
+          "accent": "white"
+        }
+      },
+      {
+        "id": "lars",
+        "name": "Lars",
+        "voice": "am_onyx",
+        "build": "curvy",
+        "height": "short",
+        "age": "teen",
+        "skin": "rosy",
+        "hair": {
+          "style": "shoulder",
+          "color": "strawberry"
+        },
+        "outfit": {
+          "top": "hoodie",
+          "bottom": "shorts"
+        },
+        "accessories": [
+          "backpack"
+        ],
+        "colors": {
+          "top": "plum",
+          "bottom": "slate",
+          "shoes": "tan",
+          "accent": "red"
+        }
+      },
+      {
+        "id": "bea",
+        "name": "Bea",
+        "voice": "af_aoede",
+        "build": "stocky",
+        "height": "very-short",
+        "age": "teen",
+        "skin": "medium",
+        "hair": {
+          "style": "ponytail",
+          "color": "jet"
+        },
+        "outfit": {
+          "top": "hoodie",
+          "bottom": "trousers"
+        },
+        "accessories": [],
+        "colors": {
+          "top": "accent",
+          "bottom": "sand",
+          "shoes": "tan",
+          "accent": "primary"
+        }
+      }
+    ]
+  },
+  "world": {
+    "kind": "classroom",
+    "time": "dusk"
+  },
+  "ending": {
+    "loop": false,
+    "final": "hold"
+  },
+  "motion": {
+    "grammar": {
+      "base": "editorial",
+      "ease": {
+        "enter": "power2.out",
+        "exit": "power2.in",
+        "move": "power2.inOut",
+        "camera": "power2.inOut",
+        "emphasis": "power2.out"
+      },
+      "duration": {
+        "enter": 0.27,
+        "exit": 0.22,
+        "transition": 0.44,
+        "camera": 0.78
+      },
+      "overshoot": 0,
+      "stagger": 1.14,
+      "camera": {
+        "whip": "power3.inOut",
+        "anticipation": false,
+        "moveBlur": 0.58,
+        "drift": 7.1
+      }
+    }
+  }
+}

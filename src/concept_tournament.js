@@ -5,6 +5,7 @@ import {
   CINEMATIC_CONCEPT_JUDGMENT_SCHEMA,
   CINEMATIC_CONCEPT_SET_SCHEMA,
   createCinematicTournament,
+  normalizeConceptJudgment,
   validateConceptJudgment,
   validateConceptSet
 } from "./cinematic_contracts.js";
@@ -105,6 +106,7 @@ export async function planConceptTournament(workspacePath, options = {}, adapter
     schemaName: "launchclip_cinematic_concept_judgment",
     maxOutputTokens: Number(options.judgeMaxOutputTokens ?? 18_000),
     semanticAttempts: Number(options.semanticAttempts ?? 2),
+    normalize: (value) => normalizeConceptJudgment(value, candidateStage.value),
     validate: (value) => validateConceptJudgment(value, candidateStage.value),
     cachePath: conceptsPath,
     materialize: async (value) => {
@@ -154,6 +156,8 @@ export async function runCinematicStructuredStage(configuration) {
     workspace, store, jobId, kind, dependsOn, inputHash, runtime, instructions, input, schema, schemaName,
     maxOutputTokens, semanticAttempts, validate, cachePath, materialize, background
   } = configuration;
+  // normalize: bookkeeping tooling can set from the answer itself (cinematic_contracts.js), applied before the check so it never costs a retry.
+  const normalize = typeof configuration.normalize === "function" ? configuration.normalize : (value) => value;
   const prepared = await prepareJob(store, { jobId, kind, dependsOn, inputHash });
   if (prepared.cached) return { value: await readJson(cachePath), cached: true, responseId: prepared.job.remote?.response_id ?? null };
   let resumeResponseId = prepared.resumeResponseId;
@@ -183,6 +187,7 @@ export async function runCinematicStructuredStage(configuration) {
         ? await runtime.client.resumeStructured(resumeResponseId, request)
         : await runtime.client.runStructured(request);
       resumeResponseId = null;
+      result.value = normalize(result.value);
       validationErrors = validate(result.value).errors;
       await store.markRunning(jobId, { provider: runtime.route.provider, response_id: result.response_id, status: result.status });
       attemptPaths.push(await writeAttempt(workspace, jobId, attempt, { response_id: result.response_id, model: result.model, usage: result.usage, errors: validationErrors, candidate: result.value }));

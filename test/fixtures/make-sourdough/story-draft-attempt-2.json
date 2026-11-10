@@ -1,0 +1,57 @@
+{
+  "errors": [
+    "the first story beat must be the hook",
+    "story must contain a proof beat",
+    "story must contain a payoff beat",
+    "stories of 20 seconds or longer require a midpoint rehook",
+    "stories of 20 seconds or longer require escalation",
+    "stories of 30 seconds or longer require at least six narrative beats",
+    "narration pace must be at least 90 WPM",
+    "open_loop.resolved_by_beat_id must reference a story beat"
+  ],
+  "candidate": {
+    "concept_id": "c2",
+    "format": {
+      "duration_seconds": 30,
+      "height": 1080,
+      "aspect": "16:9",
+      "width": 1920,
+      "language": "en"
+    },
+    "open_loop": {
+      "midpoint_rehook_beat_id": null,
+      "resolved_by_beat_id": "unresolved",
+      "question": "How does starter connect the jar to the loaf?"
+    },
+    "project": {
+      "thesis": "Explain the starter's place in sourdough as a supported cause-and-effect sequence.",
+      "title": "The Path to the Loaf",
+      "audience_promise": "Understand where starter fits in the journey from jar to loaf."
+    },
+    "claims": [],
+    "schema_version": "launchclip.cinematic-story.v1",
+    "narration": {
+      "full_text": "A source-supported script cannot be completed from the supplied evidence. Please provide sources for the starter culture, fermentation, gas production, acidity, and a documented dough-expansion observation.",
+      "beats": [
+        {
+          "desired_emotion": "Clarity",
+          "resource_ids": [],
+          "target_start_seconds": 0,
+          "id": "source_gap",
+          "role": "setup",
+          "narrative_turn": "Identify the missing evidence before making unsupported claims.",
+          "target_end_seconds": 30,
+          "visual_noun": "Starter jar",
+          "viewer_question": "What evidence is needed to explain the starter's role?",
+          "evidence_ids": [
+            "brief"
+          ],
+          "spoken_text": "A source-supported script cannot be completed from the supplied evidence. Please provide sources for the starter culture, fermentation, gas production, acidity, and a documented dough-expansion observation."
+        }
+      ],
+      "delivery": "Not a finished narration: the brief supplies the topic but does not substantiate the required causal claims.",
+      "source": "generated",
+      "target_wpm": 52
+    }
+  }
+}
