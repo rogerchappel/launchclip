@@ -45,7 +45,7 @@ import { captureFiles, readCaptureRequests, recordCaptures } from "./captures.js
 import { evidenceClipParams } from "@launchclip/core/catalog-d-evidence-clip.mjs";
 import { RESEARCH_PATHS } from "../research/schema.js";
 import { directLongFormVisuals, revertCards, typographyShare, unresolvedScenes } from "./long_form_direct.js";
-import { createMakeClient, selectMakeModel } from "./models.js";
+import { checkModelAccess, createMakeClient, selectMakeModel } from "./models.js";
 import { alternativeTransition, candidatesMode, comparisonEntry, designOpening, judgeCandidates, meanScore, openingScene, renderCandidate, rendererStill, riskyBoundary, sceneResolves, sceneTimes, selectCandidate, storyWith, transitionTimes, writeReceipt } from "./candidates.js";
 import { conceptLookLines, conceptSummary, conceptsMode, planConceptStory, readConceptStory, storySeconds } from "./concept_story.js";
 import { needsResize, planVoiceSpeed, RULES_HEADING, runsShort, SCRIPT_VERSION, WORDS_PER_MINUTE, writeScript } from "./script.js";
@@ -120,7 +120,9 @@ export function slugify(prompt) {
  *   visualHistoryDir (the series' history index: plan against it, record into it),
  *   visualHistoryLimit (recent entries the planner sees, default 8),
  *   visualSimilarityLimit (the variety lint's limit, default 0.6)}
- * adapters: {env, client ({client, provider, model, vision}), transcribe,
+ * adapters: {env, client ({client, provider, model, vision}), clientOptions
+ * (passed to the client make builds from the keys: {apiKey, sdk, fetch}), fetch
+ * (the model check asks a local Ollama for its model list through it), transcribe,
  *   inventory, voiceProvider, normalizeVoice, prepareRecording,
  *   subject ({probe(src, options), matte(src, range, options)}), finish
  *   (runFinish replacement or adapters for it: finishAdapters), notice, now, clock}
@@ -155,6 +157,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     assets_dir: assetsDir,
     options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(Number(options.minShots) > 0 ? { min_shots: Number(options.minShots) } : {}), profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, ...(options.musicVolume != null ? { music_volume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { music_duck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { music_prompt: String(options.musicPrompt) } : {}), ...(options.sfx != null ? { sfx: String(options.sfx).toLowerCase() } : {}), ...(options.layout != null ? { layout: talkingHeadLayout(options.layout) } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", critic_repairs: criticRepairBudget(options.criticRepairs), visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.pace != null ? { pace: String(options.pace).toLowerCase() } : {}), ...(options.ctaKeyword != null ? { cta_keyword: String(options.ctaKeyword) } : {}), ...(options.ctaOffer != null ? { cta_offer: String(options.ctaOffer) } : {}), ...(options.episode != null ? { episode: String(options.episode) } : {}), ...(options.choices != null ? { choices: String(options.choices) } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", critic_repairs: criticRepairBudget(options.criticRepairs), visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.research ? { research: researchMode(options.research) } : {}) },
     model: null,
+    model_access: null,
     routing: null,
     stages: {},
     timings: {},
@@ -250,9 +253,12 @@ async function stageModel(ctx) {
     ctx.model = { ...adapters.client, spec: adapters.client.spec ?? `${adapters.client.provider}:${adapters.client.model}`, source: "adapter" };
   } else {
     const { spec, source } = selectMakeModel(options.model, env);
-    ctx.model = { ...createMakeClient(spec), spec, source };
+    ctx.model = { ...createMakeClient(spec, adapters.clientOptions ?? {}), spec, source };
   }
   report.model = { spec: ctx.model.spec, source: ctx.model.source, provider: ctx.model.provider, model: ctx.model.model, reasoning: ctx.model.reasoning ?? null, vision: Boolean(ctx.model.vision) };
+  // Which roles this run's model can play (text and vision), so an app can
+  // show what the run will and will not check. No paid call (models.js).
+  report.model_access = await checkModelAccess({ env, selected: ctx.model, fetch: adapters.fetch });
   return { status: "done" };
 }
 
@@ -1547,10 +1553,11 @@ function machineLine(concurrency) {
 
 async function stageCritic(ctx) {
   const { options } = ctx;
-  const wanted = options.critic === true || (options.critic !== false && ctx.model.vision);
   if (options.critic === false) return criticPending(ctx, "--no-critic");
-  if (!wanted) return criticPending(ctx, `${ctx.model.spec} is not configured as vision-capable in make`);
-  if (!ctx.model.vision) return criticPending(ctx, `${ctx.model.spec} cannot take images`);
+  if (!ctx.model.vision) {
+    const why = ctx.report.model_access?.vision?.reason;
+    return criticPending(ctx, `${ctx.model.spec} cannot take images${why ? ` (${why})` : ""}`);
+  }
   const result = await runCritic(ctx);
   if (result.status !== "written") return criticPending(ctx, result.reason ?? "the critic did not run");
   await criticRepairs(ctx, result);

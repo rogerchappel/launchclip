@@ -35,6 +35,19 @@ Pick another model with `--model provider:model` (for example
 `--model openai:gpt-5.6`, or `openrouter:<vendor>/<model>` with
 `OPENROUTER_API_KEY`), or set `LAUNCHCLIP_MAKE_MODEL`.
 
+To see what your keys cover before you spend anything, run:
+
+```bash
+launchclip doctor --models
+```
+
+It reports whether you have a model that can write (the script, the cast
+and the storyboard) and one that can see (the critic), and names what is
+missing. It reads your environment and, if you run Ollama, asks it which
+models are installed. It makes no paid call. Add `--json` for a script, or
+`--model provider:model` to check a model other than the default. `make`
+writes the same report into `MAKE.json` as `model_access`.
+
 `ELEVENLABS_API_KEY` is optional. When it is set, the music bed comes from
 ElevenLabs (paid) unless you pass `--music synth`. Voices default to the free,
 local Kokoro voice.
@@ -66,7 +79,7 @@ Useful flags:
 | `--replan` | off | Plan a new storyboard on a rerun. |
 | `--candidates` | `on` | `off` skips the rendered candidates for the opening and one transition. They need a model that can see. |
 | `--concepts` | `on` | `off` skips the five concepts and the story, and writes the script from the brief in one pass. |
-| `--no-critic` | critic on with OpenAI, Anthropic and OpenRouter models | Skip the automatic visual review. |
+| `--no-critic` | critic on when the model takes images | Skip the automatic visual review. OpenAI, Anthropic and OpenRouter models take images; a local Ollama model does not. |
 | `--critic-repairs <n>` | `3` | Rounds of repair the critic may ask for (0–3; `0` ships its verdict as is). |
 | `--allow-needs-repair` | off | Exit 0 even when the video is `needs-repair` (see [Exit codes](#exit-codes)). |
 | `--layout <name>` | `full` | A talking head's layout for the whole video: `full` (the planner picks footage layouts per section) or `stacked` (9:16: the presenter stays in the lower 45% under a graphics panel that changes every sentence, with close-ups on personal lines and one-word captions on the seam) or `overlay` (one continuous full-frame take, graphics in the free space around the presenter, some behind them, one-word captions at chest height). |
@@ -486,8 +499,12 @@ close. It exits 1 when it finds one; `--json` gives the full report.
 
 - The headless critic only sees contact sheets: no audio and no full-motion
   playback. Treat its verdict as a first pass, not final sign-off.
-- With an Anthropic model the critic stays pending (the adapter sends text
-  only); review `qa/critic-sheets/` yourself.
+- With a local Ollama model the critic stays pending (that client sends
+  text only); review `qa/critic-sheets/` yourself. `launchclip doctor
+  --models` says so before you start.
+- The critic's cost follows the model. The figures above are for
+  `gpt-5.6-luna`; the Anthropic default is a larger model and its critic
+  pass costs more. `MAKE.json` records what each call cost.
 - A single logo has no dedicated module yet, so the storyboard usually leaves
   it out.
 - Classification uses simple local signals (speech activity, frame

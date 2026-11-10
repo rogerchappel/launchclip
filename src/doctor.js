@@ -110,6 +110,18 @@ export async function diagnoseInstallation(options = {}) {
   };
 }
 
+/**
+ * `launchclip doctor --models`: which roles a model can play with the keys in
+ * the environment and the local model on this machine (text and vision; never
+ * generation, which LaunchClip does not do). No paid call is made.
+ * options: {env, model (a --model spec), agent, fetch, timeoutMs}
+ * → launchclip.model-access.v1 (src/make/models.js)
+ */
+export async function diagnoseModels(options = {}) {
+  const { checkModelAccess } = await import("./make/models.js");
+  return checkModelAccess({ probeLocal: true, ...options });
+}
+
 // The person cut-out (subject stage): onnxruntime-node and the default model.
 // Never downloads; `launchclip subject setup` does that.
 async function subjectStatus(env) {
