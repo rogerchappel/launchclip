@@ -92,8 +92,9 @@ wear and its colours, glasses, headwear, anything they carry.
 ## Animals, mascots and objects
 
 A character does not have to be a person. `kind` chooses what it is: a horse
-on four legs (`stallion mare foal`), an upright animal (`cat dog bear rabbit
-fox frog penguin owl`), a soft mascot in the
+on four legs (`stallion mare foal`), a `deer` (four legs too; `marks`
+`antlers` or `spots`), an upright animal or bird (`cat dog bear rabbit fox
+frog squirrel hedgehog penguin owl songbird duck`), a soft mascot in the
 brand's colours (`blob droplet star monster`) or an everyday object with a
 face (`phone laptop cup bulb robot coin book cloud`). They act with the same
 poses, expressions, looks and speech as people, in every drawing style, and
@@ -122,7 +123,7 @@ launchclip cast edit whiskers --set size=large --set colors.detail=white
   becomes a stick figure, a few lines and a face.
 - A mascot's colours default to the brand's `primary` and `accent`, so it
   wears each story's brand. A dark body or screen gets light eyes.
-- 30 are ready to use by id (`launchclip cast list`: `duchess`, `sprig`, `mochi`, `biscuit`,
+- 36 are ready to use by id (`launchclip cast list`: `duchess`, `sprig`, `mochi`, `biscuit`,
   `bloop`, `ping`, `latte`, `rivet`…); `--from mochi` starts from one.
 - Where a pose cannot apply, the body does the nearest thing: a blob's arms
   are too short to cross, so `arms-crossed` rests both hands on its front,
