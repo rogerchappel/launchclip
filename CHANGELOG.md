@@ -4,6 +4,24 @@
 
 ### Changed
 
+- The storyboard planner corrects a plan's mechanical slips itself, before
+  the checks and without a model call, and reports each one as a
+  `normalise:` warning in `.launchclip/storyboard-plan.json`: a character
+  alone in a cast scene with a side position stands in the centre; scenes
+  overlapping on a track are trimmed to meet; a cue time just outside its
+  scene moves to the scene's edge; a target naming a character who is not in
+  the shot becomes the side they stand on (or they join a wide shot with
+  room); a cut that leaves a speaker off screen for a small part of their
+  line moves so their shot covers it; a direction line naming a scene that
+  is not on its words names the one character scene that is. A speaker
+  absent for most of a line, a cue far outside its scene and scenes that
+  cannot both keep their minimum length still fail.
+- A storyboard repair pass redoes only the scenes its findings reach (named
+  in a finding, on a line a finding names, or on screen at a time a finding
+  gives); every other scene keeps the params it had, so a pass no longer
+  fixes one finding and breaks a shot that passed. Findings about the plan as
+  a whole (cadence, the hook, the card mix) leave the whole storyboard open.
+  A failed attempt's plan is saved with its errors (`attempts[].candidate`).
 - `make --animation` delivers a character story as a Short: with no
   `--aspect` it is 9:16 (it was 16:9). Pass `--aspect 16:9` or `1:1`, or
   name the shape in the brief ("a landscape cartoon", "16:9", "widescreen").
