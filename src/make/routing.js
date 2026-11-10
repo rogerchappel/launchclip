@@ -12,7 +12,9 @@
 // Silent screen recordings, b-roll, screenshots and product images become
 // media (media-window scenes, or full-frame inserts in footage-led). Logos,
 // brand.json, a style pack and notes are carried as context. Format follows
-// --aspect, else the base recording's orientation, else 16:9. Duration follows
+// --aspect, else the base recording's orientation, else (a character story
+// only) the shape the brief names, else 9:16 for a character story (a Short)
+// and 16:9 for everything else. Duration follows
 // --duration, else a "45-second" style phrase in the prompt, else the base or
 // voiceover length, else 30 s. A motion video longer than 180 s is long form
 // (docs/LONG_FORM_MAKE_RFC.md): written and planned in chapters, up to 20 min.
@@ -27,6 +29,8 @@
 export const MAKE_ROUTING_VERSION = "launchclip.make-routing.v1";
 export const ASPECTS = Object.freeze({ "16:9": [1920, 1080], "9:16": [1080, 1920], "1:1": [1080, 1080] });
 export const DEFAULT_ASPECT = "16:9";
+// A character story (--animation) is a Short unless --aspect or the brief says otherwise.
+export const ANIMATION_DEFAULT_ASPECT = "9:16";
 export const DEFAULT_DURATION = 30;
 // Up to SHORT_MAX_SECONDS every lane plans the whole video at once; past it, a
 // motion video is long form, up to LONG_FORM_MAX_SECONDS.
@@ -107,11 +111,11 @@ export function routeLane(inventory, options = {}) {
   const notes = entries.filter((entry) => entry.kind === "notes");
   for (const entry of entries.filter((item) => item.kind === "other")) ignored.push({ path: entry.path, reason: "unrecognised file type" });
 
-  const aspect = resolveAspect(options.aspect, base);
-  const [width, height] = ASPECTS[aspect.value];
-  const duration = resolveDuration(options, { lane, base, voiceover });
   // Animation writes its own script and voices it, so it needs the motion lane, and a length planned at once.
   const animation = options.animation === true;
+  const aspect = resolveAspect(options.aspect, base, { animation, prompt: options.prompt });
+  const [width, height] = ASPECTS[aspect.value];
+  const duration = resolveDuration(options, { lane, base, voiceover });
   if (animation && lane !== "motion") throw new Error(`--animation writes the script and voices it, but ${(base ?? voiceover).path} already carries the voice (${lane}); remove it from --assets, or drop --animation`);
   if (animation && duration.value > SHORT_MAX_SECONDS) throw new Error(`--animation makes videos of ${SHORT_MAX_SECONDS} seconds or less; got ${duration.value}`);
   if (animation) reasons.push("--animation: a character story (the motion lane with a cast); the writers' room writes the script with speakers");
@@ -140,7 +144,30 @@ function mediaItem(entry, kind) {
   return { path: entry.path, kind, role: entry.role, description: entry.description, width: entry.media?.width ?? null, height: entry.media?.height ?? null, ...(kind === "video" ? { duration: entry.media?.duration ?? null } : {}), ...(entry.notes ? { notes: entry.notes } : {}), ...(entry.understanding ? { understanding: entry.understanding } : {}) };
 }
 
-export function resolveAspect(flag, base) {
+/**
+ * The shape a brief asks for: a ratio ("16:9", "9x16", "1:1"), "widescreen",
+ * a shape word on a format noun ("a landscape cartoon", "vertical video",
+ * "square format") or "in landscape" → "16:9" | "9:16" | "1:1", else null.
+ * A shape word on its own is the story's ("a foal crosses a snowy landscape",
+ * "a portrait of a mare") and names no format. A ratio wins over a word.
+ */
+export function aspectFromPrompt(prompt) {
+  const text = String(prompt ?? "");
+  const ratio = /(?<![\d:.])(16\s*[:x×]\s*9|9\s*[:x×]\s*16|1\s*[:x×]\s*1)(?![\d:.])/i.exec(text);
+  if (ratio) return ratio[1].replace(/\s+/g, "").replace(/[x×]/i, ":");
+  const shape = "landscape|horizontal|portrait|vertical|square";
+  const word = new RegExp(`\\b(wide-?screen)\\b|\\b(${shape})[- ](?:video|format|cartoon|animation|film|short|story|clip|aspect|orientation|mode|frame|ratio)s?\\b|\\b(?:in|as) (${shape})\\b(?! of\\b)`, "i").exec(text);
+  if (!word) return null;
+  const named = (word[2] ?? word[3] ?? "landscape").toLowerCase();
+  return named === "square" ? "1:1" : named === "portrait" || named === "vertical" ? "9:16" : "16:9";
+}
+
+/**
+ * The frame's shape: --aspect, else the base recording's orientation, else
+ * the default. A character story (context.animation) reads the brief for a
+ * shape (aspectFromPrompt) and defaults to 9:16; every other video keeps 16:9.
+ */
+export function resolveAspect(flag, base, context = {}) {
   if (flag !== undefined && flag !== null && flag !== true) {
     const value = String(flag).trim();
     if (!ASPECTS[value]) throw new Error(`--aspect must be one of ${Object.keys(ASPECTS).join(", ")}; got ${flag}`);
@@ -150,6 +177,11 @@ export function resolveAspect(flag, base) {
   if (orientation === "portrait") return { value: "9:16", reason: `the base recording ${base.path} is portrait` };
   if (orientation === "square") return { value: "1:1", reason: `the base recording ${base.path} is square` };
   if (orientation === "landscape") return { value: "16:9", reason: `the base recording ${base.path} is landscape` };
+  if (context.animation === true) {
+    const named = aspectFromPrompt(context.prompt);
+    if (named) return { value: named, reason: "named in the brief" };
+    return { value: ANIMATION_DEFAULT_ASPECT, reason: "default for a character story: a Short; pass --aspect 16:9 or say landscape in the brief for a wide one" };
+  }
   return { value: DEFAULT_ASPECT, reason: "default" };
 }
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { animationBrief, durationFromPrompt, isAnimation, isLongForm, routeLane } from "../src/make/routing.js";
+import { animationBrief, aspectFromPrompt, durationFromPrompt, isAnimation, isLongForm, routeLane } from "../src/make/routing.js";
 
 const entry = (path, kind, role, extra = {}) => ({ path, kind, role, confidence: 0.9, signals: ["test"], description: `${role} ${path}`, ...extra });
 const head = (path, duration = 40, orientation = "portrait") => entry(path, "video", "talking-head", { media: { kind: "video", duration, orientation, width: 720, height: 1280, mountable: true }, speech: { present: true } });
@@ -87,7 +87,7 @@ test("--animation marks the motion lane as an animation and gives the reason; no
   assert.equal(result.kind, "animation");
   assert.ok(isAnimation(result));
   assert.ok(result.reasons.some((reason) => /--animation: a character story/.test(reason)));
-  assert.deepEqual([result.format.width, result.format.height, result.format.duration], [1920, 1080, 30], "format stays the frame size");
+  assert.deepEqual([result.format.width, result.format.height, result.format.duration], [1080, 1920, 30], "format stays the frame size (a character story's default: 9:16)");
   // A brief that reads as a character story is not diverted yet: it still makes a whole video.
   const worded = route([], { prompt: "An animated story about two characters" });
   assert.ok(animationBrief("An animated story about two characters"));
@@ -95,6 +95,35 @@ test("--animation marks the motion lane as an animation and gives the reason; no
   assert.equal(worded.kind, undefined);
   assert.ok(!isAnimation(worded));
   assert.ok(!("kind" in route([])));
+});
+
+test("a character story is a Short (9:16) unless --aspect or the brief says otherwise; other videos keep 16:9", () => {
+  const story = route([], { prompt: "A foal learns why the starting gate opens", animation: true });
+  assert.equal(story.aspect, "9:16");
+  assert.deepEqual([story.format.width, story.format.height], [1080, 1920]);
+  assert.ok(story.reasons.some((reason) => /format 1080×1920 \(default for a character story: a Short; pass --aspect 16:9/.test(reason)));
+  // --aspect wins over the default and over the brief.
+  assert.equal(route([], { prompt: "A vertical story about a foal", animation: true, aspect: "16:9" }).aspect, "16:9");
+  assert.equal(route([], { prompt: "A vertical story about a foal", animation: true }).aspect, "9:16");
+  // The brief names the shape.
+  assert.equal(route([], { prompt: "A landscape cartoon about a foal", animation: true }).aspect, "16:9");
+  assert.equal(route([], { prompt: "A 16:9 story about a foal for YouTube", animation: true }).aspect, "16:9");
+  assert.equal(route([], { prompt: "A square animation about a foal", animation: true }).aspect, "1:1");
+  assert.ok(route([], { prompt: "A widescreen foal story", animation: true }).reasons.some((reason) => /named in the brief/.test(reason)));
+  // Not a character story: unchanged, whatever the brief says.
+  assert.equal(route([], { prompt: "A foal learns why the starting gate opens" }).aspect, "16:9");
+  assert.equal(route([], { prompt: "A vertical launch video" }).aspect, "16:9");
+});
+
+test("aspectFromPrompt reads a ratio or a shape word, and nothing from other numbers", () => {
+  assert.equal(aspectFromPrompt("make it 9:16"), "9:16");
+  assert.equal(aspectFromPrompt("a 16x9 film"), "16:9");
+  assert.equal(aspectFromPrompt("A horizontal video, please"), "16:9");
+  assert.equal(aspectFromPrompt("a portrait of a horse, in landscape"), "16:9");
+  assert.equal(aspectFromPrompt("A foal crosses a snowy landscape"), null);
+  assert.equal(aspectFromPrompt("Two characters argue in a square of the old town"), null);
+  assert.equal(aspectFromPrompt("the race starts at 11:16:9"), null);
+  assert.equal(aspectFromPrompt("A foal learns why the gate opens"), null);
 });
 
 test("--animation refuses assets that already carry the voice, and long form", () => {
