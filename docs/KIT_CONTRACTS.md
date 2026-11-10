@@ -17,6 +17,7 @@ kit/
     motion.mjs          frame-pure easing, tracks, stagger, count-up, springs
     grammar.mjs         motion grammars (editorial, snappy, smooth, playful, documentary, cinematic)
     transitions.mjs     typed transitions and scene render windows
+    transition-frames.mjs  what a transition's two plates put on screen per frame; the cover, stall and pop check
     camera-world.mjs    world layout, camera path, parallax and motion blur
     ambient.mjs         frame-pure ambient motion: background field, hold drift
     editorial-core.mjs  editorial module spec → resolved model (no HTML)
@@ -685,6 +686,50 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
   module enters at opacity 1 with no blur, the outgoing one keeps opacity 1
   into its exit), so the transition, not the card's own fade, brings it in
   and takes it away. Their slides and settles still play.
+- Full-frame pictures (`FULL_FRAME_PLATES`: `clip`, `photo-scene`, `world`).
+  A plate of one of these modules covers the frame by itself, so the plate it
+  arrives over stays whole under it until the transition ends: `sceneWindows`
+  passes `opaque` (the incoming plate) and `opaqueFrom` (the outgoing one) to
+  `transitionTweens`, which then drops every opacity tween from `out` (a
+  fade there only lets the background through). The frame is never empty and
+  a crossfade never dips to the background.
+  - World mode: the layered transitions (fade, zoom, iris, glow-wipe and the
+    rest) play as in cuts mode, the picture arriving over the outgoing plate
+    instead of the two handing over in turn.
+  - `push` in world mode (the dolly in): the picture is nested in the
+    outgoing plate at 1/1.6 and fades in over it from 8 % to 50 % of the move,
+    while the camera is still slow; the camera then grows it to the full
+    frame on the grammar's camera ease (slow, fast, slow, no overshoot, with
+    the camera's motion blur). The outgoing picture never fades. Out of a
+    card, the card fades from 50 % to 80 %, once the picture is in.
+  - `pull` (the dolly out): the picture is drawn over the outgoing plate and
+    fades in over the first 30 % of the move, before that plate has shrunk
+    away from the frame's edges.
+  - An incoming fade that starts late (a world push, pull or fade) holds its
+    first value from the transition's first frame, so a layer is never whole
+    before it arrives (GSAP's `fromTo` with `immediateRender: false`, and
+    `layerStateAt`, both leave a layer at rest until its first tween starts).
+  - Footage to footage (`FOOTAGE_PLATES`: `clip`, `photo-scene`): the
+    transitions that move a card or hand an object across
+    (`CARD_TRANSITIONS`: card-to-card, rack-focus, morph) have nothing to
+    carry and play as a fade of the same length (`footageTransition`);
+    `story validate` warns and names the scene.
+- The transition check (`kit/core/transition-frames.mjs`):
+  `transitionFrames(story, sceneId)` gives, per frame of the transition into
+  a plate, the share of the screen its two plates cover together (each plate
+  is its rect through its layer state, its world placement and the camera,
+  sampled on a grid), how much of the picture changes into the next frame,
+  and each plate's pose. `transitionFindings(story)` reports, for every
+  transition between two full-frame plates: `cover` (the two plates leave
+  more than 5 % of a frame to the background; 20 % while a pan, whip-pan or
+  orbit shows the gap between two plates side by side), `stall` (a plate on
+  screen and not yet where it rests does not change into the next frame) and
+  `pop` (a change of 12 % of the picture or more, at least half as much again
+  as the step before, followed by a nearly still frame). An overview holds on
+  the map by design, so only its pops are reported.
+  `test/transition_frames.test.js` runs it over every type, direction and
+  three lengths in both camera modes, and seeks the HyperFrames timeline's
+  tweens in GSAP against `layerStateAt` on every frame.
 - Layer state gains `wipeT/R/B/L` (percent insets, `inset()` clip-path, dropped
   once the wipe lands, like iris) and `glow` (`brightness(1 + glow)`, composed
   with blur in one filter).

@@ -294,6 +294,14 @@ something live moves in it.
 `scene.states` for builds, the shared focus ring, and the `rack-focus`,
 `glow-wipe` and `card-to-card` transitions.
 
+**Footage to footage.** `rack-focus` and `card-to-card` (and `morph`) move a
+card or hand an object across; between two full-frame footage scenes (`clip`,
+`photo-scene`) there is nothing to carry, so they play as a fade and
+`story validate` warns. Between footage use cut, fade, push, whip, zoom or
+iris (or push-blur, light-sweep, glow-wipe, dot-wipe); the new picture
+arrives over the old one, which stays whole under it, so the frame never
+drops to the background (docs/KIT_CONTRACTS.md, "Transitions").
+
 ## Gates summary
 
 | Gate | Input | Fails when |
