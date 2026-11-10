@@ -44,7 +44,9 @@ export const LOOK_LAYER_ID = 'lc-look';
 export const LOOK_FURNITURE_ID = 'lc-look-furniture';
 // Above the medium (80000 / 49), below the brand frame (90000) and the
 // captions (100000 / 50). Remotion draws both after the medium in DOM order.
-export const LOOK_Z = Object.freeze({ hyperframes: Object.freeze({ grade: 81000, furniture: 82000 }), remotion: 49 });
+// A look whose grade belongs under the paint (`under`: watercolour's pencil)
+// draws it just below the medium instead.
+export const LOOK_Z = Object.freeze({ hyperframes: Object.freeze({ grade: 81000, under: 79900, furniture: 82000 }), remotion: 49 });
 export const LOOK_INFO = Object.freeze(Object.fromEntries(Object.entries(LOOKS).map(([name, look]) => [name, Object.freeze({ describe: look.describe, honest: look.honest ?? null, step: look.defaults?.step ?? 0 })])));
 // Names people write for a look: the validator names the look to use instead.
 const ALIASES = Object.freeze({ holo: 'hologram', holographic: 'hologram', 'thermal-camera': 'thermal', infrared: 'thermal', neon: 'neon-night', 'neon-noir': 'neon-night', cyberpunk: 'neon-night', 'paper-cut': 'paper-cutout', cutout: 'paper-cutout', 'cut-out': 'paper-cutout', iso: 'isometric', anime: 'anime-cel', cel: 'anime-cel', ascii: 'ascii-terminal', terminal: 'ascii-terminal', watercolor: 'watercolour', claymation: 'clay', plasticine: 'clay', blueprints: 'blueprint' });
@@ -147,7 +149,7 @@ export function stepIndex(frame, fps, step) {
  * The look pass for a story, or null when it has no look (the render is then
  * unchanged). → {name, strength, step, labels, width, height, fps, unit,
  * duration, frames, seed, safe, band, regions, shots, cues, title, colors, variants,
- * filters: [ids], grade: boolean, furniture: {html, css} | null}
+ * filters: [ids], grade: boolean, under: boolean, furniture: {html, css} | null}
  */
 export function lookPlan(story) {
   const look = normalizeLook(story?.look);
@@ -184,6 +186,8 @@ export function lookPlan(story) {
   };
   plan.variants = def.grade ? Math.max(1, typeof def.variants === 'function' ? def.variants(plan) : def.variants ?? 1) : 0;
   plan.grade = Boolean(def.grade);
+  // The grade sits under the medium (the pencil under the wash) instead of over it.
+  plan.under = plan.grade && def.under === true;
   plan.filters = plan.grade ? Array.from({ length: plan.variants }, (_, v) => `${LOOK_LAYER_ID}-${v}`) : [];
   plan.furniture = look.furniture && def.furniture ? def.furniture(plan) : null;
   return plan;
@@ -269,19 +273,24 @@ export function lookDefs(plan) {
 export function lookCss(plan, z = LOOK_Z.hyperframes) {
   const box = `position: absolute; left: 0; top: 0; width: ${plan.width}px; height: ${plan.height}px; pointer-events: none;`;
   const lines = [];
-  if (plan.grade) lines.push(`#${LOOK_LAYER_ID} { ${box} z-index: ${z.grade}; backdrop-filter: var(--lc-look-filter); -webkit-backdrop-filter: var(--lc-look-filter); }`);
+  if (plan.grade) lines.push(`#${LOOK_LAYER_ID} { ${box} z-index: ${plan.under ? z.under ?? z.grade : z.grade}; backdrop-filter: var(--lc-look-filter); -webkit-backdrop-filter: var(--lc-look-filter); }`);
   if (plan.furniture) lines.push(`#${LOOK_FURNITURE_ID} { ${box} z-index: ${z.furniture}; overflow: hidden; font-family: var(--lc-font-meta); }`, plan.furniture.css);
   return lines.join('\n');
 }
 
-/** The look's markup after its defs: the grade layer and the furniture root, with the variables of frame 0 inline. */
-export function lookMarkup(plan) {
+/** The look's grade layer (with its defs before it) as markup, with the variables of frame 0 inline; '' without a grade. */
+export function lookGradeMarkup(plan) {
+  if (!plan?.grade) return '';
   const style = Object.entries(lookVarsAt(plan, 0)).map(([key, value]) => `${key}:${value}`).join(';');
-  return [
-    plan.grade ? `<div id="${LOOK_LAYER_ID}" data-launchclip-look="${plan.name}" aria-hidden="true" style="${style}"></div>` : '',
-    // Furniture is decoration over the scenes: the layout audit leaves it out.
-    plan.furniture ? `<div id="${LOOK_FURNITURE_ID}" data-launchclip-look="${plan.name}" data-layout-ignore="true" data-layout-allow-overflow="true" data-layout-allow-overlap="true" aria-hidden="true" style="${style}">${plan.furniture.html}</div>` : ''
-  ].join('');
+  return `${lookDefs(plan)}<div id="${LOOK_LAYER_ID}" data-launchclip-look="${plan.name}" aria-hidden="true" style="${style}"></div>`;
+}
+
+/** The look's furniture root as markup, with the variables of frame 0 inline; '' without furniture. */
+export function lookFurnitureMarkup(plan) {
+  if (!plan?.furniture) return '';
+  const style = Object.entries(lookVarsAt(plan, 0)).map(([key, value]) => `${key}:${value}`).join(';');
+  // Furniture is decoration over the scenes: the layout audit leaves it out.
+  return `<div id="${LOOK_FURNITURE_ID}" data-launchclip-look="${plan.name}" data-layout-ignore="true" data-layout-allow-overflow="true" data-layout-allow-overlap="true" aria-hidden="true" style="${style}">${plan.furniture.html}</div>`;
 }
 
 /** The selector the variables are set on. */
