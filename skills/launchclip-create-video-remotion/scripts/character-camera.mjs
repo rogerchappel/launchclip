@@ -2,7 +2,7 @@
 // zooms of its own gets one slow move for as long as it is up, so a planned
 // character story is never a row of still frames between cuts:
 //
-//   speaker   a slow push-in on the character who speaks
+//   speaker   a slow push-in on the character who speaks, rising to the face
 //   wide      a gentle drift across a wide shot (with a touch of push)
 //   reaction  a punch-in on a character who only listens, then a slow creep
 //
@@ -17,15 +17,20 @@
 // velocity blur follow), a scale over a translate around the scene in cuts
 // mode. Frame-pure and seek-safe: every key is an absolute from → to.
 //
-// Feel: every move eases in, travels and eases out (slow, fast, slow), with
-// no overshoot. A slow move is three keys with one velocity through the
-// joins: power1.in up to the cruising speed, linear, power1.out down from it.
-// The punch-in is one key on the grammar's camera ease, and the only one
-// fast enough for the camera's velocity blur to show at its peak.
+// Feel: every move is slow, fast, slow, with no overshoot. A slow move
+// starts and ends on a cut, so it never stops: it climbs from 40% of its
+// cruising speed to all of it over 0.32 s, cruises, and comes back down the
+// same way (slowKeys). The punch-in is one key on the grammar's camera ease,
+// from rest, and the only one fast enough for the camera's velocity blur to
+// show at its peak. A scene that arrives or leaves on anything but a cut (a
+// dissolve, a camera move between plates) keeps the camera at rest, as
+// before.
 //
-// A move starts and ends on a cut, so it needs no rest at either end. A scene
-// that arrives or leaves on anything but a cut (a dissolve, a camera move
-// between plates) keeps the camera at rest, as before.
+// How much: the finish motion gate calls a frame pair still when its mean
+// change is under 0.4 grey levels on a 72 px grid, and fails a render with
+// more than a tenth of them. On flat drawn worlds a push changes few pixels
+// (only edges move, and less near the centre), so a move travels along the
+// long side as well as pushing: about 3.3% of it a second.
 //
 // Imports only kit/core siblings.
 
@@ -34,15 +39,20 @@ import { defaultShot } from './characters/framing.mjs';
 import { resolveGrammar } from './grammar.mjs';
 
 export const CHARACTER_CAMERA = Object.freeze({
-  // The scale a slow move adds each second, and the least and most a whole move adds.
-  rate: 0.028, min: 0.045, max: 0.12,
-  // A wide shot's drift: the scale it sits at (room to travel inside the plate),
-  // how far it travels each second and at most (shares of the canvas width).
-  wide: Object.freeze({ scale: 1.05, travel: 0.02, most: 0.044, push: 0.4 }),
-  // A reaction's punch-in: the scale it lands at and how long it takes.
-  punch: Object.freeze({ scale: 1.07, seconds: 0.42 }),
-  // The ramps of a slow move: this long, and at most this share of the move.
-  ramp: Object.freeze({ seconds: 0.3, share: 0.25 }),
+  // A slow move travels this share of the canvas's long side each second,
+  // along that side (up the frame in 9:16, across it in 16:9), and pushes in
+  // by this much scale each second, at most `most` in all.
+  travel: 0.033, push: 0.025, most: 0.1,
+  // The shot starts a little closer than its framing, so the travel has room
+  // inside the plate: at least `closer`, at most `closest`.
+  closer: 1.05, closest: 1.14,
+  // A wide shot's drift also crosses the short side by this share of its room.
+  across: 0.8,
+  // A reaction's punch-in from the shot's own framing: how long it takes.
+  punch: 0.42,
+  // A slow move's ramps: this long (at most a quarter of the move), in `steps`
+  // even steps of speed from `slow` (a share of the cruising speed) up to it.
+  ramp: Object.freeze({ seconds: 0.32, share: 0.25, steps: 4, slow: 0.4 }),
   // A scene shorter than this keeps the camera at rest.
   shortest: 0.8
 });
@@ -59,8 +69,9 @@ export function characterCameraOn(story) {
 
 /**
  * The move a track-0 scene of a character story takes by default:
- * 'speaker' | 'wide' | 'reaction', or null (not a cast scene or a world
- * plate, has its own zooms, too short, or does not arrive and leave on a cut).
+ * 'speaker' | 'wide' | 'reaction', or null (not a cast scene: a `world` plate
+ * moves with its own params.camera; has its own zooms; too short; or does not
+ * arrive and leave on a cut).
  */
 export function characterMove(story, scene) {
   if (!characterCameraOn(story) || !isObject(scene) || (scene.track ?? 0) !== 0) return null;
@@ -70,9 +81,8 @@ export function characterMove(story, scene) {
   const plates = (Array.isArray(story.scenes) ? story.scenes : []).filter((item) => (item?.track ?? 0) === 0).sort((a, b) => Number(a.start) - Number(b.start));
   const next = plates[plates.indexOf(scene) + 1];
   if (!cutIn(scene) || (next && !cutIn(next))) return null;
-  // The last scene hands over to the ending (a loop back to the hook is a move of its own).
-  if (!next && story.ending) return null;
-  if (scene.module === 'world') return 'wide';
+  // A last scene that loops back to the hook hands over to that move.
+  if (!next && typeof story.ending?.loop_to === 'string') return null;
   if (!CAST_MODULES.includes(scene.module)) return null;
   const cast = Array.isArray(scene.params?.cast) ? scene.params.cast : scene.module === 'character-cameo' ? [scene.params ?? {}] : [];
   const walks = cast.some((actor) => actor?.pose === 'walk' || (Array.isArray(actor?.cues) && actor.cues.some((cue) => cue?.action === 'walk-to' || cue?.pose === 'walk')));
@@ -82,26 +92,45 @@ export function characterMove(story, scene) {
   return cast.some((actor) => actor?.says !== undefined && actor.says !== null && actor.says !== false) ? 'speaker' : 'reaction';
 }
 
-// A slow move from → to over [start, start + seconds]: ease in, cruise, ease out, one velocity through the joins.
+// A slow move from → to over [start, start + seconds]: slow, fast, slow.
+// It starts and ends on a cut, so it never stops: each ramp climbs from
+// ramp.slow of the cruising speed to all of it in ramp.steps even steps, each
+// a linear key (a staircase of speed whose steps are too small to see), and
+// the cruise between them is one linear key. Linear keys chain exactly, so
+// the move is the same whichever way the timeline is sought.
 function slowKeys(start, seconds, from, to) {
-  const ramp = Math.min(CHARACTER_CAMERA.ramp.seconds, seconds * CHARACTER_CAMERA.ramp.share);
-  // Distance shares: each ramp covers half of what the cruise covers in the same time.
-  const edge = ramp / (2 * (seconds - ramp));
+  const R = CHARACTER_CAMERA.ramp;
+  const ramp = Math.min(R.seconds, seconds * R.share);
+  const step = ramp / R.steps;
+  // Speeds as shares of the cruise: the ramp's steps, the cruise, the steps back down.
+  const up = Array.from({ length: R.steps }, (_, i) => R.slow + ((1 - R.slow) * i) / R.steps);
+  const parts = [...up.map((speed) => ({ seconds: step, speed })), { seconds: seconds - 2 * ramp, speed: 1 }, ...[...up].reverse().map((speed) => ({ seconds: step, speed }))];
+  const total = parts.reduce((sum, part) => sum + part.seconds * part.speed, 0);
   const at = (k) => ({ x: round(from.x + (to.x - from.x) * k, 4), y: round(from.y + (to.y - from.y) * k, 4), s: round(from.s + (to.s - from.s) * k) });
-  const a = at(edge), b = at(1 - edge);
-  return [
-    { start: round(start), duration: round(ramp), ease: 'power1.in', from: at(0), to: a },
-    { start: round(start + ramp), duration: round(seconds - 2 * ramp), ease: 'none', from: a, to: b },
-    { start: round(start + seconds - ramp), duration: round(ramp), ease: 'power1.out', from: b, to: at(1) }
-  ];
+  const keys = [];
+  let time = start, done = 0;
+  for (const part of parts) {
+    const next = done + (part.seconds * part.speed) / total;
+    keys.push({ start: round(time), duration: round(part.seconds), ease: 'none', from: at(done), to: at(Math.min(1, next)) });
+    time += part.seconds;
+    done = next;
+  }
+  keys.at(-1).to = at(1);
+  return keys;
 }
 
 /**
  * The default camera keys of one scene of a character story, in shotZooms'
- * shape, or [] (characterMove is null). index: the scene's place among the
- * story's plates (a wide shot drifts right on even places, left on odd).
- * The last key puts the camera back at rest as the scene ends, so the next
- * shot starts from its own framing.
+ * shape, or [] (characterMove is null).
+ *
+ * Every move starts a little closer than the shot's framing and travels
+ * along the canvas's long side while it pushes in: up toward the face on a
+ * speaker or a reaction in 9:16 (across in 16:9, toward the side the plate's
+ * place gives), and on a wide shot across both sides at once, a drift, its
+ * direction alternating with the plate's place in the story. A reaction
+ * first punches in from the shot's own framing on the grammar's camera ease.
+ * When the next shot has no move of its own, a last key puts the camera back
+ * at rest as the scene ends, so that shot starts from its own framing.
  */
 export function characterKeys(story, scene) {
   const move = characterMove(story, scene);
@@ -109,25 +138,30 @@ export function characterKeys(story, scene) {
   const W = Number(story.format.width), H = Number(story.format.height);
   if (!(W > 0 && H > 0)) return [];
   const C = CHARACTER_CAMERA;
-  const start = Number(scene.start), end = Number(scene.end), seconds = end - start;
+  const start = Number(scene.start), end = Number(scene.end);
   const rest = { x: W / 2, y: H / 2, s: 1 };
-  const push = (time) => clamp(C.rate * time, C.min, C.max);
   const plates = (story.scenes ?? []).filter((item) => (item?.track ?? 0) === 0).sort((a, b) => Number(a.start) - Number(b.start));
-  let keys;
-  if (move === 'wide') {
-    const s0 = C.wide.scale, s1 = round(s0 + push(seconds) * C.wide.push);
-    // Travel across, kept inside the plate at the smaller scale.
-    const room = (W / 2) * (1 - 1 / s0);
-    const half = Math.min(room, (clamp(C.wide.travel * seconds, 0, C.wide.most) * W) / 2);
-    const dir = plates.indexOf(scene) % 2 === 0 ? 1 : -1;
-    keys = slowKeys(start, seconds, { x: W / 2 - dir * half, y: H / 2, s: s0 }, { x: W / 2 + dir * half, y: H / 2, s: s1 });
-  } else if (move === 'speaker') {
-    keys = slowKeys(start, seconds, rest, { ...rest, s: round(1 + push(seconds)) });
-  } else {
-    const { ease } = { ease: resolveGrammar(story).ease.camera };
-    const landed = { ...rest, s: C.punch.scale };
-    const punch = Math.min(C.punch.seconds, seconds / 3);
-    keys = [{ start: round(start), duration: round(punch), ease, from: rest, to: landed }, ...slowKeys(start + punch, seconds - punch, landed, { ...rest, s: round(C.punch.scale + push(seconds - punch) * 0.6) })];
-  }
+  const turn = plates.indexOf(scene) % 2 === 0 ? 1 : -1;
+  const punch = move === 'reaction' ? Math.min(C.punch, (end - start) / 3) : 0;
+  const seconds = end - start - punch;
+  const portrait = H > W;
+  const long = Math.max(W, H);
+  // How far it travels, and the scale that gives that much room inside the plate.
+  const s0 = clamp(1 / (1 - (C.travel * seconds)), C.closer, C.closest);
+  const s1 = round(s0 + Math.min(C.most, C.push * seconds));
+  const room = (side) => (side / 2) * (1 - 1 / s0);
+  const half = Math.min(room(long), (C.travel * seconds * long) / 2);
+  // Along the long side: a speaker and a reaction rise to the face in 9:16; a wide shot alternates.
+  const along = portrait ? (move === 'wide' ? turn : -1) * half : turn * half;
+  const across = move === 'wide' ? turn * room(Math.min(W, H)) * C.across * (portrait ? 1 : -1) : 0;
+  const point = (k) => (portrait ? { x: W / 2 + k * across, y: H / 2 + k * along } : { x: W / 2 + k * along, y: H / 2 + k * across });
+  // After its punch-in a reaction creeps on from the centre it landed on.
+  const from = { ...point(punch ? 0 : -1), s: round(s0) }, to = { ...point(1), s: s1 };
+  const keys = [];
+  if (punch) keys.push({ start: round(start), duration: round(punch), ease: resolveGrammar(story).ease.camera, from: rest, to: from });
+  keys.push(...slowKeys(start + punch, seconds, from, to));
+  // Back at rest as the scene ends, unless the next shot's own move takes over on the cut.
+  const next = plates[plates.indexOf(scene) + 1];
+  if (next && characterMove(story, next)) return keys;
   return [...keys, { start: round(end), duration: round(1 / 30), ease: 'none', from: rest, to: rest }];
 }

@@ -1350,10 +1350,11 @@ sentence case in the body face with no stroke, and colours at most one accent
 word per line (`accents: 1`): the line's first emphasis word, else its longest
 word of six letters or more.
 
-**Chunking.** `chunkWords(words, {maxWords, maxChars, gapSeconds})` fills a
-line until the next word would pass a limit, and ends it on a full stop, a
-comma (after two words or more) or a pause. A phrase's last word is kept with
-its phrase: when a line was cut for size one word short of the phrase's end
+**Chunking.** `chunkWords(words, {maxWords, maxChars, gapSeconds,
+keepPhrase})` fills a line until the next word would pass a limit, and ends
+it on a full stop, a comma (after two words or more) or a pause. With
+`keepPhrase` (off by default; a character story's captions turn it on) a
+phrase's last word is kept with its phrase: when a line was cut for size one word short of the phrase's end
 ("The foal watched the starting" / "gate."), it hands words from its end to
 the lone word until the two are about even ("The foal watched the" /
 "starting gate."). Only when the line before keeps two words or more, the two
@@ -1366,7 +1367,8 @@ sentence ("No.") stays alone.
 is not footage-led. Its captions overlay, when it names no `preset` or
 `style`, resolves with `CHARACTER_CAPTIONS` under its own options
 (`characterCaptions`): `word-highlight` (no band, no plate) in sentence case,
-4 words and 22 letters a line, at 0.86 of the preset's size, white type in
+4 words and 22 letters a line with a phrase's last word kept with its phrase,
+at 0.86 of the preset's size, white type in
 the preset's dark outline with the spoken word in the brand primary, and no
 world-tone recolouring (the outline carries it on any world). A style pack's
 caption preset is not filled into such a story (`packCaptionsForStory`):
@@ -2971,17 +2973,27 @@ chooses it from the storyboard alone:
 
 | Move | When | What |
 |---|---|---|
-| `speaker` | a `medium` or `close` shot where a character `says` a line | a push-in from rest, 2.8% a second, 4.5% to 12% in all |
-| `wide` | a `wide` shot | a drift across at 1.05× (2% of the width a second, 4.4% at most; right on even plates, left on odd) with 40% of a push |
-| `reaction` | a `medium` or `close` shot where nobody speaks | a punch-in to 1.07× over 0.42 s on the grammar's camera ease, then a slow creep |
+| `speaker` | a `medium` or `close` shot where a character `says` a line | a push-in that travels along the canvas's long side: up toward the face in 9:16, across in 16:9 |
+| `wide` | a `wide` shot | a drift across both sides at once with the same push; its direction alternates with the plate's place in the story |
+| `reaction` | a `medium` or `close` shot where nobody speaks | a punch-in from the shot's own framing over 0.42 s on the grammar's camera ease, then the speaker's move from the centre it landed on |
 
-A slow move is three keys with one velocity through the joins (`power1.in`,
-linear, `power1.out`; ramps of 0.3 s, at most a quarter of the move), so it
-is slow, fast, slow with no overshoot; a last key puts the camera back at
-rest as the scene ends. The view never leaves the plate. A `world` plate
-keeps its own `params.camera`. A scene gets no
-move when it is shorter than 0.8 s, when it or the next plate arrives on
-anything but a cut, or when it is the last scene before an `ending`.
+`CHARACTER_CAMERA` holds the amounts: a move travels 3.3% of the long side
+and pushes 2.5% of scale each second (10% of push at most), and starts
+between 1.05× and 1.14× so that travel has room inside the plate: the view
+never leaves it. The motion gate (`src/render_motion_analysis.js`) calls a
+frame pair still under 0.4 grey levels of mean change on a 72 px grid; on a
+flat drawn world a push alone changes too few pixels, which is why the move
+also travels. A slow move starts and ends on a cut, so it never stops: it
+climbs from 40% of its cruising speed in four even steps over 0.32 s,
+cruises, and comes back down the same way, all in linear keys (slow, fast,
+slow; no overshoot; the same frame whichever way the timeline is sought).
+Only the punch-in is fast enough for the camera's velocity blur to show.
+When the next shot has no move of its own, a last key puts the camera back
+at rest as the scene ends. In world mode the camera's drift is off while
+these moves are on. A `world` plate keeps its own `params.camera`. A scene
+gets no move when it is shorter than 0.8 s, when it or the next plate
+arrives on anything but a cut, or when it is the last scene of a story that
+loops back (`ending.loop_to`).
 `camera.moves: false` turns every default move off.
 
 Validation (`kit/core/story.mjs` `validateZooms`; timing is checked with the

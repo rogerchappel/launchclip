@@ -81,8 +81,8 @@ export function characterMove(story, scene) {
   const plates = (Array.isArray(story.scenes) ? story.scenes : []).filter((item) => (item?.track ?? 0) === 0).sort((a, b) => Number(a.start) - Number(b.start));
   const next = plates[plates.indexOf(scene) + 1];
   if (!cutIn(scene) || (next && !cutIn(next))) return null;
-  // The last scene hands over to the ending (a loop back to the hook is a move of its own).
-  if (!next && story.ending) return null;
+  // A last scene that loops back to the hook hands over to that move.
+  if (!next && typeof story.ending?.loop_to === 'string') return null;
   if (!CAST_MODULES.includes(scene.module)) return null;
   const cast = Array.isArray(scene.params?.cast) ? scene.params.cast : scene.module === 'character-cameo' ? [scene.params ?? {}] : [];
   const walks = cast.some((actor) => actor?.pose === 'walk' || (Array.isArray(actor?.cues) && actor.cues.some((cue) => cue?.action === 'walk-to' || cue?.pose === 'walk')));

@@ -12,6 +12,7 @@ import { resolveStyleV2 } from "../src/style_store.js";
 import { characterStory, characterWords } from "./helpers/character_story.js";
 
 const resolved = (edit = (story) => story) => resolveStory(edit(characterStory()), { words: characterWords() });
+const keep = { keepPhrase: true };
 const lines = (chunks) => chunks.map((chunk) => chunk.words.map((word) => word.text).join(" "));
 const say = (text, gap = 0.05) => text.split(" ").map((word, index) => ({ text: word, start: index * 0.3, end: index * 0.3 + 0.3 - gap }));
 
@@ -26,21 +27,23 @@ test("a character story is one made with a show bible that stages its cast", () 
 test("a phrase's last word is kept with its phrase", () => {
   // The run's opening line under its band preset (6 words, 30 letters) left "gate." alone.
   const opening = say("The foal watched the starting gate. Why does it open?");
-  assert.deepEqual(lines(chunkWords(opening, { maxWords: 6, maxChars: 30 })), ["The foal watched the", "starting gate.", "Why does it open?"]);
+  assert.deepEqual(lines(chunkWords(opening, { maxWords: 6, maxChars: 30, ...keep })), ["The foal watched the", "starting gate.", "Why does it open?"]);
   // The default chunking: a line cut for size hands its last word to the lone one.
-  assert.deepEqual(lines(chunkWords(say("it is a brand new starting gate."))), ["it is a", "brand new", "starting gate."]);
+  assert.deepEqual(lines(chunkWords(say("it is a brand new starting gate."), keep)), ["it is a", "brand new", "starting gate."]);
   // A line of two words keeps both (it would leave its first word alone instead).
-  assert.deepEqual(lines(chunkWords(say("ship this feature today."))), ["ship this", "feature today."]);
-  assert.deepEqual(lines(chunkWords(say("we can ship this feature today."))), ["we can ship", "this feature", "today."]);
+  assert.deepEqual(lines(chunkWords(say("ship this feature today."), keep)), ["ship this", "feature today."]);
+  assert.deepEqual(lines(chunkWords(say("we can ship this feature today."), keep)), ["we can ship", "this feature", "today."]);
+  // Off unless asked for: every other video's captions are chunked as before.
+  assert.deepEqual(lines(chunkWords(opening, { maxWords: 6, maxChars: 30 })), ["The foal watched the starting", "gate.", "Why does it open?"]);
   // A one-word sentence stays alone, and so does a word spoken after a pause.
-  assert.deepEqual(lines(chunkWords(say("Not at all. No. It means you can start."), { maxWords: 6, maxChars: 30 })), ["Not at all.", "No.", "It means you can start."]);
+  assert.deepEqual(lines(chunkWords(say("Not at all. No. It means you can start."), { maxWords: 6, maxChars: 30, ...keep })), ["Not at all.", "No.", "It means you can start."]);
   const paused = say("one two three four five six seven.", 0.05);
   paused[6] = { ...paused[6], start: paused[5].end + 0.6, end: paused[5].end + 0.9 };
-  assert.deepEqual(lines(chunkWords(paused, { maxWords: 6, maxChars: 40 })), ["one two three four five six", "seven."]);
+  assert.deepEqual(lines(chunkWords(paused, { maxWords: 6, maxChars: 40, ...keep })), ["one two three four five six", "seven."]);
   // Never a line over the limits, never a first line of one word.
   for (const text of ["a b c d e f g.", "alpha beta gamma delta epsilon zeta.", "The foal stepped back from the gate."]) {
     for (const limits of [{ maxWords: 3, maxChars: 18 }, { maxWords: 4, maxChars: 22 }, { maxWords: 6, maxChars: 30 }]) {
-      const out = chunkWords(say(text), limits);
+      const out = chunkWords(say(text), { ...limits, ...keep });
       for (const chunk of out) assert.ok(chunk.words.length <= limits.maxWords, `${text} ${JSON.stringify(limits)}: ${lines(out).join(" | ")}`);
       assert.ok(out.length < 2 || out.at(-1).words.length > 1 || out.at(-2).words.length < 3, `${text} ${JSON.stringify(limits)}: ${lines(out).join(" | ")}`);
     }

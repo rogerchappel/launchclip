@@ -23,11 +23,11 @@
   the brand colours, in place of the render's colour clusters, which are the
   show bible's world and cast. The motion grammar's shot range is not
   reported there. Other stories are checked as before.
-- Captions keep a phrase's last word with its phrase: a line cut for size
-  one word short of a full stop or a comma hands words to that word
-  ("The foal watched the" / "starting gate." where it was "The foal watched
-  the starting" / "gate."). This applies to every video whose line before
-  the lone word has three words or more.
+- A character story's captions keep a phrase's last word with its phrase: a
+  line cut for size one word short of a full stop or a comma hands words to
+  that word ("The foal watched the" / "starting gate." where it was "The
+  foal watched the starting" / "gate."). Other videos' captions are chunked
+  as before.
 - In a character story the captions count as content for the density gate
   in the third of the frame they sit in.
 - Reference sheets, cast sheets and demo recordings also find the headless

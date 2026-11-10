@@ -30,8 +30,10 @@ export function isCharacterStory(story) {
 // it stands over a drawn world (sky, grass, a room), not over the brand's
 // background, and the outline carries it on any of them, so it takes no
 // world tone (world_tone: false). The spoken word turns the brand primary.
+// A phrase's last word stays with its phrase (keep_phrase: captions.mjs
+// keepPhraseEnds), so no line is a lone "gate.".
 // A style pack's caption preset is made for cards and footage in the brand's
 // colours and does not apply (a pack opts in with captions.lanes.characters).
-export const CHARACTER_CAPTIONS = Object.freeze({ preset: 'word-highlight', case: 'as-is', max_words: 4, max_chars: 22, size: 0.86, world_tone: false, colors: Object.freeze({ idle: '#ffffff', active: 'primary' }) });
+export const CHARACTER_CAPTIONS = Object.freeze({ preset: 'word-highlight', case: 'as-is', max_words: 4, max_chars: 22, size: 0.86, world_tone: false, keep_phrase: true, colors: Object.freeze({ idle: '#ffffff', active: 'primary' }) });
 // The style-pack captions lane a character story reads.
 export const CHARACTER_CAPTION_LANE = 'characters';

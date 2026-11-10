@@ -100,7 +100,15 @@ function keepPhraseEnds(chunks, { maxWords, maxChars, gapSeconds }) {
   }
 }
 
-export function chunkWords(words, { maxWords = 3, maxChars = 18, gapSeconds = 0.28 } = {}) {
+/**
+ * Words → caption chunks: a line fills until the next word would pass
+ * maxWords or maxChars, and ends on a full stop, a comma (after two words or
+ * more) or a pause over gapSeconds. keepPhrase (off by default, so every
+ * caption that was chunked before is chunked the same): a phrase's last word
+ * is kept with its phrase (keepPhraseEnds); a character story's captions
+ * turn it on.
+ */
+export function chunkWords(words, { maxWords = 3, maxChars = 18, gapSeconds = 0.28, keepPhrase = false } = {}) {
   const clean = joinAttachedWords(words
     .map((word) => ({ text: String(word.text ?? word.word ?? '').trim(), start: Number(word.start), end: Number(word.end) }))
     .filter((word) => word.text && Number.isFinite(word.start) && Number.isFinite(word.end) && word.end >= word.start));
@@ -119,7 +127,7 @@ export function chunkWords(words, { maxWords = 3, maxChars = 18, gapSeconds = 0.
     if (STRONG_BREAK.test(word.text) || (SOFT_BREAK.test(word.text) && current.length > 1)) flush();
   }
   flush();
-  keepPhraseEnds(chunks, { maxWords, maxChars, gapSeconds });
+  if (keepPhrase) keepPhraseEnds(chunks, { maxWords, maxChars, gapSeconds });
   // Hold each chunk until the next one starts (or briefly past its last word)
   // so captions never blink off between closely spaced phrases.
   return chunks.map((chunk, index) => {
@@ -596,6 +604,8 @@ export function captionOptions(given = {}, { brand, format, fonts, story } = {})
     exit: Object.hasOwn(CAPTION_EXITS, overlay?.exit) ? overlay.exit : p.exit,
     // false: the type carries its own contrast (an outline), so a world plate's tone does not recolour it.
     worldTone: overlay?.world_tone !== false,
+    // true: a phrase's last word is kept with its phrase when the lines are chunked (keepPhraseEnds).
+    keepPhrase: overlay?.keep_phrase === true,
     offset: Number.isFinite(Number(overlay?.offset)) ? Math.max(-0.5, Math.min(0.5, Number(overlay.offset))) : 0,
     colors: {
       idle,
@@ -664,8 +674,8 @@ export const captionLinePlated = (o, id) => Boolean(o.plate) || o.plates === 'al
 
 /** Re-chunk words for a preset whose chunk size differs from the default chunking. */
 export function chunksForCaptions(chunks, options) {
-  if (options.maxWords === 3 && options.maxChars === 18) return chunks;
-  return chunkWords(chunks.flatMap((chunk) => chunk.words), { maxWords: options.maxWords, maxChars: options.maxChars });
+  if (options.maxWords === 3 && options.maxChars === 18 && !options.keepPhrase) return chunks;
+  return chunkWords(chunks.flatMap((chunk) => chunk.words), { maxWords: options.maxWords, maxChars: options.maxChars, keepPhrase: Boolean(options.keepPhrase) });
 }
 
 const r4 = (value) => Math.round(value * 10000) / 10000;
