@@ -39,6 +39,16 @@
 // arrives slightly large and defocused, `focus`, and racks sharp in a few
 // frames).
 //
+// Full-frame pictures (FULL_FRAME_PLATES: a clip, a photo plate, a world):
+// the incoming plate covers the frame by itself, so the outgoing one stays
+// whole under it until the transition ends and the frame is never empty. In
+// world mode the layered transitions then play as in cuts mode (the incoming
+// picture fades, wipes or grows in over the outgoing plate), and a dolly
+// (push, pull) fades the picture in over the outgoing plate while the camera
+// starts to move. Between two footage plates (FOOTAGE_PLATES) the transitions
+// that carry a card or hand an object across (CARD_TRANSITIONS) have nothing
+// to carry and play as a fade (footageTransition).
+//
 // Empty plates: a short gap between two plates (a gap in scene timing, plus
 // any lead-in before the next scene draws anything, sceneLeadIn) would show a
 // dead frame. When that whole span is under HOLD_GAP seconds the previous
@@ -125,8 +135,23 @@ const ADJACENT = 0.1;
 // World mode: the share of a fade the outgoing plate takes to clear (and the
 // incoming one to arrive), so the two overlap only near zero opacity.
 const WORLD_HANDOVER = 0.55;
-/** Plate modules that fill the whole frame with a picture (a camera push fades them in over the outgoing plate). */
-export const FULL_FRAME_PLATES = Object.freeze(['world', 'photo-scene']);
+/** Plate modules that fill the whole frame with a picture (the incoming one covers the outgoing plate by itself). */
+export const FULL_FRAME_PLATES = Object.freeze(['world', 'photo-scene', 'clip']);
+/** Full-frame plates of supplied footage or photos. */
+export const FOOTAGE_PLATES = Object.freeze(['clip', 'photo-scene']);
+/** Transitions that move a card or hand a named object across: between two footage plates there is neither. */
+export const CARD_TRANSITIONS = Object.freeze(['card-to-card', 'rack-focus', 'morph']);
+
+/**
+ * The transition a plate arrives with: between two footage plates
+ * (FOOTAGE_PLATES) a card transition (CARD_TRANSITIONS) plays as a fade of
+ * the same length; any other transition is returned as it is.
+ */
+export function footageTransition(transition, from, to) {
+  if (!transition || typeof transition !== 'object' || !CARD_TRANSITIONS.includes(transition.type)) return transition;
+  if (!FOOTAGE_PLATES.includes(from?.module) || !FOOTAGE_PLATES.includes(to?.module)) return transition;
+  return { type: 'fade', dur: transition.dur };
+}
 /** Empty spans shorter than this (seconds) are covered by holding the previous plate. */
 export const HOLD_GAP = 0.5;
 
@@ -203,8 +228,20 @@ export function irisRadius(width, height) {
  * → {type, duration, in: Tween[], out: Tween[]}
  * Tween = {prop: "opacity"|"x"|"y"|"scale"|"blur"|"iris", from, to, start, duration, ease}
  * where start is seconds relative to the transition start.
+ * opaque: the incoming plate is a full-frame picture (FULL_FRAME_PLATES);
+ * opaqueFrom: the outgoing one is.
  */
-export function transitionTweens(transition, { width, height, grammar = null, mode = 'cuts', fromRect = null, toRect = null, opaque = false }) {
+export function transitionTweens(transition, options) {
+  const { keepOut = false, ...tweens } = typedTweens(transition, options);
+  // An incoming fade that starts late holds its first value from the
+  // transition's first frame: a layer never shows whole before it arrives.
+  // A full-frame picture covers the outgoing plate by itself, so that plate
+  // stays whole under it (fading it would only let the background through).
+  const covered = Boolean(options?.opaque) && !keepOut && tweens.type !== 'dot-wipe';
+  return { ...tweens, in: held(tweens.in, ['opacity']), out: covered ? tweens.out.filter((tw) => tw.prop !== 'opacity') : tweens.out };
+}
+
+function typedTweens(transition, { width, height, grammar = null, mode: cameraMode = 'cuts', fromRect = null, toRect = null, opaque = false, opaqueFrom = false }) {
   const type = transition?.type ?? 'cut';
   const d = Number(transition?.dur ?? 0);
   const direction = transition?.direction ?? 'left';
@@ -213,8 +250,8 @@ export function transitionTweens(transition, { width, height, grammar = null, mo
   const t = (prop, from, to, ease, start = 0, duration = d) => ({ prop, from, to, start, duration, ease: grammarEase(grammar, ease, { props: [prop], roles }) });
   if (type === 'cut' || !(d > 0)) return { type: 'cut', duration: 0, in: [], out: [] };
   // Overview outside world mode (validation refuses it): a plain crossfade.
-  if (type === 'overview' && mode !== 'world') return { type: 'fade', duration: d, in: [t('opacity', 0, 1, 'power1.inOut')], out: [] };
-  if (isCameraTransition(transition, mode)) {
+  if (type === 'overview' && cameraMode !== 'world') return { type: 'fade', duration: d, in: [t('opacity', 0, 1, 'power1.inOut')], out: [] };
+  if (isCameraTransition(transition, cameraMode)) {
     // The camera travels (camera-world.mjs). A dolly lands on a scene drawn
     // inside (push) or around (pull) the outgoing one, so the two plates
     // crossfade while the camera moves.
@@ -225,7 +262,14 @@ export function transitionTweens(transition, { width, height, grammar = null, mo
     // An incoming plate that fills the frame (a world, a photo plate) covers
     // the outgoing one by itself: it fades in over it from early in the move
     // and the outgoing plate stays until it is in, so the frame is never empty.
-    if (type === 'push' && opaque) return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', d * 0.08, d * 0.42)], out: [t('opacity', 1, 0, 'power1.inOut', d * 0.5, d * 0.3)] };
+    // A picture it grows out of (a full-frame outgoing plate) stays whole to
+    // the end of the move; a card it grows out of fades once the picture is in,
+    // so its magnified text is not left around the picture.
+    // A pull into a picture: the picture is drawn over the outgoing plate, so
+    // it fades in over it while the camera is still slow (the outgoing plate
+    // has not yet shrunk away from the edges) and that plate stays under it.
+    if (type === 'push' && opaque) return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', d * 0.08, d * 0.42)], out: opaqueFrom ? [] : [t('opacity', 1, 0, 'power1.inOut', d * 0.5, d * 0.3)], keepOut: true };
+    if (type === 'pull' && opaque) return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', 0, d * 0.3)], out: [] };
     if (type === 'push') return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', d * 0.4, d * 0.45)], out: [t('opacity', 1, 0, 'power1.inOut', d * 0.1, d * 0.35)] };
     if (type === 'pull') return { type, duration: d, camera: true, in: [t('opacity', 0, 1, 'power1.inOut', d * 0.4, d * 0.5)], out: [t('opacity', 1, 0, 'power1.inOut', 0, d * 0.45)] };
     return { type, duration: d, camera: true, in: [], out: [] };
@@ -233,6 +277,8 @@ export function transitionTweens(transition, { width, height, grammar = null, mo
   // World mode: plates are transparent, so a layered reveal also fades the
   // outgoing plate (cuts mode covers it with the incoming opaque plate), in
   // the first half, so its text is gone before the incoming text is up.
+  // A full-frame picture covers the outgoing plate in world mode too.
+  const mode = opaque ? 'cuts' : cameraMode;
   const fadeOut = mode === 'world' ? [t('opacity', 1, 0, 'power1.inOut', 0, d * WORLD_HANDOVER)] : [];
   const axis = direction === 'up' || direction === 'down' ? 'y' : 'x';
   const span = axis === 'x' ? width : height;
@@ -326,8 +372,12 @@ export function transitionTweens(transition, { width, height, grammar = null, mo
 // Tweens that start after the transition does, each preceded by a hold at its
 // `from` value from the start (as the dot-wipe's hidden first half), so the
 // incoming layer is in its first state from the transition's first frame.
-function held(tweens) {
-  const holds = tweens.filter((tw) => tw.start > 0).map((tw) => ({ ...tw, to: tw.from, start: 0, duration: tw.start, ease: 'none' }));
+// Only a prop's first tween is held (props: only those props), so no two
+// tweens of one prop overlap.
+function held(tweens, props = null) {
+  const first = new Map();
+  for (const tw of tweens) if (!first.has(tw.prop) || tw.start < first.get(tw.prop).start) first.set(tw.prop, tw);
+  const holds = [...first.values()].filter((tw) => tw.start > 0 && (!props || props.includes(tw.prop))).map((tw) => ({ ...tw, to: tw.from, start: 0, duration: tw.start, ease: 'none' }));
   return [...holds, ...tweens];
 }
 
@@ -451,11 +501,12 @@ export function sceneWindows(story) {
   const adjacentPlate = (entry) => plates.filter((other) => other !== entry && other.start < entry.start - EPS && other.end <= entry.start + EPS && entry.start - other.end <= ADJACENT + EPS)
     .reduce((best, other) => (!best || other.end > best.end + EPS ? other : best), null);
   for (const entry of scenes) {
-    const transition = entry.scene.in;
-    if (!transition || typeof transition !== 'object') continue;
+    if (!entry.scene.in || typeof entry.scene.in !== 'object') continue;
     // card-to-card maps the outgoing card's rect onto the incoming one's.
     const before = entry.plate ? adjacentPlate(entry) : null;
-    const own = { ...options, opaque: entry.plate && FULL_FRAME_PLATES.includes(entry.scene.module) };
+    // Between two footage plates a card transition plays as a fade.
+    const transition = footageTransition(entry.scene.in, before?.scene, entry.scene);
+    const own = { ...options, opaque: entry.plate && FULL_FRAME_PLATES.includes(entry.scene.module), opaqueFrom: Boolean(before) && FULL_FRAME_PLATES.includes(before.scene.module) };
     const tweens = transitionTweens(transition, transition.type === 'card-to-card' ? { ...own, fromRect: before ? sceneCardRect(before.scene, width, height) : null, toRect: sceneCardRect(entry.scene, width, height) } : own);
     entry.transitionIn = { type: tweens.type, dur: tweens.duration, direction: transition.direction ?? null, from_object: transition.from_object ?? null };
     if (tweens.camera) entry.transitionIn.camera = true;

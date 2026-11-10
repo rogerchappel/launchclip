@@ -276,6 +276,32 @@ export function samePlaceCuts(story) {
   return out;
 }
 
+// The same lists as kit/core/transitions.mjs FOOTAGE_PLATES and
+// CARD_TRANSITIONS, kept here so this file stays import-free (kept in step by
+// test/transition_frames.test.js).
+export const STORY_FOOTAGE_PLATES = ["clip", "photo-scene"];
+export const STORY_CARD_TRANSITIONS = ["card-to-card", "rack-focus", "morph"];
+
+/**
+ * Track-0 footage plates (a clip, a photo plate) that arrive from another
+ * footage plate with a transition that carries a card or hands an object
+ * across: there is neither, so it plays as a fade (transitions.mjs
+ * footageTransition). Only resolved (numeric) timings are compared.
+ * → [{from, to, type}]
+ */
+export function footageCardTransitions(story) {
+  const scenes = Array.isArray(story?.scenes) ? story.scenes : [];
+  const plates = scenes.filter((scene) => isObject(scene) && (scene.track ?? 0) === 0 && typeof scene.start === "number" && typeof scene.end === "number")
+    .sort((a, b) => a.start - b.start);
+  const out = [];
+  for (let i = 1; i < plates.length; i += 1) {
+    const a = plates[i - 1], b = plates[i];
+    if (!isObject(b.in) || !STORY_CARD_TRANSITIONS.includes(b.in.type) || Math.abs(b.start - a.end) > 0.1) continue;
+    if (STORY_FOOTAGE_PLATES.includes(a.module) && STORY_FOOTAGE_PLATES.includes(b.module)) out.push({ from: a.id, to: b.id, type: b.in.type });
+  }
+  return out;
+}
+
 /**
  * Characters in two character scenes whose windows overlap (resolved,
  * numeric timings; more than one frame). → [{character, a, b, from, to}]
@@ -837,6 +863,8 @@ export function validateStory(story, { modules, moduleParams } = {}) {
   // No ghosting (docs/DIRECTION_GUARDRAILS.md §4): one copy of a person at a time.
   for (const pair of twoCopies(story)) err(`"${pair.character}" is in scenes "${pair.a}" and "${pair.b}" at once (${pair.from}–${pair.to} s): two copies of one person on screen. End one scene where the other starts, or leave the character out of one`);
   for (const pair of samePlaceCuts(story)) err(`scenes "${pair.from}" and "${pair.to}" cut between two world plates of the same place (${pair.place}): its furniture and props would jump. Make them one world scene (one camera move), or cut to a different place, time or props`);
+  // Footage to footage: a transition made for cards has no card to move.
+  for (const pair of footageCardTransitions(story)) warn(`scene "${pair.to}" arrives from "${pair.from}" with ${pair.type}, which moves a card or hands an object across; between two full-frame footage scenes it plays as a fade. Use cut, fade, push, whip, zoom or iris (or push-blur, light-sweep, glow-wipe, dot-wipe) between footage`);
 
   return { ok: errors.length === 0, errors, warnings };
 }
