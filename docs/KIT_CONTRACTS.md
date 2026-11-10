@@ -2203,8 +2203,9 @@ true or false (each medium's defaults are `MEDIUM_DEFAULTS`).
 
 `story.look` (a style pack's `look`, filled by `applyStyle`) is one treatment
 for the world, the cast and the cards together ([SCENE_LOOKS_RFC.md](SCENE_LOOKS_RFC.md)):
-`none` (the default), `blueprint`, `hologram`, `thermal`, `neon-night` or
-`paper-cutout`, or `{name, strength?, step?, furniture?, palette?, labels?}`:
+`none` (the default), `blueprint`, `hologram`, `thermal`, `neon-night`,
+`paper-cutout`, `watercolour` or `anime-cel`, or
+`{name, strength?, step?, furniture?, palette?, labels?}`:
 `strength` 0–1, `step` false or 6–15 drawings a second, `furniture` a boolean,
 `palette` `look` or `brand`, `labels` up to 6 strings of 1–28 characters.
 `lookErrors()` and `validateStory` check it (`STORY_LOOK_NAMES` and
@@ -2213,7 +2214,7 @@ names the fix. `lookPlan(story)` is null without a look, and then neither
 renderer adds anything (the HyperFrames compile is byte for byte today's).
 
 A look is `kit/core/looks/<name>.mjs`: `{describe, words, defaults, presets(),
-variants, variantAt(), grade(), furniture(), vars(), cast}`, built from the
+variants, variantAt(), under, grade(), furniture(), vars(), cast}`, built from the
 shared parts in `kit/core/looks/parts.mjs`.
 
 - **Presets.** `lookPresets(value)` → `{colors?, cast?: {style}, world?,
@@ -2229,7 +2230,11 @@ shared parts in `kit/core/looks/parts.mjs`.
   brand frame and the captions (HyperFrames z-index 81000; Remotion 49, after
   the medium in DOM order). `lookVariantAt(plan, frame)` picks the drawing
   from the absolute frame. `strength` under 1 mixes the graded frame back
-  toward the clean one. Parts: `ramp` (brightness through a colour ramp),
+  toward the clean one. A look with `under: true` (`watercolour`, whose grade
+  is the pencil under the wash) draws its grade just below the medium instead
+  (HyperFrames z-index 79900; Remotion before the medium in DOM order).
+  Filter offsets are whole pixels (`offset`, `nudge`, `rim`): the renderers'
+  browsers resample a fractional offset differently. Parts: `ramp` (brightness through a colour ramp),
   `outline` (edge lines by colour change), `glow`, `rim` (a coloured light
   from one side), `sensor` (noise), `tear` (rows pushed sideways), `rules`
   (a mesh), `nudge`, `fadeDown` and `image` (an SVG as a filter image).
@@ -2260,8 +2265,15 @@ shared parts in `kit/core/looks/parts.mjs`.
 - **Cast options.** A look's `cast` (`lookCastOptions(story.look)`, from
   `kit/core/looks/index.mjs`) reaches module resolve as `ctx.look`, and the
   character modules pass it to `drawCharacter` as `content.castDraw`:
-  `paper-cutout` asks for `{pins: true}`. Without a look the model has no
+  `paper-cutout` asks for `{pins: true}` and `anime-cel` for
+  `{face: "cute"}` (the large glossy eyes). Without a look the model has no
   `castDraw`.
+- **Watercolour** is the `watercolour` medium (its preset, `grain` 0.3,
+  `strength` scaled by the look's) plus the pencil grade and a step of 10,
+  the medium's boil rate. **Anime cel** cuts brightness into bands (so soft
+  gradients on the cast and the world become flat tones with a hard edge) and
+  inks every colour edge; its speed lines read `plan.cues` (a cue that turns
+  a character `surprised`).
 - A module review (`sceneFilter`, `ModuleReview`) has no look.
 - Plain words: `lookFromText(text)` reads a look from a description ("as a
   hologram" → `hologram`); `make` and `story plan` pass it to the seeded style

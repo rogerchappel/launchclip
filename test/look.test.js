@@ -278,7 +278,40 @@ test("a look's cast options reach the cast's drawing, and nothing changes withou
   };
   assert.equal(scene(null).content.castDraw, undefined, "no look: the model is as it was");
   assert.equal(scene("hologram").content.castDraw, undefined);
+  assert.deepEqual(scene("anime-cel").content.castDraw, { face: "cute" });
   assert.deepEqual(scene("paper-cutout").content.castDraw, { pins: true });
+});
+
+test("watercolour is the medium plus a pencil under it, held at the boil's rate; anime cel inks and bands the whole frame", async () => {
+  const water = planOf("watercolour");
+  assert.deepEqual(lookPresets("watercolour").medium, { kind: "watercolour", strength: 0.6, grain: 0.3 });
+  assert.equal(lookPresets({ name: "watercolour", strength: 0.5 }).medium.strength, 0.3, "strength scales the paint");
+  assert.equal(applyLook(story({ look: "watercolour", medium: "oil" })).story.medium, "oil", "the story's own medium wins");
+  assert.ok(water.under, "the pencil lies under the wash");
+  assert.equal(water.step, 10);
+  assert.equal(lookStepFrame(water, 61), 60);
+  // The pencil is redrawn with the medium's boil: a new drawing every three frames.
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 6].map((frame) => lookVariantAt(water, frame)), [0, 0, 0, 1, 1, 1, 2]);
+  const { base, words } = await minimal();
+  const { html } = await compileStoryToHyperFrames(resolveStory(applyLook({ ...base, look: "watercolour" }).story, { words }), { write: false, sourceDir: MINIMAL });
+  assert.ok(html.indexOf(`id="${LOOK_LAYER_ID}"`) < html.indexOf('id="lc-medium"'), "the grade comes before the medium");
+  assert.match(html, /#lc-look \{[^}]*z-index: 79900;/);
+  assert.ok(!planOf("hologram").under);
+
+  const cel = planOf("anime-cel");
+  assert.deepEqual(lookCastOptions("anime-cel"), { face: "cute" });
+  assert.equal(lookPresets("anime-cel").cast.style, "soft-shade");
+  assert.match(lookPrimitives(cel, 0), /type="table" tableValues="0 0 0 0 0\.167 /, "brightness in bands");
+  // Speed lines fire for half a second when a cue turns a character surprised (2.5 s into the cast scene), on twos.
+  const speed = (frame) => { const vars = lookVarsAt(cel, frame); return [vars["--lc-look-speed-a"], vars["--lc-look-speed-b"]]; };
+  assert.deepEqual(speed(89), [0, 0]);
+  assert.deepEqual(speed(90).map((value) => value > 0), [true, false]);
+  assert.deepEqual(speed(92).map((value) => value > 0), [false, true]);
+  assert.deepEqual(speed(94).map((value) => value > 0), [true, false]);
+  assert.deepEqual(speed(107), [0, 0]);
+  // A character who starts a scene surprised is not a reaction.
+  const calm = lookPlan(resolveStory(applyLook(story({ look: "anime-cel", scenes: story().scenes.map((scene) => (scene.id === "pair" ? { ...scene, params: { ...scene.params, cast: [{ id: "maya", expression: "surprised" }] } } : scene)) })).story));
+  for (let frame = 0; frame < 180; frame += 1) assert.equal(lookVarsAt(calm, frame)["--lc-look-speed-a"] + lookVarsAt(calm, frame)["--lc-look-speed-b"], 0, `frame ${frame}`);
 });
 
 test("plain words name a look, and a subject does not", () => {
@@ -287,6 +320,9 @@ test("plain words name a look, and a subject does not", () => {
   assert.equal(lookFromText("thermal camera view of a server room"), "thermal");
   assert.equal(lookFromText("a cyberpunk city short"), "neon-night");
   assert.equal(lookFromText("paper cutout story for kids"), "paper-cutout");
+  assert.equal(lookFromText("an anime short about a launch"), "anime-cel");
+  assert.equal(lookFromText("watercolour and pencil, hand drawn"), "watercolour");
+  assert.equal(lookFromText("soft watercolour, dreamy"), null, "watercolour alone names the medium (mediumFromText)");
   for (const text of ["our blueprint for growth", "a neon sign shop promo", "heat map of sales", "use the paper-collage style", "a company that makes holograms", "", null]) assert.equal(lookFromText(text), null, String(text));
 });
 

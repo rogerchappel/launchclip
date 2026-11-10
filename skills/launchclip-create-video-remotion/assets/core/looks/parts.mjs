@@ -45,7 +45,8 @@ export const composite = (result, a, b, operator = 'over') => fe('feComposite', 
 export const blend = (result, top, bottom, mode) => fe('feBlend', { in: top, in2: bottom, mode, result });
 export const matrix = (result, input, values) => fe('feColorMatrix', { in: input, type: 'matrix', values: values.map((v) => r(v)).join(' '), result });
 export const saturate = (result, input, amount) => fe('feColorMatrix', { in: input, type: 'saturate', values: r(amount), result });
-export const offset = (result, input, dx, dy) => fe('feOffset', { in: input, dx: r(dx, 2), dy: r(dy, 2), result });
+// Whole pixels: browsers differ in how they resample a fractional offset.
+export const offset = (result, input, dx, dy) => fe('feOffset', { in: input, dx: Math.round(dx) + 0, dy: Math.round(dy) + 0, result });
 export const morph = (result, input, operator, radius) => fe('feMorphology', { in: input, operator, radius: r(radius, 2), result });
 export const flood = (result, color, opacity = 1) => fe('feFlood', { 'flood-color': color, 'flood-opacity': r(opacity, 3), result });
 /** Luminance into every colour channel, opaque. */
@@ -80,13 +81,16 @@ export const glow = (result, input, radius, amount, threshold = 0.5) => [
 /**
  * Edge lines of a picture: white where its colour changes, `width` px wide,
  * black elsewhere. The change is summed over the colour channels, so two
- * colours of the same brightness still get a line between them.
+ * colours of the same brightness still get a line between them. `floor`
+ * (0..1) is the change below which nothing is drawn: a soft gradient changes
+ * a little everywhere, and a small floor keeps it from drawing a haze (and
+ * from amplifying the renderers' differences in how they dither one).
  */
-export const outline = (result, input, width, gain = 1.6) => [
+export const outline = (result, input, width, gain = 1.6, floor = 0) => [
   morph(`${result}-d`, input, 'dilate', width / 2),
   morph(`${result}-e`, input, 'erode', width / 2),
   blend(`${result}-x`, `${result}-d`, `${result}-e`, 'difference'),
-  matrix(result, `${result}-x`, [gain, gain, gain, 0, 0, gain, gain, gain, 0, 0, gain, gain, gain, 0, 0, 0, 0, 0, 0, 1])
+  matrix(result, `${result}-x`, [gain, gain, gain, 0, -floor, gain, gain, gain, 0, -floor, gain, gain, gain, 0, -floor, 0, 0, 0, 0, 1])
 ].join('');
 /** Sensor noise: fine grey noise added about zero, `amount` 0..1, its pattern from `seed`. */
 export const sensor = (result, input, seed, amount, frequency = 0.8) => [
