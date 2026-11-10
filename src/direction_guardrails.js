@@ -146,6 +146,8 @@ const CHARACTER_MODULES = ["cast-scene", "character-cameo"];
 /** Does a directed state perform a verb (an acting cue, or a pose)? */
 function performs(state, verb) {
   if (state.action === verb || state.pose === verb) return true;
+  // A character whose head is turned to a target is looking at it, cue or no cue.
+  if (verb === "gaze-at" && state.target !== null && state.target !== undefined && (state.gaze?.x || state.gaze?.y)) return true;
   // A walk ends on its arrival state, which is still the walk-to.
   return verb === "walk-to" && state.arrive === true;
 }
@@ -199,7 +201,7 @@ export function actingGate(story, { map, words, rects = [] } = {}) {
         const detail = !candidates.length ? `${said}, but no cast scene plays on it; put a cast scene with ${action.who} on these words, with a cue ${hint}`
           : present.length ? `${said}, but ${action.who} does not perform it in ${present.map(({ entry }) => entry.id).join(", ")}; give ${action.who} a cue ${hint} there, on a word of the line`
             : `${said}, but ${action.who} is not in ${candidates.map(({ entry }) => entry.id).join(", ")}, the cast scene${candidates.length === 1 ? "" : "s"} on those words; add ${action.who} to that scene's params.cast with a cue ${hint}, or name a character who is in the shot in the map line's action.who`;
-        findings.push({ rule: "action-missing", severity: "error", at: first.start, ids: candidates.map(({ entry }) => entry.id), who: action.who, in_shot: present.length > 0, detail });
+        findings.push({ rule: "action-missing", severity: "error", at: first.start, ids: candidates.map(({ entry }) => entry.id), who: action.who, in_shot: present.length > 0, present: present.map(({ entry }) => entry.id), line: { verb: action.verb, target: action.target ?? null, start: first.start, end: last.end }, detail });
       }
     }
   }
@@ -213,7 +215,10 @@ export function actingGate(story, { map, words, rects = [] } = {}) {
         const holdEnd = Math.min(actor.states[i + 1]?.time ?? model.end, entry.scene.end);
         const px = state.point.x ?? actor.x, py = state.point.y;
         if (!Number.isFinite(py)) return;
-        const cover = cards.find((card) => card.start < holdEnd - 1e-6 && card.end > state.time + 1e-6 && px >= card.rect.x && px <= card.rect.x + card.rect.width && py >= card.rect.y && py <= card.rect.y + card.rect.height);
+        // A point with no place across the frame (far, with no world beneath) is judged at the character's own x,
+        // where the scene's own card never is by design (a cameo stands beside its card): only another scene's card can cover it.
+        const placed = Number.isFinite(state.point.x);
+        const cover = cards.find((card) => (placed || card.id !== entry.id) && card.start < holdEnd - 1e-6 && card.end > state.time + 1e-6 && px >= card.rect.x && px <= card.rect.x + card.rect.width && py >= card.rect.y && py <= card.rect.y + card.rect.height);
         if (cover) findings.push({ rule: "look-target-hidden", severity: "error", at: Math.max(state.time, cover.start), ids: [entry.id, cover.id], detail: `${cover.id} covers what ${actor.id} looks at in ${entry.id} (${JSON.stringify(state.target)} at ${Math.round(px)}, ${Math.round(py)}); move the card to one side or bring it in after the look` });
       });
       const away = actor.states.find((state) => state.target !== null && state.target !== undefined && state.gaze && ((state.gaze.x > 0 && state.facing === "left") || (state.gaze.x < 0 && state.facing === "right")));
