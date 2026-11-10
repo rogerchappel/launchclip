@@ -39,7 +39,7 @@ import {OVERSCAN} from './worlds/index.mjs';
 import {SPRITE_SCENE, SPRITE_TIMING} from './catalog-sprites.mjs';
 import {pointAim} from './characters/aim.mjs';
 import {lookCastOptions} from './looks/index.mjs';
-import {PORTRAIT_MEDIUM_SETS, SHOTS, defaultShot, fitShot, frameCast, frameGuides, framingMarks, punchIn} from './characters/framing.mjs';
+import {PORTRAIT_MEDIUM_SETS, SHOTS, WIDE_SHIFT_SETS, defaultShot, fitShot, frameCast, frameGuides, framingMarks, punchIn} from './characters/framing.mjs';
 
 export const CHARACTER_TIMING = Object.freeze({
   'cast-scene': {minDuration: 2, leadIn: 0, leadOut: ACTING.poseTween},
@@ -524,7 +524,8 @@ function resolveCastScene(params, ctx) {
     });
     return {frame, actors};
   };
-  const {frame, actors} = fitShot(shot, place, {canvas, count: resolved.length});
+  // A wide shot on a set with no furniture moves a character in from the safe zone's side (9:16: the right-hand place).
+  const {frame, actors} = fitShot(shot, place, {canvas, count: resolved.length, wideShift: WIDE_SHIFT_SETS.includes(setName)});
   castEvents(b, actors);
   // Cue shots: a cut in on one character, and back (characters/framing.mjs punchIn).
   const punches = actors.flatMap(actor => actor.states.filter(state => state.shot).map(state => ({time: state.time, ...punchIn(state.shot, shot, {canvas, actor, lean: stateJoints(state, actor).lean})}))).sort((a, c) => a.time - c.time);

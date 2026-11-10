@@ -4402,8 +4402,14 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   the set's furniture by the same zoom (`content.shot.set`, a transform with
   origin 0 0; a world the scene draws itself comes closer by a third of
   that). `fitShot` then moves a character in, or shrinks the shot, until
-  every pose's reach is inside the safe zone. A framed actor's reach is cut
-  at the frame's bottom edge (`actor.cut`). A 9:16 cast-scene in standing,
+  every pose's reach is inside the safe zone. A `wide` shot keeps the set's
+  own layout, except on a set with no furniture (`WIDE_SHIFT_SETS`:
+  `standing`), where a character whose reach passes one side of the safe
+  zone moves in by that much (nothing shrinks): in 9:16 the safe zone ends
+  140 px inside the right edge, which the set's right-hand place reaches
+  past. A shift that does not bring every reach inside (a walk to the
+  frame's edge) is not kept, and the cast gate reports it. A framed actor's
+  reach is cut at the frame's bottom edge (`actor.cut`). A 9:16 cast-scene in standing,
   phone, kitchen-counter, sofa or park-bench defaults to medium
   (`defaultShot`), or wide when someone walks; everything else defaults to wide. A cue's `shot` on a
   cast-scene character is a punch-in: a hard cut (`set` op on

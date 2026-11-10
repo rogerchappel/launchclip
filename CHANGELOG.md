@@ -28,6 +28,11 @@
   that word ("The foal watched the" / "starting gate." where it was "The
   foal watched the starting" / "gate."). Other videos' captions are chunked
   as before.
+- A `wide` shot on the `standing` set moves a character in from the side of
+  the safe zone when its reach passes it. In 9:16 the right-hand place of a
+  two-shot reached under the platform's buttons, so a wide two-shot failed
+  the cast check whatever the planner wrote. Such a scene failed the cast
+  gate before, so no video that rendered changes.
 - In a character story the captions count as content for the density gate
   in the third of the frame they sit in.
 - Reference sheets, cast sheets and demo recordings also find the headless
