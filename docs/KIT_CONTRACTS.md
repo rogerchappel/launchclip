@@ -4074,10 +4074,13 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   `styleGeometry`. Every style draws the same rig, poses, expressions and
   part ids, so any cast works in any style and acting.mjs animates them all.
   A kind other than a person has one body in every style (`kind-draw.mjs`);
-  the style chooses its pen. `stageHeight(style, params)` is the height a
-  set sizes its cast by: a person's drawn height; for a kind no less than a
-  person's, and more the wider it reaches (`KIND_STAGE`), so a cat is never
-  blown up to a person's height and an open laptop fits a slot.
+  the style chooses its pen. `stageHeight(style, params, {tight})` is the
+  height a set sizes its cast by: a person's drawn height; for a kind no
+  less than a person's (`KIND_STAGE`), so a cat is never blown up to a
+  person's height (less in the same measure in a style that draws people
+  shorter, such as `chibi`); and where slots are narrow (`tight`: several
+  characters across a portrait frame; `alone`: one in a portrait frame)
+  more the wider the kind reaches, so an open laptop fits its slot.
 - `toon.mjs`: the toon body shared by the cartoon styles: one builder lays
   out every shape from the rig and hands each to a pen (`shape`, `ellipse`,
   `line`, `limb`, `strand`, `ground`, `within`, `defs?`), which decides how it

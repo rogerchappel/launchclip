@@ -152,11 +152,13 @@ test('a dark face takes light ink, and line art keeps its ink', () => {
 test('a set sizes a kind as a person or further back: never blown up, and wide kinds fit a slot', () => {
   for (const id of STARTER_KIND_IDS) {
     const {params} = starterCharacter(id);
-    const stage = stageHeight('flat', params);
-    assert.ok(stage >= KIND_STAGE.height && stage >= styleHeight('flat', params) && stage < 1900, `${id}: ${stage}`);
+    const stage = stageHeight('flat', params), tight = stageHeight('flat', params, {tight: true});
+    assert.equal(stage, Math.max(KIND_STAGE.height, styleHeight('flat', params)), `${id}: never blown up to a person's height`);
+    assert.ok(stageHeight('chibi', params) >= 780 && stageHeight('chibi', params) <= stage, `${id}: beside a chibi person it stands as a chibi person does`);
+    assert.ok(tight >= stage && tight < 1900, `${id}: ${tight} in a narrow slot`);
   }
   assert.equal(stageHeight('flat', starterCharacter('maya').params), styleHeight('flat', starterCharacter('maya').params), 'a person stands as before');
-  assert.ok(stageHeight('flat', starterCharacter('byte').params) > stageHeight('flat', starterCharacter('clover').params), 'an open laptop is wider than a rabbit');
+  assert.ok(stageHeight('flat', starterCharacter('byte').params, {tight: true}) > stageHeight('flat', starterCharacter('clover').params, {tight: true}), 'an open laptop is wider than a rabbit');
 });
 
 test('story casts: a starter by id, a new one by kind, overrides, and clear refusals', () => {

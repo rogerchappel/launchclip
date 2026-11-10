@@ -210,9 +210,11 @@ export function kindHeight(params) {
 }
 
 // How a set sizes a kind (styles.mjs stageHeight). A set sizes its cast by
-// its tallest member and gives each a slot a person fits: a person about
-// KIND_STAGE.height tall reaches about KIND_STAGE.reach to each side. So a
-// kind counts as no shorter than a person (a cat is never blown up to a
-// person's height) and as taller the wider it reaches (an open laptop is
-// twice as wide as a person, so the set stands further back for it).
-export const KIND_STAGE = Object.freeze({height: 1000, reach: 196});
+// its tallest member, so a kind counts as no shorter than a person
+// (KIND_STAGE.height): a cat is never blown up to a person's height. Where
+// slots are narrow (several characters across a portrait frame), a slot
+// fits a person, who reaches about KIND_STAGE.reach to each side; a kind
+// then counts as taller the wider it reaches (an open laptop is twice as
+// wide as a person, so the set stands further back for it).
+// alone: the reach a portrait frame gives one character on its own.
+export const KIND_STAGE = Object.freeze({height: 1000, reach: 196, alone: 300});

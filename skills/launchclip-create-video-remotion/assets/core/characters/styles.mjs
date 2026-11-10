@@ -30,7 +30,7 @@ import {STYLE as chibi, STYLE_PLAIN as chibiPlain} from './style-chibi.mjs';
 import {KIND_STAGE, isKind, kindColors, kindGeometry, kindHeight} from './kinds.mjs';
 import {drawingBounds} from './bounds.mjs';
 import {castRoles} from './palette.mjs';
-import {poseJoints} from './rig.mjs';
+import {normalizeRigParams, poseJoints} from './rig.mjs';
 import {drawKind} from './kind-draw.mjs';
 
 // In order from the default to the newest; flat stays first.
@@ -75,22 +75,40 @@ export const styleGeometry = (style, params) => (isKind(params) ? kindGeometry(p
 const stageCache = new Map();
 /**
  * The height a set sizes its cast by: a person's drawn height; for a kind
- * other than a person, no less than a person's and more the wider it
- * reaches standing or seated (kinds.mjs KIND_STAGE), so it fits a slot.
+ * other than a person, no less than kinds.mjs KIND_STAGE.height (less in
+ * the same measure where a style draws people shorter), so a cat is never
+ * blown up to a person's height. tight: the slots are narrow
+ * (several characters across a portrait frame); a kind then also counts as
+ * taller the wider it reaches standing or seated, so it fits its slot.
+ * alone: one character in a portrait frame has the frame's width to itself.
  */
-export function stageHeight(style, params) {
+export function stageHeight(style, params, {tight = false, alone = false} = {}) {
   if (!isKind(params)) return styleOf(style).height(params);
+  if (!tight) return Math.max(personHeight(style), kindHeight(params), alone ? Math.round(KIND_STAGE.height * kindReach(params) / KIND_STAGE.alone) : 0);
+  return Math.round(Math.max(kindHeight(params), KIND_STAGE.height * Math.max(1, kindReach(params) / KIND_STAGE.reach)));
+}
+
+// The least a kind counts as in a style: KIND_STAGE.height where people are drawn at the rig's
+// proportions, and less in the same measure where they are drawn shorter (the cute family).
+const PERSON = normalizeRigParams({skin: 'tan', hair: {style: 'short'}});
+function personHeight(style) {
+  const key = `person|${style ?? 'flat'}`;
+  if (!stageCache.has(key)) stageCache.set(key, Math.round(KIND_STAGE.height * Math.min(1, styleOf(style).height(PERSON) / STYLES.flat.height(PERSON))));
+  return stageCache.get(key);
+}
+
+/** How far a kind reaches to either side, standing or seated, in rig units (the box the cast gate measures). */
+function kindReach(params) {
   const key = `${params.kind}|${params.size ?? 'medium'}`;
   if (!stageCache.has(key)) {
     const geometry = kindGeometry(params);
     const colors = kindColors(params.colors, castRoles(null));
     let reach = 0;
     for (const pose of ['stand', 'sit']) {
-      // The same box the cast gate measures a reach with (bounds.mjs drawingBounds).
       const box = drawingBounds(drawKind('flat', params, colors, {id: 'stage', joints: poseJoints(pose, {geometry})}));
       reach = Math.max(reach, -box.left, box.right);
     }
-    stageCache.set(key, Math.round(Math.max(kindHeight(params), KIND_STAGE.height * Math.max(1, reach / KIND_STAGE.reach))));
+    stageCache.set(key, reach);
   }
   return stageCache.get(key);
 }

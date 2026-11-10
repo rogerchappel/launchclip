@@ -483,9 +483,11 @@ function resolveCastScene(params, ctx) {
   try { cast = resolveStoryCast({cast: ctx.cast ?? null, brand: ctx.brand}); } catch (error) { check.fail('story.cast', error.message); }
   const ids = p.cast.map(entry => entry?.id);
   if (new Set(ids).size !== ids.length) check.fail('params.cast', 'names a character twice');
-  // Heights first (the set scales to the tallest), then the layout.
+  // Heights first (the set scales to the tallest), then the layout. Several characters across a portrait
+  // frame stand in narrow slots: a wide kind (an open laptop, a cloud) then sets the scale by its reach.
+  const tight = canvas.height > canvas.width && p.cast.length > 1;
   const heights = p.cast.map((entry, i) => {
-    try { const member = castMember(cast, entry?.id, `params.cast[${i}].id`); return stageHeight(member.style, member.params); } catch { return 1000; }
+    try { const member = castMember(cast, entry?.id, `params.cast[${i}].id`); return stageHeight(member.style, member.params, {tight, alone: canvas.height > canvas.width}); } catch { return 1000; }
   });
   const inWorldSet = stage.backdrop === 'world';
   const layout = layoutSet(setName, {canvas, colors: b.colors, count: p.cast.length, heights, screen: Boolean(screen), unit: b.unit, backdrop: stage.backdrop,
