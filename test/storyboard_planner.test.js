@@ -520,3 +520,25 @@ for (const position of ["top", "middle", "low", "auto"]) {
     });
   }
 }
+
+test("caption band: the planner is told where this story's captions sit, not the profile's usual band", async () => {
+  const usual = await plan(fakeClient([envelope(goodStoryboard())]));
+  assert.equal(usual.status, "passed");
+  const client = fakeClient([envelope({ ...goodStoryboard(), overlays: [{ type: "captions" }], style: "brand-look" })]);
+  await plan(client, { style: brandCaptions("middle"), maxRepairs: 0 });
+  const [{ instructions }] = client.calls;
+  // The band the layout check measures: the middle of 1080×1920, grown to the preset's tallest line at size 1.15.
+  assert.match(instructions, /caption band x 65–918, y 826–1095 \(this story's captions: position "middle"\)/);
+  assert.match(instructions, /captions in the middle of the frame: wherever these rules say "the caption band", it is y 826–1095/);
+  assert.match(instructions, /tooling then hides the captions under the card/);
+  assert.doesNotMatch(instructions, /caption band x 65–918, y 1190–1420;/);
+  const plain = fakeClient([envelope(goodStoryboard())]);
+  await plan(plain);
+  assert.match(plain.calls[0].instructions, /caption band x 65–918, y 1190–1420;/, "without a pack the profile's band stands");
+  assert.doesNotMatch(plain.calls[0].instructions, /this story's captions/);
+  for (const [position, y] of [["top", /y 250–519/], ["low", /y 979–1248/]]) {
+    const placed = fakeClient([envelope({ ...goodStoryboard(), overlays: [{ type: "captions" }], style: "brand-look" })]);
+    await plan(placed, { style: brandCaptions(position), maxRepairs: 0 });
+    assert.match(placed.calls[0].instructions, new RegExp(`caption band x 65–918, ${y.source} \\(this story's captions: position "${position}"\\)`));
+  }
+});
