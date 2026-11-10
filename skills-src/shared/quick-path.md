@@ -82,7 +82,7 @@ after the animatic, then rejoin at step 5. Headless:
    (`AUDIO-MANIFEST.json` included). Fix one scene with
    `--preview-scene <id>`, then `--scene <id>`. The gates include the
    guardrails:
-   - physics, acting, ghosting, density and variety;
+   - physics, acting, lip-sync, ghosting, density and variety;
    - caption legibility on the layout gate. Finish measures every caption line
      on the frames, plates the ones that do not read and renders once more.
 

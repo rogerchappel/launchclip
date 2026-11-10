@@ -35,6 +35,8 @@ import { backdropPrompt, cardBackdrops, minShotsError, resolveShots, shotPrompt,
 import { restoreMisses, varyInserts } from "./insert_variety.js";
 import { fitTimings } from "./timing_fit.js";
 import { fitDirectionCast, normalizeCastCues, plannedCast } from "./cast_fit.js";
+import { bibleCast, bibleRef, directionWithBible } from "@launchclip/core/bible.mjs";
+import { castGate } from "./cast.js";
 import { SHORT_FORM_HOLD, fitDurations, paceErrors } from "./duration_fit.js";
 import { fitCaptionBand } from "./caption_band_fit.js";
 import { fitDiagrams } from "./diagram_fit.js";
@@ -106,6 +108,12 @@ export async function planStoryboard(options = {}) {
   // readStoryTrack), so tooling keeps cards off the face; none → the default head.
   const subjectTrack = options.subjectTrack ?? null;
   const media = Array.isArray(options.media) ? options.media : [];
+  // bible: the project's frozen show bible (kit/core/bible.mjs). Its cast is
+  // the story's cast in every attempt (pinned like the brand, so a repair or a
+  // replan cannot change who is in the story), and the storyboard and the map
+  // name it. script: the raw SCRIPT.json, so a map line's `line` id is checked.
+  const bible = options.bible?.frozen === true ? options.bible : null;
+  const script = options.script && typeof options.script === "object" ? options.script : null;
   // direction: true plans DIRECTION.json first (one call, RFC §6.4), a map
   // object plans against that map, false or omitted plans no map.
   // style: a loaded launchclip.style.v2 pack. Its brand is the default brand,
@@ -134,10 +142,10 @@ export async function planStoryboard(options = {}) {
   // The cast the story will have (the seed storyboard's, else the style's):
   // the direction map's cues are planned and checked against it, and a
   // seeded style's default roster takes the story's own names (src/cast_fit.js).
-  const castPlan = plannedCast({ story: options.seed?.storyboard ?? null, style });
+  const castPlan = plannedCast({ story: options.seed?.storyboard ?? null, style, bible });
   let boundCast = null;
   if (wantsMap) {
-    directionPlan = await planDirection({ client, model, brief, fixed, profile, words: wordList, subject, segments: style?.segments ?? null, now, constraints, cast: castPlan });
+    directionPlan = await planDirection({ client, model, brief, fixed, profile, words: wordList, subject, segments: style?.segments ?? null, now, constraints, cast: castPlan, script });
     direction = directionPlan.map;
     directionSource = direction ? "model" : null;
     if (direction && directionPlan.bound?.length) boundCast = directionPlan.cast;
@@ -154,6 +162,17 @@ export async function planStoryboard(options = {}) {
   if (boundCast) {
     fixed.cast = boundCast;
     planStyle = { ...style, cast: { ...style.cast, members: boundCast.characters } };
+  }
+  // The show bible's cast is pinned the same way, whatever the style or the
+  // map say, and both files name the bible they were planned against.
+  const pinMap = (map) => (bible && map ? directionWithBible(map, bible) : map);
+  if (bible) {
+    fixed.cast = bibleCast(bible);
+    fixed.bible = bibleRef(bible);
+    // The bible's world is the story's place (its sets stay the bible's own list).
+    if (typeof bible.world?.kind === "string") fixed.world = { kind: bible.world.kind, ...(bible.world.time ? { time: bible.world.time } : {}) };
+    if (style?.cast) planStyle = { ...style, cast: { ...style.cast, drawing_style: fixed.cast.style, members: fixed.cast.characters } };
+    direction = pinMap(direction);
   }
   // Lines over a hidden range are insert lines, whatever the model chose.
   const constraintWarnings = [];
@@ -184,7 +203,7 @@ export async function planStoryboard(options = {}) {
   // it leaves on a stock plate ask for one too (src/asset_provider.js).
   const footageBackdrops = Boolean(assets) && options.cardBackdrops === "footage" && lane !== "footage-led";
   if (!assets && options.cardBackdrops === "footage") shotWarnings.push("backdrops: card backdrops ignored: there is no asset provider to ask for footage");
-  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style: planStyle, artDirection: brief, subject, profile, direction, clipLed }), ...(layout ? [layout.prompt()] : []), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : []), ...(featured?.length ? [featuredPrompt(featured)] : [])].join("\n\n");
+  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style: planStyle, artDirection: brief, subject, profile, direction, clipLed }), ...(layout ? [layout.prompt()] : []), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : []), ...(featured?.length ? [featuredPrompt(featured)] : []), ...(bible ? [biblePrompt(bible)] : [])].join("\n\n");
   const shotCache = new Map();
   let shots = [];
   const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });
@@ -238,7 +257,7 @@ export async function planStoryboard(options = {}) {
       if (repairedMap?.ok) {
         // A repaired map's free-text cues get the kit's values, as the first map's did.
         const normalized = normalizeCastCues(repairedMap.map);
-        direction = normalized.map;
+        direction = bible ? pinMap(fitDirectionCast(normalized.map, { cast: castPlan, words: wordList }).map) : normalized.map;
         if (normalized.changed.length) pinned.warnings = [...pinned.warnings, ...normalized.changed.map((entry) => `cast: tooling mapped DIRECTION.json ${entry}`)];
       }
       let shotErrors = [];
@@ -299,7 +318,7 @@ export async function planStoryboard(options = {}) {
         pinned.storyboard = diagrams.storyboard;
         pinned.warnings = [...pinned.warnings, ...diagrams.changed.map((entry) => `diagrams: tooling ${entry}`)];
       }
-      const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints, minHold: SHORT_FORM_HOLD };
+      const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints, minHold: SHORT_FORM_HOLD, ...(script ? { script } : {}), ...(bible ? { castGate: true } : {}) };
       checked = checkStoryboard(pinned.storyboard, checkOptions);
       // A scene shorter than its module allows, or an event time just outside
       // its module's window, is tooling's to fix, not a repair call's; a fix
@@ -449,7 +468,7 @@ export async function planStoryboard(options = {}) {
   if (wantsMap && !direction && last?.ok && last.storyboard) {
     try {
       const resolved = resolveStory(JSON.parse(JSON.stringify(last.storyboard)), { words: wordList, beats });
-      direction = draftDirectionMap(resolved, wordList, { profile: profile?.id ?? null });
+      direction = pinMap(draftDirectionMap(resolved, wordList, { profile: profile?.id ?? null }));
       if (constraints) direction = reconcileMap(direction, resolved, constraints, wordList);
       directionSource = "drafted";
       last.warnings = [...last.warnings, "direction: the model returned no valid direction map; DIRECTION.json was drafted from the storyboard (check its treatments)"];
@@ -566,7 +585,7 @@ function clearFace(storyboard, checked, { words, beats, track, checkOptions }) {
  * {errors, warnings, findings}}. Error strings are prefixed by stage:
  * "validation:", "tier:", "anchors:", "params:", "layout:".
  */
-export function checkStoryboard(raw, { words = [], beats = null, tier = "structured", style = null, direction = null, profile = null, bandErrors = true, clipLed = null, constraints = null, minHold = 0 } = {}) {
+export function checkStoryboard(raw, { words = [], beats = null, tier = "structured", style = null, direction = null, profile = null, bandErrors = true, clipLed = null, constraints = null, minHold = 0, script = null, castGate: gated = false } = {}) {
   const errors = [];
   const warnings = [];
   const layout = emptyLayout();
@@ -595,7 +614,7 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   if (second.ok && direction) {
     // Cast cues are checked against the story's cast, as finish's cast gate
     // does; a repair can fix either side (the map's cues or story.cast).
-    const map = validateDirection(direction, { words, story: resolved, cast: resolved.cast ?? direction.cast ?? null, validateCast: validateCastCues, ...(Array.isArray(style?.segments) ? { segments: style.segments } : {}) });
+    const map = validateDirection(direction, { words, story: resolved, cast: resolved.cast ?? direction.cast ?? null, validateCast: validateCastCues, ...(Array.isArray(style?.segments) ? { segments: style.segments } : {}), ...(script ? { script } : {}) });
     errors.push(...map.errors.map((entry) => `direction: ${entry}`));
     warnings.push(...map.warnings.map((entry) => `direction: ${entry}`));
     if (map.ok && profile && words.length) {
@@ -613,6 +632,13 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
         else warnings.push(line);
       }
     }
+  }
+  // castGate: the cast gate finish runs (src/cast.js), here so a repair can
+  // fix what it finds: a limb off the canvas, a character who changes sides.
+  // On for a story pinned to a show bible, whose every shot is a cast shot.
+  if (second.ok && gated) {
+    const gate = castGate(resolved, { direction });
+    if (gate.status === "failed") errors.push(...[...new Set(gate.findings.map((finding) => `cast: ${finding.detail}`))].filter((entry) => !errors.some((error) => error.endsWith(entry.slice(6)))).slice(0, 8));
   }
   // The app's constraints (src/constraints.js): hidden ranges covered,
   // must_use present, never_use absent; errors are prefixed "constraints:".
@@ -797,9 +823,13 @@ export function pinInputs(story, fixed) {
   else if (copy.base !== undefined && copy.base !== null) { warnings.push("base is only for the footage-led lane and has been removed"); copy.base = null; }
   if (copy.schema === undefined) copy.schema = "launchclip.story.v1";
   if (fixed.cast) {
-    if (copy.cast !== undefined && JSON.stringify(copy.cast) !== JSON.stringify(fixed.cast)) warnings.push("cast was changed by the model and has been reset to the story's bound cast");
+    if (copy.cast !== undefined && JSON.stringify(copy.cast) !== JSON.stringify(fixed.cast)) warnings.push(fixed.bible ? "cast was changed by the model and has been reset to the show bible's cast: a plan cannot change who is in the story" : "cast was changed by the model and has been reset to the story's bound cast");
     copy.cast = JSON.parse(JSON.stringify(fixed.cast));
   }
+  // The show bible the story is pinned to (kit/core/bible.mjs withBible).
+  if (fixed.bible) copy.bible = { ...fixed.bible };
+  // Its world too: the place and the time are the bible's; props and detail stay the plan's.
+  if (fixed.world) copy.world = { ...(copy.world && typeof copy.world === "object" && !Array.isArray(copy.world) ? copy.world : {}), ...fixed.world };
   if (fixed.style) {
     if (copy.style !== undefined && (typeof copy.style === "string" ? copy.style : copy.style?.name) !== fixed.style) warnings.push("style was changed by the model and has been reset to the fixed input");
     copy.style = typeof copy.style === "object" && copy.style?.name === fixed.style ? copy.style : fixed.style;
@@ -814,7 +844,7 @@ export function pinInputs(story, fixed) {
  * → {map | null, attempts, warnings, cast?, bound?}: cast is the story cast
  * the map's cues name (a style default cast with the story's names bound).
  */
-export async function planDirection({ client, model = null, brief, fixed, profile = null, words, subject = null, segments = null, now = () => Date.now(), constraints = null, cast = null }) {
+export async function planDirection({ client, model = null, brief, fixed, profile = null, words, subject = null, segments = null, now = () => Date.now(), constraints = null, cast = null, script = null }) {
   // cast: plannedCast() (src/cast_fit.js), the cast the story will have, or
   // null when the storyboard defines it (its cues are then checked there).
   const instructions = directionPrompt({ lane: fixed.lane, format: fixed.format, profile, words, subject, segments, cast: cast ? { characters: cast.cast.characters, bindable: cast.bindable } : null });
@@ -848,7 +878,7 @@ export async function planDirection({ client, model = null, brief, fixed, profil
       extracted.map = fit.map;
       const map = extracted.map;
       if (profile && !map.profile) map.profile = profile.id;
-      const check = validateDirection(map, { words, lane: fixed.lane, deferScenes: true, ...(cast ? { cast: fit.cast, validateCast: validateCastCues } : {}), ...(Array.isArray(segments) ? { segments } : {}) });
+      const check = validateDirection(map, { words, lane: fixed.lane, deferScenes: true, ...(cast ? { cast: fit.cast, validateCast: validateCastCues } : {}), ...(Array.isArray(segments) ? { segments } : {}), ...(script ? { script } : {}) });
       errors = check.errors;
     }
     attempts.push({ attempt, kind, ok: errors.length === 0, errors, warnings: fit?.warnings ?? [], layout: { errors: 0, warnings: 0 }, usage, cost_usd: cost.estimated_usd, cost_warning: cost.warning, model: result?.model ?? model, response_id: result?.response_id ?? null, elapsed_ms: now() - started });
@@ -885,6 +915,21 @@ export function extractDirection(result) {
   return fromText(result?.text);
 }
 
+/**
+ * The planner's section for a frozen show bible: who is in the story and
+ * where each of them stands. The cast is fixed; the model casts scenes from it.
+ */
+export function biblePrompt(bible) {
+  const cast = bibleCast(bible);
+  const members = (cast?.characters ?? []).map((entry) => `"${entry.id}"${entry.name ? ` (${entry.name})` : ""}${entry.position ? `, ${entry.position}` : ""}`);
+  const sets = Array.isArray(bible.world?.sets) && bible.world.sets.length ? ` Sets the story may use: ${bible.world.sets.join(", ")}.` : "";
+  return [
+    "## Show bible (frozen)",
+    "",
+    `story.cast is fixed by the show bible and tooling writes it: ${members.join("; ")}, drawn ${cast.style}. Name characters in cast-scene and character-cameo by these ids only. Never add, drop, rename or restyle a character, and never write a look into a scene: a scene names who is in it, their pose, expression and cues.${sets}${bible.world?.kind ? ` story.world is the bible's too: ${bible.world.kind}${bible.world.time ? `, ${bible.world.time}` : ""}.` : ""}`
+  ].join("\n");
+}
+
 function planRequest({ brief, fixed, hints, direction = null, history = null }) {
   const lines = [
     "Write the storyboard for this brief.",
@@ -900,6 +945,7 @@ function planRequest({ brief, fixed, hints, direction = null, history = null }) 
     `brand: ${JSON.stringify(fixed.brand)}`
   ];
   if (fixed.style) lines.push(`style: ${JSON.stringify(fixed.style)}`);
+  if (fixed.bible) lines.push(`bible: ${JSON.stringify(fixed.bible)}`, `cast: ${JSON.stringify({ style: fixed.cast.style, characters: fixed.cast.characters.map((entry) => entry.id) })} (the show bible's; tooling writes the full cast, so you may leave story.cast out)`);
   if (Object.keys(fixed.audio).length) lines.push(`audio: ${JSON.stringify(fixed.audio)} (add music and sfx as you see fit)`);
   if (fixed.base) lines.push(`base: ${JSON.stringify(fixed.base)}`);
   if (direction) lines.push("", "## Direction map", "", "Plan the storyboard against DIRECTION.json (in the instructions): every scene a line names, on that line's words.");

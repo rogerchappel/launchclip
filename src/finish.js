@@ -35,7 +35,7 @@ import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from 
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
 import { actingGate, densityGate, ghostingGate, physicsGate, varietyGate } from "./direction_guardrails.js";
 import { holdGate, stateGate } from "./movement_guardrails.js";
-import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
+import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, lipSyncGate, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
 import { worstStillSpans, writeMotionReport } from "./render_motion_analysis.js";
@@ -46,7 +46,8 @@ import { getRenderer, resolveRendererName } from "./renderers/index.js";
 import { deriveBoundaries, resolveStory, storyBase, storyFormat } from "./story.js";
 import { storyChapters } from "@launchclip/core/story.mjs";
 import { ffmetadataChapters, youtubeChapterProblems, youtubeChapters } from "@launchclip/core/long-form.mjs";
-import { directionFileFor, moduleParamErrors, validateStory } from "./story_cli.js";
+import { directionFileFor, moduleParamErrors, readScriptBeside, validateStory } from "./story_cli.js";
+import { ANIMATIC_FILE, ANIMATIC_VIDEO, writeAnimatic } from "./animatic.js";
 import { hasExactFile, readStoryEdl } from "./story_loader.js";
 import { readStorySubject, readStoryTrack } from "./subject/project.js";
 import { applyProjectStyle } from "./story_style.js";
@@ -807,7 +808,12 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
   if (prototype && candidate) throw new Error("use --prototype or --candidate, not both");
   if (prototype && (iterationOptions(story, options).scenes.length || options.previewScene || iteration.chapter)) throw new Error("--prototype renders the opening; drop --scene, --preview-scene and --chapter");
   if (candidate && iteration.chapter) throw new Error("use --candidate or --chapter, not both");
-  const out = projectFile(project, options.out ?? (candidate ? CANDIDATE_OUTPUT : prototype ? `renders/prototype${quality === "high" ? "-high" : ""}.mp4` : quality === "high" ? "renders/final.mp4" : "renders/draft.mp4"));
+  // --animatic: the whole story at draft quality, to renders/animatic.mp4,
+  // with ANIMATIC.json (src/animatic.js). --scene re-renders shots into it (a retake).
+  const animatic = Boolean(options.animatic);
+  if (animatic && quality !== "draft") throw new Error("--animatic renders at draft quality; drop --quality high (the delivery render is launchclip finish --quality high)");
+  if (animatic && (candidate || prototype || options.previewScene || iteration.chapter)) throw new Error("--animatic renders the whole story; drop --candidate, --prototype, --preview-scene and --chapter");
+  const out = projectFile(project, options.out ?? (candidate ? CANDIDATE_OUTPUT : animatic ? ANIMATIC_VIDEO : prototype ? `renders/prototype${quality === "high" ? "-high" : ""}.mp4` : quality === "high" ? "renders/final.mp4" : "renders/draft.mp4"));
   const started = adapters.now();
   const ctx = {
     project,
@@ -824,6 +830,7 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
     out,
     raw: path.join(project, ".launchclip", "finish", `render-${prototype ? "prototype-" : ""}${quality}.mp4`),
     prototype: prototype ? { requested: true } : null,
+    animatic: animatic ? { requested: true } : null,
     state: await readState(project),
     warnings: [...(styled.style?.warnings ?? []), ...candidateNotes],
     candidate,
@@ -866,7 +873,20 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
     }
     // A finished video: the designed cover when the story has one (it becomes
     // the thumbnail), then publish.json beside it.
-    finished = !failed && !ctx.preview && !candidate && !prototype && existsSync(out);
+    finished = !failed && !ctx.preview && !candidate && !prototype && !animatic && existsSync(out);
+    if (animatic && !failed && existsSync(out)) {
+      const written = await writeAnimatic(project, {
+        resolved: ctx.resolved,
+        map: await readOptionalJson(directionFileFor(storyFile)),
+        words: ctx.words ?? [],
+        script: await readScriptBeside(project),
+        segments: stages.find((stage) => stage.name === "render")?.details?.segments ?? null,
+        gates: ctx.gates ?? {},
+        video: rel(project, out),
+        renderer: rendererName
+      });
+      ctx.animatic = { file: ANIMATIC_FILE, video: written.animatic.video, shots: written.animatic.shots.length, gates_failed: written.animatic.gates_failed, review: written.animatic.review };
+    }
     if (finished && ctx.copy.cover) ctx.cover = await finishCover(ctx);
   } finally {
     await temp.release();
@@ -1925,6 +1945,9 @@ async function runGates(ctx) {
     // Acting (docs/DIRECTION_GUARDRAILS.md §2): each line's key action is performed on screen.
     const acting = actingGate(ctx.resolved, { map: direction.map, words: scope.words, rects: ctx.layout?.rects ?? [] });
     if (acting.status !== "skipped") gates.acting = acting;
+    // Lip sync (docs/ANIMATION_PIPELINE_RFC.md §8.2): drawn mouths move on their own words and rest between them.
+    const lipSync = lipSyncGate({ resolved: ctx.resolved, words: scope.words });
+    if (lipSync.status !== "skipped") gates["lip-sync"] = lipSync;
     const face = storyBase(ctx.resolved) ? await readFaceData(ctx.project, ctx.resolved) : null;
     const hidden = await readOptionalJson(path.join(ctx.project, "CONSTRAINTS.json")).then((doc) => Array.isArray(doc?.ranges) && doc.ranges.some((range) => range?.picture === "hidden")).catch(() => false);
     gates.coverage = coverageGate({ resolved: ctx.resolved, words: scope.words, map: gates.direction.status === "passed" ? direction.map : null, profile, face: face?.intervals ?? null, prototype, hidden });
@@ -2014,6 +2037,7 @@ function buildReport(ctx, stages, { seconds, failed }) {
   }
   if (!failed && ctx.candidateReceipt) nextSteps.push(`Score candidate ${ctx.candidate} (0-10 per field) in ${ctx.candidateReceipt.receipt} from its frames, then set selected_candidate_id (highest mean, ties by candidate_order), selection_rationale and a rejection_reason for each loser.`);
   if (!failed && ctx.prototype) nextSteps.push(`Review the prototype (${rel(ctx.project, ctx.out)}${ctx.prototype.cut ? `, the opening ${ctx.prototype.cut} s of ${ctx.prototype.duration} s` : ""}) for style, layout, density and sound; when it is right, run launchclip finish ${ctx.project} for the whole video.`);
+  if (!failed && ctx.animatic?.file) nextSteps.push(`Review the animatic (${ctx.animatic.video}) for story, staging and acting: launchclip finish ${ctx.project} --animatic --review has a vision model do it (${ctx.animatic.shots} shot${ctx.animatic.shots === 1 ? "" : "s"} in ${ANIMATIC_FILE}); when it is right, run launchclip finish ${ctx.project} --quality high for the delivery render.`);
   if (!failed && ctx.preview) nextSteps.push(`Look at ${rel(ctx.project, ctx.preview.output)}; when it is right, run launchclip finish ${ctx.project} --scene ${ctx.preview.scene} to re-render it into the final.`);
   return {
     schema_version: FINISH_REPORT_VERSION,
@@ -2025,10 +2049,12 @@ function buildReport(ctx, stages, { seconds, failed }) {
     quality: ctx.quality,
     style: ctx.style ? { name: ctx.style.name, source: ctx.style.source, file: ctx.style.file, applied: ctx.style.applied.length } : null,
     voice: ctx.state.stages?.voice?.details?.provider && stages.find((stage) => stage.name === "voice")?.status !== "skipped" ? ctx.state.stages.voice.details.provider : null,
-    final: !failed && !ctx.preview && existsSync(ctx.out) ? ctx.out : null,
+    // An animatic is not the final: it is named under `animatic`.
+    final: !failed && !ctx.preview && !ctx.animatic && existsSync(ctx.out) ? ctx.out : null,
     output: ctx.out,
     ...(ctx.preview ? { preview: { scene: ctx.preview.scene, output: ctx.preview.output } } : {}),
     ...(ctx.candidate ? { candidate: { id: ctx.candidate, ...(ctx.candidateReceipt ?? {}) } } : {}),
+    ...(ctx.animatic?.file ? { animatic: ctx.animatic } : {}),
     ...(ctx.prototype ? { prototype: { cut: ctx.prototype.cut ?? null, duration: ctx.prototype.duration ?? null } } : {}),
     ...(ctx.options.scenes?.length ? { scenes: ctx.options.scenes, scene_stills: render?.details?.scene_stills ?? [] } : {}),
     ...(ctx.chapters ? { chapters: ctx.chapters } : {}),
@@ -2070,6 +2096,7 @@ export function formatFinishSummary(report) {
     lines.push("gates:");
     for (const [name, gate] of gates) lines.push(`  ${name.padEnd(17)} ${gate.status}${gate.error ? `  ${firstLine(gate.error)}` : ""}`);
   }
+  if (report.animatic) lines.push(`animatic: ${report.animatic.video} (${report.animatic.shots} shot${report.animatic.shots === 1 ? "" : "s"}; ${report.animatic.file}${report.animatic.gates_failed.length ? `; gates failed: ${report.animatic.gates_failed.join(", ")}` : ""}${report.animatic.review?.verdict ? `; review: ${report.animatic.review.verdict}` : ""})`);
   if (report.final) lines.push(`final: ${report.final}`);
   if (report.cover?.file) lines.push(`cover: ${report.cover.file}${report.cover.frame === "first" ? " (also the opening frame)" : report.cover.source === "video" ? ` (the video's frame at ${report.cover.frame} s)` : ""}`);
   if (report.publish) lines.push(`publish: ${report.publish}`);
@@ -2391,12 +2418,12 @@ async function writeResolvedCopy(ctx) {
   if (ctx.resolved) await writeJson(path.join(ctx.project, PATHS.resolved), ctx.resolved);
 }
 
-async function loadWords(project, story) {
+export async function loadWords(project, story) {
   const file = typeof story?.audio?.words === "string" ? path.join(project, story.audio.words) : null;
   if (!file || !existsSync(file)) return null;
   const words = narrationWords(await readJson(file, story.audio.words));
-  // A dialogue's words keep their speaker (character scenes' says: "auto").
-  return words.map((word) => ({ text: String(word.text ?? word.word ?? ""), start: Number(word.start), end: Number(word.end), ...(typeof word.speaker === "string" ? { speaker: word.speaker } : {}) }));
+  // A dialogue's words keep their speaker (character scenes' says: "auto") and their phonemes (mouth shapes).
+  return words.map((word) => ({ text: String(word.text ?? word.word ?? ""), start: Number(word.start), end: Number(word.end), ...(typeof word.speaker === "string" ? { speaker: word.speaker } : {}), ...(typeof word.phonemes === "string" ? { phonemes: word.phonemes } : {}) }));
 }
 
 // Every assets/ path referenced anywhere in the resolved story.

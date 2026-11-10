@@ -1,0 +1,28 @@
+{
+  "schema_version": "launchclip.make-script.v2",
+  "title": "The standup that would not end",
+  "logline": "Maya wants one answer from a standup that keeps wandering.",
+  "duration": 20,
+  "premise": { "want": "one answer", "obstacle": "a meeting that wanders", "change": "she asks in writing" },
+  "characters": [
+    { "id": "maya", "role": "lead", "want": "one answer", "speech": "short" },
+    { "id": "sam", "role": "foil", "want": "to be heard", "speech": "long-winded" },
+    { "id": "theo", "role": "witness", "want": "lunch", "speech": "none" }
+  ],
+  "beats": [
+    { "beat": "setup", "place": "meeting",
+      "lines": [
+        { "id": "l1", "speaker": "narrator", "text": "Every morning at nine the whole team gathers around one long table to say what they did yesterday and what they hope to do today." },
+        { "id": "l2", "speaker": "sam", "text": "So yesterday I looked at the dashboard again, and then I looked at the other dashboard, and honestly both of them were fine." }
+      ] },
+    { "beat": "problem", "place": "meeting",
+      "lines": [
+        { "id": "l3", "speaker": "maya", "text": "I only need to know if the release is blocked." },
+        { "id": "l4", "speaker": "boss", "text": "Let us take that offline." }
+      ] },
+    { "beat": "resolution", "place": "desk-laptop",
+      "lines": [
+        { "id": "l5", "speaker": "maya", "text": "Next time I am sending a message." }
+      ] }
+  ]
+}

@@ -4,7 +4,11 @@
 // Story cast (story.cast):
 //   {style?: "flat", colors?: {primary?, accent?, paper?, ink?, bg?},
 //    characters: [{id, from?, name?, voice?, build?, height?, age?, skin?, hair?,
-//                  outfit?, accessories?, headwear?, mobility?, colors?, acting?}]}
+//                  outfit?, accessories?, headwear?, mobility?, colors?, acting?}
+//                 | {id, from?, name?, voice?, kind, size?, colors?, acting?}]}
+// An entry with a `kind` (kinds.mjs: cat, blob, phone…) is an animal, a
+// mascot or an object with a face; it takes kind, size and colors {body,
+// detail, accent} and none of a person's fields.
 // An entry whose id (or `from`) names a starter character starts from its
 // params; the fields given override them. Any other id needs full params
 // (skin and hair at least). `colors` maps brand roles for the whole cast, so
@@ -26,6 +30,7 @@ import {BRAND_ROLES, isColorName} from './palette.mjs';
 import {SEATED_SETS, SETS} from './sets.mjs';
 import {DRAWING_STYLES} from './styles.mjs';
 import {ACTING_PROFILE_NAMES} from './acting.mjs';
+import {isKind, kindPhrase} from './kinds.mjs';
 
 export {DRAWING_STYLES};
 export const KOKORO_VOICES = Object.freeze([
@@ -37,7 +42,7 @@ const ID = /^[a-z][a-z0-9-]{0,23}$/;
 // An illustrated (sprite) character: art names its sprite folder (kit/core/catalog-sprites.mjs); it
 // takes no rig params and acts only in sprite-scene.
 const SPRITE_KEYS = ['id', 'name', 'voice', 'art', 'position'];
-const ENTRY_KEYS = ['id', 'from', 'name', 'voice', 'art', 'build', 'height', 'age', 'skin', 'hair', 'outfit', 'accessories', 'headwear', 'mobility', 'colors', 'position', 'acting'];
+const ENTRY_KEYS = ['id', 'from', 'name', 'voice', 'art', 'kind', 'size', 'build', 'height', 'age', 'skin', 'hair', 'outfit', 'accessories', 'headwear', 'mobility', 'colors', 'position', 'acting'];
 const isObj = value => value && typeof value === 'object' && !Array.isArray(value);
 
 function castEntries(cast) {
@@ -92,6 +97,15 @@ function castParams(entry, path) {
   const baseId = entry.from ?? (isStarterId(entry.id) ? entry.id : null);
   if (entry.from !== undefined && !isStarterId(entry.from)) throw new Error(`${path}.from "${entry.from}" is not a starter character (${STARTER_IDS.join(', ')})`);
   const base = baseId ? starterCharacter(baseId).params : null;
+  // An animal, a mascot or an object: its kind, size and colours (over a starter of the same kind).
+  if (isKind(entry) || (isKind(base) && entry.kind === undefined)) {
+    const kind = entry.kind ?? base.kind;
+    if (base && base.kind !== kind) throw new Error(`${path}.kind ${kind} cannot start from ${baseId}, which is ${isKind(base) ? kindPhrase(base.kind) : 'a person'}; leave out \`from\` or name a starter of that kind`);
+    const {id: _id, from: _from, name: _name, voice: _voice, position: _position, acting: _acting, ...own} = entry;
+    const size = entry.size ?? base?.size;
+    return normalizeRigParams({...own, kind, ...(size ? {size} : {}), colors: entry.colors === undefined || isObj(entry.colors) ? {...(base?.colors ?? {}), ...(entry.colors ?? {})} : entry.colors}, path);
+  }
+  if (base && isKind(base)) throw new Error(`${path}.kind person cannot start from ${baseId}, which is ${kindPhrase(base.kind)}; leave out \`from\``);
   if (!base && (entry.skin === undefined || entry.hair === undefined)) throw new Error(`${path} (${entry.id}) is not a starter character, so it needs its own skin and hair (or from: a starter id)`);
   const merged = {
     build: entry.build ?? base?.build,

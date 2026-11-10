@@ -4016,23 +4016,71 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   and the named expressions (`neutral happy delighted frustrated confused
   surprised focused`) as face parts. Positive arm and leg angles swing a limb
   away from the body on its own side.
+- `kinds.mjs`: the character kinds that are not people. A person is the
+  rig's default and stores no `kind`, so every person keeps the params and
+  fingerprint it had. Any other kind has its own parameter set, `{kind,
+  size?: small | medium | large, colors: {body, detail, accent}}`
+  (`normalizeKindParams`, reached through `normalizeRigParams`; medium is
+  not stored), and refuses a person's params by name ("hair does not apply
+  to a cup"). `KINDS` lists 20 in three groups (`KIND_GROUPS`, `kindsOf`):
+  animals `cat dog bear rabbit fox frog penguin owl`, mascots `blob droplet
+  star monster` (brand colours by default) and objects with faces `phone
+  laptop cup bulb robot coin book cloud`; each entry says what its three
+  colour slots paint (`slots`). `kindGeometry` reports rig geometry in the
+  shape `rigGeometry` does (hips, shoulders, the head or the face area, the
+  seat drop), so poses, sets, framing and aiming treat a kind as a person;
+  `kindColors` resolves the slots and the face's colours. Pose restatements
+  (`geometry.poses`): a headed kind raises its arms wide of its big head; a
+  single body's arms are shorter than it is wide, so `think` and `look`
+  touch the body's edge beside the face, `facepalm` covers the near side,
+  `arms-crossed` and `hands-on-hips` rest both hands on the front and
+  `point-self` points at the body. A medium kind is 550 to 900 rig units
+  tall beside a person of about 1000.
+- `kind-draw.mjs`: `drawKind(style, params, colours, options)` draws a
+  kind on the rig's joints with the toon's cute face (`toon.mjs face`), so
+  the op list, gaze, blinks and speech mouths act it as they act a person
+  and both renderers draw it alike. Two body plans: headed (a trunk and a
+  head: the animals and the robot; the head tilts, turns and its features
+  cross it as a person's) and single (one body carrying the face: the face
+  tilts on `C-head` about its chin and moves across the body for a look,
+  the body leans and squashes on `C-torso`, and from behind the face is
+  gone). Part ids are the toon's. A dark face area takes light ink. The
+  cast's drawing style chooses the pen: flat fills with the chibi outline
+  for most, line art for `line` and `stick-classic`, comic ink for
+  `outlined`, cut paper for `paper`, soft shading for `soft-shade`,
+  `avatar`, `lifelike` and `cinematic`. A size resizes shapes, pivots and
+  line weights and leaves joint values alone.
 - `palette.mjs`: skin tones, hair colours, clothing neutrals and brand roles.
   A colour slot is a palette name, a brand role (`primary accent paper ink
   bg`) or a hex. Roles come from the story brand, overridden by the cast's
   colour mapping.
-- `cast.mjs`: the starter cast (71 characters: the original set, then a wider cast with a personality each and one accessory at most). `RETIRED_CAST` holds characters no longer offered (`fatima`): not listed and not in `STARTER_IDS`, but a story that names one by id still draws it (`isStarterId`). Ids are stable and never
+- `cast.mjs`: the starter cast (95 characters: the original set, then a wider cast with a personality each and one accessory at most, then 24 animals, mascots and objects with faces, `STARTER_KIND_IDS`: `mochi soot biscuit bruno clover rusty ember puddle pebble hoot`, `bloop fizz drip twinkle grumble`, `ping byte latte watt rivet cog penny paige nimbus`). `RETIRED_CAST` holds characters no longer offered (`fatima`): not listed and not in `STARTER_IDS`, but a story that names one by id still draws it (`isStarterId`). Ids are stable and never
   change once shipped.
 - `generate.mjs`: `generateCast({seed, set, count, palette})` → story cast
   entries, always the same for the same inputs. `CHARACTER_SETS` (office-team,
   startup-founders, family, kids, seniors, students, chefs, medical,
   athletes, creators, city-crowd) fix the wardrobe, age mix and props; the
   seed varies the people (skin tones spread across the range, no two members
-  alike). `castFromStyle(pack.cast)` turns a style pack's `{drawing_style,
+  alike). Four more sets give the kinds that are not people:
+  `animal-friends`, `mascots`, `everyday-objects` (each kind once before a
+  repeat, in its own colours or a seeded variation) and `mixed-company`
+  (people and kinds turn about). A seed chooses only among the sets of
+  people (`PEOPLE_SET_NAMES`), so seeded styles keep the casts they gave;
+  the four are for `character_set` or `cast.set` to ask for.
+  `castFromStyle(pack.cast)` turns a style pack's `{drawing_style,
   set, members}` into `story.cast`.
 - `styles.mjs`: the drawing styles (`DRAWING_STYLES`, flat first) and
   `drawCharacter(style, params, colours, options)`, `styleHeight`,
   `styleGeometry`. Every style draws the same rig, poses, expressions and
   part ids, so any cast works in any style and acting.mjs animates them all.
+  A kind other than a person has one body in every style (`kind-draw.mjs`);
+  the style chooses its pen. `stageHeight(style, params, {tight})` is the
+  height a set sizes its cast by: a person's drawn height; for a kind no
+  less than a person's (`KIND_STAGE`), so a cat is never blown up to a
+  person's height (less in the same measure in a style that draws people
+  shorter, such as `chibi`); and where slots are narrow (`tight`: several
+  characters across a portrait frame; `alone`: one in a portrait frame)
+  more the wider the kind reaches, so an open laptop fits its slot.
 - `toon.mjs`: the toon body shared by the cartoon styles: one builder lays
   out every shape from the rig and hands each to a pen (`shape`, `ellipse`,
   `line`, `limb`, `strand`, `ground`, `within`, `defs?`), which decides how it
@@ -4179,14 +4227,35 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
     `foreidle-*` wrappers inside the posed joints) and sways the body
     instead of shifting its weight.
   - **Speech.** `speechChanges(ranges)` → `[{time, shape, open}]`. A spoken
-    word with its text (`words: [[start, end, "word"]]`; the story resolver
-    adds the text for word anchors and `says: "auto"`) takes a mouth shape
-    per sound from its spelling (`wordVisemes`): `closed` on m, b, p; `o`
-    on o, u, w; `wide` on e, i, y; `open` on a; `small` on other
-    consonants. The shapes spread across the word (none shorter than
-    0.07 s; with more sounds than fit, the part-open consonants go first),
-    and the mouth closes when the word ends unless the next follows within
-    0.07 s. A word without text opens and closes as before (two flaps on a
+    word is `[start, end]`, `[start, end, "word"]` or `[start, end, "word",
+    "phonemes"]`; the story resolver adds the text, and the phonemes when
+    the narration has them, for word anchors and `says: "auto"`.
+    - *With phonemes* (`phonemeVisemes`). The voice's own sounds and how
+      long it held each, as `NARRATION.json` keeps them on a word:
+      `symbol:milliseconds` pairs in order from the word's start
+      (`"b:60 ˈ:45 o:70 ʊ:70 t:55"`; IPA code points as Kokoro writes them,
+      `_` for a pause inside the word). The mouth takes a shape per sound
+      for as long as the sound lasts: `closed` on m, b, p; `o` on w, u, ʊ,
+      o, ɔ; `wide` on i, ɪ, e, ɛ, j; `open` on a, ɑ, æ, ʌ, ɐ; `small` on
+      every other consonant and the neutral vowels. A stress mark or an h
+      belongs to the sound after it and a length mark to the one before.
+      The lengths are scaled to the word's span. No shape is held under
+      0.07 s: a short `small` gives its time to its neighbours, and pressed
+      lips or a vowel take time from a longer neighbour (which keeps at
+      least 0.05 s beside pressed lips) or go when there is none. A closing
+      consonant that trails off lets the mouth close 0.16 s into it. A word
+      cut by the scene's edge, or whose phonemes do not parse, uses its
+      spelling.
+    - *With text only* (`wordVisemes`): a shape per sound from the
+      spelling: `closed` on m, b, p; `o` on o, u, w; `wide` on e, i, y;
+      `open` on a; `small` on other consonants. The shapes spread evenly
+      across the word (none shorter than 0.07 s; with more sounds than fit,
+      the part-open consonants go first). This is the path for supplied
+      audio, other voice providers, and a `NARRATION.json` written before
+      phonemes were kept.
+
+    Either way the mouth closes when the word ends unless the next follows
+    within 0.07 s. A word without text opens and closes as before (two flaps on a
     long word), cycling through the open shapes; a range without word
     timings flaps every 0.24 s. The rig draws two mouths per face, so
     `closed` is the closed mouth and every other shape is that face's open
@@ -4248,7 +4317,11 @@ scaleX and scaleY for its speech shape).
 ```
 
 An id (or `from`) naming a starter starts from its params; the fields given
-override them. Other ids need their own skin and hair. When the cast lists
+override them. Other ids need their own skin and hair, or a `kind`: `{ "id":
+"mug", "kind": "cup", "size": "small", "colors": { "accent": "red" } }` is an
+animal, a mascot or an object with a face (`kinds.mjs`), which takes `kind`,
+`size` and `colors {body, detail, accent}` and none of a person's fields. A
+kind may start `from` a starter of the same kind only. When the cast lists
 characters, scenes may only use those; without a cast, scenes may use any
 starter. `position` (left, centre or right) is the side the character
 takes in every cast scene it shares, unless a scene says otherwise. `acting`
@@ -4281,6 +4354,11 @@ One designed character as a file, used by the CLI, by agents (the
               "colors": { "top": "red", "bottom": "denim", "shoes": "white", "accent": "accent" } } }
 ```
 
+- A kind other than a person stores `"params": { "kind": "cat", "size":
+  "small", "colors": { "body": "tangerine", "detail": "cream", "accent":
+  "rose" } }`; the set paths `kind`, `size`, `colors.body` and
+  `colors.detail` edit it, and a description names it ("a small orange
+  cat").
 - `params` are rig params; `normalizeCharacter` validates them with
   `normalizeRigParams` and writes the file in canonical form (fixed key
   order, optional fields only when set), so equal characters are equal
@@ -4523,6 +4601,101 @@ map line plays, which always includes the silent ones. Without a map, lines
 are grouped by speaker. The command prints text; `--json` prints the report.
 `examples/story/dialogue-9x16` is a two-character dialogue with a script.
 
+### The animatic, its review and retakes (`src/animatic.js`, `src/make/critic.js`, `src/make/retakes.js`)
+
+The animatic is the whole story drawn by the rig at draft quality, with the
+real voice and captions (docs/ANIMATION_PIPELINE_RFC.md §4.4). It is an
+ordinary draft `finish` written to its own file:
+
+```bash
+launchclip finish <project> --animatic            # renders/animatic.mp4 and ANIMATIC.json
+launchclip finish <project> --animatic --review   # then the staging review (a vision model)
+launchclip finish <project> --animatic --retake   # then retake the shots the review fails
+```
+
+`ANIMATIC.json` (`launchclip.animatic.v1`), written by `finish`:
+
+```json
+{
+  "schema": "launchclip.animatic.v1",
+  "story_hash": "8a35…", "bible_hash": "sha256:2cd6…",
+  "video": "renders/animatic.mp4", "renderer": "remotion", "fps": 30, "duration": 20.5,
+  "shots": [{ "id": "ask", "start": 2.156, "end": 8.524, "frames": 191, "first_frame": 65, "last_frame": 255, "who": ["maya", "sam"], "segment": "01-ask:c133f436d9de", "segments": ["01-ask:c133f436d9de"] }],
+  "gates": { "cast": "passed", "acting": "passed", "motion": "failed" },
+  "gates_failed": ["motion"],
+  "review": { "verdict": "ship", "file": "qa/animatic-critic.json" }
+}
+```
+
+- `story_hash` is the hash of `storyboard.json` as parsed, `bible_hash` the
+  frozen bible's own hash (null with no bible). `readAnimatic(project)` returns
+  `{animatic, fresh, reasons}`: fresh while both still match and the video is
+  on disk, so a rerun can reuse the animatic.
+- `shots` is the shot list (`story shots`) with the render segments that show
+  each shot; `segment` is the one that holds most of it. Both are null for a
+  renderer without frame ranges.
+- `gates` are finish's own, without `critic`: the review stands in for it.
+  `animaticApproved(animatic)` is true when no gate failed and the review
+  said `ship`.
+- An animatic has no cover and no `publish.json`, and `finish.json` reports it
+  under `animatic` with `final: null`.
+
+**The staging review** (`reviewAnimatic`, or `runHeadlessCritic({review:
+"animatic"})`) is the critic over the animatic's contact sheets for story,
+staging and acting only: its findings use `narrative`, `composition`,
+`timing`, `acting`, `character-consistency` and `lip-sync`, and a finding in
+any other category is dropped with a warning. It writes
+`qa/animatic-critic.json` in the `qa/critic.json` format and records its
+verdict in `ANIMATIC.json`.
+
+**Reference sheets.** In a project with a show bible, both reviews show the
+model each character's sheet (`bible/sheets/<id>.png`) after the contact
+sheets, with the character's `must_keep` list, and the critique lists them
+under `reviewer.reference_sheets`. A sheet is what a character must look
+like; it is never evidence, and a finding cites the tile that shows the
+mismatch. The reviews are also given the shot list as text (who is in each
+shot, what is said, the poses planned).
+
+**Retakes** (`runRetakes`, §4.7). While the review does not say `ship` and
+rounds remain (three at most, `--critic-repairs`), a round fixes the shots
+the blocking and major findings name, by the cheapest step that could work
+(`retakeStep`):
+
+| Step | When | What may change |
+|---|---|---|
+| `redirect` | a finding names the shot | that shot's poses, expressions, cues, set, framing and who is in it |
+| `replan-beat` | the critic asked for `replan`, a narrative finding names the shot, or the shot was redirected and still fails | the same, for every shot of the story beat the shot is in |
+
+A retake never moves a shot's start or end, and never touches a scene outside
+its shots: `scopedRetake` takes only the named scenes from what the planner
+returned and lists the rest under `ignored`. Only the changed scenes render
+again (`finish --scene`), then the review runs again. A round that fails,
+changes nothing or does not lower the blocking and major findings is undone
+and the rounds stop. Dropping a shot's handed-in art (step 2 of the RFC)
+arrives with hand-in.
+
+`qa/retakes.json` (`launchclip.retakes.v1`):
+
+```json
+{
+  "schema": "launchclip.retakes.v1", "review": "animatic", "limit": 3,
+  "status": "ship", "verdict": "ship",
+  "rounds": [{
+    "round": 1, "step": "redirect", "reason": "a finding names the shot",
+    "findings": [{ "id": "f1", "severity": "major", "category": "acting", "message": "…", "shots": ["ask"] }],
+    "shots": ["ask"], "tried": "Maya puts her hands on her hips as she gives in.",
+    "changed": ["ask"], "rendered": ["ask"],
+    "segments": { "mode": "segments", "total": 6, "rendered": 1, "reused": 5 },
+    "verdict_before": "repair", "verdict_after": "ship", "kept": true, "seconds": 41.2
+  }]
+}
+```
+
+`status` is `ship` or `needs-repair`. The default step is one small model
+call (`redirectShots`) whose answer must validate as a story; `runRetakes`
+takes `redirect`, `render` and `critic` hooks, so `make` can pass its own
+planner and stages.
+
 ### Sprite casts (`cast.sprites.json`, `launchclip cast sprites`)
 
 ```json
@@ -4719,6 +4892,31 @@ the cadence profile whose `problem_lands_seconds` p90 is the limit (default
 from. `--json` includes `narration.lines`. A version 1 `SCRIPT.json` is
 checked exactly as before.
 
+### The gate (`src/script_gate.js`)
+
+`scriptGate({project, resolved, words, profile})` holds a finished project's
+`SCRIPT.json` to `validateScreenplay` and returns `{status, file, profile,
+duration, wpm, rules, errors, warnings, stats}`. `rules` lists the contract
+error ids that failed (`speaker-unknown`, `character-unused`, `fits-length`,
+`problem-lands`, `problem-missing`, and the shape ids). The length is the
+script's `duration`, else `plan.duration`, else the story's; the pace is
+`plan.wpm`, else measured from the take's words, else 150. No `SCRIPT.json`
+or a version 1 script is `skipped`. It runs none of the copy checks above.
+`finish` does not call it yet; the animation scorecard does
+(docs/ANIMATION_MEASUREMENT.md).
+
+### Dialogue measures (`kit/core/cadence.mjs`)
+
+`characterMeasures(shots, {duration, words, script})` takes the shot list
+(`shotList()` in `src/story_shots.js`) and returns the character measures a
+cadence profile may carry: `scene_seconds`, `character_screen_time`,
+`expression_changes_per_min`, `problem_lands_seconds`, and the four in
+`DIALOGUE_MEASURES`: `speaker_turns_per_min`, `line_seconds`,
+`reaction_share` and `longest_framing_seconds`. A measure the project cannot
+answer is `null`. `spokenRuns(words, {script})` gives the spoken lines of a
+take. `story-characters` carries seed bands for all of them; the four
+dialogue bands are provisional (docs/ANIMATION_MEASUREMENT.md).
+
 ### The writers' room (`src/make/animation.js`, `launchclip make --animation`)
 
 `make --animation` writes a version 2 `SCRIPT.json` and voices it
@@ -4726,8 +4924,7 @@ checked exactly as before.
 router marks the run `routing.kind: "animation"` on the `motion` lane
 (`routing.format` is the frame size, so the mark has its own key). Only the
 flag sets it for now: a brief that merely reads as a character story still
-makes a whole narrated video, because the animation path stops after the
-voice until its later stages exist.
+makes a narrated video, until the animatic and the retakes are in place.
 
 Three structured calls, each with a strict schema, then at most one repair:
 
@@ -4767,9 +4964,11 @@ bible owns each character's real voice.
 **Voice.** `screenplayNarration(script).lines` goes through
 `src/voice/dialogue.js` unchanged, and `NARRATION.json` is the dialogue
 document (`words[].speaker`, `lines`, `gaps`). Until a bible exists the
-characters borrow stand-in voices (`standInCast`): under Kokoro one each, by
-`voice_type`, never the narrator's; under any other provider none, so the
-narrator's voice reads every line and `MAKE.json` warns. The joined take is
+characters speak in stand-in voices (`standInCast`) which the show bible
+then keeps: under Kokoro one each, by `voice_type`, never the narrator's;
+under any other provider none, so the narrator's voice reads every line and
+`MAKE.json` warns. Once the project has a frozen `BIBLE.json`, the lines are
+voiced in its voices. The joined take is
 `.launchclip/make/narration.wav`.
 
 **Reuse.** The script is reused while its inputs hash the same (the prompt,
@@ -4778,12 +4977,71 @@ limit), the take while every line's request and every pause is unchanged. A
 rerun that reuses both leaves `SCRIPT.json` and `NARRATION.json` untouched
 and reports `prepare` as `cached`.
 
-**The stop.** `MAKE.json` ends `status: "stopped"` with `stopped: {after:
-"prepare", reason}`; `storyboard`, `subject`, `finish` and `critic` are
-`skipped` with that reason, and `report.script` has `kind: "animation"`,
-the `characters`, `speakers`, line counts and `voices`. A stage ends a run
-by setting `ctx.stop = {after, status, reason, next}` in
-`src/make/index.js`; the later animation stages move or remove this stop.
+**Stopping a run.** A stage ends a run by setting `ctx.stop = {after,
+status, reason, next}` in `src/make/index.js`: the later stages are
+`skipped` with that reason, and `MAKE.json` ends with that status and
+`stopped: {after, reason}`. The bible stage uses it for approval.
+
+### The show bible and the shot list in `make` (`src/make/show_bible.js`)
+
+After `prepare`, the animation path runs the `bible` stage
+([ANIMATION_PIPELINE_RFC.md](ANIMATION_PIPELINE_RFC.md) §4.2, §6.1, §6.3,
+phase 6), then the same `storyboard` stage every video uses, with the bible
+pinned. Other kinds of video report `bible` as `skipped`.
+
+**One structured call** (`designBible`, schema name
+`launchclip_animation_bible`): for each character of the script `{id, use,
+sets, position}`, plus `drawing_style`, `world: {kind, time}`, `sets` and
+`rules`. `sets` are character set paths (`{path, op, value}`, the edit
+language of `cast create`); the paths offered are `DESIGN_PATHS`: a look,
+never the name, the voice or the drawing style. `normalizeBibleDesign`
+passes every set through `checkedSets` (`src/cast_design.js`), gives each
+character a side of its own, and keeps only worlds and sets the kit draws.
+
+**Tooling** (`castFromDesign`, then `makeBible`):
+
+| The script's character | Becomes |
+|---|---|
+| a new id | `launchclip cast create` with the sets (or `--from` the character `use` names): `cast/<id>.character.json` |
+| an id that is a starter's | that starter (or the starter `use` names) with the sets applied, written out in full; no file, since a starter id is not a saved character's |
+| an id already saved by the user | that character as it is, its own voice when no other speaker has it |
+
+Then a draft `BIBLE.json` is written and `freezeBible` (`src/bible.js`)
+draws the sheets and writes the hash. The drawing style is the style pack's
+`cast.drawing_style` when a chosen pack sets one (a seeded style's is
+ignored), else the designer's when the brief asked for one, else
+`DEFAULT_DRAWING_STYLE` (`chibi`). Voices are the stand-in voices the
+script was voiced in.
+
+**Reuse.** A frozen `BIBLE.json` in the project is used as it is: make's
+own while the script's characters and places, the prompt, the notes, the
+rules, the model and the narrator's voice hash the same (a reworded line
+does not redesign the cast), and one make did not write always
+(`report.bible.source` is `designed`, `reused` or `project`). A bible of
+somebody else's that is not valid is never overwritten: the stage fails
+and says how to freeze it again.
+
+**Approval** (`--stop-after bible`, `--approve bible`; `MAKE_STOP_POINTS`
+in `src/make/options.js`). With `--stop-after bible` the run ends
+`awaiting-approval`, `stopped.after: "bible"`. `--approve bible` records
+the approval of that bible's hash in the make state and the run goes on;
+the approval holds while the bible is unchanged. An attended run (a
+terminal, or `adapters.ask`) asks instead of needing the flag.
+
+**The shot list.** `planStoryboard` (`src/storyboard_planner.js`) takes
+`bible` and `script`:
+
+- `plannedCast` returns the bible's cast first, never bindable
+  (`src/cast_fit.js`); a cue that spells a character by name takes its id;
+- the story's `cast` and `bible: {file, hash}` are written by `pinInputs`
+  after every model pass, and the direction map names the bible too, so a
+  repair, a critic round or `--replan` cannot change who is in the story;
+- `validateDirection` gets the script, so a line's `line` id is checked;
+- `checkStoryboard(…, {castGate: true})` runs the cast gate inside the
+  plan, and its findings (`cast: …`) go back to the model as repair errors.
+
+The brief (`animationBriefLines`) is the screenplay with its line ids, the
+bible's cast, world and rules, and staging notes for dialogue.
 
 ## World module (`kit/core/catalog-world.mjs`)
 
