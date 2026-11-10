@@ -1,10 +1,12 @@
 // Shared by the `make --animation` tests: a model that answers each call from
 // a hand-written fixture in test/fixtures/make-animation/ (no test calls a
 // real model), the dialogue join without ffmpeg, and a project to run in.
-import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { writeAnimatic } from "../../src/animatic.js";
 import { runMake } from "../../src/make/index.js";
+import { readProjectStory } from "../../src/story_loader.js";
 import { dialogueLayout } from "../../src/voice/dialogue.js";
 import { synthesizeNarration } from "../../src/voice/narrate.js";
 
@@ -81,7 +83,17 @@ export async function room(options = {}) {
     synthesizeDialogue: dialogueWithoutFfmpeg(takes),
     home: path.join(cwd, "home"),
     renderSheet: async (html, png) => { sheets.push(png); await writeFile(png, "png"); },
-    finish: options.finish ?? (async (project) => { finished.push(project); return { status: "passed", seconds: 0, stages: [], gates: {}, final: null, warnings: [] }; })
+    finish: options.finish ?? (async (project, finishOptions = {}) => {
+      finished.push(project);
+      // The animatic stage reads ANIMATIC.json back, so the stand-in writes one (and the file it names).
+      if (finishOptions.animatic) {
+        const loaded = await readProjectStory(project);
+        await mkdir(path.join(project, "renders"), { recursive: true });
+        await writeFile(path.join(project, "renders/animatic.mp4"), "mp4");
+        await writeAnimatic(project, { resolved: loaded.resolved, words: loaded.words, renderer: finishOptions.renderer });
+      }
+      return { status: "passed", seconds: 0, stages: [], gates: {}, final: null, warnings: [] };
+    })
   };
   const project = path.join(cwd, "short");
   // A fixed --seed: the generated style (its frame, its motion) is the same in every run, so the checks see the same geometry.
