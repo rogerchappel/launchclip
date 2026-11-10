@@ -53,6 +53,8 @@ import { layoutSpec, talkingHeadLayout } from "./talking_head_layout.js";
 import { abstractErrors, castFromDirection, characterErrors, characterShare, defaultExplainerCast, openingErrors } from "@launchclip/core/explainer.mjs";
 import { readingFindings } from "./direction_guardrails.js";
 import { fitCastCuts } from "./cast_cut_fit.js";
+import { normalisePlan } from "./plan_normalise.js";
+import { keepUnnamed, repairScope } from "./repair_scope.js";
 
 export const STORYBOARD_PLAN_VERSION = "launchclip.storyboard-plan.v1";
 export const DEFAULT_MAX_REPAIRS = 2;
@@ -270,7 +272,10 @@ export async function planStoryboard(options = {}) {
     let checked;
     if (!extracted.ok) checked = { ok: false, errors: [`json: ${extracted.error}`], warnings: [], storyboard: null, layout: emptyLayout(), candidate: extracted.text ?? null };
     else {
+      // A repair redoes the scenes its findings reach; the rest keep the params they had (src/repair_scope.js).
+      const keptScenes = kind === "repair" ? keepRepairScope(extracted, previous, { direction, words: wordList, beats }) : [];
       const pinned = pinInputs(extracted.storyboard, fixed);
+      if (keptScenes.length) pinned.warnings = [...pinned.warnings, `repair: tooling kept the params of ${keptScenes.length} scene${keptScenes.length === 1 ? "" : "s"} the findings did not reach (${keptScenes.join(", ")})`];
       // A repair may return a corrected map with the storyboard.
       const repairedMap = kind === "repair" && direction ? extractDirection(result) : null;
       if (repairedMap?.ok) {
@@ -346,6 +351,9 @@ export async function planStoryboard(options = {}) {
         pinned.storyboard = cuts.storyboard;
         pinned.warnings = [...pinned.warnings, ...cuts.changed.map((entry) => `cast: tooling made ${entry}`)];
       }
+      // Slips with one obvious correction (a lone character on a side, scenes overlapping on a track, a cue just outside its
+      // scene, a cut one word late for its speaker) are tooling's, before the checks see them (src/plan_normalise.js).
+      direction = tidyPlan(pinned, direction, { words: wordList, beats, script });
       // A character story: a map action whose character is in the shot without the cue is tooling's to add (src/acting_place.js).
       if (bible && direction) {
         const placed = placeActions(pinned.storyboard, { direction, words: wordList });
@@ -377,6 +385,16 @@ export async function planStoryboard(options = {}) {
         pinned.storyboard = fitted.storyboard;
         moved.push(...fitted.moved);
         checked = checkStoryboard(pinned.storyboard, checkOptions);
+      }
+      // The fits above move cuts (a short shot takes time from the next one), which can take a speaker's first word off
+      // their shot or leave a cue past its scene's end: the same corrections again, on what the fits left.
+      if (!checked.ok) {
+        const fitted = pinned.storyboard;
+        direction = tidyPlan(pinned, direction, { words: wordList, beats, script });
+        if (pinned.storyboard !== fitted) {
+          checkOptions.direction = direction;
+          checked = checkStoryboard(pinned.storyboard, checkOptions);
+        }
       }
       // A card in the caption band while captions show: the captions dip out
       // under it (a caption position the module layout does not plan for, such
@@ -489,7 +507,9 @@ export async function planStoryboard(options = {}) {
       cost_warning: cost.warning,
       model: result?.model ?? model,
       response_id: result?.response_id ?? null,
-      elapsed_ms: now() - callStarted
+      elapsed_ms: now() - callStarted,
+      // A failed attempt keeps the plan it failed on (as the model returned it), so the failure can be replayed.
+      ...(!checked.ok && checked.candidate && typeof checked.candidate === "object" ? { candidate: checked.candidate } : {})
     });
     last = checked;
     previous = checked;
@@ -592,6 +612,25 @@ export async function planStoryboard(options = {}) {
 
 // ---------------------------------------------------------------------------
 // Checks
+
+// normalisePlan in the planner: the corrected storyboard replaces the pinned one, each correction becomes a
+// "normalise:" warning, and the map (whose lines may name other scenes now) is returned.
+function tidyPlan(pinned, direction, { words, beats, script }) {
+  const tidied = normalisePlan(pinned.storyboard, { words, beats, direction, script });
+  if (!tidied.changed.length) return direction;
+  pinned.storyboard = tidied.storyboard;
+  pinned.warnings = [...pinned.warnings, ...tidied.changed.map((entry) => `normalise: ${entry}`).filter((entry) => !pinned.warnings.includes(entry))];
+  return tidied.direction;
+}
+
+// keepUnnamed in the planner: the repaired storyboard with the scenes its findings did not reach as they were. → the kept scene ids
+function keepRepairScope(extracted, previous, { direction, words, beats }) {
+  if (!previous?.candidate || typeof previous.candidate !== "object" || !Array.isArray(previous.errors) || !previous.errors.length) return [];
+  const scope = repairScope(previous.errors, { storyboard: previous.storyboard ?? previous.candidate, direction, words, beats });
+  const kept = keepUnnamed(previous.candidate, extracted.storyboard, scope);
+  extracted.storyboard = kept.storyboard;
+  return kept.kept;
+}
 
 // fitFaceClear in the planner: cards moved (or, as a last resort, dropped)
 // off the face, the captions dipped under any card moved over their band,
@@ -1061,7 +1100,7 @@ function repairRequest({ request, previous, errors, attempt, repairs, direction 
     "",
     "A params error names the first offending item a module found (rows[1], steps[0], left.label…); the same rule applies to every sibling item, so fix all of them in that scene, not only the one named.",
     "",
-    "Return the complete corrected storyboard as one JSON object. Fix only the scenes and params the errors name (shorten copy, change a param, retime or swap a scene's module); keep everything else. Keep lane, format, brand, audio and base exactly as given. The checks and their thresholds are fixed and cannot be relaxed.",
+    "Return the complete corrected storyboard as one JSON object. Fix only the scenes and params the errors name (shorten copy, change a param, retime or swap a scene's module); keep everything else. Tooling holds you to that: a scene that no error names, that plays on no line an error names and is not on screen at a time an error gives gets its previous params back, so put the whole fix in the scenes the errors reach. Keep lane, format, brand, audio and base exactly as given. The checks and their thresholds are fixed and cannot be relaxed.",
     ...(direction ? ["", "Errors prefixed direction: or cadence: are about the direction map and the profile band. Fix them in the storyboard (add or move the scenes a line names), in the map (a line's treatment, scenes or why), or both. Return {storyboard_json, direction_json}; direction_json is the complete corrected map, or an empty string to keep it.", "", "Current direction map:", "", JSON.stringify(direction)] : []),
     ""
   ].join("\n");
