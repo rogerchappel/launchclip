@@ -59,10 +59,16 @@ export function isLongForm(routing) {
 /**
  * Route an inventory. options: {aspect, duration (seconds), prompt, animation (--animation)}.
  * → {schema_version, lane, kind? ("animation"), reasons: [..], base, voiceover, media: [..], logos,
- *    music, brand, style, notes, ignored: [{path, reason}], format, duration_source}
+ *    music, brand, style, notes, ignored: [{path, reason}], provided?: [paths the asset provider fetched
+ *    for an earlier plan; not routed], format, duration_source}
  */
 export function routeLane(inventory, options = {}) {
-  const entries = Array.isArray(inventory?.entries) ? inventory.entries : [];
+  const listed = Array.isArray(inventory?.entries) ? inventory.entries : [];
+  // Files the asset provider fetched for an earlier plan of this project
+  // (src/provided_files.js) are not the user's media: they are never the
+  // base, a voiceover or footage to place, so a rerun routes as the first run did.
+  const provided = listed.filter((entry) => entry?.provided);
+  const entries = listed.filter((entry) => !entry?.provided);
   const reasons = [];
   const ignored = [];
   const byRole = (kind, role) => entries.filter((entry) => entry.kind === kind && (!role || entry.role === role));
@@ -134,6 +140,7 @@ export function routeLane(inventory, options = {}) {
     style: style ? { path: style.path, name: style.style_name } : null,
     notes: notes.map((entry) => entry.path),
     ignored,
+    ...(provided.length ? { provided: provided.map((entry) => entry.path) } : {}),
     aspect: aspect.value,
     format: { width, height, fps: 30, duration: duration.value },
     duration_source: duration.reason
