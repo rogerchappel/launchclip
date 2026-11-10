@@ -931,6 +931,10 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
   if (isObject(copy.light) && Array.isArray(copy.light.pulses)) copy.light.pulses.forEach((pulse, p) => {
     if (isObject(pulse) && pulse.at !== undefined) pulse.at = resolve(pulse.at, `light.pulses[${p}].at`);
   });
+  // A story-wide prop cue (a starting gate that opens once, for every scene): story seconds.
+  if (isObject(copy.world) && Array.isArray(copy.world.props)) copy.world.props = copy.world.props.map((entry, i) => (isObject(entry) && Array.isArray(entry.cues)
+    ? { ...entry, cues: entry.cues.map((cue, j) => (isObject(cue) && cue.at !== undefined ? { ...cue, at: resolve(cue.at, `world.props[${i}].cues[${j}].at`) } : cue)) }
+    : entry));
   const scenes = Array.isArray(copy.scenes) ? copy.scenes : [];
   scenes.forEach((scene, index) => {
     if (!isObject(scene)) return;

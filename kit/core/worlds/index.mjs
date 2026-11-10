@@ -196,7 +196,19 @@ export function storyWorldErrors(world, path = 'world') {
   if (world.detail !== undefined && !DETAIL_LEVELS.includes(world.detail)) errors.push(`${path}.detail must be one of ${DETAIL_LEVELS.join(', ')}`);
   if (world.props !== undefined) {
     if (!Array.isArray(world.props) || world.props.length > 12) errors.push(`${path}.props must be a list of up to 12 props`);
-    else world.props.forEach((entry, i) => { try { propEntry(entry, `${path}.props[${i}]`); } catch (error) { errors.push(error.message); } });
+    else world.props.forEach((entry, i) => {
+      // A story-wide cue for a prop with states: {at: story seconds or an anchor, state}.
+      const {cues, ...rest} = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry : {};
+      try { propEntry(cues === undefined ? entry : rest, `${path}.props[${i}]`); } catch (error) { errors.push(error.message); return; }
+      if (cues === undefined) return;
+      const states = PROP_STATES[rest.id];
+      if (!states) errors.push(`${path}.props[${i}].cues: ${rest.id} has no states to cue (props with states: ${Object.keys(PROP_STATES).join(', ')})`);
+      else if (!Array.isArray(cues) || !cues.length || cues.length > 4) errors.push(`${path}.props[${i}].cues must be a list of 1 to 4 cues {at, state}`);
+      else cues.forEach((cue, j) => {
+        if (!cue || typeof cue !== 'object' || !(typeof cue.at === 'number' ? cue.at >= 0 : typeof cue.at === 'string' && cue.at.trim())) errors.push(`${path}.props[${i}].cues[${j}].at must be story seconds or a time anchor ("word:<text>[#n][+/-s]")`);
+        if (!states.includes(cue?.state)) errors.push(`${path}.props[${i}].cues[${j}].state must be one of ${states.join(', ')}`);
+      });
+    });
   }
   return errors;
 }

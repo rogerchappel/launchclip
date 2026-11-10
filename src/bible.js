@@ -18,7 +18,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { BIBLE_FILE, BIBLE_SCHEMA, BIBLE_SHEETS, bibleCast, bibleCastFindings, bibleCharacter, bibleHash, bibleRefErrors, directionWithBible, validateBible, withBible } from "@launchclip/core/bible.mjs";
+import { BIBLE_FILE, BIBLE_SCHEMA, BIBLE_SHEETS, bibleCast, bibleCastFindings, biblePropFindings, bibleCharacter, bibleHash, bibleRefErrors, directionWithBible, validateBible, withBible } from "@launchclip/core/bible.mjs";
 import { savedCharacterRequests, withSavedCharacters } from "@launchclip/core/characters/character.mjs";
 import { starterCharacter } from "@launchclip/core/characters/cast.mjs";
 import { DRAWING_STYLES, resolveStoryCast, storyCastErrors } from "@launchclip/core/characters/cues.mjs";
@@ -313,6 +313,8 @@ export async function bibleGate(projectDir, story, { direction = null } = {}) {
       if (!errors.length && hash && direction.bible.hash !== hash) fail(`${DIRECTION_FILE} was planned against bible ${short(direction.bible.hash)}; the frozen bible is ${short(hash)}`);
     }
     if (isObj(bible?.cast)) for (const detail of bibleCastFindings(story, bible)) fail(detail);
+    // What the story turns on must be on screen: a prop of the bible's world no scene shows fails here.
+    for (const detail of biblePropFindings(story, bible)) fail(detail);
     return { status: findings.length ? "failed" : "passed", file: relative, hash, characters: entriesOf(bible?.cast).map((entry) => entry?.id).filter(Boolean), findings };
   }
   return { status: "failed", file: relative, hash: null, findings };

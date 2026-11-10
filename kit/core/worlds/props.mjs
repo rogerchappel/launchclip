@@ -877,7 +877,8 @@ export function propEntry(entry, path = 'props') {
   const given = typeof entry === 'string' ? {id: entry} : entry;
   if (!given || typeof given !== 'object' || Array.isArray(given)) throw new Error(`${path} must be a prop id or {id, at?, on?, scale?, layer?, flip?}`);
   // null means unset (a normalised entry passes through unchanged).
-  const raw = Object.fromEntries(Object.entries(given).filter(([, value]) => value !== null));
+  // null means unset; cues (a prop's state changes) are the scene's to read (catalog-world.mjs sceneProps).
+  const raw = Object.fromEntries(Object.entries(given).filter(([key, value]) => value !== null && key !== 'cues'));
   for (const key of Object.keys(raw)) if (!PROP_KEYS.includes(key)) throw new Error(`${path}.${key} is not a prop field (${PROP_KEYS.join(', ')})`);
   if (!PROPS[raw.id]) throw new Error(`${path}.id ${JSON.stringify(raw.id)} is not a prop (props: ${PROP_IDS.join(', ')})`);
   if (raw.at !== undefined && !(raw.at in AT) && !(typeof raw.at === 'number' && raw.at >= 0 && raw.at <= 1)) throw new Error(`${path}.at must be left, centre, right or a share of the width from 0 to 1`);

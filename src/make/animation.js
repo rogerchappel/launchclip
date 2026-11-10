@@ -28,6 +28,8 @@ import { estimateModelUsageCost } from "../cost_tracker.js";
 import { TITLE_OPTIONS } from "@launchclip/core/skeleton-library.mjs";
 import { checkScreenplay } from "../script_check.js";
 import { RULES_HEADING, cleanNarration } from "./script.js";
+import { STORY_PROP_IDS, WORLD_KINDS } from "@launchclip/core/worlds/index.mjs";
+import { NOT_DRAWN, TOLD, drawableFindings, drawableLines, normalizeShows } from "./drawable.js";
 
 /** The cadence profile whose problem_lands_seconds a screenplay is held to. */
 export const ANIMATION_PROFILE = "story-characters";
@@ -147,8 +149,30 @@ export const JUDGE_SCHEMA = Object.freeze({
 export const SCREENPLAY_SCHEMA = Object.freeze({
   type: "object",
   additionalProperties: false,
-  required: ["title", "title_options", "beats"],
+  required: ["title", "title_options", "shows", "beats"],
   properties: {
+    shows: {
+      type: "object",
+      additionalProperties: false,
+      required: ["world", "things"],
+      description: "What the story needs on screen, chosen from the lists of what can be shown.",
+      properties: {
+        world: { type: "string", enum: ["", ...WORLD_KINDS], description: "The place the story happens in, or \"\" to leave it to the designer." },
+        things: {
+          type: "array",
+          description: "Every object the story turns on: what a viewer must see for it to make sense (the gate that opens, the trophy that is won). [] when it turns on none.",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["name", "prop"],
+            properties: {
+              name: line("What the script calls it."),
+              prop: { type: "string", enum: [...STORY_PROP_IDS, TOLD, NOT_DRAWN], description: `The listed thing that draws it; "${TOLD}" when only the narrator names it and nothing on screen needs it; "${NOT_DRAWN}" when the story needs to show it and nothing listed draws it.` }
+            }
+          }
+        }
+      }
+    },
     title: line("A short working title (60 characters at most)."),
     title_options: { type: "array", description: `${TITLE_OPTIONS} publish-ready titles the video pays off, the best first (70 characters at most each).`, items: { type: "string" } },
     beats: {
@@ -192,6 +216,8 @@ From the brief, decide:
 - characters: ${DEFAULT_CAST_SIZE} characters unless the brief names more (${MAX_CAST_SIZE} at most). Give each an id, a name, a role, a want and a way of speaking. Use the names the brief gives. Do not describe how anyone looks: a designer does that later.
 - loglines: ${MIN_LOGLINES} to ${MAX_LOGLINES} one-sentence versions of the story for this premise and cast. Make them really different (where it opens, who drives it, what the turn is), not rewordings.
 
+Everything is drawn in code from a fixed kit, listed under "What can be shown". Build every logline on a place and on things from those lists: a story whose turn needs an object the kit cannot draw cannot be made.
+
 Keep every fact, number and product claim to what the brief states. Return only the JSON object.`;
 
 const JUDGE_ROLE = `You judge loglines for a short animated character story. You did not write them. You see the brief and the loglines, nothing else.
@@ -199,7 +225,7 @@ const JUDGE_ROLE = `You judge loglines for a short animated character story. You
 Score each logline 0-10 on:
 - hook: would a stranger want the next sentence?
 - turn: does something change, and is the change earned rather than announced?
-- playable: can a few characters play it with a handful of lines and simple actions, in the time given, on one or two plain sets? Crowds, chases, effects and montage score low.
+- playable: can a few characters play it with a handful of lines and simple actions, in the time given, on one or two plain sets? Crowds, chases, effects and montage score low, and so does a story that turns on an object or a place missing from the list of what can be shown.
 - brief: does it do what the brief asks, with no fact, number or claim the brief does not support?
 
 Be strict; most loglines are a 5. The scores decide, so do not round them up to be kind. Then say which one you would make, and why in one sentence. Return only the JSON object.`;
@@ -211,6 +237,7 @@ The shape:
 - A line is spoken or silent. A spoken line has a speaker (a character id, or "narrator"), the exact words in text, and may have a short playing note (how it is said; never spoken). A silent line has speaker "", an action that names who does what, and its seconds. Silent lines are where the acting happens: a look, a pause, a reaction.
 - Beats, in story order, each one of: ${NARRATIVE_BEATS.join(", ")}. Every script has a problem beat, and it comes early. Use cta only when the brief asks the viewer to do something.
 - Open on a spoken line and close on a spoken line.
+- shows: the place the story happens in (world) and every object it turns on (things), each matched to a listed thing that draws it. The story may only turn on what is listed under "What can be shown". When a thing changes on screen (a starting gate that opens), give the change a silent line of its own that says so plainly ("The gate opens.").
 
 The rules:
 - Spoken lines are plain speech: no headings, emoji, stage directions, sound cues or speaker labels inside text. Short lines; people interrupt and trail off.
@@ -250,7 +277,7 @@ async function structured(client, request, { provider, model }) {
  */
 export async function writePremise(options = {}) {
   const { client, duration } = options;
-  const input = [`Open the room on this brief. The video runs about ${duration} seconds.`, "", ...briefLines(options)].join("\n");
+  const input = [`Open the room on this brief. The video runs about ${duration} seconds.`, "", ...briefLines(options), "", ...drawableLines()].join("\n");
   const result = await structured(client, { instructions: PREMISE_ROLE, input: `${input}\n`, schema: PREMISE_SCHEMA, schemaName: "launchclip_animation_premise", maxOutputTokens: 3000 }, options);
   const value = result.value ?? {};
   const premise = { want: text(value.premise?.want), obstacle: text(value.premise?.obstacle), change: text(value.premise?.change) };
@@ -291,7 +318,7 @@ function slugId(value) {
 export async function judgeLoglines(options = {}) {
   const { client, duration, loglines = [] } = options;
   if (!loglines.length) throw new Error("judgeLoglines needs loglines");
-  const input = [`Judge these loglines for a video of about ${duration} seconds.`, "", ...briefLines(options), "", "## Loglines", "", ...loglines.map((entry, index) => `${index + 1}. ${entry.logline}`)].join("\n");
+  const input = [`Judge these loglines for a video of about ${duration} seconds.`, "", ...briefLines(options), "", ...drawableLines(), "", "## Loglines", "", ...loglines.map((entry, index) => `${index + 1}. ${entry.logline}`)].join("\n");
   const result = await structured(client, { instructions: JUDGE_ROLE, input: `${input}\n`, schema: JUDGE_SCHEMA, schemaName: "launchclip_animation_loglines", maxOutputTokens: 1500 }, options);
   const picked = rankLoglines(loglines, result.value);
   return { ...picked, usage: result.usage, cost_usd: result.cost_usd, model: result.model, response_id: result.response_id };
@@ -338,7 +365,9 @@ export async function writeScreenplay(options = {}) {
     "## Characters (speaker ids)",
     "",
     ...characters.map(characterLine),
-    `- ${NARRATOR}: tells the story between the characters' lines.`
+    `- ${NARRATOR}: tells the story between the characters' lines.`,
+    "",
+    ...drawableLines()
   ];
   if (options.structure?.length) lines.push("", "## Structure (build the story beats on it)", "", ...options.structure.map((entry) => `- ${entry}`));
   if (options.problemLandsSeconds != null) lines.push("", `The problem beat must start within ${options.problemLandsSeconds} seconds: keep the setup to a line or two.`);
@@ -390,7 +419,7 @@ export function normalizeScreenplay(value, { characters = [], premise = null, lo
   for (const beat of beats) beat.lines = beat.lines.map((entry) => ({ id: `l${(count += 1)}`, ...entry }));
   const title = text(value?.title).slice(0, 80) || "Untitled";
   const options = (Array.isArray(value?.title_options) ? value.title_options : []).map((entry) => text(entry).slice(0, 100)).filter(Boolean).slice(0, TITLE_OPTIONS);
-  const play = { schema_version: SCREENPLAY_VERSION, title, logline: text(logline), ...(premise ? { premise } : {}), characters, beats };
+  const play = { schema_version: SCREENPLAY_VERSION, title, logline: text(logline), ...(premise ? { premise } : {}), characters, shows: normalizeShows(value?.shows), beats };
   return { ...play, narration: screenplayText(play), title_options: options.length ? options : [title] };
 }
 
@@ -405,15 +434,24 @@ function cleanLine(value, speakers = []) {
 
 // The previous script as a model reads it back in a repair.
 function scriptForPrompt(script) {
-  return (script.beats ?? []).map((beat) => [`${beat.beat}${beat.place ? ` (${beat.place})` : ""}:`, ...beat.lines.map((entry) => entry.speaker === null ? `  ${entry.id} [silent, ${entry.seconds}s] ${entry.action}` : `  ${entry.id} ${entry.speaker}: ${entry.text}${entry.playing ? ` (${entry.playing})` : ""}`)].join("\n")).join("\n");
+  const things = (script.shows?.things ?? []).map((thing) => `${thing.name} = ${thing.prop ?? NOT_DRAWN}`);
+  return [...(script.shows ? [`shows: world ${script.shows.world ?? "(the designer's choice)"}; things ${things.join(", ") || "none"}`] : []), ...scriptBeatsForPrompt(script)].join("\n");
+}
+
+function scriptBeatsForPrompt(script) {
+  return (script.beats ?? []).map((beat) => [`${beat.beat}${beat.place ? ` (${beat.place})` : ""}:`, ...beat.lines.map((entry) => entry.speaker === null ? `  ${entry.id} [silent, ${entry.seconds}s] ${entry.action}` : `  ${entry.id} ${entry.speaker}: ${entry.text}${entry.playing ? ` (${entry.playing})` : ""}`)].join("\n"));
 }
 
 // ---------------------------------------------------------------------------
 // The room
 
-/** What the screenplay is checked against: the contract, then the script checks on the spoken text. */
+/** What the screenplay is checked against: the contract, the script checks on the spoken text, and what the story shows. */
 export function checkAnimationScript(script, { duration, wpm, problemLandsSeconds, brief } = {}) {
-  return checkScreenplay({ script, duration, ...(wpm ? { wpm } : {}), problemLandsSeconds, brief });
+  const check = checkScreenplay({ script, duration, ...(wpm ? { wpm } : {}), problemLandsSeconds, brief });
+  // And what it shows: every object the story turns on must be one the kit draws (src/make/drawable.js).
+  const drawable = drawableFindings(script);
+  const errors = [...check.errors, ...drawable.errors];
+  return { ...check, ok: errors.length === 0, errors, warnings: [...check.warnings, ...drawable.warnings] };
 }
 
 /**

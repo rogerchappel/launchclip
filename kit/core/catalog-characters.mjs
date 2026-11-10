@@ -434,7 +434,7 @@ function castStage(b, ctx, setName) {
   // The scene's own props join the story's, and a prop with states (the starting gate) is drawn in the state it has by now;
   // a story with neither keeps its props exactly as written.
   const stateful = p.props !== undefined || base.some(entry => PROP_STATES[typeof entry === 'string' ? entry : entry?.id]);
-  const placed = beneath || !stateful ? {props: base, cues: []} : sceneProps(check, {base, own: p.props, duration: b.duration, states: ctx.propStates ?? {}});
+  const placed = beneath || !stateful ? {props: base, cues: []} : sceneProps(check, {base, own: p.props, start: b.start, duration: b.duration, states: ctx.propStates ?? {}});
   const detail = p.world === undefined && !beneath ? (ctx.world?.detail ?? null) : null;
   return {backdrop, world, cues: placed.cues, draw: beneath ? null : {kind: world.kind, time: world.time, props: placed.props, detail, style: ctx.cast?.style ?? ctx.cast?.drawing_style ?? null}};
 }
