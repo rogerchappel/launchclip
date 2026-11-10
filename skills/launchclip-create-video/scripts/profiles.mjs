@@ -68,7 +68,13 @@ export const PROFILE_MEASURES = Object.freeze({
   scene_seconds: { unit: 's', check: 'band', stat: 'p50', describe: 'scene length (character stories)' },
   character_screen_time: { unit: 'share', check: 'band', describe: 'share of the runtime with a character on screen' },
   expression_changes_per_min: { unit: '/min', check: 'band', describe: 'pose or expression changes per minute' },
-  problem_lands_seconds: { unit: 's', check: 'max', describe: 'how soon the problem beat lands' }
+  problem_lands_seconds: { unit: 's', check: 'max', describe: 'how soon the problem beat lands' },
+  // Dialogue (kit/core/cadence.mjs characterMeasures): read from the script,
+  // the voiced words and the shot list, so exact for a project and annotated for a reference.
+  speaker_turns_per_min: { unit: '/min', check: 'band', describe: 'changes of speaker per minute (the narrator is a speaker)' },
+  line_seconds: { unit: 's', check: 'band', stat: 'p50', describe: 'length of a spoken line' },
+  reaction_share: { unit: 'share', check: 'min', describe: 'share of the time a character speaks that the picture is on a listener reacting' },
+  longest_framing_seconds: { unit: 's', check: 'max', describe: 'longest stretch on one framing (the same set, shot size and people)' }
 });
 
 // The measures the motion gate reads (src/cinematic_check.js).
