@@ -4726,8 +4726,7 @@ checked exactly as before.
 router marks the run `routing.kind: "animation"` on the `motion` lane
 (`routing.format` is the frame size, so the mark has its own key). Only the
 flag sets it for now: a brief that merely reads as a character story still
-makes a whole narrated video, because the animation path stops after the
-voice until its later stages exist.
+makes a narrated video, until the animatic and the retakes are in place.
 
 Three structured calls, each with a strict schema, then at most one repair:
 
@@ -4767,9 +4766,11 @@ bible owns each character's real voice.
 **Voice.** `screenplayNarration(script).lines` goes through
 `src/voice/dialogue.js` unchanged, and `NARRATION.json` is the dialogue
 document (`words[].speaker`, `lines`, `gaps`). Until a bible exists the
-characters borrow stand-in voices (`standInCast`): under Kokoro one each, by
-`voice_type`, never the narrator's; under any other provider none, so the
-narrator's voice reads every line and `MAKE.json` warns. The joined take is
+characters speak in stand-in voices (`standInCast`) which the show bible
+then keeps: under Kokoro one each, by `voice_type`, never the narrator's;
+under any other provider none, so the narrator's voice reads every line and
+`MAKE.json` warns. Once the project has a frozen `BIBLE.json`, the lines are
+voiced in its voices. The joined take is
 `.launchclip/make/narration.wav`.
 
 **Reuse.** The script is reused while its inputs hash the same (the prompt,
@@ -4778,12 +4779,71 @@ limit), the take while every line's request and every pause is unchanged. A
 rerun that reuses both leaves `SCRIPT.json` and `NARRATION.json` untouched
 and reports `prepare` as `cached`.
 
-**The stop.** `MAKE.json` ends `status: "stopped"` with `stopped: {after:
-"prepare", reason}`; `storyboard`, `subject`, `finish` and `critic` are
-`skipped` with that reason, and `report.script` has `kind: "animation"`,
-the `characters`, `speakers`, line counts and `voices`. A stage ends a run
-by setting `ctx.stop = {after, status, reason, next}` in
-`src/make/index.js`; the later animation stages move or remove this stop.
+**Stopping a run.** A stage ends a run by setting `ctx.stop = {after,
+status, reason, next}` in `src/make/index.js`: the later stages are
+`skipped` with that reason, and `MAKE.json` ends with that status and
+`stopped: {after, reason}`. The bible stage uses it for approval.
+
+### The show bible and the shot list in `make` (`src/make/show_bible.js`)
+
+After `prepare`, the animation path runs the `bible` stage
+([ANIMATION_PIPELINE_RFC.md](ANIMATION_PIPELINE_RFC.md) §4.2, §6.1, §6.3,
+phase 6), then the same `storyboard` stage every video uses, with the bible
+pinned. Other kinds of video report `bible` as `skipped`.
+
+**One structured call** (`designBible`, schema name
+`launchclip_animation_bible`): for each character of the script `{id, use,
+sets, position}`, plus `drawing_style`, `world: {kind, time}`, `sets` and
+`rules`. `sets` are character set paths (`{path, op, value}`, the edit
+language of `cast create`); the paths offered are `DESIGN_PATHS`: a look,
+never the name, the voice or the drawing style. `normalizeBibleDesign`
+passes every set through `checkedSets` (`src/cast_design.js`), gives each
+character a side of its own, and keeps only worlds and sets the kit draws.
+
+**Tooling** (`castFromDesign`, then `makeBible`):
+
+| The script's character | Becomes |
+|---|---|
+| a new id | `launchclip cast create` with the sets (or `--from` the character `use` names): `cast/<id>.character.json` |
+| an id that is a starter's | that starter (or the starter `use` names) with the sets applied, written out in full; no file, since a starter id is not a saved character's |
+| an id already saved by the user | that character as it is, its own voice when no other speaker has it |
+
+Then a draft `BIBLE.json` is written and `freezeBible` (`src/bible.js`)
+draws the sheets and writes the hash. The drawing style is the style pack's
+`cast.drawing_style` when a chosen pack sets one (a seeded style's is
+ignored), else the designer's when the brief asked for one, else
+`DEFAULT_DRAWING_STYLE` (`chibi`). Voices are the stand-in voices the
+script was voiced in.
+
+**Reuse.** A frozen `BIBLE.json` in the project is used as it is: make's
+own while the script's characters and places, the prompt, the notes, the
+rules, the model and the narrator's voice hash the same (a reworded line
+does not redesign the cast), and one make did not write always
+(`report.bible.source` is `designed`, `reused` or `project`). A bible of
+somebody else's that is not valid is never overwritten: the stage fails
+and says how to freeze it again.
+
+**Approval** (`--stop-after bible`, `--approve bible`; `MAKE_STOP_POINTS`
+in `src/make/options.js`). With `--stop-after bible` the run ends
+`awaiting-approval`, `stopped.after: "bible"`. `--approve bible` records
+the approval of that bible's hash in the make state and the run goes on;
+the approval holds while the bible is unchanged. An attended run (a
+terminal, or `adapters.ask`) asks instead of needing the flag.
+
+**The shot list.** `planStoryboard` (`src/storyboard_planner.js`) takes
+`bible` and `script`:
+
+- `plannedCast` returns the bible's cast first, never bindable
+  (`src/cast_fit.js`); a cue that spells a character by name takes its id;
+- the story's `cast` and `bible: {file, hash}` are written by `pinInputs`
+  after every model pass, and the direction map names the bible too, so a
+  repair, a critic round or `--replan` cannot change who is in the story;
+- `validateDirection` gets the script, so a line's `line` id is checked;
+- `checkStoryboard(…, {castGate: true})` runs the cast gate inside the
+  plan, and its findings (`cast: …`) go back to the model as repair errors.
+
+The brief (`animationBriefLines`) is the screenplay with its line ids, the
+bible's cast, world and rules, and staging notes for dialogue.
 
 ## World module (`kit/core/catalog-world.mjs`)
 
