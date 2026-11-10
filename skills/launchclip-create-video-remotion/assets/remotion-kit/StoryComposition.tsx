@@ -92,6 +92,7 @@ import { needsSubject, roomStateAt, sceneLayerOf, subjectCameraAt, subjectCamera
 import { propsToStyle } from "../core/catalog-b-view.mjs";
 // @ts-ignore plain ESM from kit/core
 import { storyCaptionZones } from "../core/cast-captions.mjs";
+// @ts-ignore plain ESM from kit/core
 import { breakoutNotch, layoutPlan, layoutStateAt, withLayoutCameras } from "../core/footage-layout.mjs";
 // @ts-ignore plain ESM from kit/core
 import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumLayerStyle, mediumPlan } from "../core/medium.mjs";
