@@ -20,6 +20,19 @@
 
 ### Added
 
+- Measurement for character stories. `npm run eval:formats -- --animation`
+  scores six character-Short briefs from finished projects (contracts,
+  story, design, direction, cadence, gates, critic, cost) without rendering,
+  and `npm run eval:animation-parity` writes the make-against-skill table to
+  `benchmarks/ANIMATION_PARITY.md`. The briefs have not been run on either
+  path yet, so the table says so and holds no numbers. The `story-characters`
+  profile gains four dialogue measures (speaker turns per minute, seconds
+  per line, the share of speech on a listener's reaction, the longest
+  stretch on one framing); their bands are hand-set and marked provisional.
+  `scriptGate` (`src/script_gate.js`) fails a project whose `SCRIPT.json`
+  has an unknown speaker, a character who never speaks or acts, a script
+  over its length or a problem that lands late; `finish` does not call it
+  yet. See `docs/ANIMATION_MEASUREMENT.md`.
 - Shot fields for character stories. A direction-map line may name the
   script line it plays (`"line": "l3"`, checked against `SCRIPT.json`). In a
   story told in beats, a character who speaks must be in a scene on screen

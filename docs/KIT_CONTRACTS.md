@@ -4719,6 +4719,31 @@ the cadence profile whose `problem_lands_seconds` p90 is the limit (default
 from. `--json` includes `narration.lines`. A version 1 `SCRIPT.json` is
 checked exactly as before.
 
+### The gate (`src/script_gate.js`)
+
+`scriptGate({project, resolved, words, profile})` holds a finished project's
+`SCRIPT.json` to `validateScreenplay` and returns `{status, file, profile,
+duration, wpm, rules, errors, warnings, stats}`. `rules` lists the contract
+error ids that failed (`speaker-unknown`, `character-unused`, `fits-length`,
+`problem-lands`, `problem-missing`, and the shape ids). The length is the
+script's `duration`, else `plan.duration`, else the story's; the pace is
+`plan.wpm`, else measured from the take's words, else 150. No `SCRIPT.json`
+or a version 1 script is `skipped`. It runs none of the copy checks above.
+`finish` does not call it yet; the animation scorecard does
+(docs/ANIMATION_MEASUREMENT.md).
+
+### Dialogue measures (`kit/core/cadence.mjs`)
+
+`characterMeasures(shots, {duration, words, script})` takes the shot list
+(`shotList()` in `src/story_shots.js`) and returns the character measures a
+cadence profile may carry: `scene_seconds`, `character_screen_time`,
+`expression_changes_per_min`, `problem_lands_seconds`, and the four in
+`DIALOGUE_MEASURES`: `speaker_turns_per_min`, `line_seconds`,
+`reaction_share` and `longest_framing_seconds`. A measure the project cannot
+answer is `null`. `spokenRuns(words, {script})` gives the spoken lines of a
+take. `story-characters` carries seed bands for all of them; the four
+dialogue bands are provisional (docs/ANIMATION_MEASUREMENT.md).
+
 ### The writers' room (`src/make/animation.js`, `launchclip make --animation`)
 
 `make --animation` writes a version 2 `SCRIPT.json` and voices it
