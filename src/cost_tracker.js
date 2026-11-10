@@ -270,8 +270,10 @@ export function estimateOpenAiUsageCost(model, usage = {}) {
 // tracked fetch (an SDK client, or a test). OpenRouter-style ids such as
 // "openai/gpt-5.6-luna" or "anthropic/claude-opus-4-8" use the vendor's rates.
 export function estimateModelUsageCost(provider, model, usage = {}) {
-  const name = String(model ?? "unknown").replace(/^(openai|anthropic)\//, "");
-  const anthropic = provider === "anthropic" || /^claude-/.test(name);
+  const bare = String(model ?? "unknown").replace(/^(openai|anthropic)\//, "");
+  const anthropic = provider === "anthropic" || /^claude-/.test(bare);
+  // A router writes a Claude version with a dot ("claude-opus-5.5"); the rate table has the vendor's own id ("claude-opus-5-5").
+  const name = anthropic ? bare.replace(/\./g, "-") : bare;
   const item = anthropic
     ? anthropicLineItem({ json: { model: name } }, {
       type: "message",
