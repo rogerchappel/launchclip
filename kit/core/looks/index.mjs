@@ -15,6 +15,7 @@ import { LOOK as neonNight } from './neon-night.mjs';
 import { LOOK as paperCutout } from './paper-cutout.mjs';
 import { LOOK as watercolour } from './watercolour.mjs';
 import { LOOK as animeCel } from './anime-cel.mjs';
+import { LOOK as asciiTerminal } from './ascii-terminal.mjs';
 
 export const LOOKS = Object.freeze({
   blueprint,
@@ -23,7 +24,8 @@ export const LOOKS = Object.freeze({
   'neon-night': neonNight,
   'paper-cutout': paperCutout,
   watercolour,
-  'anime-cel': animeCel
+  'anime-cel': animeCel,
+  'ascii-terminal': asciiTerminal
 });
 
 /** What a look (story.look: a name or {name}) asks of the cast's drawing, or null: {pins: true} for paper cutout, {face: "cute"} for anime cel. */
