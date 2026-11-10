@@ -1296,7 +1296,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 - `style generate`: Generate a style pack from a seed (a random one unless --seed), inside art-direction constraints, conditioned on a brand's colours, logo, fonts, tone and industry when given; --avoid keeps it clear of other styles.
 
   ```text
-  launchclip style generate [--seed <hex>] [--tone calm|serious|warm|energetic|playful|premium|technical] [--theme dark|light|tinted] [--world <id>[,<id>...]] [--drawing-style <name>] [--character-set <id>] [--background <kind>] [--panel <treatment>] [--medium oil|watercolour|pastel|ink|gouache] [--overshoot] [--brand <brand.json>] [--name <brand>] [--colors <#hex,role=#hex,...>] [--fonts <display,body[,meta]>] [--brand-tone <words>] [--industry <text>] [--logo <file>] [--reference <file>]... [--avoid <style>[,<style>...]] [--out <dir|style.json> | --project <dir>] [--force]
+  launchclip style generate [--seed <hex>] [--tone calm|serious|warm|energetic|playful|premium|technical] [--theme dark|light|tinted] [--world <id>[,<id>...]] [--drawing-style <name>] [--character-set <id>] [--background <kind>] [--panel <treatment>] [--medium oil|watercolour|pastel|ink|gouache] [--look <name>] [--overshoot] [--brand <brand.json>] [--name <brand>] [--colors <#hex,role=#hex,...>] [--fonts <display,body[,meta]>] [--brand-tone <words>] [--industry <text>] [--logo <file>] [--reference <file>]... [--avoid <style>[,<style>...]] [--out <dir|style.json> | --project <dir>] [--force]
   ```
 
 - `style reroll`: Give a project with a generated style a new seed, keeping its brand and constraints and stepping away from the old look; --undo goes back once. A pinned style needs --force.

@@ -23,6 +23,7 @@ import { CHARACTER_SET_NAMES, castFromStyle } from './characters/generate.mjs';
 import { BACKGROUND_FADES, BACKGROUND_KINDS, backgroundErrors, panelFillErrors } from './backgrounds.mjs';
 import { lightErrors } from './lighting.mjs';
 import { MEDIUM_KINDS, mediumErrors } from './medium.mjs';
+import { LOOK_NAMES, applyLook, lookErrors, lookPresets, normalizeLook } from './look.mjs';
 import { plateErrors } from './plates.mjs';
 import { PANEL_RADIUS, PANEL_TREATMENTS } from './panels.mjs';
 import { soundProblems } from './sound/options.mjs';
@@ -39,7 +40,7 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 const NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 const TOP = new Set(['schema', 'name', 'description', 'brand', 'motion', 'camera', 'ambient', 'captions', 'sound', 'modules', 'layout', 'intro', 'outro', 'loop', 'references', 'reference_stats', 'notes', 'created_at', 'upgraded_from']);
 // v3 fields (docs/VIDEO_QUALITY_RFC.md §9.1–9.3).
-const TOP_V3 = new Set(['layouts', 'vocabulary', 'profile', 'cast', 'brand_frame', 'dials', 'segments', 'generated', 'background', 'variants', 'world', 'medium', 'plate', 'light']);
+const TOP_V3 = new Set(['layouts', 'vocabulary', 'profile', 'cast', 'brand_frame', 'dials', 'segments', 'generated', 'background', 'variants', 'world', 'medium', 'plate', 'light', 'look']);
 // Footage layouts (RFC §7.1). The layouts session owns their geometry; a
 // style only names them, so an unknown name is a warning, not an error.
 export const STYLE_LAYOUTS = Object.freeze(['full', 'split-left', 'split-right', 'framed', 'stacked', 'insert']);
@@ -58,6 +59,8 @@ export const STYLE_ILLUSTRATIONS = Object.freeze(['flat', 'flat-shadow', 'line']
 // The material every frame is painted in (kit/core/medium.mjs): a name or
 // {kind, strength, boil, grain}; "none" (the default) leaves the render as it is.
 export const STYLE_MEDIUMS = MEDIUM_KINDS;
+// The whole-scene treatment (kit/core/look.mjs): a name or {name, …}.
+export const STYLE_LOOKS = LOOK_NAMES;
 // The worlds kit's times (kit/core/worlds/); a pack's world is checked like a story's.
 export const STYLE_WORLD_TIMES = WORLD_TIMES;
 export const STYLE_GENERATED_KEYS = Object.freeze(['seed', 'generator', 'tone', 'at', 'constraints', 'inputs', 'theme', 'scheme', 'pairing', 'redraws', 'adjusted', 'substituted', 'stepped', 'avoided', 'pinned']);
@@ -560,6 +563,7 @@ function seededFieldErrors(pack, { err, warn, known }) {
   }
   if (pack.world !== undefined) for (const message of storyWorldErrors(pack.world, 'world')) err(message);
   for (const message of mediumErrors(pack.medium, 'medium')) err(message);
+  for (const message of lookErrors(pack.look, 'look')) err(message);
 }
 
 // Recurring segment formats (long form, RFC §10.2): named chapter templates a
@@ -657,6 +661,16 @@ export function applyStyle(story, pack, options = {}) {
     }
   };
 
+  // Look (kit/core/look.mjs): the story's look, else the pack's. Its presets
+  // (palette, world time, background, light, medium) fill the story before
+  // the pack does, so what the video sets wins, then the look, then the pack.
+  const lookValue = out.look ?? pack.look;
+  if (normalizeLook(lookValue)) {
+    const filled = applyLook(out, lookValue);
+    Object.assign(out, filled.story);
+    applied.push(...filled.applied.map((key) => (key === 'look' ? key : `${key} (look)`)));
+  }
+
   // Brand: colours and fonts per role.
   if (isObject(pack.brand)) {
     if (!isObject(out.brand)) { out.brand = {}; }
@@ -701,6 +715,12 @@ export function applyStyle(story, pack, options = {}) {
     if (out.cast === undefined && cast.characters.length) { out.cast = cast; applied.push('cast'); }
     else if (isObject(out.cast) && out.cast.style === undefined && pack.cast.drawing_style) { out.cast.style = cast.style; applied.push('cast.style'); }
   }
+  // The look's drawing style wins over the pack's (the story's own was kept above).
+  const lookStyle = story.cast?.style === undefined ? lookPresets(lookValue).cast?.style : undefined;
+  if (lookStyle && isObject(out.cast) && out.cast.style !== lookStyle) { out.cast.style = lookStyle; applied.push('cast.style (look)'); }
+  // So does its time of day, over a world the pack brought.
+  const lookTime = story.world?.time === undefined ? lookPresets(lookValue).world?.time : undefined;
+  if (lookTime && isObject(out.world) && out.world.time !== lookTime) { out.world.time = lookTime; applied.push('world.time (look)'); }
   if (isObject(pack.variants) && Object.keys(pack.variants).length && out.variants !== null) {
     if (!isObject(out.variants)) out.variants = {};
     fill(out.variants, pack.variants, 'variants');

@@ -189,6 +189,43 @@ You can also just describe it. With no style named, words in your prompt such as
 
 Painting every frame takes time: expect a medium to make a render a few times slower.
 
+## A whole-scene look
+
+A **look** treats the world, the characters and the cards together, so the whole video reads as one thing: a hologram, a blueprint, a thermal camera. Name one in a style pack or in one video's `storyboard.json`:
+
+```json
+"look": "hologram"
+```
+
+| Look | What it shows |
+|---|---|
+| `blueprint` | Deep blue paper and a fine grid, the scene as white and cyan line drawing, dimension lines with measurements and a title block. Each shot draws in from the left behind a drawing line. |
+| `hologram` | Everything as translucent cyan light on black: a glowing rim, rolling scanlines, a faint wireframe, small glitch flickers, a glowing grid floor and floating technical labels. |
+| `thermal` | The scene through a black, purple, red, orange, yellow, white heat palette with slight blur and sensor noise, under a camera overlay: crosshair, scale bar, record dot and a running clock. |
+| `neon-night` | A dark scene lit by pink and cyan neon: a rim light of each colour, glow on bright areas, long reflections on a wet floor, haze, and rain outdoors. |
+| `paper-cutout` | Layered craft paper: rough cut edges, paper fibre and soft shadows between layers, the cast as jointed paper puppets with pin fasteners, animated on twos with a tiny jitter at every step. |
+| `none` | The default: no look, the video renders exactly as before. |
+
+A look brings its own colours, and where it needs them a drawing style for the characters, a time of day, a backdrop and lighting. Anything your video sets itself wins, then the look, then the style pack. With its dials:
+
+```json
+"look": { "name": "blueprint", "strength": 0.8, "labels": ["Checkout flow", "Scale 1:4"] }
+```
+
+- `strength` (0 to 1, default 1): how far the frame moves from the clean render.
+- `step`: how many drawings a second the picture holds at. `12` animates "on twos", the way stop motion and cut-out animation move; `paper-cutout` uses it by default, and `false` turns it off. Captions and sound never step.
+- `furniture` (default on): the look's overlay, such as the hologram's labels and grid floor or the thermal camera's crosshair. `false` leaves only the picture's treatment.
+- `palette`: `"brand"` keeps your style's colours instead of the look's. The looks that map the whole frame through their own colours (blueprint, hologram, thermal) still do.
+- `labels`: up to six short labels for the looks that show text: the hologram's floating labels, the blueprint's title and scale, the thermal scale's hottest and coldest values.
+
+You can also just describe it: with no style named, *"as a hologram"*, *"blueprint style"*, *"thermal camera"*, *"cyberpunk"* or *"paper cutout"* in your prompt picks the look. From the command line, `launchclip style generate --look hologram` does the same.
+
+Captions and the brand frame are never treated, so they stay readable, and a look renders the same every time. A look and a medium can be used together: the medium paints first.
+
+What a look cannot do: it treats the finished picture, so it cannot tell a person from a wall. The thermal look reads brightness as heat (it sets the scene to night so people are the brightest thing in it), and the neon reflections fall on the lower part of the frame, not on a floor it can see.
+
+To see every look on a test scene in both renderers, run `node scripts/look-sheet.mjs`.
+
 ## Turn the dials
 
 Every style has four dials, each from 0 to 1:
