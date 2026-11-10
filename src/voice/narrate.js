@@ -83,7 +83,10 @@ export function voiceCacheDir(project, env = process.env) {
  *   so no Whisper pass; used with edited)}
  * Synthesised voices are levelled to the supplied-voiceover loudness (Kokoro
  * arrives near -22 LUFS); the offline test tone and supplied audio are not.
- * → {file, words: [{text, start, end}], duration, sampleRate, loudness, cached, cache_key}
+ * → {file, words: [{text, start, end, phonemes?}], duration, sampleRate, loudness, cached, cache_key}
+ * `phonemes` is there when the voice engine reports them (Kokoro): the word's
+ * sounds and their lengths, "symbol:milliseconds" from the word's start. A
+ * take cached before phonemes were kept has none until it is voiced again.
  */
 export async function synthesizeNarration(request, { outFile, cacheDir = null, voiceProvider, normalizeVoice, source, edited = false, words: timed = null } = {}) {
   if (!request?.text) throw new Error("narration text is empty: set audio.narration.text (or pass --text)");
@@ -117,7 +120,7 @@ export async function synthesizeNarration(request, { outFile, cacheDir = null, v
     await rename(normalized, outFile);
   }
   const taken = spoken ? restoreWords(result.words, request.text, spoken) : result.words;
-  const words = taken.map((word) => ({ text: String(word.text), start: round3(Number(word.start)), end: round3(Number(word.end)) }));
+  const words = taken.map((word) => ({ text: String(word.text), start: round3(Number(word.start)), end: round3(Number(word.end)), ...(typeof word.phonemes === "string" && word.phonemes ? { phonemes: word.phonemes } : {}) }));
   const duration = round3(Number(result.duration ?? words.at(-1).end));
   if (cacheable) {
     // Other processes may read or write the same take: whole files only.

@@ -68,7 +68,10 @@ export function restoreWords(words, text, { groups }) {
   for (const group of groups) {
     const spoken = words.slice(wordIndex, wordIndex + group.spoken);
     if (group.tokens === 1) {
-      restored.push({ ...spoken[0], text: tokens[tokenIndex], end: spoken.at(-1).end });
+      // Said as several words: their phonemes join, with the pauses between them as rests (`_`).
+      const { phonemes: _first, ...head } = spoken[0];
+      const phonemes = spoken.every((word) => word.phonemes) ? spoken.map((word, i) => (i ? `_:${Math.max(0, Math.round((word.start - spoken[i - 1].end) * 1000))} ` : "") + word.phonemes).join(" ") : null;
+      restored.push({ ...head, text: tokens[tokenIndex], end: spoken.at(-1).end, ...(phonemes ? { phonemes } : {}) });
     } else {
       // A multi-word term said as m words: share its span out by word.
       const start = spoken[0].start;

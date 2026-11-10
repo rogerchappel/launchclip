@@ -1152,7 +1152,13 @@ into words at spaces and punctuation, the groups are mapped to the script's
 words (merging groups when text normalisation expanded a token, such as
 "35"), and each onset is snapped to an RMS energy onset within 50 ms. If a
 model returns no durations, each sentence's voiced span is split in proportion
-to phoneme counts and onsets are snapped within 80 ms. Measured on the
+to phoneme counts and onsets are snapped within 80 ms. With model durations,
+each word in `NARRATION.json` also keeps its phonemes and their lengths
+(`"phonemes": "b:60 ˈ:45 o:70 ʊ:70 t:55"`, `symbol:milliseconds` from the
+word's start, `_` for a pause inside the word); character mouths take their
+shapes from them. The field is optional: the fallback, the other providers
+and takes cached before it existed have none, and mouths then follow the
+word's spelling. Measured on the
 25.5 s cooling narration, against an RMS onset detector (mean absolute error,
 nearest onset within 150 ms):
 

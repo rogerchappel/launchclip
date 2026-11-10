@@ -7,8 +7,8 @@
 // add about half a second a line), the takes are joined with a pause of
 // `gap` seconds from the end of one line's speech to the start of the next
 // (audio.narration.gap, or a line's own gap), and every word keeps its
-// speaker, so character scenes can open mouths on their own lines
-// (`says: "auto"`).
+// speaker (and its phonemes, when the voice gives them), so character scenes
+// can shape mouths on their own lines (`says: "auto"`).
 import { execFile } from "node:child_process";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
@@ -73,7 +73,7 @@ export function dialogueDocument(story, entries, take) {
  * seconds of silence kept each side, less when the gap is shorter), then
  * padded so gaps[i] seconds pass from line i's last word to line i+1's first.
  * takes: [{speaker, request, take: {words, duration, cached, sound?: {start, end}}}]
- * → {cuts: [{start, end, pad}], words: [{text, start, end, speaker}], lines, duration}
+ * → {cuts: [{start, end, pad}], words: [{text, start, end, speaker, phonemes?}], lines, duration}
  */
 export function dialogueLayout(takes, gaps) {
   // A take's speech runs from its first word (or first sound, take.sound,
@@ -95,7 +95,7 @@ export function dialogueLayout(takes, gaps) {
     const end = round3(spans[i].last + tails[i]);
     const pad = i < takes.length - 1 ? round3(Math.max(0, gaps[i] - tails[i] - leads[i + 1])) : 0;
     cuts.push({ start, end, pad });
-    for (const word of take.words) words.push({ text: word.text, start: round3(offset + word.start - start), end: round3(offset + word.end - start), speaker });
+    for (const word of take.words) words.push({ text: word.text, start: round3(offset + word.start - start), end: round3(offset + word.end - start), speaker, ...(word.phonemes ? { phonemes: word.phonemes } : {}) });
     lines.push({ speaker, voice: request.voice, text: request.text, start: round3(offset), end: round3(offset + end - start), cached: take.cached });
     offset += end - start + pad;
   }
@@ -105,7 +105,7 @@ export function dialogueLayout(takes, gaps) {
 /**
  * Synthesise every line and join the trimmed takes into outFile.
  * options: {outFile, cacheDir, voiceProvider, normalizeVoice, gap (seconds, or one per gap: dialogueGaps)}
- * → {file, words: [{text, start, end, speaker}], duration, lines: [{speaker, voice, text, start, end, cached}], gaps}
+ * → {file, words: [{text, start, end, speaker, phonemes?}], duration, lines: [{speaker, voice, text, start, end, cached}], gaps}
  */
 export async function synthesizeDialogue(entries, { outFile, cacheDir = null, voiceProvider, normalizeVoice, gap = DIALOGUE_GAP, ffmpeg = "ffmpeg" } = {}) {
   if (!entries.length) throw new Error("the dialogue has no lines");
