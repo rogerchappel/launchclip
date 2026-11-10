@@ -5325,6 +5325,30 @@ the approval of that bible's hash in the make state and the run goes on;
 the approval holds while the bible is unchanged. An attended run (a
 terminal, or `adapters.ask`) asks instead of needing the flag.
 
+**Plan-only** (`--stop-after storyboard`, `--approve storyboard`;
+`PLAN_STOP` in `src/make/options.js`; any video, not only a character
+story). The stage list gains `plan`, between `subject` and `finish`. It
+runs `runFinish` with `planOnly` (`launchclip finish --plan-only`): the
+`voice`, `validate`, `captions` and `sound` stages, then a `plan` step that
+plates the captions, writes the resolved story
+(`.launchclip/finish/story.resolved.json`), runs `runGates` without the
+gates that read the rendered video (`RENDER_ONLY_GATES` in
+`src/finish.js`) and writes `PLAYER-MANIFEST.json`
+(`src/player_manifest.js`, `launchclip.player-manifest.v1`: `story`,
+`format`, `files[] {path, role, bytes, sha256, player}`, `missing[]`,
+`bytes`, `audio`, `not_in_preview[]`). No renderer adapter is called.
+`finish.json` has `status: "planned"` and `plan: {story, manifest, files,
+bytes, missing, audio, checks: {status, failed, gates, needs_render}}`;
+`MAKE.json` has the same under `plan`, with `checks.script`,
+`checks.storyboard` and `timings: {seconds, stages, steps}`, and ends
+`awaiting-approval`, `stopped.after: "storyboard"` (exit 3 for every kind
+of video). `MAKE.json` `gates` stays null. `--approve storyboard` skips
+the stop when the storyboard stage reused its storyboard (one planned in
+the approving run stops again); the candidates stage is skipped in this
+mode on both runs, and a character story's animatic is made after the
+approval. The finish stages the plan ran are reused from
+`.launchclip/finish-state.json`.
+
 **The shot list.** `planStoryboard` (`src/storyboard_planner.js`) takes
 `bible` and `script`:
 
