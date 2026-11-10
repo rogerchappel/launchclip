@@ -74,6 +74,7 @@ import { COVER_PATH } from "../cover.js";
 import { DEFAULT_VISUAL_HISTORY_LIMIT, DEFAULT_VISUAL_SIMILARITY_LIMIT, assessVariety, fingerprintStory, historyAvoid, historyPrompt, readHistoryIndex, recordHistoryEntry, varyStory } from "../visual_history.js";
 import { progressLine } from "../progress.js";
 import { measureMachine, renderBudget } from "../capacity.js";
+import { createModelGate, modelConcurrency } from "./model_calls.js";
 
 export const MAKE_VERSION = "launchclip.make.v1";
 export const MAKE_MAX_REPAIRS = 4;
@@ -127,7 +128,8 @@ export function slugify(prompt) {
  *   visualHistoryLimit (recent entries the planner sees, default 8),
  *   visualSimilarityLimit (the variety lint's limit, default 0.6),
  *   animation (a character story), stopAfter ("bible": end awaiting approval once the show bible is frozen),
- *   approve ("bible": the approval, so the run goes on)}
+ *   approve ("bible": the approval, so the run goes on),
+ *   modelConcurrency (model calls in flight at once; src/make/model_calls.js)}
  * adapters: {env, client ({client, provider, model, vision}), clientOptions
  * (passed to the client make builds from the keys: {apiKey, sdk, fetch}), fetch
  * (the model check asks a local Ollama for its model list through it), transcribe,
@@ -136,7 +138,8 @@ export function slugify(prompt) {
  *   (runFinish replacement or adapters for it: finishAdapters), notice, now, clock,
  *   ask (question → yes/no: the attended approvals, demo flows and the show bible),
  *   renderSheet ((html, png): draws a bible reference sheet instead of Chromium),
- *   home (the character library's root), synthesizeDialogue}
+ *   home (the character library's root), synthesizeDialogue,
+ *   sleep (ms → a promise: the wait after a rate-limit answer)}
  * Returns the MAKE.json report. Throws only on bad options; stage failures
  * are reported with status "failed" and a next step.
  */
@@ -149,6 +152,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   const text = String(prompt ?? "").trim();
   if (!text) throw new Error("launchclip make needs a prompt: launchclip make \"A 30-second launch video for …\" [--assets ./assets]");
   const { voice: voiceProvider, renderer, quality, script: scriptOptions } = validateMakeOptions(options);
+  const modelLimit = modelConcurrency(options.modelConcurrency, env);
   const cwd = path.resolve(options.cwd ?? process.cwd());
   // Inside a library (options.library, src/library.js) a project without
   // --out goes under storage.projects, and its drive is checked first.
@@ -173,6 +177,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     stages: {},
     timings: {},
     costs: { items: [], estimated_usd: 0, complete: true },
+    model_calls: null,
     repairs: null,
     gates: null,
     candidates: null,
@@ -185,7 +190,9 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   };
   const say = (line) => { report.notices.push(line); notice(line); };
   const state = { ...previousState, assets_dir: assetsDir };
-  const ctx = { project, env, adapters, options, report, state, say, progress, voiceProvider, renderer, quality, text, assetsDir };
+  // Every model call of the run goes through one gate: at most --model-concurrency in flight, and a rate limit is waited out.
+  const gate = createModelGate({ limit: modelLimit, now, say, ...(adapters.sleep ? { sleep: adapters.sleep } : {}) });
+  const ctx = { project, env, adapters, options, report, state, say, progress, voiceProvider, renderer, quality, text, assetsDir, gate };
 
   const stages = [
     ["model", stageModel],
@@ -210,6 +217,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
       continue;
     }
     const t0 = now();
+    gate.stage(name);
     progress({ stage: name, done: index, total: stages.length });
     try {
       const result = await fn(ctx);
@@ -231,6 +239,8 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   report.timings.total = round1((now() - started) / 1000);
   report.costs.estimated_usd = round4(report.costs.items.reduce((sum, item) => sum + (item.estimated_usd ?? 0), 0));
   report.costs.complete = report.costs.items.every((item) => item.estimated_usd != null);
+  // How the model calls ran: a stage whose calls overlapped has more call_seconds than its wall time in timings.
+  report.model_calls = gate.report();
   if (ctx.stop && report.status !== "failed") {
     report.status = ctx.stop.status;
     report.stopped = { after: ctx.stop.after, reason: ctx.stop.reason };
@@ -270,6 +280,7 @@ async function stageModel(ctx) {
     const { spec, source } = selectMakeModel(options.model, env);
     ctx.model = { ...createMakeClient(spec, adapters.clientOptions ?? {}), spec, source };
   }
+  ctx.model.client = ctx.gate.wrap(ctx.model.client);
   report.model = { spec: ctx.model.spec, source: ctx.model.source, provider: ctx.model.provider, model: ctx.model.model, reasoning: ctx.model.reasoning ?? null, vision: Boolean(ctx.model.vision) };
   // Which roles this run's model can play (text and vision), so an app can
   // show what the run will and will not check. No paid call (models.js).
