@@ -3,14 +3,14 @@
 // two-character example with recorded model responses and a fake renderer.
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { ANIMATIC_SCHEMA, animaticApproved, readAnimatic } from "../src/animatic.js";
 import { freezeBible } from "../src/bible.js";
 import { runCli } from "../src/cli.js";
-import { PATHS, formatFinishSummary, runFinish } from "../src/finish.js";
+import { formatFinishSummary, runFinish } from "../src/finish.js";
 import { CRITIC_CATEGORIES, STAGING_CATEGORIES, bibleReferenceSheets, reviewAnimatic, runHeadlessCritic } from "../src/make/critic.js";
 import { RETAKES_SCHEMA } from "../src/make/critic_repair.js";
 import { redirectShots, retakeProject, runRetakes } from "../src/make/retakes.js";

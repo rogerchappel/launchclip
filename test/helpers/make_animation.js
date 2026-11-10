@@ -17,8 +17,11 @@ export const fixture = async (name) => JSON.parse(await readFile(new URL(`../fix
  * A model that answers each call from a fixture, by schema name. `scripts` is
  * the script call's answers in order (the last one repeats); `storyboards`
  * the storyboard call's, the same way; `bible` the designer's answer.
+ * `recorded` answers any other call: {schemaName: [answers in order]}, where
+ * an answer may be a function of the request; a call with none left throws.
+ * `vision`: whether the model takes images (the reviews and the critic).
  */
-export async function recordedModel({ scripts = ["script"], storyboards = ["storyboard"], bible = "bible", direction = "direction" } = {}) {
+export async function recordedModel({ scripts = ["script"], storyboards = ["storyboard"], bible = "bible", direction = "direction", recorded = {}, vision = false } = {}) {
   const calls = [];
   const usage = { input_tokens: 1200, output_tokens: 400, total_tokens: 1600 };
   const answers = {
@@ -27,9 +30,10 @@ export async function recordedModel({ scripts = ["script"], storyboards = ["stor
     launchclip_animation_bible: typeof bible === "string" ? await fixture(bible) : bible,
     launchclip_direction: { direction_json: JSON.stringify(await fixture(direction)) }
   };
-  const plays = await Promise.all(scripts.map(fixture));
+  const plays = await Promise.all(scripts.map((entry) => (typeof entry === "string" ? fixture(entry) : entry)));
   const boards = await Promise.all(storyboards.map((entry) => (typeof entry === "string" ? fixture(entry) : entry)));
   const count = { script: 0, storyboard: 0 };
+  const queues = Object.fromEntries(Object.entries(recorded).map(([name, list]) => [name, [...list]]));
   const client = {
     provider: "openai",
     async runStructured(request) {
@@ -37,11 +41,15 @@ export async function recordedModel({ scripts = ["script"], storyboards = ["stor
       const reply = (value) => ({ model: "gpt-5.6-luna", value, usage });
       if (request.schemaName === "launchclip_animation_script") return reply(plays[Math.min(count.script++, plays.length - 1)]);
       if (request.schemaName === "launchclip_storyboard") return reply({ storyboard_json: JSON.stringify(boards[Math.min(count.storyboard++, boards.length - 1)]), direction_json: "" });
+      if (queues[request.schemaName]?.length) {
+        const next = queues[request.schemaName].shift();
+        return reply(typeof next === "function" ? await next(request) : next);
+      }
       if (answers[request.schemaName]) return reply(answers[request.schemaName]);
       throw new Error(`unexpected schema ${request.schemaName}`);
     }
   };
-  return { calls, model: { client, provider: "openai", model: "gpt-5.6-luna", spec: "openai:gpt-5.6-luna", vision: false } };
+  return { calls, model: { client, provider: "openai", model: "gpt-5.6-luna", spec: "openai:gpt-5.6-luna", vision } };
 }
 
 // synthesizeDialogue without ffmpeg (the CI test jobs have none): every line
@@ -102,5 +110,5 @@ export async function room(options = {}) {
   return { cwd, project, calls, takes, notices, sheets, finished, adapters, make, read, done: () => rm(cwd, { recursive: true, force: true }) };
 }
 
-/** The calls a run made, by short name: premise, loglines, script, bible, direction, storyboard. */
+/** The calls a run made, by short name: premise, loglines, script, bible, direction, storyboard, animatic_review, retake, make_critic. */
 export const schemas = (calls) => calls.map((call) => call.schemaName.replace("launchclip_animation_", "").replace("launchclip_", ""));
