@@ -12,6 +12,11 @@
   limits how many model calls are in flight; `1` sends one at a time. A
   rate-limit answer is waited out instead of failing the stage, and
   `MAKE.json` `model_calls` says where calls overlapped.
+- An OpenAI model's answer is picked up sooner. A background response was
+  polled every 5 s, so each finished answer waited 2.5 s on average to be
+  seen; it is now polled after 1 s, 1 s, then every 2 s, and every 5 s once a
+  call has run two minutes. That is about 1.5 s less per call, or about 18 s
+  over the dozen calls of a `make` run, with the same answers.
 - The spending limit (`--max-cost-usd`) holds when calls overlap: a paid call
   starts beside others only when the most they can all cost fits under the
   limit, and otherwise waits its turn.
