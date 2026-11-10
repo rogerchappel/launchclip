@@ -1,0 +1,20 @@
+{
+  "characters": [
+    { "id": "maya", "use": "", "position": "left", "sets": [
+      { "path": "hair.style", "op": "=", "value": "bob" },
+      { "path": "hair.color", "op": "=", "value": "auburn" },
+      { "path": "outfit.top", "op": "=", "value": "sweater" },
+      { "path": "colors.top", "op": "=", "value": "teal" },
+      { "path": "accessories", "op": "+=", "value": "round-glasses" }
+    ] },
+    { "id": "Sam", "use": "", "position": "left", "sets": [
+      { "path": "outfit.top", "op": "=", "value": "hoodie" },
+      { "path": "colors.top", "op": "=", "value": "mustard" },
+      { "path": "headwear", "op": "=", "value": "crown" }
+    ] }
+  ],
+  "drawing_style": "",
+  "world": { "kind": "office", "time": "day" },
+  "sets": ["desk-laptop", "standing", "moon-base"],
+  "rules": ["Sam never raises his voice."]
+}

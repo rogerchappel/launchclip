@@ -126,8 +126,10 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light, 
     const from = clip(check.num(range.from, `${where}.from`, -86400, 86400)), to = clip(check.num(range.to, `${where}.to`, -86400, 86400));
     if (to < from) check.fail(`${where}.to`, 'must not be before from');
     const words = range.words === undefined ? null : check.arr(range.words, `${where}.words`, 0, 400).map((w, k) => {
-      if (!Array.isArray(w) || w.length < 2 || w.length > 3 || !Number.isFinite(w[0]) || !Number.isFinite(w[1]) || w[1] < w[0] || (w.length === 3 && typeof w[2] !== 'string')) check.fail(`${where}.words[${k}]`, 'must be [start, end] seconds, or [start, end, "word"]');
-      return [rt(b.start + clip(w[0])), rt(b.start + clip(w[1])), ...(w.length === 3 ? [w[2]] : [])];
+      if (!Array.isArray(w) || w.length < 2 || w.length > 4 || !Number.isFinite(w[0]) || !Number.isFinite(w[1]) || w[1] < w[0] || w.slice(2).some(part => typeof part !== 'string')) check.fail(`${where}.words[${k}]`, 'must be [start, end] seconds, [start, end, "word"], or [start, end, "word", "phonemes"] (symbol:milliseconds pairs)');
+      // A word cut by the scene's edge loses its phonemes: their lengths no longer fit it.
+      const whole = w[0] >= 0 && w[1] <= b.duration;
+      return [rt(b.start + clip(w[0])), rt(b.start + clip(w[1])), ...w.slice(2, whole ? 4 : 3)];
     }).filter(([s, e]) => e > s);
     return {from: rt(b.start + from), to: rt(b.start + to), words};
   });

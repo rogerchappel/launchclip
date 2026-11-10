@@ -17,7 +17,8 @@
 //   the character's id.
 // - Expressions crossfade their faces; mouths take a shape per sound of the
 //   character's spoken words (speechChanges: a small viseme set made from
-//   the closed and open mouths every face draws).
+//   the closed and open mouths every face draws), from the voice's phonemes
+//   and their lengths when a word carries them, else from its spelling.
 // - An acting profile (ACTING_PROFILES) scales all of it per character.
 //
 // Every op is an absolute set or from-to tween, so any frame can be drawn
@@ -505,16 +506,119 @@ export function wordVisemes(text, max = Infinity) {
   return shapes;
 }
 
+// Phonemes → shapes. A voice engine that reports phonemes with their lengths
+// (Kokoro, src/voice/kokoro.js) gives each word `symbol:milliseconds` pairs
+// in order from the word's start; the symbols are IPA code points as espeak
+// writes them, or Kokoro's one-letter diphthongs. A sound not listed here is
+// a part-open consonant or a neutral vowel ('small').
+const PHONEME_SHAPES = new Map([
+  ...Array.from('mbp', c => [c, ['closed']]),
+  ...Array.from('wuʊoɔO', c => [c, ['o']]),
+  ...Array.from('iɪeɛjA', c => [c, ['wide']]),
+  ...Array.from('aɑæʌɐ', c => [c, ['open']]),
+  // One-letter diphthongs: I (my), W (now), Y (boy), Q (British "go").
+  ['I', ['open', 'wide']], ['W', ['open', 'o']], ['Y', ['o', 'wide']], ['Q', ['small', 'o']]
+]);
+// Sounds with no shape of their own: the mouth is already on the next one
+// (h, a glottal stop, a stress mark) or stays on the last (a length mark).
+const PHONEME_LEADS = new Set(Array.from('hʔˈˌ'));
+const PHONEME_HOLDS = new Set(Array.from('ːˑʰʲ̩̃'));
+// The least a shape keeps when pressed lips beside it take time to be seen.
+const VISEME_SPARE = 0.05;
+// The longest a closing consonant holds the mouth part open before it closes.
+const TAIL_HOLD = 0.16;
+
+/** A word's phonemes as kept in NARRATION.json ("h:55 ə:40 …") → [[symbol, seconds]]; [] when there are none. */
+export function parsePhonemes(phonemes) {
+  if (typeof phonemes !== 'string') return [];
+  const out = [];
+  for (const part of phonemes.trim().split(/\s+/)) {
+    const cut = part.lastIndexOf(':');
+    const ms = cut > 0 ? Number(part.slice(cut + 1)) : NaN;
+    if (!Number.isFinite(ms) || ms < 0) return [];
+    out.push([part.slice(0, cut), ms / 1000]);
+  }
+  return out;
+}
+
+/**
+ * A word's mouth shapes from its phonemes, timed by their lengths and fitted
+ * to the word's span: [{time, shape}] in order, the first at `start` (null
+ * when the phonemes give no shape, so the caller reads the spelling).
+ * - The lengths are scaled to the word (its start may have been snapped to
+ *   the audio since they were measured).
+ * - A stress mark or an h belongs to the sound after it; a length mark to
+ *   the one before; a rest inside the word (`_`) closes the mouth when it is
+ *   long enough to see.
+ * - No shape is held for less than VISEME_MIN: a short part-open consonant
+ *   gives its time to its neighbours first; pressed lips and vowels take
+ *   time from a longer neighbour, and go only when there is none to take
+ *   (pressed lips read most, so their neighbour may drop to VISEME_SPARE).
+ * `end` (returned as the last entry's `until`) is where the mouth may close:
+ * the word's end, or sooner when a closing consonant trails off.
+ */
+export function phonemeVisemes(phonemes, start, end) {
+  const sounds = parsePhonemes(phonemes);
+  const total = sounds.reduce((sum, [, seconds]) => sum + seconds, 0);
+  if (!(total > 0) || !(end > start)) return null;
+  const scale = (end - start) / total;
+  let runs = [];
+  let time = start, lead = null;
+  for (const [symbol, seconds] of sounds) {
+    const length = seconds * scale;
+    if (symbol === '_') { if (length >= VISEME_MIN) runs.push({time, shape: 'closed'}); lead = null; }
+    else if (PHONEME_LEADS.has(symbol)) lead ??= time;
+    else if (!PHONEME_HOLDS.has(symbol)) {
+      const shapes = PHONEME_SHAPES.get(symbol) ?? ['small'];
+      const from = lead ?? time, span = time + length - from;
+      shapes.forEach((shape, i) => runs.push({time: from + (span * i) / shapes.length, shape}));
+      lead = null;
+    }
+    time += length;
+  }
+  const merge = list => list.filter((run, i) => i === 0 || run.shape !== list[i - 1].shape);
+  runs = merge(runs);
+  if (!runs.some(run => run.shape !== 'closed')) return runs.length && sounds.some(([symbol]) => PHONEME_SHAPES.has(symbol)) ? [{time: start, shape: 'closed', until: end}] : null;
+  runs[0].time = start;
+  const length = i => (i + 1 < runs.length ? runs[i + 1].time : end) - runs[i].time;
+  for (let guard = 0; guard < 200 && runs.length > 1; guard++) {
+    const short = runs.map((_, i) => i).filter(i => length(i) < (runs[i].least ?? VISEME_MIN) - 1e-9);
+    if (!short.length) break;
+    // The part-open consonants go first; among equals, the shortest.
+    const pick = short.reduce((best, i) => {
+      const a = runs[i].shape === 'small' ? 0 : 1, b = runs[best].shape === 'small' ? 0 : 1;
+      return a < b || (a === b && length(i) < length(best) - 1e-9) ? i : best;
+    });
+    const need = (runs[pick].least ?? VISEME_MIN) - length(pick);
+    if (runs[pick].shape !== 'small') {
+      // Take the time from a neighbour that can spare it: the next one, else the one before.
+      const least = runs[pick].shape === 'closed' ? VISEME_SPARE : VISEME_MIN;
+      if (pick + 1 < runs.length && length(pick + 1) - need >= least - 1e-9) { runs[pick + 1].time += need; runs[pick + 1].least = least; continue; }
+      if (pick > 0 && length(pick - 1) - need >= least - 1e-9) { runs[pick].time -= need; runs[pick - 1].least = least; continue; }
+    }
+    // Drop it: the shape before holds through it (the first one's time goes to the next).
+    if (pick === 0) runs[1].time = start;
+    runs = merge(runs.filter((_, i) => i !== pick));
+  }
+  const last = runs.length - 1;
+  const until = runs[last].shape === 'small' && end - runs[last].time > TAIL_HOLD ? runs[last].time + TAIL_HOLD : end;
+  return runs.map((run, i) => ({time: rt(run.time), shape: run.shape, ...(i === last ? {until: rt(until)} : {})}));
+}
+
 // Shapes for speech with no text to read, in turn.
 const UNREAD = ['open', 'small', 'wide', 'open', 'o', 'small'];
 
 /**
  * Mouth changes for spoken ranges: [{time, shape, open}] in time order
  * (shape: a VISEMES name; open: false for the closed mouth).
- * ranges: [{from, to, words?: [[start, end, text?]]}] absolute seconds.
- * - A word with its text takes the shapes of its sounds (wordVisemes),
- *   spread across the word; the mouth closes when the word ends unless the
- *   next one follows at once.
+ * ranges: [{from, to, words?: [[start, end, text?, phonemes?]]}] absolute seconds.
+ * - A word with its phonemes ("symbol:milliseconds …", the voice engine's
+ *   own) takes a shape per sound for as long as the voice holds it
+ *   (phonemeVisemes).
+ * - A word with only its text takes the shapes of its spelling
+ *   (wordVisemes), spread evenly across the word. Either way the mouth
+ *   closes when the word ends unless the next one follows at once (in this
+ *   range, or as the first word of the next).
  * - A word without text opens on its start and closes after most of it (a
  *   long word gets a second flap), cycling through the open shapes.
  * - A range without word timings flaps on a steady 0.24 s rhythm.
@@ -522,14 +626,23 @@ const UNREAD = ['open', 'small', 'wide', 'open', 'o', 'small'];
 export function speechChanges(ranges) {
   const out = [];
   let unread = 0;
-  for (const range of ranges) {
+  ranges.forEach((range, at) => {
+    // The word after this range's last: the next range's first (says: "auto" makes a range of every word).
+    const after = range.words?.length ? ranges[at + 1]?.words?.[0] : undefined;
     const words = range.words?.length ? range.words : Array.from({length: Math.max(1, Math.floor((range.to - range.from) / 0.24))}, (_, i) => [range.from + i * 0.24, range.from + i * 0.24 + 0.2]);
-    words.forEach(([s, e, text], index) => {
+    words.forEach(([s, e, text, phonemes], index) => {
       const d = Math.max(0.08, e - s);
+      const next = words[index + 1] ?? after;
+      const heard = phonemes ? phonemeVisemes(phonemes, s, s + d) : null;
+      if (heard) {
+        for (const {time, shape} of heard) out.push({time: rt(time), shape, open: shape !== 'closed'});
+        const until = heard[heard.length - 1].until;
+        if (!next || next[0] - until >= VISEME_MIN) out.push({time: rt(until), shape: 'closed', open: false});
+        return;
+      }
       const shapes = typeof text === 'string' ? wordVisemes(text, Math.floor(d / VISEME_MIN)) : [];
       if (shapes.length) {
         shapes.forEach((shape, i) => out.push({time: rt(s + (d * i) / shapes.length), shape, open: shape !== 'closed'}));
-        const next = words[index + 1];
         if (!next || next[0] - (s + d) >= VISEME_MIN) out.push({time: rt(s + d), shape: 'closed', open: false});
         return;
       }
@@ -539,7 +652,7 @@ export function speechChanges(ranges) {
         out.push({time: rt(t + Math.max(0.06, Math.min(len * 0.62, 0.2))), shape: 'closed', open: false});
       }
     });
-  }
+  });
   out.sort((a, b) => a.time - b.time || (a.open ? 1 : -1));
   // A shape that repeats the one before it changes nothing.
   return out.filter((change, i) => i === 0 || change.shape !== out[i - 1].shape || change.time === out[i - 1].time);
