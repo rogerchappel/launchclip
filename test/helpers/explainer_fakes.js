@@ -11,7 +11,7 @@ export const SOURDOUGH_CAST = Object.freeze({
 
 /** The saved direction map's sections with the cast added and each line's scenes renamed to the character storyboard's. */
 export function explainerDirection(saved) {
-  const scenes = ["hook", "belief", "inside", "inside", "gas", "rise", "tang", "both", "save"];
+  const scenes = ["hook", "belief", "inside", "jobs", "gas", "rise", "tang", "both", "save"];
   let index = 0;
   return {
     schema: saved.schema,
@@ -21,7 +21,7 @@ export function explainerDirection(saved) {
   };
 }
 
-/** The storyboard: characters in seven of nine scenes, one diagram and the end card as support. */
+/** The storyboard: characters in eight of ten scenes, one diagram and the end card as support. */
 export function explainerStoryboard({ format, brand }) {
   const cameo = (id, start, end, character, pose, expression, card, cue) => ({ id, module: "character-cameo", start, end, energy: 2, params: { character, pose, expression, card, ...(cue ? { cues: [cue] } : {}) } });
   return {
@@ -32,7 +32,8 @@ export function explainerStoryboard({ format, brand }) {
     scenes: [
       cameo("hook", 0, 2.72, "starter", "shrug", "confused", { title: "Why does bread need this jar?" }, { at: 1.4, pose: "think", expression: "thinking" }),
       cameo("belief", 2.72, 5.95, "starter", "point-self", "smirk", { kicker: "The guess", title: "Just for the sour taste?" }, { at: 1.6, pose: "shrug", expression: "side-eye" }),
-      { id: "inside", module: "cast-scene", start: 5.95, end: 11.64, energy: 2, params: { set: "standing", shot: "medium", cast: [{ id: "yeast", pose: "wave", expression: "happy", cues: [{ at: 2.6, pose: "cheer", expression: "excited" }] }, { id: "bacteria", pose: "arms-crossed", expression: "smirk", cues: [{ at: 1.6, pose: "wave", expression: "happy" }, { at: 4.2, pose: "point-self", expression: "delighted" }] }] } },
+      { id: "inside", module: "cast-scene", start: 5.95, end: 9.13, energy: 2, params: { set: "standing", shot: "medium", cast: [{ id: "yeast", pose: "wave", expression: "happy", cues: [{ at: 2.2, pose: "cheer", expression: "excited" }] }, { id: "bacteria", pose: "arms-crossed", expression: "smirk", cues: [{ at: 1.2, pose: "wave", expression: "happy" }] }] } },
+      cameo("jobs", 9.13, 11.64, "starter", "point-self", "surprised", { kicker: "More than flavor", title: "Two jobs, one jar" }),
       cameo("gas", 11.64, 14.15, "yeast", "cheer", "delighted", { kicker: "Job one", title: "Yeast makes gas" }),
       { id: "rise", module: "process-steps", start: 14.15, end: 17.1, energy: 2, params: { title: "How the loaf rises", steps: ["Gas", "Bubbles", "Rise"] } },
       cameo("tang", 17.1, 19.97, "bacteria", "point-self", "smirk", { kicker: "Job two", title: "Bacteria make the tang" }, { at: 1.5, pose: "cheer", expression: "laughing" }),

@@ -95,6 +95,10 @@ test("a character-led explainer needs a character on screen for most of it, and 
   assert.match(errors[1], /^characters: the opening scene starter-jar-and-loaf \(line-diagram\) has no character; open on a character-cameo from 0 s whose card title is the hook/);
   const led = resolved(explainerStoryboard({ format: portrait, brand: saved.brand }));
   assert.deepEqual(characterErrors(led, { cast }), []);
+  // From the first real run: a 5.2 s cast-scene in 9:16 left the top third to its plate and failed the density gate.
+  const long = { ...led, scenes: led.scenes.map((scene) => (scene.id === "inside" ? { ...scene, end: 11.64 } : scene)).filter((scene) => scene.id !== "jobs") };
+  assert.match(characterErrors(long, { cast })[0], /^characters: inside \(cast-scene\) holds for 5\.69 s; in 9:16 the top third of the frame is only its plate, and the density gate fails that after 4 s/);
+  assert.deepEqual(characterErrors({ ...long, format: { ...long.format, width: 1920, height: 1080 } }, { cast }), []);
   assert.ok(characterShare(led).share > 0.7);
 });
 
@@ -227,4 +231,26 @@ test("the seeded style of an explainer: a lively palette when the prompt names n
   assert.equal(explainerLook(PROMPT), null);
   assert.deepEqual(explainerSeed("How a jet engine works", { tone: null, constraints: { look: "hologram" } }).constraints, { look: "hologram" });
   assert.deepEqual(explainerSeed("How a jet engine works", { tone: null, constraints: {} }).constraints, { look: "blueprint" });
+});
+
+test("from the first real run: character scenes that share a character are joined by a cut, so there is never a second copy", async () => {
+  const { fitCastCuts, sceneCharacters } = await import("../src/cast_cut_fit.js");
+  const cast = castFromDirection({ cast: SOURDOUGH_CAST }).cast;
+  // The run's joins: the starter in two cameos joined by a zoom, the bacteria in a cameo then a cast-scene joined by a whip-pan.
+  const board = explainerStoryboard({ format: portrait, brand: saved.brand });
+  const joins = { belief: { type: "zoom", dur: 0.35 }, inside: { type: "zoom", dur: 0.4 }, both: { type: "whip-pan", dur: 0.35, direction: "right" }, rise: { type: "push", dur: 0.6 }, tang: { type: "zoom", dur: 0.3 } };
+  const planned = { ...board, cast, scenes: board.scenes.map((scene) => (joins[scene.id] ? { ...scene, in: joins[scene.id] } : scene)) };
+  const copies = ghostingGate(resolved(planned)).findings.filter((finding) => finding.rule === "two-copies");
+  assert.deepEqual(copies.map((finding) => finding.ids.join("+")), ["hook+belief", "tang+both"]);
+  assert.match(copies[0].detail, /two copies of starter on screen/);
+  const fitted = fitCastCuts(planned);
+  assert.deepEqual(fitted.changed, ["belief cuts in instead of zoom (starter is also in hook)", "both cuts in instead of whip-pan (bacteria is also in tang)"]);
+  const scenes = Object.fromEntries(fitted.storyboard.scenes.map((scene) => [scene.id, scene.in]));
+  assert.deepEqual(scenes.belief, { type: "cut" });
+  assert.deepEqual(scenes.inside, joins.inside, "a join between scenes that share nobody keeps its transition");
+  assert.deepEqual(scenes.rise, joins.rise);
+  assert.deepEqual(scenes.tang, joins.tang, "so does one into a character scene from a diagram");
+  assert.deepEqual(ghostingGate(resolved(fitted.storyboard)).findings, []);
+  assert.deepEqual(sceneCharacters(planned.scenes[2]), ["yeast", "bacteria"]);
+  assert.equal(fitCastCuts(fitted.storyboard).changed.length, 0);
 });

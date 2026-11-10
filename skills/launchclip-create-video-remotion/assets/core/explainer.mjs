@@ -28,6 +28,8 @@ import { normalizeRigParams } from './characters/rig.mjs';
 
 /** The share of the runtime a character is on screen for, at least. */
 export const EXPLAINER_CHARACTER_SHARE = 0.5;
+/** The longest a cast-scene holds in a portrait frame (the density gate's empty-region limit). */
+export const CAST_SCENE_SECONDS = 4;
 /** The most characters an explainer casts. */
 export const EXPLAINER_CAST_MAX = 3;
 /** The drawing style an explainer's cast is drawn in. */
@@ -145,7 +147,7 @@ export function explainerStoryboardLines(explainer) {
     `Characters carry this explainer: ${members.map((member) => describeMember(member, roles)).join('; ')}. story.cast is fixed and tooling writes it; name characters by these ids only.`,
     `A character is on screen for at least ${Math.round(EXPLAINER_CHARACTER_SHARE * 100)}% of the runtime (the check measures it), and the same characters come back through the video: the viewer follows them from the question to the answer.`,
     'The scene to reach for is character-cameo: one character, large, beside a card (kicker, title, body) that carries the line\'s few words. It is a full scene on its own: no world or panel under it, no track.',
-    `Put two or three of them together in a cast-scene for the moments they meet, disagree or celebrate${short ? ': set "standing" with shot "medium" or "close" (objects, mascots and animals are short, and the furniture sets are built for people and hide them)' : ''}. A cast-scene draws its own world; do not add a world scene under it. Keep a cast-scene to about 4 s (longer leaves the top of a portrait frame empty), and let cameos carry the longer lines.`,
+    `Put two or three of them together in a cast-scene for the moments they meet, disagree or celebrate${short ? ': set "standing" with shot "medium" or "close" (objects, mascots and animals are short, and the furniture sets are built for people and hide them)' : ''}. A cast-scene draws its own world; do not add a world scene under it. In 9:16 a cast-scene ends within 4 s (longer leaves the top of the frame empty and fails the density gate); cameos carry the longer lines.`,
     'Shapes: {"id": "s1", "module": "character-cameo", "start": 0, "end": "word:<text>", "energy": 2, "params": {"character": "<id>", "pose": "shrug", "expression": "confused", "card": {"kicker": "<2 words>", "title": "<the line in 3–7 words>"}, "cues": [{"at": "word:<text>", "pose": "think", "expression": "thinking"}]}} and {"id": "s4", "module": "cast-scene", "start": "word:<text>", "end": "word:<text>", "energy": 2, "params": {"set": "standing", "shot": "medium", "cast": [{"id": "<id>", "pose": "wave", "expression": "happy", "cues": [{"at": "word:<text>", "pose": "cheer", "expression": "delighted"}]}, {"id": "<id>", "pose": "arms-crossed", "expression": "smirk"}]}}. A cue\'s word is one spoken while its scene is on screen.',
     'They act, they do not stand there: pose and expression say the line\'s feeling (confused at the question, surprised at the turn, delighted at the payoff), and every character scene has cues on the narration\'s words ({"at": "word:<text>", "pose", "expression"}) so something changes about every 1.5 s. No two character scenes in a row share the same character, pose and framing.',
     'The opening scene is a character scene from 0 s (a character-cameo whose card title is the hook in 6–8 words): a character is drawn whole on frame 0. Never open on a module that draws itself from an empty plate (line-diagram, doodle-outline, feynman-diagram, a particle piece).',
@@ -190,6 +192,13 @@ export function characterErrors(story, { cast = null, share = EXPLAINER_CHARACTE
   const measured = characterShare(story);
   if (measured.duration > 0 && measured.share < share - 1e-6) {
     errors.push(`characters: a character is on screen for ${Math.round(measured.share * 100)}% of the video (${measured.seconds} of ${measured.duration} s); an explainer needs one for at least ${Math.round(share * 100)}%. Replace diagram and card scenes with character-cameo scenes (${who} beside a card that carries the line's words) or a cast-scene, acting the line with pose and expression cues`);
+  }
+  // In 9:16 a cast-scene leaves the top third of the frame to its plate, and the density gate fails that after 4 s.
+  if (Number(story?.format?.height) > Number(story?.format?.width)) {
+    for (const scene of plates(story)) {
+      const seconds = Number(scene.end) - Number(scene.start);
+      if (scene.module === 'cast-scene' && seconds > CAST_SCENE_SECONDS + 1e-6) errors.push(`characters: ${scene.id} (cast-scene) holds for ${round2(seconds)} s; in 9:16 the top third of the frame is only its plate, and the density gate fails that after ${CAST_SCENE_SECONDS} s. End it within ${CAST_SCENE_SECONDS} s and give the rest of the line to a character-cameo (a character beside a card)`);
+    }
   }
   const first = plates(story)[0];
   if (first && !CHARACTER_SCENE_MODULES.includes(first.module)) {

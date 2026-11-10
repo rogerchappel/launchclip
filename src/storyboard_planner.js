@@ -48,6 +48,7 @@ import { cardErrors, fitShotCallouts, hookErrors, hookTimingErrors, storyboardSe
 import { layoutSpec, talkingHeadLayout } from "./talking_head_layout.js";
 import { abstractErrors, castFromDirection, characterErrors, characterShare, defaultExplainerCast, openingErrors } from "@launchclip/core/explainer.mjs";
 import { readingFindings } from "./direction_guardrails.js";
+import { fitCastCuts } from "./cast_cut_fit.js";
 
 export const STORYBOARD_PLAN_VERSION = "launchclip.storyboard-plan.v1";
 export const DEFAULT_MAX_REPAIRS = 2;
@@ -333,6 +334,12 @@ export async function planStoryboard(options = {}) {
       if (diagrams.changed.length) {
         pinned.storyboard = diagrams.storyboard;
         pinned.warnings = [...pinned.warnings, ...diagrams.changed.map((entry) => `diagrams: tooling ${entry}`)];
+      }
+      // One copy of a character at a time: a join between two character scenes that share one is a cut (src/cast_cut_fit.js).
+      const cuts = fitCastCuts(pinned.storyboard);
+      if (cuts.changed.length) {
+        pinned.storyboard = cuts.storyboard;
+        pinned.warnings = [...pinned.warnings, ...cuts.changed.map((entry) => `cast: tooling made ${entry}`)];
       }
       const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints, minHold: SHORT_FORM_HOLD, ...(script ? { script } : {}), ...(bible || explainer ? { castGate: true } : {}) };
       checked = checkStoryboard(pinned.storyboard, checkOptions);
