@@ -758,7 +758,9 @@ const NEAR_MISS = ["cadence: ", "placeholder: ", "hook: ", "cards: ", "featured:
 export function planReadingErrors(resolved) {
   let found = [];
   try { found = readingFindings(resolved); } catch { found = []; }
-  return found.map((entry) => `reading: ${entry.id} (${entry.module}) shows ${entry.words} words but is fully on screen for ${entry.hold} s, which is time to read ${entry.fits}; cut its copy to ${entry.fits} word${entry.fits === 1 ? "" : "s"} or fewer (title, body, labels and steps together), or split it into two scenes`);
+  return found.map((entry) => entry.fits < 1
+    ? `reading: ${entry.id} (${entry.module}) is fully on screen for ${entry.hold} s, and a card needs at least ${entry.need} s to be read; lengthen the scene, or drop it and give its ${entry.words} word${entry.words === 1 ? "" : "s"} to the scene before or after it`
+    : `reading: ${entry.id} (${entry.module}) shows ${entry.words} words but is fully on screen for ${entry.hold} s, which is time to read ${entry.fits}; cut its copy to ${entry.fits} word${entry.fits === 1 ? "" : "s"} or fewer (title, body, labels and steps together), or split it into two scenes`);
 }
 
 // A card's text that only holds its place: dashes, question marks, an

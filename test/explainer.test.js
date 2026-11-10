@@ -9,6 +9,7 @@ import test from "node:test";
 import { CHARACTER_SCENE_MODULES, EXPLAINER_TONE, abstractErrors, abstractFindings, castFromDirection, characterErrors, characterShare, defaultExplainerCast, explainerDirectionLines, explainerLook, explainerStoryboardLines, openingErrors } from "@launchclip/core/explainer.mjs";
 import { directionPrompt, planningPrompt } from "@launchclip/core/planning-prompt.mjs";
 import { resolveStory } from "@launchclip/core/story.mjs";
+import { applyStyle } from "@launchclip/core/style.mjs";
 import { generateStyle } from "@launchclip/core/style-seed.mjs";
 import { castGate } from "../src/cast.js";
 import { ghostingGate, paramWords, readingFindings, varietyGate } from "../src/direction_guardrails.js";
@@ -246,11 +247,28 @@ test("from the first real run: character scenes that share a character are joine
   const fitted = fitCastCuts(planned);
   assert.deepEqual(fitted.changed, ["belief cuts in instead of zoom (starter is also in hook)", "both cuts in instead of whip-pan (bacteria is also in tang)"]);
   const scenes = Object.fromEntries(fitted.storyboard.scenes.map((scene) => [scene.id, scene.in]));
-  assert.deepEqual(scenes.belief, { type: "cut" });
+  assert.equal(scenes.belief, undefined, "no transition is a cut");
   assert.deepEqual(scenes.inside, joins.inside, "a join between scenes that share nobody keeps its transition");
   assert.deepEqual(scenes.rise, joins.rise);
   assert.deepEqual(scenes.tang, joins.tang, "so does one into a character scene from a diagram");
   assert.deepEqual(ghostingGate(resolved(fitted.storyboard)).findings, []);
   assert.deepEqual(sceneCharacters(planned.scenes[2]), ["yeast", "bacteria"]);
   assert.equal(fitCastCuts(fitted.storyboard).changed.length, 0);
+  // Through the planner, on a seeded style, the fitted storyboard passes every check first time (the second real run
+  // failed here: tooling wrote a cut the story contract refuses, on every attempt).
+  const pack = generateStyle({ seed: "1c85c831", tone: "playful", constraints: {}, at: "2026-11-10T00:00:00Z" });
+  const client = { provider: "openai", async runStructured(request) {
+    if (request.schemaName === "launchclip_direction") return { value: { direction_json: JSON.stringify(explainerDirection(direction)) }, usage: {} };
+    const { cast: _cast, ...written } = planned;
+    return { value: { storyboard_json: JSON.stringify(written), direction_json: "" }, usage: {} };
+  } };
+  const plan = await planStoryboard({ brief: PROMPT, words: narration.words, lane: "motion", format: portrait, style: pack, client, direction: true, explainer: true, maxRepairs: 0, audio: { words: "NARRATION.json" } });
+  assert.equal(plan.status, "passed", JSON.stringify(plan.errors));
+  assert.ok(plan.warnings.some((warning) => warning === "cast: tooling made belief cuts in instead of zoom (starter is also in hook)"), plan.warnings.join("\n"));
+  assert.equal(plan.storyboard.cast.style, "chibi");
+  const styled = resolveStory(applyStyle(JSON.parse(JSON.stringify(plan.storyboard)), pack).story, { words: narration.words });
+  assert.deepEqual(ghostingGate(styled).findings, []);
+  // A card on screen for less than the shortest read is told to grow or go, never to "cut to 0 words".
+  const blink = { ...resolved(planned), scenes: resolved(planned).scenes.map((scene) => (scene.id === "rise" ? { ...scene, module: "concept-card", params: { text: "Gas", sub: "Lifts the whole loaf" }, end: scene.start + 1.7 } : scene.id === "tang" ? { ...scene, start: 14.15 + 1.7 } : scene)) };
+  assert.match(planReadingErrors(blink).find((error) => error.includes("rise")), /a card needs at least 1\.2 s to be read; lengthen the scene, or drop it and give its 5 words to the scene before or after it/);
 });

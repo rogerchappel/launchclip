@@ -34,7 +34,8 @@ export function fitCastCuts(storyboard) {
     const shared = sceneCharacters(scene).filter((id) => sceneCharacters(before).includes(id));
     if (!shared.length) continue;
     changed.push(`${scene.id} cuts in instead of ${scene.in.type} (${shared.join(", ")} ${shared.length === 1 ? "is" : "are"} also in ${before.id})`);
-    scene.in = { type: "cut" };
+    // No transition is a cut (a written {type: "cut"} would need a dur).
+    delete scene.in;
   }
   return { storyboard: changed.length ? story : storyboard, changed };
 }
