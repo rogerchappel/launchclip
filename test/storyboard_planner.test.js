@@ -190,17 +190,57 @@ test("hiding the captions over a caption-band clash clears it for the layout che
   assert.ok(!rechecked.errors.some((entry) => /^layout: caption-band /.test(entry)), rechecked.errors.join("\n"));
 });
 
+test("edit rounds: a slip is cleared by a small edit to the scene it names, with no repair call", async () => {
+  const story = goodStoryboard();
+  const right = story.scenes[3].start;
+  story.scenes[3].start = "word:subscribe";
+  const base = fakeClient([envelope(story)]);
+  const editCalls = [];
+  const client = { ...base, async runStructured(request) {
+    if (request.schemaName !== "launchclip_storyboard_edits") return base.runStructured(request);
+    editCalls.push(request);
+    return { model: "gpt-5.6-luna", value: { edits: [{ scene: story.scenes[3].id, op: "set", path: "start", value_json: JSON.stringify(right) }] }, usage: { input_tokens: 900, output_tokens: 40, total_tokens: 940 } };
+  } };
+  const report = await plan(client);
+  assert.equal(report.status, "passed", report.errors.join("\n"));
+  assert.deepEqual(report.attempts.map((entry) => entry.kind), ["plan", "edit"]);
+  assert.equal(report.repairs_used, 0);
+  assert.equal(report.edit_rounds, 1);
+  assert.equal(editCalls.length, 1);
+  // The edit call is small: the failing check, the scene table and the named scene, not the planning prompt.
+  assert.match(editCalls[0].input, /### Failing checks[^]*Unknown anchor word:subscribe/);
+  assert.ok(editCalls[0].input.length < 6000 && editCalls[0].instructions.length < 4000);
+  assert.equal(report.storyboard.scenes[3].start, right);
+  assert.ok(report.warnings.some((entry) => /^edits: round 1 made 1 edit/.test(entry)));
+});
+
+test("edit rounds: an edit that leaves the plan no better is not kept", async () => {
+  const story = goodStoryboard();
+  story.scenes[3].start = "word:subscribe";
+  const base = fakeClient([envelope(story)]);
+  const client = { ...base, async runStructured(request) {
+    if (request.schemaName !== "launchclip_storyboard_edits") return base.runStructured(request);
+    return { model: "gpt-5.6-luna", value: { edits: [{ scene: story.scenes[3].id, op: "set", path: "start", value_json: "\"word:nowhere\"" }] }, usage: { input_tokens: 900, output_tokens: 40, total_tokens: 940 } };
+  } };
+  const report = await plan(client);
+  assert.equal(report.status, "failed");
+  assert.deepEqual(report.attempts.map((entry) => entry.kind), ["plan", "edit", "edit", "repair", "repair"]);
+  assert.ok(report.errors.some((entry) => /word:subscribe/.test(entry)), "the plan the repairs saw is the one before the bad edits");
+});
+
 test("repair exhaustion: stops after two repairs and reports the last errors", async () => {
   const story = goodStoryboard();
   story.scenes[3].start = "word:subscribe";
   const client = fakeClient([envelope(story)]);
   const report = await plan(client);
   assert.equal(report.status, "failed");
-  assert.equal(client.calls.length, 3);
+  // An unknown anchor is an edit's to fix first; this client never returns edits, so two edit rounds stall and the repairs run.
+  assert.equal(client.calls.length, 5);
   assert.equal(report.repairs_used, 2);
-  assert.deepEqual(report.attempts.map((entry) => entry.kind), ["plan", "repair", "repair"]);
+  assert.equal(report.edit_rounds, 2);
+  assert.deepEqual(report.attempts.map((entry) => entry.kind), ["plan", "edit", "edit", "repair", "repair"]);
   assert.ok(report.errors.some((entry) => /^anchors: scenes\[3\]\.start: Unknown anchor word:subscribe/.test(entry)), report.errors.join("\n"));
-  assert.match(client.calls[2].input, /## Repair 2 of 2/);
+  assert.match(client.calls[4].input, /## Repair 2 of 2/);
   assert.ok(report.storyboard, "the last candidate is kept for inspection");
 });
 

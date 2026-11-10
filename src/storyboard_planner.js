@@ -42,6 +42,7 @@ import { actingGate } from "./direction_guardrails.js";
 import { placeActions } from "./acting_place.js";
 import { lipSyncGate } from "./quality_gates.js";
 import { SHORT_FORM_HOLD, fitDurations, paceErrors } from "./duration_fit.js";
+import { EDIT_INSTRUCTIONS, EDIT_SCHEMA, EDIT_STALL, MAX_EDIT_ROUNDS, applyEdits, editProgress, editRequest, editable, extractEdits } from "./storyboard_edits.js";
 import { captionBandWarnings, settleCaptionBand } from "./caption_band_fit.js";
 import { captionVisibilityGate } from "./caption_visibility.js";
 import { captionBandFor } from "./layout_check.js";
@@ -256,22 +257,33 @@ export async function planStoryboard(options = {}) {
   // plan; every attempt is a repair, checked like any other.
   const seed = options.seed?.storyboard ? options.seed : null;
   if (seed) previous = { candidate: seed.storyboard, errors: Array.isArray(seed.errors) ? seed.errors : [] };
-  for (let attempt = 0; attempt <= repairs; attempt += 1) {
-    const kind = attempt === 0 && !seed ? "plan" : "repair";
-    const input = kind === "plan" ? request : repairRequest({ request, previous: previous?.candidate ?? null, errors: previous?.errors ?? [], attempt, repairs, direction, shots: previous?.shotCounts?.shots ?? [] });
+  // Edit rounds (src/storyboard_edits.js): a plan that fails its checks is first corrected by small edits to the scenes
+  // the checks name, each a short call, and only when those stall does a full repair write the storyboard again. They do
+  // not count against the repairs, and an edit that leaves more errors than it found is not kept.
+  const editRounds = options.editRounds === undefined ? MAX_EDIT_ROUNDS : Math.max(0, Math.min(12, Number(options.editRounds) || 0));
+  let edits = 0;
+  let stalled = 0;
+  const canEdit = () => edits < editRounds && stalled < EDIT_STALL && Boolean(previous?.working) && typeof previous.working === "object" && editable(previous?.errors);
+  for (let attempt = 0; attempt <= repairs || canEdit();) {
+    const kind = canEdit() ? "edit" : attempt === 0 && !seed ? "plan" : "repair";
+    const input = kind === "edit" ? editRequest({ storyboard: previous.working, errors: previous.errors, words: wordList, beats, round: edits + 1, rounds: editRounds }) : kind === "plan" ? request : repairRequest({ request, previous: previous?.candidate ?? null, errors: previous?.errors ?? [], attempt, repairs, direction, shots: previous?.shotCounts?.shots ?? [] });
     const callStarted = now();
     let result;
     try {
-      result = await client.runStructured({
-        instructions,
-        input,
-        schema: kind === "repair" && direction ? PLAN_REPAIR_ENVELOPE_SCHEMA : STORYBOARD_ENVELOPE_SCHEMA,
-        schemaName: "launchclip_storyboard",
-        model: bareModelId(model) ?? undefined,
-        temperature: 0,
-        maxOutputTokens: 16_000
-      });
+      result = await client.runStructured(kind === "edit"
+        ? { instructions: EDIT_INSTRUCTIONS, input, schema: EDIT_SCHEMA, schemaName: "launchclip_storyboard_edits", model: bareModelId(model) ?? undefined, temperature: 0, maxOutputTokens: 4_000 }
+        : {
+          instructions,
+          input,
+          schema: kind === "repair" && direction ? PLAN_REPAIR_ENVELOPE_SCHEMA : STORYBOARD_ENVELOPE_SCHEMA,
+          schemaName: "launchclip_storyboard",
+          model: bareModelId(model) ?? undefined,
+          temperature: 0,
+          maxOutputTokens: 16_000
+        });
     } catch (error) {
+      // An edit call that fails is not the plan's failure: the full repair takes over.
+      if (kind === "edit") { edits = editRounds; continue; }
       // A transport failure is not something a repair prompt can fix.
       attempts.push({ attempt, kind, ok: false, errors: [`model: ${message(error)}`], warnings: [], layout: { errors: 0, warnings: 0 }, usage: emptyUsage(), cost_usd: 0, model, elapsed_ms: now() - callStarted });
       last = { ok: false, errors: [`model: ${message(error)}`], warnings: [], storyboard: null, layout: emptyLayout() };
@@ -279,7 +291,14 @@ export async function planStoryboard(options = {}) {
     }
     const usage = normalizeUsage(result?.usage);
     const cost = estimateModelUsageCost(providerOf(client, model), result?.model ?? model, usage);
-    const extracted = extractStoryboard(result);
+    let extracted;
+    let edited = null;
+    if (kind === "edit") {
+      edits += 1;
+      const returned = extractEdits(result);
+      edited = returned.ok ? applyEdits(previous.working, returned.edits) : { storyboard: null, applied: [], rejected: [returned.error] };
+      extracted = edited.applied.length ? { ok: true, storyboard: edited.storyboard } : { ok: false, error: `the edit round changed nothing (${edited.rejected.slice(0, 3).join("; ") || "no edits"})`, text: null };
+    } else extracted = extractStoryboard(result);
     let checked;
     if (!extracted.ok) checked = { ok: false, errors: [`json: ${extracted.error}`], warnings: [], storyboard: null, layout: emptyLayout(), candidate: extracted.text ?? null };
     else {
@@ -467,6 +486,9 @@ export async function planStoryboard(options = {}) {
       if (shotErrors.length) { checked.errors = [...shotErrors, ...checked.errors]; checked.ok = false; }
       checked.warnings = [...pinned.warnings, ...checked.warnings];
       checked.candidate = extracted.storyboard;
+      // What an edit round works on: the storyboard as tooling left it, which is the one the errors are about.
+      checked.working = pinned.storyboard;
+      if (edited) checked.warnings = [...checked.warnings, `edits: round ${edits} made ${edited.applied.length} edit${edited.applied.length === 1 ? "" : "s"} (${edited.applied.slice(0, 6).join("; ")}${edited.applied.length > 6 ? "; …" : ""})`];
       // extraCheck(storyboard) → [error strings]: caller rules (for example,
       // `launchclip make` allows only the files in its asset manifest).
       if (typeof extraCheck === "function" && checked.storyboard) {
@@ -531,6 +553,14 @@ export async function planStoryboard(options = {}) {
       // A failed attempt keeps the plan it failed on (as the model returned it), so the failure can be replayed.
       ...(!checked.ok && checked.candidate && typeof checked.candidate === "object" ? { candidate: checked.candidate } : {})
     });
+    if (kind === "edit") {
+      // An edit round is kept when it moved the plan on (editProgress); otherwise the plan stays as it was and the round counts as a stall.
+      const better = checked.ok || (Boolean(checked.working) && editProgress(previous.errors, checked.errors));
+      stalled = better ? 0 : stalled + 1;
+      if (!better) continue;
+      // Earlier warnings about the plan still hold for the edited one.
+      checked.warnings = [...new Set([...(previous.warnings ?? []), ...checked.warnings])];
+    } else attempt += 1;
     last = checked;
     previous = checked;
     if (checked.ok) break;
@@ -599,7 +629,8 @@ export async function planStoryboard(options = {}) {
     lane,
     model,
     attempts,
-    repairs_used: Math.max(0, attempts.length - 1),
+    repairs_used: Math.max(0, attempts.filter((entry) => entry.kind !== "edit").length - 1),
+    edit_rounds: attempts.filter((entry) => entry.kind === "edit").length,
     max_repairs: repairs,
     valid_first_attempt: Boolean(attempts[0]?.ok),
     errors: last?.errors ?? [],

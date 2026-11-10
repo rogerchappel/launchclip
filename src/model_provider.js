@@ -73,6 +73,7 @@ export class ChatCompletionsStructuredClient {
     this.supportsImages = route.supportsImages;
     this.reasoning = route.reasoning;
     this.noTemperature = new Set();
+    this.lowReasoning = new Set();
   }
 
   async runStructured(options = {}) {
@@ -98,6 +99,7 @@ export class ChatCompletionsStructuredClient {
       if (options.reasoningEffort && (options.reasoningEffort !== "none" || model === "openrouter/free")) {
         body.reasoning = { effort: options.reasoningEffort };
       }
+      else if (!options.reasoningEffort && this.lowReasoning.has(model)) body.reasoning = { effort: "low" };
     }
     let payload;
     try {
@@ -106,6 +108,13 @@ export class ChatCompletionsStructuredClient {
       if (!("temperature" in body) || !refusesParameters(error)) throw error;
       this.noTemperature.add(model);
       delete body.temperature;
+      payload = await this.request("/chat/completions", { method: "POST", body: JSON.stringify(body) });
+    }
+    // A model that thinks by default can spend the whole output limit on reasoning and return nothing, or a reply cut
+    // off mid-JSON. Asked again with a small reasoning budget it answers; the client then keeps that budget for the model.
+    if (this.provider === "openrouter" && !body.reasoning && thoughtOutTheLimit(payload)) {
+      this.lowReasoning.add(model);
+      body.reasoning = { effort: "low" };
       payload = await this.request("/chat/completions", { method: "POST", body: JSON.stringify(body) });
     }
     const result = chatStructuredResult(payload, model);
@@ -175,6 +184,16 @@ export class ChatCompletionsStructuredClient {
 function refusesParameters(error) {
   const message = String(error?.message ?? "");
   return /\((?:400|404)\)/.test(message) && /requested parameters|temperature/i.test(message);
+}
+
+// The reply stopped at the output limit with most of it spent on reasoning.
+function thoughtOutTheLimit(payload) {
+  const choice = payload?.choices?.[0] ?? {};
+  if (choice.finish_reason !== "length") return false;
+  const usage = payload?.usage ?? {};
+  const completion = Number(usage.completion_tokens ?? 0);
+  const reasoning = Number(usage.completion_tokens_details?.reasoning_tokens ?? 0);
+  return completion > 0 && reasoning >= completion * 0.5;
 }
 
 export class OllamaStructuredClient extends ChatCompletionsStructuredClient {
