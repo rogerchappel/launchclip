@@ -208,7 +208,9 @@ test("make plans a character-led explainer only where the video has no picture o
   for (const off of [{ lane: "footage-led" }, { format: "promo" }, { format: "story" }, { media: 2 }, { provider: true }, { bible: { frozen: true } }, { animation: true }, { skeleton: { id: "last-time" } }, { longForm: true }]) assert.equal(explainerContent({ ...base, ...off }), false, JSON.stringify(off));
   assert.equal(characterLed(true, { source: "generated" }), true);
   assert.equal(characterLed(true, null), true);
-  assert.equal(characterLed(true, { source: "library" }), false, "a style the user chose keeps its look and its cast");
+  assert.equal(characterLed(true, { source: "library", pack: {} }), false, "a style the user chose keeps its look and its cast");
+  // From the third real run: a project run again loads its own seed from disk, and was planned without characters.
+  assert.equal(characterLed(true, { source: "project", pack: { generated: { seed: "1c85c831" } } }), true);
   assert.equal(characterLed(false, { source: "generated" }), false);
 });
 

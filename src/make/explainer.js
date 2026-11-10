@@ -27,9 +27,13 @@ export function explainerContent({ lane, format, bible = null, animation = false
   return lane !== "footage-led" && !bible && !animation && !longForm && !skeleton && !provider && !(media > 0) && FORMATS.includes(format);
 }
 
-/** explainerContent, and the style is make's seeded one (or none). */
+/**
+ * explainerContent, and the style is make's seeded one (or none). A project
+ * that is run again loads its seed from disk (source "project"): the pack's
+ * own `generated` record is what says it is a seed.
+ */
 export function characterLed(content, style) {
-  return Boolean(content) && (!style || style.source === "generated");
+  return Boolean(content) && (!style || style.source === "generated" || Boolean(style.pack?.generated));
 }
 
 /**
