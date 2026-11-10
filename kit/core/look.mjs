@@ -29,6 +29,7 @@
 // Canonical copy: kit/core/look.mjs.
 
 import { brandFrameLayout } from './brand-frame.mjs';
+import { iconPath, isIcon } from './icons.mjs';
 import { profileGeometry } from './layout-check.mjs';
 import { LOOKS } from './looks/index.mjs';
 import { fe, hash, r } from './looks/parts.mjs';
@@ -42,6 +43,7 @@ export const LOOK_LABELS_MAX = 6;
 export const LOOK_LABEL_LENGTH = 28;
 export const LOOK_LAYER_ID = 'lc-look';
 export const LOOK_FURNITURE_ID = 'lc-look-furniture';
+export const LOOK_UNDER_ID = 'lc-look-under';
 // Above the medium (80000 / 49), below the brand frame (90000) and the
 // captions (100000 / 50). Remotion draws both after the medium in DOM order.
 // A look whose grade belongs under the paint (`under`: watercolour's pencil)
@@ -92,7 +94,7 @@ export function normalizeLook(value) {
   };
 }
 
-/** What a look sets on the fields a story already has → {colors?, cast?: {style}, world?: {time}, background?, light?, medium?}. */
+/** What a look sets on the fields a story already has → {colors?, cast?: {style}, world?: {time}, background?, light?, medium?, camera?: {mode}}. */
 export function lookPresets(value) {
   const look = normalizeLook(value);
   if (!look) return {};
@@ -103,7 +105,7 @@ export function lookPresets(value) {
 
 /**
  * The story with its look's presets filled under its own values: a colour
- * role, cast.style, world.time, background, light and medium are set only
+ * role, cast.style, world.time, background, light, medium and camera.mode are set only
  * where the story has none. `value` is the look to apply when the story names
  * none (a style pack's), and it is then written to story.look. The input is
  * not changed. → {story, applied: [paths]}
@@ -128,6 +130,7 @@ export function applyLook(story, value = undefined) {
     else if (isObject(out.world) && out.world.time === undefined && presets.world.time) { out.world.time = presets.world.time; applied.push('world.time'); }
   }
   for (const key of ['background', 'light', 'medium']) if (presets[key] !== undefined && out[key] === undefined) { out[key] = presets[key]; applied.push(key); }
+  if (presets.camera?.mode && out.camera?.mode === undefined && (out.camera === undefined || isObject(out.camera))) { out.camera = { ...(out.camera ?? {}), mode: presets.camera.mode }; applied.push('camera.mode'); }
   return { story: out, applied };
 }
 
@@ -149,7 +152,8 @@ export function stepIndex(frame, fps, step) {
  * The look pass for a story, or null when it has no look (the render is then
  * unchanged). → {name, strength, step, labels, width, height, fps, unit,
  * duration, frames, seed, safe, band, regions, shots, cues, title, colors, variants,
- * filters: [ids], grade: boolean, under: boolean, furniture: {html, css} | null}
+ * filters: [ids], grade: boolean, under: boolean, furniture: {html, css} | null,
+ * stage: {planes: {sceneId: {transform, filter}}, under} | null}
  */
 export function lookPlan(story) {
   const look = normalizeLook(story?.look);
@@ -168,6 +172,7 @@ export function lookPlan(story) {
     ...(typeof entry?.expression === 'string' ? [{ at: scene.start, expression: entry.expression }] : []),
     ...(Array.isArray(entry?.cues) ? entry.cues.filter((cue) => isObject(cue) && typeof cue.at === 'number' && typeof cue.expression === 'string').map((cue) => ({ at: scene.start + cue.at, expression: cue.expression })) : [])
   ])).sort((a, b) => a.at - b.at);
+  const icons = [...new Set(scenes.map((scene) => scene.params?.icon).filter(isIcon))];
   const plan = {
     ...look,
     // Footage is never stepped (its frames are the recording's), so a story with a base is not.
@@ -179,6 +184,9 @@ export function lookPlan(story) {
     // The safe zone inside the brand frame, and the frame's own boxes (kicker, section labels), for the furniture to keep clear of.
     safe: frame?.safe ?? geometry.safeZone, band: geometry.captionBand, regions: (frame?.regions ?? []).map((region) => region.rect),
     shots, cues,
+    // Every scene's id and track (for a look that stages the layers), and the icons the story names.
+    scenes: scenes.map((scene) => ({ id: scene.id, track: Number.isInteger(scene.track) ? scene.track : 0 })),
+    icons, iconPaths: Object.fromEntries([...icons, 'sparkles', 'check', 'heart'].filter(isIcon).map((name) => [name, iconPath(name)])),
     title: typeof story?.title === 'string' ? story.title : '',
     world: typeof story?.world?.kind === 'string' ? story.world.kind : null,
     colors: clone(def.presets?.(look)?.colors ?? {}),
@@ -190,6 +198,9 @@ export function lookPlan(story) {
   plan.under = plan.grade && def.under === true;
   plan.filters = plan.grade ? Array.from({ length: plan.variants }, (_, v) => `${LOOK_LAYER_ID}-${v}`) : [];
   plan.furniture = look.furniture && def.furniture ? def.furniture(plan) : null;
+  // A stage: a transform (and a shadow) per scene layer and markup under them all. It needs the
+  // scenes in screen space, so the renderers apply it only when no camera carries them.
+  plan.stage = def.stage ? def.stage(plan) : null;
   return plan;
 }
 
@@ -291,6 +302,24 @@ export function lookFurnitureMarkup(plan) {
   const style = Object.entries(lookVarsAt(plan, 0)).map(([key, value]) => `${key}:${value}`).join(';');
   // Furniture is decoration over the scenes: the layout audit leaves it out.
   return `<div id="${LOOK_FURNITURE_ID}" data-launchclip-look="${plan.name}" data-layout-ignore="true" data-layout-allow-overflow="true" data-layout-allow-overlap="true" aria-hidden="true" style="${style}">${plan.furniture.html}</div>`;
+}
+
+/** The inline style of a scene's layer on the look's stage ({} without one): {transformOrigin, transform, filter}. */
+export function lookPlaneStyle(plan, sceneId) {
+  const plane = plan?.stage?.planes[sceneId];
+  return plane ? { transformOrigin: '0 0', transform: plane.transform, filter: plane.filter } : {};
+}
+
+/** The stage's CSS for the HyperFrames scene elements (#lc-scene-<id>, its loop clone and its behind part). */
+export function lookStageCss(plan) {
+  if (!plan?.stage) return '';
+  return Object.entries(plan.stage.planes).map(([id, plane]) => `#lc-scene-${id}, #lc-scene-${id}-loop, #lc-scene-${id}-behind { transform-origin: 0 0; transform: ${plane.transform}; filter: ${plane.filter}; }`).join('\n');
+}
+
+/** The stage's markup under every scene (the floor), '' without a stage. */
+export function lookUnderMarkup(plan) {
+  if (!plan?.stage?.under) return '';
+  return `<div id="${LOOK_UNDER_ID}" data-launchclip-look="${plan.name}" data-layout-ignore="true" aria-hidden="true" style="position:absolute;left:0;top:0;width:${plan.width}px;height:${plan.height}px;pointer-events:none;overflow:hidden">${plan.stage.under}</div>`;
 }
 
 /** The selector the variables are set on. */
