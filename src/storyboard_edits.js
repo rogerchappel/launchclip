@@ -182,7 +182,8 @@ export function applyEdits(storyboard, edits) {
 
 // The slips an edit can clear: a time, an anchor, a length, a position, a value from a short list, a param to take off.
 // Anything that needs a new scene, another module or a change to the direction map (an unknown module, a card too
-// many, a missing shot, a map line) is the full repair's, which has the catalog.
+// many, a scene held so long its line needs a second shot, a missing shot, a map line) is the full repair's, which
+// has the catalog.
 const EDITABLE = [
   /overlaps scenes\[\d+\]/,
   /at once \(/,
@@ -190,7 +191,7 @@ const EDITABLE = [
   /must fall between|before the next cue|must be seconds|must be before scenes\[|start must be before/,
   /duration must be between|needs a scene of at least/,
   /^reading: /,
-  /holds for [\d.]+ s/,
+  /closer than [\d.]+ s|space them out/,
   /off the canvas/,
   /must be at most \d+ (characters|words|items)/,
   /must be one of /,
@@ -202,4 +203,19 @@ const EDITABLE = [
 /** Whether every check error is a slip an edit round can clear (see EDITABLE); one that is not sends the plan to the full repair. */
 export function editable(errors) {
   return Array.isArray(errors) && errors.length > 0 && errors.every((entry) => EDITABLE.some((pattern) => pattern.test(String(entry))));
+}
+
+// Where an error is, without what it measured: its first two parts (the check and the place), less quoted values
+// and decimals, so "on screen for 1.12 s" and "for 1.15 s", or two wrong words on one anchor, are the same error.
+const place = (error) => String(error).split(": ").slice(0, 2).join(": ").replace(/"[^"]*"/g, '""').replace(/word:[^\s:;,)]+/g, "word:").replace(/\d+\.\d+/g, "#");
+
+/**
+ * Whether an edit round moved the plan on: it passes, or at least one of the places it was given an error at is
+ * clear and the plan has no more errors than before. Clearing one slip often shows the next one (an anchor fixed,
+ * the next anchor found), so an error somewhere else in the same number is progress, not a stall.
+ */
+export function editProgress(before, after) {
+  if (!after.length) return true;
+  const left = new Set(after.map(place));
+  return after.length <= before.length && before.some((entry) => !left.has(place(entry)));
 }

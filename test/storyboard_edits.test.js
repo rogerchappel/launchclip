@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyEdits, editRequest, editable, extractEdits, scenesNamed } from "../src/storyboard_edits.js";
+import { applyEdits, editProgress, editRequest, editable, extractEdits, scenesNamed } from "../src/storyboard_edits.js";
 
 const story = () => ({ scenes: [
   { id: "open", module: "hook-title", track: 0, start: 0, end: 3, params: { headline: "Why decks rot" } },
@@ -61,4 +61,20 @@ test("edit rounds take timing and value slips; a plan that needs a new scene or 
 test("edits are read from a client result", () => {
   assert.deepEqual(extractEdits({ value: { edits: [{ scene: "a", op: "set", path: "end", value_json: "1" }, "junk"] } }), { ok: true, edits: [{ scene: "a", op: "set", path: "end", value_json: "1" }] });
   assert.equal(extractEdits({ value: { storyboard_json: "{}" } }).ok, false);
+});
+
+test("an edit round that clears a slip and shows the next one is progress; the same errors, or more of them, are not", () => {
+  const budget = 'anchors: scenes[2].params.cues[0].at: Unknown anchor word:budget: no narration word matches "budget"';
+  const oil = 'anchors: scenes[4].params.cues[1].at: Unknown anchor word:oil: no narration word matches "oil"';
+  assert.equal(editProgress([budget], [oil]), true);
+  assert.equal(editProgress([budget], []), true);
+  assert.equal(editProgress([budget], [budget]), false);
+  assert.equal(editProgress([budget], [budget.replaceAll("budget", "cheap")]), false, "another wrong word on the same anchor");
+  assert.equal(editProgress(["reading: step (character-cameo) is fully on screen for 1.12 s, and a card needs at least 1.2 s"], ["reading: step (character-cameo) is fully on screen for 1.15 s, and a card needs at least 1.2 s"]), false);
+  assert.equal(editProgress([budget], [oil, "validation: scenes[1] (a) overlaps scenes[0] (b) on track 0"]), false);
+});
+
+test("a pose change too close to the next is an edit's; a scene held too long needs a second shot, so it is the repair's", () => {
+  assert.equal(editable(['cast: scenes[10] (recap): module "character-cameo" params: recap (character-cameo): params.cues pose changes at 1.95 s and 2.35 s are closer than 0.45 s; space them out']), true);
+  assert.equal(editable(["characters: scene-pine-rot (cast-scene) holds for 5.27 s; in 9:16 the top third of the frame is only its plate"]), false);
 });

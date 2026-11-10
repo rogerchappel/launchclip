@@ -42,7 +42,7 @@ import { actingGate } from "./direction_guardrails.js";
 import { placeActions } from "./acting_place.js";
 import { lipSyncGate } from "./quality_gates.js";
 import { SHORT_FORM_HOLD, fitDurations, paceErrors } from "./duration_fit.js";
-import { EDIT_INSTRUCTIONS, EDIT_SCHEMA, EDIT_STALL, MAX_EDIT_ROUNDS, applyEdits, editRequest, editable, extractEdits } from "./storyboard_edits.js";
+import { EDIT_INSTRUCTIONS, EDIT_SCHEMA, EDIT_STALL, MAX_EDIT_ROUNDS, applyEdits, editProgress, editRequest, editable, extractEdits } from "./storyboard_edits.js";
 import { captionBandWarnings, settleCaptionBand } from "./caption_band_fit.js";
 import { captionVisibilityGate } from "./caption_visibility.js";
 import { captionBandFor } from "./layout_check.js";
@@ -554,9 +554,8 @@ export async function planStoryboard(options = {}) {
       ...(!checked.ok && checked.candidate && typeof checked.candidate === "object" ? { candidate: checked.candidate } : {})
     });
     if (kind === "edit") {
-      // An edit round is kept when it leaves fewer errors; otherwise the plan stays as it was and the round counts as a stall.
-      const before = previous.errors.length;
-      const better = checked.ok || (Boolean(checked.working) && checked.errors.length < before);
+      // An edit round is kept when it moved the plan on (editProgress); otherwise the plan stays as it was and the round counts as a stall.
+      const better = checked.ok || (Boolean(checked.working) && editProgress(previous.errors, checked.errors));
       stalled = better ? 0 : stalled + 1;
       if (!better) continue;
       // Earlier warnings about the plan still hold for the edited one.
