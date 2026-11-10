@@ -10,6 +10,8 @@
 // (night, late, neon → night; sunset, evening, golden hour → dusk), else day.
 
 export const TOPIC_FIT = Object.freeze([
+  {topic: 'horse racing', words: ['racing', 'racetrack', 'racecourse', 'race day', 'raceday', 'jockey', 'jockeys', 'starting gate', 'starting stalls', 'furlong', 'furlongs', 'derby', 'thoroughbred', 'thoroughbreds', 'racehorse', 'racehorses', 'winning post', 'photo finish', 'steeplechase'], worlds: ['racetrack', 'paddock', 'stable-yard'], props: ['starting-gate', 'finish-post', 'rosette']},
+  {topic: 'horses and stables', words: ['horse', 'horses', 'foal', 'foals', 'mare', 'mares', 'stallion', 'pony', 'ponies', 'stable', 'stables', 'stable yard', 'groom', 'saddle', 'hay', 'paddock', 'parade ring', 'yearling', 'colt', 'filly'], worlds: ['stable-yard', 'paddock', 'racetrack'], props: ['hay-bale', 'bucket', 'saddle']},
   {topic: 'cooking', words: ['cook', 'cooking', 'recipe', 'recipes', 'kitchen', 'chef', 'meal', 'meals', 'bake', 'baking', 'food', 'dinner', 'lunch', 'breakfast', 'restaurant'], worlds: ['kitchen', 'cafe'], props: ['pan', 'pot', 'cutting-board', 'bread', 'fruit-bowl']},
   {topic: 'coffee', words: ['coffee', 'cafe', 'café', 'barista', 'espresso', 'latte', 'tea'], worlds: ['cafe', 'kitchen', 'shopfronts'], props: ['coffee-cup', 'mug', 'teapot', 'cake']},
   {topic: 'fitness', words: ['fitness', 'workout', 'gym', 'exercise', 'training', 'run', 'running', 'yoga', 'health', 'wellness', 'sport', 'sports', 'athlete', 'marathon'], worlds: ['gym', 'park'], props: ['dumbbell', 'kettlebell', 'water-bottle', 'ball']},

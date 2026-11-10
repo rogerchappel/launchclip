@@ -63,7 +63,7 @@ function positions(value) {
 
 /**
  * Freeze a project's show bible. options: characters (ids, comma-separated
- * or a list), style, position, world, time, sets, rule, pack, seed, force,
+ * or a list), style, position, world, time, sets, props, rule, pack, seed, force,
  * pin (false leaves storyboard.json and DIRECTION.json alone). hooks: home
  * (the character library's root), render(html, png) (stands in for
  * Chromium), chromium (an executable path).
@@ -137,6 +137,14 @@ export async function freezeBible(projectDir, options = {}, hooks = {}) {
   if (text(options.world)) { world.kind = text(options.world); }
   if (text(options.time)) world.time = text(options.time);
   if (options.sets !== undefined) world.sets = commas(options.sets);
+  // --props: the things the story turns on. They join the world's props (one already placed keeps its placement and cues) and are its `shows`.
+  if (options.props !== undefined) {
+    const ids = commas(options.props);
+    const placed = Array.isArray(world.props) ? world.props : [];
+    const idOf = (entry) => (typeof entry === "string" ? entry : entry?.id);
+    world.props = [...placed, ...ids.filter((id) => !placed.some((entry) => idOf(entry) === id)).map((id) => ({ id }))];
+    world.shows = ids;
+  }
   const pack = text(options.pack) ?? existing?.style?.pack ?? storyStyleRequest(story)?.name ?? null;
   const seedIn = options.seed ?? existing?.style?.seed;
   const seed = seedIn === undefined || seedIn === null ? null : /^\d+$/.test(String(seedIn)) ? Number(seedIn) : String(seedIn);
@@ -262,7 +270,7 @@ export async function showBible(projectDir, hooks = {}) {
 export async function runBibleCommand(action, project, flags = {}, hooks = {}) {
   if (action === "freeze") {
     return freezeBible(project ?? flags.project ?? ".", {
-      characters: flags.characters, style: flags.style, position: flags.position, world: flags.world, time: flags.time, sets: flags.sets,
+      characters: flags.characters, style: flags.style, position: flags.position, world: flags.world, time: flags.time, sets: flags.sets, props: flags.props,
       rule: flags.rule, pack: flags.pack, seed: flags.seed, chromium: flags.chromium, force: Boolean(flags.force), pin: !flags["no-pin"]
     }, hooks);
   }

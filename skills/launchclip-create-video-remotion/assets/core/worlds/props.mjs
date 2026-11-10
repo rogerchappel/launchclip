@@ -17,8 +17,13 @@ import {tree, lampPost} from './common.mjs';
 import {pottedPlant, frameArt, deskLamp, monitor, chair} from './furniture.mjs';
 import {car} from './street.mjs';
 import {bench} from './outside.mjs';
+import {STORY_SCALE, bucketNodes, hayStack, winningPost} from './racing.mjs';
+import {el} from '../catalog-b-view.mjs';
 
-const P = (label, on, h, w, draw) => ({label, on, h, w, draw});
+// extra: {story: true} for a story prop, drawn at the cast's scale wherever
+// it stands (racing.mjs STORY_SCALE); {states: [...]} for a prop with states
+// (the first is its default), which draw(…, {state}) draws one of.
+const P = (label, on, h, w, draw, extra = {}) => ({label, on, h, w, draw, ...extra});
 const SURFACE = ['surface', 'counter', 'ground'];
 const GROUND = ['ground', 'floor'];
 const FLOOR = ['floor', 'ground'];
@@ -749,12 +754,118 @@ const DEFS = {
     out.push(p.line(x - r * 0.4, cy + r * 0.86, x - 0.15 * s, y - 0.3 * s, pal.ink, 2), p.line(x + r * 0.4, cy + r * 0.86, x + 0.15 * s, y - 0.3 * s, pal.ink, 2));
     out.push(p.rect(x - 0.2 * s, y - 0.32 * s, 0.4 * s, 0.32 * s, pal.woodShade, {rx: 0.04 * s}));
     return out;
-  })
+  }),
+
+  // -- Racing and story props (drawn at the cast's scale) --------------------
+  bucket: P('bucket', GROUND, 0.5, 0.4, (k, x, y, s) => bucketNodes(k, x, y, s), {story: true}),
+  'hay-bale': P('hay bale', GROUND, 0.5, 0.95, (k, x, y, s) => hayStack(k, x - 0.45 * s, y, s, [1]), {story: true}),
+  saddle: P('saddle on a rack', GROUND, 1.1, 0.9, (k, x, y, s) => {
+    const {p, pal} = k;
+    const leather = pal.g('#8a5630'), leatherS = pal.g('#643a1c');
+    const top = y - 0.82 * s;
+    return [shadowUnder(k, x, y, 0.8, s),
+      p.line(x - 0.3 * s, y, x - 0.22 * s, top, pal.woodShade, 0.05 * s / k.u), p.line(x + 0.3 * s, y, x + 0.22 * s, top, pal.woodShade, 0.05 * s / k.u),
+      p.rect(x - 0.42 * s, top - 0.03 * s, 0.84 * s, 0.07 * s, pal.wood, {rx: 0.03 * s}),
+      p.path(`M${f(x - 0.4 * s)} ${f(top - 0.02 * s)}Q${f(x - 0.44 * s)} ${f(top - 0.3 * s)} ${f(x - 0.24 * s)} ${f(top - 0.26 * s)}Q${f(x)} ${f(top - 0.12 * s)} ${f(x + 0.22 * s)} ${f(top - 0.22 * s)}Q${f(x + 0.4 * s)} ${f(top - 0.24 * s)} ${f(x + 0.38 * s)} ${f(top - 0.02 * s)}Z`, leather, {}),
+      p.path(pts([[x - 0.16 * s, top - 0.06 * s], [x + 0.14 * s, top - 0.06 * s], [x + 0.18 * s, top + 0.34 * s], [x - 0.2 * s, top + 0.34 * s]]), leatherS, {}),
+      p.line(x, top + 0.34 * s, x, top + 0.5 * s, pal.ink, 2), p.rect(x - 0.07 * s, top + 0.5 * s, 0.14 * s, 0.1 * s, 'none', {stroke: pal.metalLight, sw: 1.6, rx: 0.02 * s})];
+  }, {story: true}),
+  rosette: P('rosette', WALL, 0.7, 0.45, (k, x, y, s, anchor) => {
+    const {p, pal} = k;
+    const cy = anchor === 'wall' ? y - 0.1 * s : y - 1.9 * s, r = 0.2 * s;
+    const out = [p.path(pts([[x - r * 0.5, cy + r * 0.5], [x - r * 0.1, cy + r * 0.5], [x - r * 0.5, cy + r * 2.3], [x - r * 0.75, cy + r * 1.9], [x - r * 1.05, cy + r * 2.1]]), pal.primaryShade, {}),
+      p.path(pts([[x + r * 0.5, cy + r * 0.5], [x + r * 0.1, cy + r * 0.5], [x + r * 0.5, cy + r * 2.3], [x + r * 0.75, cy + r * 1.9], [x + r * 1.05, cy + r * 2.1]]), pal.primary, {})];
+    for (let i = 0; i < 10; i++) out.push(p.circle(x + Math.cos(i * Math.PI / 5) * r * 0.82, cy + Math.sin(i * Math.PI / 5) * r * 0.82, r * 0.3, pal.primary, {}));
+    out.push(p.circle(x, cy, r * 0.82, pal.primaryLight, {}), p.circle(x, cy, r * 0.5, pal.g('#f0b632'), {}));
+    return out;
+  }, {story: true}),
+  'finish-post': P('winning post', GROUND, 2.6, 0.6, (k, x, y, s) => winningPost(k, x, y, 2.6 * s), {story: true}),
+  jump: P('jump', GROUND, 1.3, 2, (k, x, y, s) => {
+    const {p, pal} = k;
+    const out = [shadowUnder(k, x, y, 2, s)];
+    // Brush between two wing stands, two striped poles across.
+    out.push(p.rect(x - 0.78 * s, y - 0.55 * s, 1.56 * s, 0.55 * s, pal.foliageShade, {rx: 0.08 * s}));
+    for (let i = 0; i < 7; i++) out.push(p.circle(x - 0.66 * s + i * 0.22 * s, y - 0.56 * s, 0.13 * s, i % 2 ? pal.foliage : pal.foliageLight, {}));
+    for (const py of [0.78, 1.0]) {
+      out.push(p.rect(x - 0.9 * s, y - py * s, 1.8 * s, 0.08 * s, pal.white, {rx: 0.04 * s}));
+      for (const t of [-0.6, -0.1, 0.4]) out.push(p.rect(x + t * s, y - py * s, 0.25 * s, 0.08 * s, pal.accent, {stroke: false}));
+    }
+    for (const side of [-1, 1]) {
+      const wx = x + side * 0.92 * s;
+      out.push(p.path(pts([[wx - 0.07 * s, y], [wx + 0.07 * s, y], [wx + 0.07 * s, y - 1.3 * s], [wx - 0.07 * s, y - 1.3 * s]]), pal.white, {}));
+      out.push(p.path(pts([[wx + side * 0.07 * s, y], [wx + side * 0.36 * s, y], [wx + side * 0.07 * s, y - 1.1 * s]]), pal.primary, {}));
+      out.push(p.circle(wx, y - 1.3 * s, 0.09 * s, pal.accent, {}));
+    }
+    return out;
+  }, {story: true}),
+  sign: P('sign on a post', GROUND, 1.5, 1, (k, x, y, s) => {
+    const {p, pal} = k;
+    // A blank board with an arrow: the kit draws no lettering on props.
+    return [shadowUnder(k, x, y, 0.4, s), p.rect(x - 0.045 * s, y - 1.2 * s, 0.09 * s, 1.2 * s, pal.woodShade, {}),
+      p.rect(x - 0.48 * s, y - 1.5 * s, 0.96 * s, 0.56 * s, pal.cream, {rx: 0.05 * s}),
+      p.rect(x - 0.42 * s, y - 1.44 * s, 0.84 * s, 0.44 * s, 'none', {stroke: pal.primary, sw: 1.4, rx: 0.03 * s}),
+      p.path(pts([[x - 0.26 * s, y - 1.26 * s], [x + 0.06 * s, y - 1.26 * s], [x + 0.06 * s, y - 1.34 * s], [x + 0.28 * s, y - 1.22 * s], [x + 0.06 * s, y - 1.1 * s], [x + 0.06 * s, y - 1.18 * s], [x - 0.26 * s, y - 1.18 * s]]), pal.accent, {stroke: false})];
+  }, {story: true}),
+  'starting-gate': P('starting gate', GROUND, 2.5, 3.9, (k, x, y, s, anchor, opt = {}) => startingGate(k, x, y, s, opt.state ?? 'closed'), {story: true, states: ['closed', 'open'], at: 'centre'})
 };
+
+/** How many stalls the starting gate has: two on a portrait canvas, three across a landscape one. */
+export const gateBays = k => (k.portrait ? 2 : 3);
+
+/**
+ * A starting gate seen from the front, centred on x: white posts, a brand
+ * top beam with a pip per stall, and a pair of padded doors in each stall.
+ * closed: the doors meet across the stall. open: each door has swung out
+ * against its post and the stall stands clear, so the course shows through.
+ */
+function startingGate(k, x, y, s, state) {
+  const {p, pal} = k;
+  const n = gateBays(k);
+  const bay = 1.15 * s, post = 0.11 * s, h = 2.5 * s;
+  const w = n * bay + (n + 1) * post, left = x - w / 2;
+  const pad = pal.accent, padS = pal.accentShade;
+  const out = [p.shadow(x, y, w * 0.52, 0.09 * s, 0.7)];
+  const doorTop = y - 1.55 * s, doorBottom = y - 0.3 * s;
+  for (let i = 0; i < n; i++) {
+    const bx = left + post + i * (bay + post);
+    // The rails along each stall, seen end on behind the doors.
+    out.push(p.rect(bx, y - 1.0 * s, bay, 0.05 * s, pal.metalShade, {stroke: false, opacity: 0.55}));
+    if (state === 'open') {
+      for (const side of [0, 1]) {
+        const hx = side ? bx + bay : bx, dir = side ? -1 : 1;
+        out.push(p.path(pts([[hx, doorTop], [hx + dir * bay * 0.13, doorTop + 0.07 * s], [hx + dir * bay * 0.13, doorBottom + 0.07 * s], [hx, doorBottom]]), padS, {}));
+      }
+    } else {
+      for (const side of [0, 1]) {
+        const dx = bx + side * bay / 2;
+        out.push(p.rect(dx + 0.012 * s, doorTop, bay / 2 - 0.024 * s, doorBottom - doorTop, pad, {rx: 0.07 * s}));
+        out.push(p.rect(dx + 0.07 * s, doorTop + 0.1 * s, bay / 2 - 0.14 * s, (doorBottom - doorTop) * 0.36, mixColor('#ffffff', pad, 0.22), {rx: 0.04 * s, stroke: false}));
+      }
+      out.push(p.rect(bx + bay / 2 - 0.05 * s, (doorTop + doorBottom) / 2 - 0.04 * s, 0.1 * s, 0.08 * s, pal.metalLight, {rx: 0.02 * s}));
+    }
+  }
+  for (let i = 0; i <= n; i++) {
+    const px = left + i * (bay + post);
+    out.push(p.rect(px, y - h + 0.2 * s, post, h - 0.2 * s, pal.white, {rx: post * 0.3}));
+    out.push(p.rect(px - post * 0.25, y - 0.07 * s, post * 1.5, 0.07 * s, pal.metalShade, {rx: 0.02 * s}));
+  }
+  // The top beam, with one pip for the first stall, two for the second…
+  out.push(p.rect(left - 0.06 * s, y - h, w + 0.12 * s, 0.42 * s, pal.primary, {rx: 0.1 * s}));
+  out.push(p.rect(left - 0.06 * s, y - h + 0.3 * s, w + 0.12 * s, 0.06 * s, pal.primaryShade, {stroke: false}));
+  for (let i = 0; i < n; i++) {
+    const cx = left + post + i * (bay + post) + bay / 2;
+    for (let j = 0; j <= i; j++) out.push(p.circle(cx + (j - i / 2) * 0.13 * s, y - h + 0.17 * s, 0.045 * s, pal.white, {stroke: false}));
+  }
+  return out;
+}
 
 export const PROPS = Object.freeze(DEFS);
 export const PROP_IDS = Object.freeze(Object.keys(DEFS));
-export const PROP_KEYS = Object.freeze(['id', 'at', 'on', 'scale', 'layer', 'flip']);
+export const PROP_KEYS = Object.freeze(['id', 'at', 'on', 'scale', 'layer', 'flip', 'state']);
+/** Props a story can turn on: drawn at the cast's scale (racing.mjs STORY_SCALE), plus a few small ones a scene can show. */
+export const STORY_PROP_IDS = Object.freeze([...Object.keys(DEFS).filter(id => DEFS[id].story), 'trophy', 'ball', 'gift', 'flag', 'signpost', 'box', 'ladder', 'bench', 'bike', 'tent', 'campfire', 'balloons', 'kite']);
+/** Props with states, and the states of each (the first is its default): {'starting-gate': ['closed', 'open']}. */
+export const PROP_STATES = Object.freeze(Object.fromEntries(Object.entries(DEFS).filter(([, def]) => def.states).map(([id, def]) => [id, Object.freeze([...def.states])])));
 export const PROP_ANCHORS = Object.freeze(['surface', 'counter', 'ground', 'floor', 'wall', 'sky', 'road', 'far', 'parapet']);
 export const PROP_LAYERS = Object.freeze(['back', 'mid', 'front']);
 const AT = {left: 0.12, centre: 0.5, center: 0.5, right: 0.88};
@@ -766,7 +877,8 @@ export function propEntry(entry, path = 'props') {
   const given = typeof entry === 'string' ? {id: entry} : entry;
   if (!given || typeof given !== 'object' || Array.isArray(given)) throw new Error(`${path} must be a prop id or {id, at?, on?, scale?, layer?, flip?}`);
   // null means unset (a normalised entry passes through unchanged).
-  const raw = Object.fromEntries(Object.entries(given).filter(([, value]) => value !== null));
+  // null means unset; cues (a prop's state changes) are the scene's to read (catalog-world.mjs sceneProps).
+  const raw = Object.fromEntries(Object.entries(given).filter(([key, value]) => value !== null && key !== 'cues'));
   for (const key of Object.keys(raw)) if (!PROP_KEYS.includes(key)) throw new Error(`${path}.${key} is not a prop field (${PROP_KEYS.join(', ')})`);
   if (!PROPS[raw.id]) throw new Error(`${path}.id ${JSON.stringify(raw.id)} is not a prop (props: ${PROP_IDS.join(', ')})`);
   if (raw.at !== undefined && !(raw.at in AT) && !(typeof raw.at === 'number' && raw.at >= 0 && raw.at <= 1)) throw new Error(`${path}.at must be left, centre, right or a share of the width from 0 to 1`);
@@ -774,7 +886,9 @@ export function propEntry(entry, path = 'props') {
   if (raw.scale !== undefined && !(typeof raw.scale === 'number' && raw.scale >= 0.25 && raw.scale <= 4)) throw new Error(`${path}.scale must be a number from 0.25 to 4`);
   if (raw.layer !== undefined && !PROP_LAYERS.includes(raw.layer)) throw new Error(`${path}.layer must be one of ${PROP_LAYERS.join(', ')}`);
   if (raw.flip !== undefined && typeof raw.flip !== 'boolean') throw new Error(`${path}.flip must be true or false`);
-  return {id: raw.id, at: raw.at ?? null, on: raw.on ?? null, scale: raw.scale ?? 1, layer: raw.layer ?? null, flip: raw.flip === true};
+  const states = PROPS[raw.id].states;
+  if (raw.state !== undefined && !states?.includes(raw.state)) throw new Error(states ? `${path}.state must be one of ${states.join(', ')}` : `${path}.state: ${raw.id} has no states (props with states: ${Object.keys(PROP_STATES).join(', ')})`);
+  return {id: raw.id, at: raw.at ?? null, on: raw.on ?? null, scale: raw.scale ?? 1, layer: raw.layer ?? null, flip: raw.flip === true, ...(states ? {state: raw.state ?? states[0]} : {})};
 }
 
 const DEFAULT_LAYER = {surface: 'front', counter: 'mid', ground: 'mid', floor: 'mid', wall: 'back', sky: 'back', road: 'front', far: 'mid', parapet: 'front'};
@@ -792,10 +906,12 @@ export function placeProps(k, anchors, entries = []) {
     const def = PROPS[e.id];
     const anchorName = (e.on && anchors[e.on] ? e.on : null) ?? def.on.find(name => anchors[name]) ?? 'ground';
     const a = anchors[anchorName] ?? anchors.ground;
-    const s = a.ppm * e.scale;
+    // A story prop keeps the cast's scale on the ground of any world.
+    const s = (def.story && (anchorName === 'ground' || anchorName === 'floor') ? Math.max(a.ppm, k.ppm * STORY_SCALE) : a.ppm) * e.scale;
     const w = def.w * s;
     let x;
-    if (e.at !== null) x = (typeof e.at === 'number' ? e.at : AT[e.at]) * k.W;
+    const at = e.at ?? def.at ?? null;
+    if (at !== null) x = (typeof at === 'number' ? at : AT[at]) * k.W;
     else {
       const taken = used[anchorName] ??= [];
       const fits = fx => {
@@ -810,11 +926,20 @@ export function placeProps(k, anchors, entries = []) {
     const y = a.y;
     const layer = e.layer ?? a.layer ?? DEFAULT_LAYER[anchorName] ?? 'mid';
     k.p.at(layer);
-    let nodes = def.draw(k, x, y, s, anchorName).flat(Infinity).filter(Boolean);
-    if (e.flip) nodes = [k.p.g(nodes, {transform: `translate(${f(2 * x)} 0) scale(-1 1)`})];
+    const drawState = state => {
+      const drawn = def.draw(k, x, y, s, anchorName, {state}).flat(Infinity).filter(Boolean);
+      return e.flip ? [k.p.g(drawn, {transform: `translate(${f(2 * x)} 0) scale(-1 1)`})] : drawn;
+    };
+    // A prop with states draws each one in a group of its own ({scene id}-prop{i}-{state}),
+    // the others clear, so a scene can cue the change (catalog-world.mjs propCueOps).
+    let nodes, groups = null;
+    if (def.states) {
+      groups = Object.fromEntries(def.states.map(state => [state, `${k.id}-prop${i}-${state}`]));
+      nodes = def.states.map(state => el('g', groups[state], null, drawState(state), state === e.state ? {} : {opacity: 0}));
+    } else nodes = drawState(undefined);
     const h = def.h * s;
     const top = anchorName === 'wall' ? y - h / 2 : y - h;
-    out.push({id: e.id, anchor: anchorName, x, y, scale: Math.round(s * 1000) / 1000, layer, rect: {x: Math.round(x - w / 2), y: Math.round(top), width: Math.round(w), height: Math.round(h)}, nodes});
+    out.push({id: e.id, anchor: anchorName, x, y, scale: Math.round(s * 1000) / 1000, layer, rect: {x: Math.round(x - w / 2), y: Math.round(top), width: Math.round(w), height: Math.round(h)}, nodes, ...(groups ? {state: e.state, groups} : {})});
   });
   return out;
 }

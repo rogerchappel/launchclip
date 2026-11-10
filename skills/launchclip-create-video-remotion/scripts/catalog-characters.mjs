@@ -34,7 +34,8 @@ import {castMember, resolveStoryCast} from './characters/cues.mjs';
 import {ACTIONS, ACTION_INFO, GAZE, NAMED_TARGETS, TARGET_REQUIRED, VIEWS, gazeOffset, viewFor, sideOf, targetError, targetPoint, walkDuration} from './characters/actions.mjs';
 import {WORLD_KINDS, WORLD_TIMES, renderWorld, worldAnchors, worldFocus, worldGrade, worldLight} from './worlds/index.mjs';
 import {worldLayerNodes} from './worlds/view.mjs';
-import {withoutForeground, worldCameraStates} from './catalog-world.mjs';
+import {propCueOps, sceneProps, withoutForeground, worldCameraStates} from './catalog-world.mjs';
+import {PROP_STATES, RACING_WORLDS, STORY_PROP_IDS} from './worlds/index.mjs';
 import {OVERSCAN} from './worlds/index.mjs';
 import {SPRITE_SCENE, SPRITE_TIMING} from './catalog-sprites.mjs';
 import {pointAim} from './characters/aim.mjs';
@@ -419,15 +420,23 @@ function castStage(b, ctx, setName) {
   const story = isStoryWorld(ctx.world) ? {kind: ctx.world.kind, time: ctx.world.time ?? 'day'} : null;
   const fits = SET_INFO[setName].world;
   const backdrop = p.backdrop === undefined ? (fits && (named || story) ? 'world' : 'room') : check.oneOf(p.backdrop, 'params.backdrop', BACKDROPS);
-  if (backdrop === 'room') return {backdrop, world: named, draw: null};
+  if (backdrop === 'room') {
+    if (p.props !== undefined) check.fail('params.props', 'needs the world the cast stands in (backdrop "world"): the set\'s own room has no place for props');
+    return {backdrop, world: named, draw: null};
+  }
   if (!fits) check.fail('params.backdrop', `"world" does not fit the ${setName} set (sets with a furniture-only form: ${WORLD_SETS.join(', ')})`);
   const world = named ?? story;
   if (!world) check.fail('params.backdrop', '"world" needs a world: a track-0 world scene beneath, params.world or story.world');
   // Over a world scene the plate shows through; otherwise the scene draws the world itself.
   const beneath = p.world === undefined && ctx.beneath;
-  const props = p.world === undefined && !beneath ? (Array.isArray(ctx.world?.props) ? ctx.world.props : []) : [];
+  if (beneath && p.props !== undefined) check.fail('params.props', 'belongs on the world scene beneath (its params.props): this scene plays over that plate');
+  const base = p.world === undefined && !beneath ? (Array.isArray(ctx.world?.props) ? ctx.world.props : []) : [];
+  // The scene's own props join the story's, and a prop with states (the starting gate) is drawn in the state it has by now;
+  // a story with neither keeps its props exactly as written.
+  const stateful = p.props !== undefined || base.some(entry => PROP_STATES[typeof entry === 'string' ? entry : entry?.id]);
+  const placed = beneath || !stateful ? {props: base, cues: []} : sceneProps(check, {base, own: p.props, start: b.start, duration: b.duration, states: ctx.propStates ?? {}});
   const detail = p.world === undefined && !beneath ? (ctx.world?.detail ?? null) : null;
-  return {backdrop, world, draw: beneath ? null : {kind: world.kind, time: world.time, props, detail, style: ctx.cast?.style ?? ctx.cast?.drawing_style ?? null}};
+  return {backdrop, world, cues: placed.cues, draw: beneath ? null : {kind: world.kind, time: world.time, props: placed.props, detail, style: ctx.cast?.style ?? ctx.cast?.drawing_style ?? null}};
 }
 
 /**
@@ -475,7 +484,7 @@ function sceneFocus(world, ctx, canvas, draw) {
 const isStoryWorld = world => Boolean(world) && typeof world === 'object' && WORLD_KINDS.includes(world.kind) && (world.time === undefined || WORLD_TIMES.includes(world.time));
 
 function resolveCastScene(params, ctx) {
-  const b = createBase('cast-scene', params, ctx, {allowed: ['set', 'screen', 'cast', 'light', 'world', 'backdrop', 'enter', 'exit', 'shot'], required: ['set', 'cast'], hidesCaptions: false});
+  const b = createBase('cast-scene', params, ctx, {allowed: ['set', 'screen', 'cast', 'light', 'world', 'backdrop', 'props', 'enter', 'exit', 'shot'], required: ['set', 'cast'], hidesCaptions: false});
   const {check, canvas} = b;
   const p = b.params;
   const setName = check.oneOf(p.set, 'params.set', SETS);
@@ -497,7 +506,7 @@ function resolveCastScene(params, ctx) {
   });
   const inWorldSet = stage.backdrop === 'world';
   const layout = layoutSet(setName, {canvas, colors: b.colors, count: p.cast.length, heights, screen: Boolean(screen), unit: b.unit, backdrop: stage.backdrop,
-    ...(inWorldSet ? {floor: worldFloor(stage, ctx, canvas), grade: worldGrade(stage.world.kind, stage.world.time)} : {})});
+    ...(inWorldSet ? {floor: worldFloor(stage, ctx, canvas), grade: worldGrade(stage.world.kind, stage.world.time), bare: RACING_WORLDS.includes(stage.world.kind)} : {})});
   const slotOf = castSlots(b, p.cast, cast);
   const world = stage.world;
   const light = sceneLight(b, p.light, ctx, world);
@@ -537,7 +546,7 @@ function resolveCastScene(params, ctx) {
   const screenRect = sr && shot !== 'wide' ? {x: r2(sr.x * k.scale + k.x), y: r2(sr.y * k.scale + k.y), width: r2(sr.width * k.scale), height: r2(sr.height * k.scale)} : sr;
   b.model.layer = 'front';
   const content = {...castPassage(b, ctx, actors.map(actor => actor.id)), ...castDraw(ctx), follow: plateFollow(stage, ctx, canvas), set: setName, backdrop: stage.backdrop, world: stage.world, drawWorld: stage.draw, seated: layout.seated, back: layout.back, front: layout.front, screenRect, media: screen, actors, colors: layout.colors,
-    shot: {name: shot, zoom: frame.zoom, set: frame.set, punches}};
+    shot: {name: shot, zoom: frame.zoom, set: frame.set, punches}, ...(stage.cues?.length ? {propCues: stage.cues} : {})};
   const model = b.finish(content, {minTextPx: b.min.key});
   // A set fills the frame: fade in place rather than slide.
   model.motion = {...model.motion, enterFrom: {opacity: 0, x: 0, y: 0, scale: 1}, exitTo: {opacity: 0, x: 0, y: 0, scale: 1}};
@@ -588,6 +597,7 @@ function castSceneTimeline(model, ops) {
   followOps(model, ops);
   punchOps(model, ops);
   actorsOps(model, ops);
+  propCueOps(ops, `${model.id}-world`, model.content.propCues, model.start);
 }
 
 // Cue shots: hard cuts in on a character and back (no move: a cut).
@@ -709,7 +719,7 @@ function cameoTimeline(model, ops) {
 const DEFINITIONS = {
   'cast-scene': {resolve: resolveCastScene, view: castSceneView, timeline: castSceneTimeline,
     describe: 'One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), framed wide, medium or close, acting on cues: named poses and expressions at times or narration words, mouths moving on their lines, cuts in on a character. The screen set plays a real capture.',
-    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id (a story-cast id, or "@1", "@2"… by place in the cast), position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: toward its target, else inward), target?: what it attends to (${NAMED_TARGETS.join(' | ')} | {prop} | {character} | {x, y}; it faces it and turns its head to it), cues?: [{at, pose?, expression?, action?: ${ACTIONS.join(' | ')}, target?, facing?, view?: ${VIEWS.join(' | ')}, shot?: ${SHOTS.join(' | ')} (a hard cut in on this character; the scene's shot cuts back)}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`, shot: `${SHOTS.join(' | ')}: wide = whole figures on the floor; medium = knees up; close = chest up (faces readable on a phone, kept inside the safe zone and above the caption band, no camera move). Default: medium for a 9:16 ${PORTRAIT_MEDIUM_SETS.join(', ')} set, else wide`, light: '{dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world\'s light, else a soft key from the upper left); shaded drawing styles follow it', world: `{kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)`, backdrop: `${BACKDROPS.join(' | ')}: room = the set's own room; world = only its furniture and props, recoloured and lit by the world and standing on its ground, over the world scene beneath or in params.world / story.world drawn behind it (default world when there is a world; not for video-call)`, enter: 'fade | cut: how the cast arrives (default: with the world plate beneath when it starts with it, a cut or a fade over its transition; else a fade)', exit: 'fade | cut: how the cast leaves (default: as the next plate arrives when it ends with the world beneath; else a fade)'},
+    params: {set: SETS.join(' | '), screen: '{src: "assets/…(image|video|demo-autopilot .mp4)", sourceStart?, fit?} (required for screen, optional for meeting)', cast: `[{id (a story-cast id, or "@1", "@2"… by place in the cast), position?: left|centre|right (default: the story cast's position, then list order), pose?, expression?, facing?: left|right (default: toward its target, else inward), target?: what it attends to (${NAMED_TARGETS.join(' | ')} | {prop} | {character} | {x, y}; it faces it and turns its head to it), cues?: [{at, pose?, expression?, action?: ${ACTIONS.join(' | ')}, target?, facing?, view?: ${VIEWS.join(' | ')}, shot?: ${SHOTS.join(' | ')} (a hard cut in on this character; the scene's shot cuts back)}], says?: [{from, to}] | "auto" (its own dialogue lines), holds?: phone}] 1–3; poses: ${POSES.join(', ')}; expressions: ${EXPRESSIONS.join(', ')}`, shot: `${SHOTS.join(' | ')}: wide = whole figures on the floor; medium = knees up; close = chest up (faces readable on a phone, kept inside the safe zone and above the caption band, no camera move). Default: medium for a 9:16 ${PORTRAIT_MEDIUM_SETS.join(', ')} set, else wide`, light: '{dir?: degrees the key light comes from (0 right, 90 above, 180 left) or a world vector {x, y} from the light toward the subject, color?: hex, intensity?: 0–1} (default: the world\'s light, else a soft key from the upper left); shaded drawing styles follow it', world: `{kind, time?: day|dusk|night} the world the cast stands in: its light and half its time-of-day grade (default: the track-0 world scene beneath this one)`, props: `[id | {id, at?: left|centre|right|0..1, scale?, flip?, state?, cues?: [{at, state}]}] ≤ 12: things the story shows, standing in the world behind the cast at the cast's scale: ${STORY_PROP_IDS.join(', ')}. An entry naming a prop of story.world.props changes that prop for this scene; any other adds one. A prop with states (${Object.entries(PROP_STATES).map(([id, states]) => `${id}: ${states.join(' → ')}`).join('; ')}) changes on a cue ({at: "word:opens" or seconds, state: "open"}) and keeps that state in every later scene. Not over a world scene beneath (put them in that scene's props)`, backdrop: `${BACKDROPS.join(' | ')}: room = the set's own room; world = only its furniture and props, recoloured and lit by the world and standing on its ground, over the world scene beneath or in params.world / story.world drawn behind it (default world when there is a world; not for video-call)`, enter: 'fade | cut: how the cast arrives (default: with the world plate beneath when it starts with it, a cut or a fade over its transition; else a fade)', exit: 'fade | cut: how the cast leaves (default: as the next plate arrives when it ends with the world beneath; else a fade)'},
     events: ['<character>-cue-<i>']},
   'character-cameo': {resolve: resolveCameo, view: cameoView, timeline: cameoTimeline,
     describe: 'One animated character beside a card (kicker, title, body) or alone on a panel, for a beat in a footage-led or explainer video.',

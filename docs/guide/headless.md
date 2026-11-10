@@ -208,6 +208,20 @@ voice runs it more than 15% short of the target, or it fails at the voice's
 real pace, that one repair call is spent then instead. Errors left after the
 repair are warnings in `MAKE.json`.
 
+A story can only show what LaunchClip can draw, so the writers are given the
+list: the worlds (a racetrack, a stable yard and a paddock among them), the
+sets, the character kinds and the story props (a starting gate that opens, a
+bucket, a hay bale, a saddle, a rosette, a winning post, a jump, a sign, a
+trophy, a ball, a gift and a few more). The script names what it turns on
+(`shows` in `SCRIPT.json`). If it turns on something that is not on the
+list, the script check fails with `undrawable` and the repair call moves the
+story to the nearest thing that is, or leaves the thing to the narrator's
+words. `MAKE.json` says which under `script.shows`, and warns when a thing
+is only told. The props go into the show bible (`world.props`), stand in
+every shot, and a change the script plays in a silent line ("The gate
+opens.") happens at that line. `finish` fails with a `bible check failed`
+message if a prop the story turns on is in no shot.
+
 Under Kokoro each character speaks in a voice of its own, which the show
 bible then keeps; with ElevenLabs the narrator's voice reads every line
 until you give the characters voice ids (`launchclip cast edit <id> --voice

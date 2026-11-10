@@ -166,10 +166,11 @@ function callRoom(t, s, c, i) {
  * "world" draws only its furniture and props, to stand in a world drawn
  * behind it. floor: the floor line in canvas px (a world's ground; default
  * the set's own). grade: hex → hex, recolouring every set colour (a world's
- * time-of-day grade).
+ * time-of-day grade). bare: leave out the pot plant the standing and phone
+ * sets bring into a landscape world (a racetrack has none).
  * → {back, front, screenRect | null, slots: [{x, floor, scale, facing}], seated, floor}
  */
-export function layoutSet(name, {canvas, colors, count, heights, screen = false, unit = 1, backdrop = 'room', floor: floorAt = null, grade = null}) {
+export function layoutSet(name, {canvas, colors, count, heights, screen = false, unit = 1, backdrop = 'room', floor: floorAt = null, grade = null, bare = false}) {
   if (!BACKDROPS.includes(backdrop)) throw new Error(`unknown set backdrop ${JSON.stringify(backdrop)} (${BACKDROPS.join(', ')})`);
   if (backdrop === 'world' && !SET_INFO[name]?.world) throw new Error(`the ${name} set has no furniture-only form; it cannot stand in a world (sets that can: ${WORLD_SETS.join(', ')})`);
   const own = setColors(colors);
@@ -244,7 +245,10 @@ export function layoutSet(name, {canvas, colors, count, heights, screen = false,
     const xs = spread(W * (count === 1 ? 0.5 : portrait ? 0.3 : 0.32), W * (portrait ? 0.7 : 0.68));
     slots = xs.map((x, i) => ({x, floor, scale, facing: x < W / 2 ? 'right' : 'left', index: i}));
     if (portrait) scenery.push(...windowFrame(W * 0.26, H * 0.12, W * 0.48, H * 0.18, s, c));
-    else scenery.push(...windowFrame(W * 0.4, H * 0.1, W * 0.2, H * 0.3, s, c), ...frameArt(W * 0.12, H * 0.14, W * 0.12, H * 0.16, s, c)), back.push(...plant(W * 0.88, floor, s * 1.1, c));
+    else {
+      scenery.push(...windowFrame(W * 0.4, H * 0.1, W * 0.2, H * 0.3, s, c), ...frameArt(W * 0.12, H * 0.14, W * 0.12, H * 0.16, s, c));
+      if (!bare) back.push(...plant(W * 0.88, floor, s * 1.1, c));
+    }
   }
   else slots = newerSet(name, {canvas, c, count, s, floor, scenery, back, front, frontScenery, portrait, scaleFor, spread, standShare, W, H, tallest});
   const inRoom = backdrop === 'room';
