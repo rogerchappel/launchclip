@@ -42,18 +42,55 @@ import { DEFAULT_VIEWPORT, sessionProblems, uploadFileProblems, uploadPath, vali
 
 export const ACTION_LOG_SCHEMA = "launchclip.demo-actions.v1";
 
-/** Chromium executable to drive, without downloading: → path | null. */
-export async function findChromium({ env = process.env, playwrightPath = null } = {}) {
-  if (env.LAUNCHCLIP_CHROMIUM && existsSync(env.LAUNCHCLIP_CHROMIUM)) return env.LAUNCHCLIP_CHROMIUM;
-  if (playwrightPath && existsSync(playwrightPath)) return playwrightPath;
-  const cache = env.PLAYWRIGHT_BROWSERS_PATH || (process.platform === "darwin" ? path.join(os.homedir(), "Library", "Caches", "ms-playwright") : process.platform === "win32" ? path.join(env.LOCALAPPDATA ?? "", "ms-playwright") : path.join(os.homedir(), ".cache", "ms-playwright"));
+/**
+ * Where a Chromium to drive can be, in the order they are tried, without
+ * downloading one: LAUNCHCLIP_CHROMIUM; the build Playwright pins; Playwright's
+ * cache; a system Chrome; then the browsers the renderers already use (the
+ * Remotion renderer's headless shell, then HyperFrames'), so a machine that
+ * can render a video can also draw a sheet or record a demo.
+ * → {path: string | null, looked: [string]} (every place tried, in order).
+ */
+export async function chromiumSearch({ env = process.env, playwrightPath = null, home = os.homedir(), platform = process.platform, root = undefined } = {}) {
+  const looked = [];
+  const tried = (label, file) => { looked.push(`${label} (${file})`); return existsSync(file) ? file : null; };
+  const done = (file) => ({ path: file, looked });
+  if (env.LAUNCHCLIP_CHROMIUM) { const file = tried("LAUNCHCLIP_CHROMIUM", env.LAUNCHCLIP_CHROMIUM); if (file) return done(file); }
+  else looked.push("LAUNCHCLIP_CHROMIUM (not set)");
+  if (playwrightPath) { const file = tried("Playwright's own Chromium", playwrightPath); if (file) return done(file); }
+  const cache = env.PLAYWRIGHT_BROWSERS_PATH || (platform === "darwin" ? path.join(home, "Library", "Caches", "ms-playwright") : platform === "win32" ? path.join(env.LOCALAPPDATA ?? "", "ms-playwright") : path.join(home, ".cache", "ms-playwright"));
   const builds = (await readdir(cache).catch(() => [])).filter((name) => /^chromium-\d+$/.test(name)).sort((a, b) => Number(b.split("-")[1]) - Number(a.split("-")[1]));
-  const inside = process.platform === "darwin"
+  const inside = platform === "darwin"
     ? ["chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing", "chrome-mac/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing", "chrome-mac/Chromium.app/Contents/MacOS/Chromium"]
-    : process.platform === "win32" ? ["chrome-win64/chrome.exe", "chrome-win/chrome.exe"] : ["chrome-linux64/chrome", "chrome-linux/chrome"];
-  for (const build of builds) for (const rel of inside) if (existsSync(path.join(cache, build, rel))) return path.join(cache, build, rel);
-  const system = process.platform === "darwin" ? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Chromium.app/Contents/MacOS/Chromium"] : ["/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"];
-  return system.find((file) => existsSync(file)) ?? null;
+    : platform === "win32" ? ["chrome-win64/chrome.exe", "chrome-win/chrome.exe"] : ["chrome-linux64/chrome", "chrome-linux/chrome"];
+  looked.push(`Playwright's browser cache (${path.join(cache, "chromium-*")})`);
+  for (const build of builds) for (const rel of inside) if (existsSync(path.join(cache, build, rel))) return done(path.join(cache, build, rel));
+  const system = platform === "darwin" ? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Chromium.app/Contents/MacOS/Chromium"] : platform === "win32" ? [] : ["/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"];
+  for (const file of system) { const found = tried("a system Chrome", file); if (found) return done(found); }
+  // The renderers' own browsers: both are Chrome headless shells, which Playwright drives.
+  const { remotionBrowserExecutable, remotionShellPath } = await import("../renderers/remotion_segments.js");
+  if (env.LAUNCHCLIP_REMOTION_BROWSER?.trim()) { const file = tried("LAUNCHCLIP_REMOTION_BROWSER", env.LAUNCHCLIP_REMOTION_BROWSER.trim()); if (file) return done(file); }
+  const shell = remotionBrowserExecutable({}, root ? { root } : {});
+  looked.push(`the Remotion renderer's headless shell (${remotionShellPath(root ? { root } : {}) ?? "no build for this platform"})`);
+  if (shell) return done(shell);
+  for (const name of ["HYPERFRAMES_BROWSER_PATH", "PRODUCER_HEADLESS_SHELL_PATH"]) if (env[name]?.trim()) { const file = tried(name, env[name].trim()); if (file) return done(file); }
+  const hyperframes = path.join(home, ".cache", "hyperframes", "chrome", "chrome-headless-shell");
+  looked.push(`the HyperFrames renderer's headless shell (${path.join(hyperframes, "*")})`);
+  // Newest build first: mac_arm-152.0.7977.30 over mac_arm-152.0.7928.2.
+  const versions = (await readdir(hyperframes).catch(() => [])).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  for (const version of versions) for (const folder of await readdir(path.join(hyperframes, version)).catch(() => [])) {
+    for (const name of ["chrome-headless-shell", "chrome-headless-shell.exe"]) if (existsSync(path.join(hyperframes, version, folder, name))) return done(path.join(hyperframes, version, folder, name));
+  }
+  return done(null);
+}
+
+/** Chromium executable to drive, without downloading (chromiumSearch): → path | null. */
+export async function findChromium(options = {}) {
+  return (await chromiumSearch(options)).path;
+}
+
+/** What to say when no Chromium was found: every place looked, and the three ways to supply one. */
+export function chromiumMissingMessage(looked = []) {
+  return `no Chromium found; set LAUNCHCLIP_CHROMIUM to a Chrome or chrome-headless-shell binary, install one (npx playwright install chromium), or install the renderer's (npx remotion browser ensure). Looked in: ${looked.map((place, index) => `${index + 1}. ${place}`).join("; ")}`;
 }
 
 /**
@@ -78,8 +115,9 @@ export async function recorderAvailability({ env = process.env, repo = null } = 
   if (!chromium) reasons.push(`the optional dependency playwright is not installed (npm install playwright)${repo ? `, and ${repo} does not install one either` : ""}`);
   let pinned = null;
   try { pinned = chromium?.executablePath() ?? null; } catch { pinned = null; }
-  const executablePath = chromium ? await findChromium({ env, playwrightPath: pinned }) : null;
-  if (chromium && !executablePath) reasons.push("no Chromium found; set LAUNCHCLIP_CHROMIUM or install one (npx playwright install chromium)");
+  const search = chromium ? await chromiumSearch({ env, playwrightPath: pinned }) : null;
+  const executablePath = search?.path ?? null;
+  if (chromium && !executablePath) reasons.push(chromiumMissingMessage(search.looked));
   const ffmpeg = await hasFfmpeg();
   if (!ffmpeg) reasons.push("ffmpeg is not on PATH");
   return { ok: reasons.length === 0, chromium, executablePath, ffmpeg, reasons };

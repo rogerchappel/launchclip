@@ -211,10 +211,15 @@ function remotionPlatform() {
   return null;
 }
 
+/** Where LaunchClip's own Remotion headless shell is kept (whether or not it is installed), or null on a platform Remotion has no build for. */
+export function remotionShellPath({ root = LAUNCHCLIP_ROOT, platform = remotionPlatform() } = {}) {
+  return platform ? path.join(root, "node_modules", ".remotion", "chrome-headless-shell", platform, `chrome-headless-shell-${platform}`) : null;
+}
+
 // The layout BrowserFetcher's getExecutablePath reads for "headless-shell".
 function ownHeadlessShell(root, platform) {
   if (!platform) return null;
-  const folder = path.join(root, "node_modules", ".remotion", "chrome-headless-shell", platform, `chrome-headless-shell-${platform}`);
+  const folder = remotionShellPath({ root, platform });
   for (const name of ["headless_shell", platform === "win64" ? "chrome-headless-shell.exe" : "chrome-headless-shell"]) {
     const file = path.join(folder, name);
     if (existsSync(file)) return file;
