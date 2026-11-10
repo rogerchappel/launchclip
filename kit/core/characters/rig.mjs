@@ -15,6 +15,7 @@
 // Imports only sibling kit/core files.
 
 import {COLOR_SLOTS, isColorName} from './palette.mjs';
+import {isKind, normalizeKindParams} from './kinds.mjs';
 
 export const BUILDS = Object.freeze(['slim', 'average', 'athletic', 'broad', 'round', 'petite', 'stocky', 'curvy']);
 export const HEIGHTS = Object.freeze(['short', 'average', 'tall', 'very-short', 'very-tall']);
@@ -73,9 +74,17 @@ const isObj = value => value && typeof value === 'object' && !Array.isArray(valu
  *   mobility     a MOBILITY aid (default none): a wheelchair, a cane, a white
  *                cane, a forearm crutch, a prosthetic leg or arm
  *   colors       {top, bottom, shoes, accent?} palette names, brand roles or hex
+ *
+ * kind: person (the default, never stored) or a kinds.mjs KINDS name; any
+ * other kind takes only {kind, size?, colors: {body?, detail?, accent?}}.
  */
 export function normalizeRigParams(params, path = 'character') {
   if (!isObj(params)) fail(path, 'must be an object');
+  // An animal, a mascot or an object with a face has its own small parameter
+  // set (kinds.mjs). A person names no kind (or "person", which is dropped),
+  // so its normalised params and fingerprint are what they always were.
+  if (isKind(params)) return normalizeKindParams(params, path);
+  if (params.kind !== undefined) { const {kind: _kind, ...person} = params; params = person; }
   for (const key of Object.keys(params)) if (!PARAM_KEYS.includes(key)) fail(`${path}.${key}`, `is not a rig param (allowed: ${PARAM_KEYS.join(', ')})`);
   const build = oneOf(params.build ?? 'average', `${path}.build`, BUILDS);
   const height = oneOf(params.height ?? 'average', `${path}.height`, HEIGHTS);
@@ -241,6 +250,8 @@ export function poseJoints(name, {facing = 'right', seated = false, geometry} = 
   // point, so the toon's knees-in would cross its shins).
   const lower = lowerName === 'sit' && geometry?.sitLegs ? {...LOWER.sit, ...geometry.sitLegs} : LOWER[lowerName];
   if (name === 'sit' && geometry?.sitArms) Object.assign(upper, geometry.sitArms);
+  // A body that lies down when seated folds its front legs in any pose (a four-legged kind, kinds.mjs).
+  if (lowerName === 'sit' && geometry?.seatedArms) Object.assign(upper, geometry.seatedArms);
   const drop = lower.drop && geometry ? geometry.sitDrop : 0;
   const joints = {
     armL: upper.armL, foreL: upper.foreL, armR: upper.armR, foreR: upper.foreR,

@@ -20,6 +20,42 @@
 
 ### Added
 
+- `launchclip make --animation` reviews its own work before the delivery
+  render. After the shots are planned it renders an animatic
+  (`renders/animatic.mp4`, `ANIMATIC.json`) and a vision model reviews it
+  for story, staging and acting. While the review does not say `ship`, the
+  shots its findings name are retaken and only those shots render again
+  (`qa/animatic-retakes.json`). The critic's repair rounds on the finished
+  video are retakes too (`qa/retakes.json`). `--critic-repairs` is one
+  budget for both. `--stop-after animatic` ends the run `awaiting-approval`
+  so you can watch the animatic, and `--approve animatic` goes on from
+  there; in a terminal make asks instead. The run ends `ready` on a `ship`
+  verdict and `needs-repair` once the rounds are spent, with the animation
+  path's exit codes (0, 1, 2, 3 `awaiting-approval`, 4 `ready-for-review`).
+- Measurement for character stories. `npm run eval:formats -- --animation`
+  scores six character-Short briefs from finished projects (contracts,
+  story, design, direction, cadence, gates, critic, cost) without rendering,
+  and `npm run eval:animation-parity` writes the make-against-skill table to
+  `benchmarks/ANIMATION_PARITY.md`. The briefs have not been run on either
+  path yet, so the table says so and holds no numbers. The `story-characters`
+  profile gains four dialogue measures (speaker turns per minute, seconds
+  per line, the share of speech on a listener's reaction, the longest
+  stretch on one framing); their bands are hand-set and marked provisional.
+  `scriptGate` (`src/script_gate.js`) fails a project whose `SCRIPT.json`
+  has an unknown speaker, a character who never speaks or acts, a script
+  over its length or a problem that lands late; `finish` does not call it
+  yet. See `docs/ANIMATION_MEASUREMENT.md`.
+- `launchclip make --animation` now makes the whole video. After the script
+  and the voice it designs the cast and the world in one model call, from
+  the rig's own options (the set paths `cast create` takes), freezes
+  `BIBLE.json` with a reference sheet per character, and plans the shots
+  with that cast pinned: a repair or `--replan` cannot change who is in the
+  story. The cast is drawn `chibi` unless a style pack or the prompt names
+  another style. `--stop-after bible` ends the run `awaiting-approval` so
+  you can look at the sheets, and `--approve bible` goes on from there. In
+  a terminal make asks instead. A frozen `BIBLE.json` already in the
+  project is used as it is. The run used to stop after the voice with
+  status `stopped`.
 - Shot fields for character stories. A direction-map line may name the
   script line it plays (`"line": "l3"`, checked against `SCRIPT.json`). In a
   story told in beats, a character who speaks must be in a scene on screen

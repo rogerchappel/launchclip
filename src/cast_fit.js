@@ -1,7 +1,7 @@
 // Cast fit for the planner's direction map: tooling, not a repair call, for
 // the two ways a character story's cues miss the character kit.
 //
-//   plannedCast({story, style})          the cast the story will have, and
+//   plannedCast({story, style, bible})   the cast the story will have, and
 //                                        whether its names are the story's to set
 //   normalizeCastCues(map)               free-text poses, expressions and sets
 //                                        → the nearest kit value, each reported
@@ -13,7 +13,11 @@
 // a generated cast whose names have nothing to do with the story; a story
 // about Mia and Sam keeps the looks and voices and takes the names. A cast the
 // story or the user defined is never renamed: its cues must use its ids, and
-// the direction checks say so.
+// the direction checks say so. A frozen show bible's cast
+// (docs/ANIMATION_PIPELINE_RFC.md §4.2) comes before both and is never
+// renamed either: a cue that spells a bible character by its name ("Maya")
+// takes that character's id, and nothing else about the cast moves.
+import { bibleCast } from "@launchclip/core/bible.mjs";
 import { castFromStyle } from "@launchclip/core/characters/generate.mjs";
 import { EXPRESSIONS, POSES } from "@launchclip/core/characters/rig.mjs";
 import { SETS } from "@launchclip/core/characters/sets.mjs";
@@ -23,12 +27,18 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 
 /**
  * The cast the planned story will have, before the storyboard exists.
- * story: a storyboard the plan starts from (its own cast wins); style: the
- * loaded style pack. → {cast: {style, characters}, source: "story" | "style",
+ * bible: the project's frozen show bible (its cast wins over everything, and
+ * is never bindable); story: a storyboard the plan starts from (its own cast
+ * wins over the style's); style: the loaded style pack.
+ * → {cast: {style, characters}, source: "bible" | "story" | "style",
  * bindable} | null. bindable: the cast is a seeded style's generated default,
  * so the story's own names may be bound onto it.
  */
-export function plannedCast({ story = null, style = null } = {}) {
+export function plannedCast({ story = null, style = null, bible = null } = {}) {
+  if (bible?.frozen === true) {
+    const cast = bibleCast(bible);
+    if (cast?.characters?.length) return { cast: clone(cast), source: "bible", bindable: false };
+  }
   if (isObject(story?.cast) && Array.isArray(story.cast.characters) && story.cast.characters.length) {
     return { cast: clone(story.cast), source: "story", bindable: false };
   }
@@ -185,13 +195,15 @@ function displayName(id, words) {
  * before action.who) takes the next member no cue names, keeping its look
  * and voice and taking the name as its id and name. Cue ids and action.who
  * are rewritten to the bound ids ("Mia" → "mia"). A cast that is not
- * bindable is returned unchanged. Names are never used to guess a look.
+ * bindable is returned unchanged, and so is the map, except under a show
+ * bible, where a cue that spells a character by name or in capitals takes the
+ * character's id. Names are never used to guess a look.
  * → {map, cast: {style, characters}, bound: [{from, to, name}]}
  */
 export function bindStoryCast(map, planned, { words = [] } = {}) {
   if (!planned?.cast || !isObject(map)) return { map, cast: planned?.cast ?? null, bound: [] };
   const cast = clone(planned.cast);
-  if (!planned.bindable) return { map, cast, bound: [] };
+  if (!planned.bindable) return { map: planned.source === "bible" ? respellCast(map, cast) : map, cast, bound: [] };
   const out = clone(map);
   const ids = new Set(cast.characters.map((member) => member.id));
   const named = [];
@@ -225,6 +237,24 @@ export function bindStoryCast(map, planned, { words = [] } = {}) {
     }
   }
   return { map: out, cast, bound };
+}
+
+// A fixed cast's ids in a map that spelled a character another way: "Maya" or
+// the character's display name → its id. An id the cast does not have is left
+// for the direction checks to name.
+function respellCast(map, cast) {
+  const ids = new Set(cast.characters.map((member) => member.id));
+  const byName = new Map(cast.characters.filter((member) => typeof member.name === "string").map((member) => [slug(member.name), member.id]));
+  const respell = (value) => (typeof value !== "string" || ids.has(value) || /^@\d+$/.test(value) ? value : ids.has(slug(value)) ? slug(value) : byName.get(slug(value)) ?? value);
+  const out = clone(map);
+  for (const { line } of mapLines(out)) {
+    for (const cue of Array.isArray(line.cast) ? line.cast : []) if (isObject(cue)) cue.id = respell(cue.id);
+    if (isObject(line.action)) {
+      line.action.who = respell(line.action.who);
+      if (typeof line.action.target === "string") line.action.target = respell(line.action.target);
+    }
+  }
+  return out;
 }
 
 /**

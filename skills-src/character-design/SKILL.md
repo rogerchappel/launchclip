@@ -7,7 +7,9 @@ description: Design an animated LaunchClip character and save it as a reusable c
 
 A LaunchClip character is drawn in code from one rig: a build, a height, an
 age, a skin tone, hair, an outfit, accessories, headwear, a mobility aid and
-clothing colours, plus a voice and a drawing style. You design one by choosing
+clothing colours, plus a voice and a drawing style. (An animal, a mascot or
+an object with a face is a `kind` with a size and three colours instead: see
+"Animals, mascots and objects".) You design one by choosing
 those options, saving them as a character file, and looking at its sheet.
 
 The file is the same one the CLI and every storyboard read use (`story
@@ -86,6 +88,47 @@ wear and its colours, glasses, headwear, anything they carry.
   `assumed`.
 - Brand colours: `primary` and `accent` are valid clothing colours and follow
   the story's brand, so a character can wear the brand without a hex.
+
+## Animals, mascots and objects
+
+A character does not have to be a person. `kind` chooses what it is: a horse
+on four legs (`stallion mare foal`), an upright animal (`cat dog bear rabbit
+fox frog penguin owl`), a soft mascot in the
+brand's colours (`blob droplet star monster`) or an everyday object with a
+face (`phone laptop cup bulb robot coin book cloud`). They act with the same
+poses, expressions, looks and speech as people, in every drawing style, and
+share scenes with them.
+
+```bash
+launchclip cast create whiskers --describe "a small orange cat" --personality "naps on the keyboard"
+launchclip cast create mug --set kind=cup --set colors.accent=red
+launchclip cast edit whiskers --set size=large --set colors.detail=white
+```
+
+- A kind takes only `size` (small, medium, large) and three colours:
+  `colors.body`, `colors.detail`, `colors.accent` (`cast options kind`
+  lists the kinds). Hair, clothes, skin, age and the rest of a person's
+  options do not apply and are refused by name; the description reports
+  them as `unmatched`.
+- Horses: a `stallion` (sire), a `mare` (dam) or a `foal`. Name the coat
+  and the description sets all three colours: "a bay mare with a blaze", "a
+  grey foal with white socks", "a black stallion". `marks` is a list of
+  white markings (`--set marks+=blaze`, `star`, `socks`). A horse is drawn
+  from the side on four legs, so poses mean their four-legged version
+  (`walk` trots, `look` lifts the head, `slump` lowers it, `wave` and
+  `point` lift a foreleg, `cheer` prances, `sit` lies down): look at those
+  on the sheet.
+- For the simplest look set `--style stick` or `stick-classic`: every kind
+  becomes a stick figure, a few lines and a face.
+- A mascot's colours default to the brand's `primary` and `accent`, so it
+  wears each story's brand. A dark body or screen gets light eyes.
+- 30 are ready to use by id (`launchclip cast list`: `duchess`, `sprig`, `mochi`, `biscuit`,
+  `bloop`, `ping`, `latte`, `rivet`…); `--from mochi` starts from one.
+- Where a pose cannot apply, the body does the nearest thing: a blob's arms
+  are too short to cross, so `arms-crossed` rests both hands on its front,
+  and `think` touches a hand to its side. Check those poses on the sheet.
+- Never copy a known character or mascot. Describe plain traits (what it
+  is, its colours, its size) and give it its own name.
 
 ## Voice, personality and style
 

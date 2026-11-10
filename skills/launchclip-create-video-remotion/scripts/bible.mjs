@@ -95,6 +95,8 @@ const coloured = (color, thing) => (color === undefined || color === null ? thin
 export function mustKeep(params) {
   if (!isObj(params)) return [];
   const out = [];
+  // An animal, a mascot or an object with a face: what it is, its main colour and its size.
+  if (typeof params.kind === 'string' && params.kind !== 'person') return [coloured(params.colors?.body, words(params.kind)), ...(params.size ? [`${params.size} size`] : []), ...(Array.isArray(params.marks) ? params.marks.map(name => `white ${name}`) : [])];
   const colors = isObj(params.colors) ? params.colors : {};
   const hair = isObj(params.hair) ? params.hair : {};
   if (hair.style === 'bald') out.push('bald head');

@@ -7,6 +7,10 @@
 //             outfit: {top, bottom, over?}, accessories, headwear?, mobility?,
 //             colors: {top, bottom, shoes, accent}}}
 //
+// An animal, a mascot or an object with a face (kinds.mjs) stores
+//   params: {kind, size?, colors: {body, detail, accent}}
+// instead.
+//
 // params are rig params (rig.mjs normalizeRigParams validates them). style is
 // the drawing style the character was designed in (its sheet draws in it); in
 // a story the cast's style decides, as for every character.
@@ -29,6 +33,7 @@ import {BRAND_ROLES, HAIR_COLORS, NEUTRALS, SKIN_TONES} from './palette.mjs';
 import {isStarterId} from './cast.mjs';
 import {DRAWING_STYLES} from './styles.mjs';
 import {KOKORO_VOICES} from './cues.mjs';
+import {KIND_MARKS, KIND_NAMES, KIND_SIZES} from './kinds.mjs';
 
 export const CHARACTER_SCHEMA = 'launchclip.character.v1';
 export const CAST_PACK_SCHEMA = 'launchclip.cast-pack.v1';
@@ -54,6 +59,9 @@ export function characterPaths() {
     personality: {free: true, clear: true, describe: 'one line, at most 160 characters'},
     voice: {values: [...KOKORO_VOICES], other: true, clear: true, describe: 'a local Kokoro voice, or another provider\'s voice id'},
     style: {values: [...DRAWING_STYLES]},
+    kind: {values: ['person', ...KIND_NAMES], describe: 'person (the default), or an animal, a mascot or an object with a face; those take only size and colors.body / detail / accent'},
+    size: {values: [...KIND_SIZES], describe: 'for a kind other than a person'},
+    marks: {values: [...KIND_MARKS], list: true, clear: true, describe: 'a horse\'s white markings'},
     build: {values: [...BUILDS]},
     height: {values: [...HEIGHTS]},
     age: {values: [...AGES]},
@@ -69,7 +77,9 @@ export function characterPaths() {
     'colors.top': {values: clothing(), hex: true},
     'colors.bottom': {values: clothing(), hex: true},
     'colors.shoes': {values: clothing(), hex: true},
-    'colors.accent': {values: clothing(), hex: true}
+    'colors.accent': {values: clothing(), hex: true},
+    'colors.body': {values: [...clothing(), ...Object.keys(HAIR_COLORS), ...Object.keys(SKIN_TONES)], hex: true, describe: 'a kind\'s main colour'},
+    'colors.detail': {values: [...clothing(), ...Object.keys(HAIR_COLORS), ...Object.keys(SKIN_TONES)], hex: true, describe: 'a kind\'s second colour (a belly, a screen, a lid)'}
   };
 }
 export const CHARACTER_PATHS = Object.freeze(Object.keys(characterPaths()));
@@ -124,6 +134,7 @@ function wanted(entry) {
   const base = entry.from ?? entry.id;
   if (typeof base !== 'string' || !ID.test(base) || isStarterId(base)) return null;
   if (entry.from === undefined && entry.skin !== undefined && entry.hair !== undefined) return null;
+  if (entry.from === undefined && entry.kind !== undefined && entry.kind !== 'person') return null;
   return base;
 }
 
@@ -148,8 +159,9 @@ export function withSavedCharacters(story, find) {
     used.push({id: entry.id, from: base});
     return {
       ...from, ...own, id: entry.id,
-      hair: {...from.hair, ...(isObj(own.hair) ? own.hair : {})},
-      outfit: {...from.outfit, ...(isObj(own.outfit) ? own.outfit : {})},
+      // (A kind other than a person has neither hair nor an outfit.)
+      ...(from.hair || own.hair !== undefined ? {hair: {...from.hair, ...(isObj(own.hair) ? own.hair : {})}} : {}),
+      ...(from.outfit || own.outfit !== undefined ? {outfit: {...from.outfit, ...(isObj(own.outfit) ? own.outfit : {})}} : {}),
       colors: {...from.colors, ...(isObj(own.colors) ? own.colors : {})}
     };
   };
@@ -185,7 +197,7 @@ export function applyCharacterSets(character, sets) {
     const {path, op = '=', value} = set;
     const spec = paths[path];
     if (!spec) throw new Error(`"${path}" is not a character path (paths: ${CHARACTER_PATHS.join(', ')})`);
-    if (op !== '=' && !spec.list) throw new Error(`${path} takes =, not ${op} (only accessories is a list)`);
+    if (op !== '=' && !spec.list) throw new Error(`${path} takes =, not ${op} (only accessories and marks are lists)`);
     if (isNone(value) && !spec.clear) throw new Error(`${path} cannot be cleared; set it to one of its options`);
     if (path === 'accessories') {
       const names = isNone(value) ? [] : String(value).split(',').map(name => name.trim()).filter(Boolean);
@@ -194,6 +206,13 @@ export function applyCharacterSets(character, sets) {
       // A new pair of glasses replaces the pair already worn (the rig draws one).
       else for (const name of names) { if (GLASSES.includes(name)) list = list.filter(other => !GLASSES.includes(other)); if (!list.includes(name)) list.push(name); }
       p.accessories = list;
+      continue;
+    }
+    if (path === 'marks') {
+      const names = isNone(value) ? [] : String(value).split(',').map(name => name.trim()).filter(Boolean);
+      const now = op === '=' ? [] : [...(Array.isArray(p.marks) ? p.marks : [])];
+      p.marks = op === '-=' ? now.filter(name => !names.includes(name)) : [...new Set([...now, ...names])];
+      if (!p.marks.length) delete p.marks;
       continue;
     }
     const [head, leaf] = path.split('.');

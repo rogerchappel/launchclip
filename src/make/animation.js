@@ -25,6 +25,7 @@ import { SETS } from "@launchclip/core/characters/sets.mjs";
 import { NARRATIVE_BEATS } from "@launchclip/core/direction.mjs";
 import { MAX_SILENCE_SECONDS, NARRATOR, SCREENPLAY_GAP, SCREENPLAY_VERSION, SCREENPLAY_WPM, screenplayText } from "@launchclip/core/screenplay.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
+import { TITLE_OPTIONS } from "@launchclip/core/skeleton-library.mjs";
 import { checkScreenplay } from "../script_check.js";
 import { RULES_HEADING, cleanNarration } from "./script.js";
 
@@ -149,7 +150,7 @@ export const SCREENPLAY_SCHEMA = Object.freeze({
   required: ["title", "title_options", "beats"],
   properties: {
     title: line("A short working title (60 characters at most)."),
-    title_options: { type: "array", description: "Three publish-ready titles the video pays off, the best first (70 characters at most each).", items: { type: "string" } },
+    title_options: { type: "array", description: `${TITLE_OPTIONS} publish-ready titles the video pays off, the best first (70 characters at most each).`, items: { type: "string" } },
     beats: {
       type: "array",
       description: `The story in order. Each beat is one of ${NARRATIVE_BEATS.join(", ")}.`,
@@ -388,7 +389,7 @@ export function normalizeScreenplay(value, { characters = [], premise = null, lo
   }
   for (const beat of beats) beat.lines = beat.lines.map((entry) => ({ id: `l${(count += 1)}`, ...entry }));
   const title = text(value?.title).slice(0, 80) || "Untitled";
-  const options = (Array.isArray(value?.title_options) ? value.title_options : []).map((entry) => text(entry).slice(0, 100)).filter(Boolean).slice(0, 3);
+  const options = (Array.isArray(value?.title_options) ? value.title_options : []).map((entry) => text(entry).slice(0, 100)).filter(Boolean).slice(0, TITLE_OPTIONS);
   const play = { schema_version: SCREENPLAY_VERSION, title, logline: text(logline), ...(premise ? { premise } : {}), characters, beats };
   return { ...play, narration: screenplayText(play), title_options: options.length ? options : [title] };
 }

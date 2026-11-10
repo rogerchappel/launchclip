@@ -24,7 +24,7 @@ import {createBase, fitText, r2, rt} from './catalog-b-base.mjs';
 import {abs, el, svgRoot, tw, set} from './catalog-b-view.mjs';
 import {media, mediaNode} from './catalog-e.mjs';
 import {EXPRESSIONS, HELD_AIDS, POSES} from './characters/rig.mjs';
-import {drawCharacter, styleGeometry, styleHeight} from './characters/styles.mjs';
+import {drawCharacter, stageHeight, styleGeometry, styleHeight} from './characters/styles.mjs';
 import {lightErrors, normalizeLight} from './characters/light.mjs';
 import {characterView} from './characters/view.mjs';
 import {drawingBounds} from './characters/bounds.mjs';
@@ -38,6 +38,7 @@ import {withoutForeground, worldCameraStates} from './catalog-world.mjs';
 import {OVERSCAN} from './worlds/index.mjs';
 import {SPRITE_SCENE, SPRITE_TIMING} from './catalog-sprites.mjs';
 import {pointAim} from './characters/aim.mjs';
+import {lookCastOptions} from './looks/index.mjs';
 import {PORTRAIT_MEDIUM_SETS, SHOTS, defaultShot, fitShot, frameCast, frameGuides, framingMarks, punchIn} from './characters/framing.mjs';
 
 export const CHARACTER_TIMING = Object.freeze({
@@ -126,8 +127,10 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light, 
     const from = clip(check.num(range.from, `${where}.from`, -86400, 86400)), to = clip(check.num(range.to, `${where}.to`, -86400, 86400));
     if (to < from) check.fail(`${where}.to`, 'must not be before from');
     const words = range.words === undefined ? null : check.arr(range.words, `${where}.words`, 0, 400).map((w, k) => {
-      if (!Array.isArray(w) || w.length < 2 || w.length > 3 || !Number.isFinite(w[0]) || !Number.isFinite(w[1]) || w[1] < w[0] || (w.length === 3 && typeof w[2] !== 'string')) check.fail(`${where}.words[${k}]`, 'must be [start, end] seconds, or [start, end, "word"]');
-      return [rt(b.start + clip(w[0])), rt(b.start + clip(w[1])), ...(w.length === 3 ? [w[2]] : [])];
+      if (!Array.isArray(w) || w.length < 2 || w.length > 4 || !Number.isFinite(w[0]) || !Number.isFinite(w[1]) || w[1] < w[0] || w.slice(2).some(part => typeof part !== 'string')) check.fail(`${where}.words[${k}]`, 'must be [start, end] seconds, [start, end, "word"], or [start, end, "word", "phonemes"] (symbol:milliseconds pairs)');
+      // A word cut by the scene's edge loses its phonemes: their lengths no longer fit it.
+      const whole = w[0] >= 0 && w[1] <= b.duration;
+      return [rt(b.start + clip(w[0])), rt(b.start + clip(w[1])), ...w.slice(2, whole ? 4 : 3)];
     }).filter(([s, e]) => e > s);
     return {from: rt(b.start + from), to: rt(b.start + to), words};
   });
@@ -175,7 +178,7 @@ function directActor(b, actor, path, scene) {
     if (view === 'back') turns = true;
     // A point aims the arm at its target, bent short of another character and inside the safe zone (characters/aim.mjs).
     const other = target && typeof target === 'object' && target.character !== undefined ? scene.actors.find(one => one.id === target.character) ?? null : null;
-    const aim = state.pose === 'point' ? pointAim({actor: here, facing, point, other, safe: scene.safe ?? null, standing}) : null;
+    const aim = state.pose === 'point' && !actor.geometry?.noAim ? pointAim({actor: here, facing, point, other, safe: scene.safe ?? null, standing}) : null;
     const directed = {...state, target, facing, standing, gaze, view, x, ...(point ? {point: {x: point.x ?? null, y: point.y ?? null, far: Boolean(point.far), ...(point.toward ? {toward: point.toward} : {})}} : {}), ...(aim ? {aim} : {})};
     out.push(directed);
     if (action === 'walk-to' && point) {
@@ -220,11 +223,14 @@ function inWorld(actor, world) {
 // A held phone sits in the hand away from the facing side (in the facing hand when the other holds a cane).
 const actorProps = actor => actor.holds === 'phone' ? {[(actor.facing === 'left') !== HELD_AIDS.includes(actor.params.mobility) ? 'r' : 'l']: phoneProp(actor.colors, 98)} : null;
 
+// What the story's look asks of the cast's drawing (kit/core/look.mjs lookCastOptions: pin joints for paper cutout); nothing without a look.
+const castDraw = ctx => { const options = lookCastOptions(ctx.look); return options ? {castDraw: options} : {}; };
+
 function actorNode(model, actor, index) {
   const cid = `${model.id}-c${index}`;
   const first = actor.states[0];
   const joints = stateJoints(first, actor);
-  const drawing = drawCharacter(actor.style, actor.params, actor.colors, {id: cid, joints, expression: first.expression, expressions: actor.expressions, props: actorProps(actor), light: actor.light, facing: actor.facing, gaze: Boolean(actor.gaze), turns: Boolean(actor.turns)});
+  const drawing = drawCharacter(actor.style, actor.params, actor.colors, {...model.content.castDraw, id: cid, joints, expression: first.expression, expressions: actor.expressions, props: actorProps(actor), light: actor.light, facing: actor.facing, gaze: Boolean(actor.gaze), turns: Boolean(actor.turns)});
   const view = characterView(drawing, {id: cid, x: actor.x, y: actor.floor, scale: actor.scale});
   // A walking character moves on its own wrapper, so its scale stays on the view.
   return actor.walks ? el('div', `${cid}-walk`, abs(0, 0, 0, 0), [view]) : view;
@@ -483,9 +489,11 @@ function resolveCastScene(params, ctx) {
   try { cast = resolveStoryCast({cast: ctx.cast ?? null, brand: ctx.brand}); } catch (error) { check.fail('story.cast', error.message); }
   const ids = p.cast.map(entry => entry?.id);
   if (new Set(ids).size !== ids.length) check.fail('params.cast', 'names a character twice');
-  // Heights first (the set scales to the tallest), then the layout.
+  // Heights first (the set scales to the tallest), then the layout. Several characters across a portrait
+  // frame stand in narrow slots: a wide kind (an open laptop, a cloud) then sets the scale by its reach.
+  const tight = canvas.height > canvas.width && p.cast.length > 1;
   const heights = p.cast.map((entry, i) => {
-    try { const member = castMember(cast, entry?.id, `params.cast[${i}].id`); return styleHeight(member.style, member.params); } catch { return 1000; }
+    try { const member = castMember(cast, entry?.id, `params.cast[${i}].id`); return stageHeight(member.style, member.params, {tight, alone: canvas.height > canvas.width, shared: p.cast.length > 1}); } catch { return 1000; }
   });
   const inWorldSet = stage.backdrop === 'world';
   const layout = layoutSet(setName, {canvas, colors: b.colors, count: p.cast.length, heights, screen: Boolean(screen), unit: b.unit, backdrop: stage.backdrop,
@@ -528,7 +536,7 @@ function resolveCastScene(params, ctx) {
   const sr = layout.screenRect, k = frame.set;
   const screenRect = sr && shot !== 'wide' ? {x: r2(sr.x * k.scale + k.x), y: r2(sr.y * k.scale + k.y), width: r2(sr.width * k.scale), height: r2(sr.height * k.scale)} : sr;
   b.model.layer = 'front';
-  const content = {...castPassage(b, ctx, actors.map(actor => actor.id)), follow: plateFollow(stage, ctx, canvas), set: setName, backdrop: stage.backdrop, world: stage.world, drawWorld: stage.draw, seated: layout.seated, back: layout.back, front: layout.front, screenRect, media: screen, actors, colors: layout.colors,
+  const content = {...castPassage(b, ctx, actors.map(actor => actor.id)), ...castDraw(ctx), follow: plateFollow(stage, ctx, canvas), set: setName, backdrop: stage.backdrop, world: stage.world, drawWorld: stage.draw, seated: layout.seated, back: layout.back, front: layout.front, screenRect, media: screen, actors, colors: layout.colors,
     shot: {name: shot, zoom: frame.zoom, set: frame.set, punches}};
   const model = b.finish(content, {minTextPx: b.min.key});
   // A set fills the frame: fade in place rather than slide.
@@ -662,7 +670,7 @@ function resolveCameo(params, ctx) {
   }
   castEvents(b, [actor]);
   b.model.layer = 'front';
-  const content = {...castPassage(b, ctx, [actor.id]), actors: [actor], card, cardBox, panel: panel ? {x: r2(x - Math.min(area.width / 2, 340 * scale * 1.3)), y: area.y, width: r2(Math.min(area.width, 680 * scale * 1.3)), height: area.height, radius: u(36)} : null, side, shot: {name: shot}};
+  const content = {...castPassage(b, ctx, [actor.id]), ...castDraw(ctx), actors: [actor], card, cardBox, panel: panel ? {x: r2(x - Math.min(area.width / 2, 340 * scale * 1.3)), y: area.y, width: r2(Math.min(area.width, 680 * scale * 1.3)), height: area.height, radius: u(36)} : null, side, shot: {name: shot}};
   return b.finish(content, {minTextPx: card ? cardBox.titleSize : b.min.key});
 }
 

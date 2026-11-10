@@ -212,7 +212,7 @@ test("the Remotion story draws the same layer under its frame and captions", asy
   const source = await readFile(path.join(ROOT, "kit", "remotion", "StoryComposition.tsx"), "utf8");
   assert.match(source, /mediumPlan\(story\)/);
   assert.match(source, /mediumLayerStyle\(plan, \(frame \* plan\.fps\) \/ fps\)/);
-  assert.equal((source.match(/\{medium \? <MediumLayer plan=\{medium\} \/> : null\}\n\s*<BrandFrame/g) ?? []).length, 2, "both paths draw it right before the brand frame");
+  assert.equal((source.match(/\{medium \? <MediumLayer plan=\{medium\} \/> : null\}\n\s*\{look \? <LookLayer plan=\{look\} \/> : null\}\n\s*<BrandFrame/g) ?? []).length, 2, "both paths draw it, then the look, right before the brand frame");
 });
 
 async function chromeAvailable() {

@@ -145,6 +145,13 @@ launchclip style upgrade my-channel
   - `chibi-plain`: the chibi figure in paper white with no skin tone, for a neutral cast.
 
   A generated style also generates its cast from a character set (office team, founders, family, kids, seniors, students, chefs, medical, athletes, creators, city crowd), so every project gets different people.
+
+  A cast does not have to be people. The same rig draws horses on four legs (a stallion, a mare and a foal, in bay, chestnut, grey or black, with an optional blaze, star or socks), upright animals (cat, dog, bear, rabbit, fox, frog, penguin, owl), soft mascots in your brand colours (blob, droplet, star, little monster) and everyday objects with faces (phone, laptop, coffee cup, light bulb, robot, coin, book, cloud). They take the same poses, expressions, looks and speech as people, in every drawing style, and can share a scene with them:
+  - Use a ready-made one by id: the horses `comet` and `copper` (stallions), `duchess` and `misty` (mares), `sprig` and `shadow` (foals); `mochi` and `soot` (cats), `biscuit` (dog), `bruno` (bear), `clover` (rabbit), `rusty` and `ember` (foxes), `puddle` (frog), `pebble` (penguin), `hoot` (owl), `bloop` and `fizz` (blobs), `drip` (droplet), `twinkle` (star), `grumble` (monster), `ping` (phone), `byte` (laptop), `latte` (cup), `watt` (bulb), `rivet` and `cog` (robots), `penny` (coin), `paige` (book), `nimbus` (cloud).
+  - Make your own: `launchclip cast create whiskers --describe "a small orange cat"`, or in a story cast `{ "id": "mug", "kind": "cup", "colors": { "accent": "red" } }`. Each takes a `size` (small, medium, large) and three colours (`body`, `detail`, `accent`); hair, clothes and the rest of a person's options do not apply and are refused.
+  - A horse stands on four legs, so each pose means its four-legged version: `walk` trots, `look` lifts the head, `slump` lowers it, `wave` and `point` lift a foreleg with a nod, `cheer` is a little prance, and `sit` (or any seated set) lies down. Describe one by its coat: `launchclip cast create rosie --describe "a bay mare with a blaze"`.
+  - Want it simpler? Set the cast's style to `stick` or `stick-classic` and every one of them, horses included, is a stick figure: a few lines and a face.
+  - Generate a whole cast of them by asking for the character set `horse-family`, `animal-friends`, `mascots`, `everyday-objects` or `mixed-company` (people and others, turn about). A generated style never picks these on its own.
 - **Brand frame (`brand_frame`):** your logo and a short kicker label with an underline, section labels and an optional progress line, drawn around every scene so the whole video hangs together. Name the kicker and sections per video with `"frame": { "kicker": { "label": "Inside Ship Mode" }, "labels": [{ "scene": "how", "label": "How it works" }] }`, or turn it off for one video with `"frame": false`.
 
 - **Recurring segments (`segments`):** named formats a series repeats, like a "tool of the week" with its own kicker, icon, layout and favourite graphics. Every episode's chapter of that name opens and looks the same way; see [long videos](long-form.md#recurring-segments).
@@ -181,6 +188,47 @@ Put `medium` in a style pack, or in one video's `storyboard.json` (the video's o
 You can also just describe it. With no style named, words in your prompt such as *"oil paint, like the faith shorts"*, *"soft watercolour, dreamy"*, *"crayon on paper, for kids"*, *"inked, like a graphic novel"* or *"flat gouache storybook"* pick the medium, and a look that suits it (dreamy watercolour is calm, on light paper; crayon for kids is playful). *Soft* or *subtle* paints lighter, *thick* or *bold* heavier, and *no boil* keeps the lines still. From the command line, `launchclip style generate --medium watercolour` does the same.
 
 Painting every frame takes time: expect a medium to make a render a few times slower.
+
+## A whole-scene look
+
+A **look** treats the world, the characters and the cards together, so the whole video reads as one thing: a hologram, a blueprint, a thermal camera. Name one in a style pack or in one video's `storyboard.json`:
+
+```json
+"look": "hologram"
+```
+
+| Look | What it shows |
+|---|---|
+| `blueprint` | Deep blue paper and a fine grid, the scene as white and cyan line drawing, dimension lines with measurements and a title block. Each shot draws in from the left behind a drawing line. |
+| `hologram` | Everything as translucent cyan light on black: a glowing rim, rolling scanlines, a faint wireframe, small glitch flickers, a glowing grid floor and floating technical labels. |
+| `thermal` | The scene through a black, purple, red, orange, yellow, white heat palette with slight blur and sensor noise, under a camera overlay: crosshair, scale bar, record dot and a running clock. |
+| `neon-night` | A dark scene lit by pink and cyan neon: a rim light of each colour, glow on bright areas, long reflections on a wet floor, haze, and rain outdoors. |
+| `paper-cutout` | Layered craft paper: rough cut edges, paper fibre and soft shadows between layers, the cast as jointed paper puppets with pin fasteners, animated on twos with a tiny jitter at every step. |
+| `watercolour` | Soft washes that bleed at the edges with darker pooled borders and paper grain, loose pencil lines slightly off register, and washes that shift every few frames like hand-painted frames. It is the `watercolour` medium with a pencil drawing under it, held at ten drawings a second. |
+| `anime-cel` | Thin dark outlines and two-tone cel shading with hard shadow edges on the characters and the world alike, big shiny eyes, light rays, and speed lines when a character is surprised. |
+| `none` | The default: no look, the video renders exactly as before. |
+
+A look brings its own colours, and where it needs them a drawing style for the characters, a time of day, a backdrop and lighting. Anything your video sets itself wins, then the look, then the style pack. With its dials:
+
+```json
+"look": { "name": "blueprint", "strength": 0.8, "labels": ["Checkout flow", "Scale 1:4"] }
+```
+
+- `strength` (0 to 1, default 1): how far the frame moves from the clean render.
+- `step`: how many drawings a second the picture holds at. `12` animates "on twos", the way stop motion and cut-out animation move; `paper-cutout` uses it by default, and `false` turns it off. Captions and sound never step.
+- `furniture` (default on): the look's overlay, such as the hologram's labels and grid floor or the thermal camera's crosshair. `false` leaves only the picture's treatment.
+- `palette`: `"brand"` keeps your style's colours instead of the look's. The looks that map the whole frame through their own colours (blueprint, hologram, thermal) still do.
+- `labels`: up to six short labels for the looks that show text: the hologram's floating labels, the blueprint's title and scale, the thermal scale's hottest and coldest values.
+
+You can also just describe it: with no style named, *"as a hologram"*, *"blueprint style"*, *"thermal camera"*, *"cyberpunk"*, *"paper cutout"*, *"watercolour and pencil"* or *"anime"* in your prompt picks the look. (*Watercolour* on its own picks the medium, without the pencil or the held frames.) From the command line, `launchclip style generate --look hologram` does the same.
+
+Captions and the brand frame are never treated, so they stay readable, and a look renders the same every time. A look and a medium can be used together: the medium paints first.
+
+What a look cannot do: it treats the finished picture, so it cannot tell a person from a wall. The thermal look reads brightness as heat (it sets the scene to night so people are the brightest thing in it), and the neon reflections fall on the lower part of the frame, not on a floor it can see.
+
+In `anime-cel`, the speed lines fire on their own whenever a cue turns a character `surprised`. For a punch-in on the face, add `"shot": "close"` to the same cue.
+
+To see every look on a test scene in both renderers, run `node scripts/look-sheet.mjs`.
 
 ## Turn the dials
 

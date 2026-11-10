@@ -17,6 +17,12 @@
 //   eventStats(events, {duration, cuts}) → {events, per_min, gap, longest_static, cut_gap}
 //   cadenceGate(stats, target)           → {ok, checks}; cadenceReport(gate) → text
 //
+// Character and dialogue measures, from a finished project's shot list:
+//
+//   characterMeasures(shots, {duration, words, script}) → {character_screen_time,
+//     expression_changes_per_min, speaker_turns_per_min, line_seconds, …}
+//   spokenRuns(words, {script})          → the spoken lines of a take
+//
 // Pure ESM; imports only kit/core siblings. Canonical copy: kit/core/cadence.mjs.
 
 import { storyBase, storySections } from './story.mjs';
@@ -380,4 +386,153 @@ export function cadenceReport(gate, stats = null) {
   if (stats) lines.push(`  ${stats.events} events in ${stats.duration} s; gaps p10 ${stats.gap.p10} / p50 ${stats.gap.p50} / p90 ${stats.gap.p90} s${stats.cuts !== null ? `; ${stats.cuts} cuts` : ''}`);
   for (const entry of gate.checks) lines.push(`  ${entry.ok ? 'ok  ' : 'FAIL'} ${entry.id.padEnd(15)} ${String(entry.value).padStart(7)}  want ${entry.want}  (${entry.message})`);
   return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Character and dialogue measures (docs/ANIMATION_PIPELINE_RFC.md §8.2)
+//
+//   characterMeasures(shots, {duration, words, script}) → the story-characters
+//     profile's measures a finished project can answer: scene_seconds,
+//     character_screen_time, expression_changes_per_min, problem_lands_seconds,
+//     and the four dialogue measures (DIALOGUE_MEASURES).
+//
+// shots: the shot list (`launchclip story shots --json`, src/story_shots.js):
+// each {start, end, who, set, framing, beats, lines: [{speaker, start, end,
+// beat?}], poses: {<id>: [{at, pose?, expression?, shot?}]}}. words: the
+// narration words, each with its `speaker` in a dialogue. script: SCRIPT.json,
+// read loosely, to split one speaker's run into its written lines.
+// For a LaunchClip project these are exact: the files say who speaks, who is
+// drawn and when a pose changes. A reference video has none of these files, so
+// its dialogue measures come from annotation, not from `profile measure`.
+
+/** The measures dialogue adds to a character profile. */
+export const DIALOGUE_MEASURES = Object.freeze(['speaker_turns_per_min', 'line_seconds', 'reaction_share', 'longest_framing_seconds']);
+// A pause this long inside one speaker's run starts a new line when no script says where the lines break.
+const LINE_PAUSE_SECONDS = 0.6;
+// A listener's pose change this close to a line counts as a reaction to it.
+const REACTION_SLACK_SECONDS = 0.1;
+const NARRATOR_ID = 'narrator';
+
+const wordCount = (text) => String(text ?? '').trim().split(/\s+/).filter(Boolean).length;
+
+/**
+ * The spoken lines of a take, in order: [{speaker, start, end, words}].
+ * With a script whose spoken lines add up to the take's words, each written
+ * line is one line. Otherwise a line is one speaker's unbroken run, split at
+ * pauses of LINE_PAUSE_SECONDS.
+ */
+export function spokenRuns(words, { script = null, pause = LINE_PAUSE_SECONDS } = {}) {
+  const list = (Array.isArray(words) ? words : []).filter((word) => finite(Number(word?.start))).map((word) => ({ speaker: typeof word.speaker === 'string' && word.speaker ? word.speaker : null, start: Number(word.start), end: finite(Number(word.end)) ? Number(word.end) : Number(word.start) }));
+  if (!list.length) return [];
+  const written = [];
+  for (const beat of Array.isArray(script?.beats) ? script.beats : []) for (const line of Array.isArray(beat?.lines) ? beat.lines : []) {
+    if (typeof line?.speaker === 'string' && typeof line.text === 'string' && line.text.trim()) written.push({ id: line.id ?? null, speaker: line.speaker, count: wordCount(line.text) });
+  }
+  const runs = [];
+  if (written.length && written.reduce((sum, line) => sum + line.count, 0) === list.length) {
+    let cursor = 0;
+    for (const line of written) {
+      const slice = list.slice(cursor, cursor + line.count);
+      cursor += line.count;
+      if (slice.length) runs.push({ ...(line.id ? { id: line.id } : {}), speaker: slice[0].speaker ?? line.speaker, start: slice[0].start, end: slice.at(-1).end, words: slice.length });
+    }
+    return runs;
+  }
+  for (const word of list) {
+    const open = runs.at(-1);
+    if (open && open.speaker === word.speaker && word.start - open.end < pause) { open.end = word.end; open.words += 1; }
+    else runs.push({ speaker: word.speaker, start: word.start, end: word.end, words: 1 });
+  }
+  return runs;
+}
+
+/**
+ * The character and dialogue measures of a finished story.
+ * → {duration_seconds, scene_seconds, character_screen_time,
+ *    expression_changes_per_min, problem_lands_seconds, speaker_turns_per_min,
+ *    line_seconds, reaction_share, longest_framing_seconds, counts: {shots,
+ *    lines, turns, speakers, pose_changes, spoken_seconds, reaction_seconds},
+ *    framings: [{start, end, set, framing, who}]}
+ * A measure nothing in the project can answer is null (a story nobody speaks
+ * in has no line_seconds and no reaction_share).
+ */
+export function characterMeasures(shots, { duration, words = [], script = null } = {}) {
+  const length = Number(duration);
+  if (!(length > 0)) throw new Error('characterMeasures needs the story duration');
+  const list = (Array.isArray(shots) ? shots : []).filter((shot) => finite(Number(shot?.start)) && finite(Number(shot?.end)) && Number(shot.end) > Number(shot.start)).map((shot) => ({ ...shot, start: Number(shot.start), end: Number(shot.end), who: Array.isArray(shot.who) ? shot.who : [] })).sort((a, b) => a.start - b.start);
+  const minutes = length / 60;
+
+  // Pose and expression changes: every state after the one a character opens a shot in.
+  const changesOf = (shot, id) => {
+    const states = (Array.isArray(shot.poses?.[id]) ? shot.poses[id] : []).filter((state) => finite(Number(state?.at))).sort((a, b) => a.at - b.at);
+    return states.filter((state, index) => index > 0 && (state.pose !== states[index - 1].pose || state.expression !== states[index - 1].expression));
+  };
+  let poseChanges = 0;
+  for (const shot of list) for (const id of shot.who) poseChanges += changesOf(shot, id).length;
+
+  // The take: who speaks, in what order, for how long.
+  const runs = spokenRuns(words, { script });
+  let turns = 0;
+  for (let i = 1; i < runs.length; i += 1) if (runs[i].speaker !== runs[i - 1].speaker) turns += 1;
+  const speakers = [...new Set(runs.map((run) => run.speaker).filter(Boolean))];
+
+  // Reactions: of the time a character speaks, the time the picture is on a
+  // listener reacting: a listener's pose or expression changes during the
+  // line, or the speaker is unseen and a listener holds the shot.
+  let spoken = 0, reacting = 0;
+  for (const shot of list) for (const line of Array.isArray(shot.lines) ? shot.lines : []) {
+    if (!line?.speaker || line.speaker === NARRATOR_ID || !finite(Number(line.start)) || !finite(Number(line.end))) continue;
+    const seconds = Math.max(0, Math.min(shot.end, Number(line.end)) - Math.max(shot.start, Number(line.start)));
+    if (!(seconds > 0)) continue;
+    spoken += seconds;
+    const listeners = shot.who.filter((id) => id !== line.speaker);
+    const unseen = !shot.who.includes(line.speaker) && listeners.length > 0;
+    const reacts = listeners.some((id) => changesOf(shot, id).some((state) => state.at >= Number(line.start) - REACTION_SLACK_SECONDS && state.at <= Number(line.end) + REACTION_SLACK_SECONDS));
+    if (unseen || reacts) reacting += seconds;
+  }
+
+  // Framings: a stretch on one set, one framing and one group of people. A
+  // cut between two shots that changes none of them is still the same framing;
+  // a cue that changes the shot inside a scene starts a new one.
+  const framings = [];
+  for (const shot of list) {
+    const who = [...shot.who].sort();
+    const cuts = [];
+    for (const id of who) for (const state of Array.isArray(shot.poses?.[id]) ? shot.poses[id] : []) if (state?.shot && finite(Number(state.at)) && state.at > shot.start && state.at < shot.end) cuts.push({ at: Number(state.at), framing: state.shot });
+    cuts.sort((a, b) => a.at - b.at);
+    let start = shot.start, framing = shot.framing ?? null;
+    for (const cut of [...cuts, { at: shot.end, framing: null }]) {
+      if (cut.at > start) {
+        const open = framings.at(-1);
+        const key = JSON.stringify([shot.set ?? null, framing, who]);
+        if (open && open.key === key && start - open.end < MERGE_SECONDS) open.end = cut.at;
+        else framings.push({ key, start, end: cut.at, set: shot.set ?? null, framing, who });
+      }
+      start = cut.at;
+      framing = cut.framing ?? framing;
+    }
+  }
+
+  // The problem lands with the first line of the first shot that plays the problem beat.
+  let problem = null;
+  for (const shot of list) {
+    const lines = (Array.isArray(shot.lines) ? shot.lines : []).filter((line) => line?.beat === 'problem' && finite(Number(line.start)));
+    const at = lines.length ? Math.min(...lines.map((line) => Number(line.start))) : (Array.isArray(shot.beats) && shot.beats.length === 1 && shot.beats[0] === 'problem' ? shot.start : null);
+    if (at !== null) { problem = Math.max(shot.start, at); break; }
+  }
+
+  const onScreen = unionIntervals(list.filter((shot) => shot.who.length).map((shot) => clip([shot.start, shot.end], length)));
+  return {
+    duration_seconds: round(length),
+    scene_seconds: list.length ? distribution(list.map((shot) => shot.end - shot.start)) : null,
+    character_screen_time: round(total(onScreen) / length, 4),
+    expression_changes_per_min: round(poseChanges / minutes, 2),
+    problem_lands_seconds: problem === null ? null : round(problem),
+    speaker_turns_per_min: runs.length ? round(turns / minutes, 2) : null,
+    line_seconds: runs.length ? distribution(runs.map((run) => run.end - run.start)) : null,
+    reaction_share: spoken > 0 ? round(reacting / spoken, 4) : null,
+    longest_framing_seconds: framings.length ? round(framings.reduce((max, entry) => Math.max(max, entry.end - entry.start), 0)) : null,
+    counts: { shots: list.length, lines: runs.length, turns, speakers: speakers.length, pose_changes: poseChanges, spoken_seconds: round(spoken), reaction_seconds: round(reacting) },
+    framings: framings.map(({ key, ...entry }) => ({ ...entry, start: round(entry.start), end: round(entry.end) }))
+  };
 }

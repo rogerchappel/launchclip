@@ -78,6 +78,10 @@ export const STORY_PANEL_TREATMENTS = ["solid", "glass", "paper", "outline", "so
 // kept in step by test/medium.test.js).
 export const STORY_MEDIUM_KINDS = ["none", "oil", "watercolour", "pastel", "ink", "gouache"];
 export const STORY_MEDIUM_KEYS = ["kind", "strength", "boil", "grain"];
+// story.look names and keys (kit/core/look.mjs LOOK_NAMES, LOOK_KEYS; kept in
+// step by test/look.test.js).
+export const STORY_LOOK_NAMES = ["none", "blueprint", "hologram", "thermal", "neon-night", "paper-cutout", "watercolour", "anime-cel"];
+export const STORY_LOOK_KEYS = ["name", "strength", "step", "furniture", "palette", "labels"];
 // story.light (kit/core/lighting.mjs LIGHT_PARAMS, LIGHT_PRESETS): ranges per
 // layer, kept in step by test/lighting.test.js.
 export const STORY_LIGHT_PRESETS = ["none", "studio", "spot", "soft"];
@@ -110,8 +114,9 @@ const EPS = 1e-6;
 // cover: the designed cover (the thumbnail and, with frame "first", the
 // opening frame); see validateCover below.
 // medium: the material every frame is painted in (a style pack's medium; kit/core/medium.mjs).
+// look: the whole-scene treatment (a style pack's look; kit/core/look.mjs).
 // light: the story's lighting (a style pack's light; kit/core/lighting.mjs).
-const TOP_LEVEL = new Set(["light", "cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine", "bible"]);
+const TOP_LEVEL = new Set(["look", "light", "cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine", "bible"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -535,6 +540,8 @@ export function validateStory(story, { modules, moduleParams } = {}) {
   });
   // medium: the whole-frame finishing pass (kit/core/medium.mjs).
   validateMedium(story.medium, err);
+  // look: the whole-scene treatment (kit/core/look.mjs).
+  validateLook(story.look, err);
 
   // variants: one designed variant per module (docs/SEEDED_STYLES_RFC.md §3.2).
   if (story.variants !== undefined && story.variants !== null) {
@@ -999,7 +1006,8 @@ export function resolveUiAnchors(params, sceneStart, resolve) {
 // `says` ranges may be time anchors; they resolve to seconds from the scene
 // start, and a spoken range gains the timing of each narration word in it
 // and its text (`words: [[start, end, "word"], ...]`), so a mouth shapes
-// the voice's words.
+// the voice's words; a word whose voice reported its phonemes carries them
+// as a fourth entry (`[start, end, "word", "h:55 ə:40 …"]`).
 export const CAST_MODULES = Object.freeze(["cast-scene", "character-cameo"]);
 // Scenes whose cues and spoken ranges resolve here: the rig's cast modules and
 // the illustrated sprite-scene (kit/core/catalog-sprites.mjs).
@@ -1023,10 +1031,11 @@ export function castRefId(id, ids = []) {
   return match && ids[Number(match[1]) - 1] ? ids[Number(match[1]) - 1] : id;
 }
 
-// A narration word as a spoken range's word: [start, end] from the scene start, with its text when it has one (the mouth shapes follow its sounds).
+// A narration word as a spoken range's word: [start, end] from the scene start, with its text when it has one and then its phonemes (the mouth shapes follow its sounds).
 function spokenWord(word, start) {
   const text = typeof (word.text ?? word.word) === "string" ? (word.text ?? word.word).trim() : "";
-  return [Math.round((word.start - start) * 1000) / 1000, Math.round((word.end - start) * 1000) / 1000, ...(text ? [text] : [])];
+  const phonemes = text && typeof word.phonemes === "string" ? word.phonemes.trim() : "";
+  return [Math.round((word.start - start) * 1000) / 1000, Math.round((word.end - start) * 1000) / 1000, ...(text ? [text] : []), ...(phonemes ? [phonemes] : [])];
 }
 
 /** A character scene's params with anchors (and cast references) resolved. resolve(anchor, path) → seconds. */
@@ -1619,6 +1628,23 @@ function validateMedium(value, err, path = "medium") {
   if (!STORY_MEDIUM_KINDS.includes(value.kind)) err(kindError(value.kind, `${path}.kind`));
   for (const key of ["strength", "grain"]) if (value[key] !== undefined && !(typeof value[key] === "number" && value[key] >= 0 && value[key] <= 1)) err(`${path}.${key} must be a number from 0 to 1`);
   if (value.boil !== undefined && typeof value.boil !== "boolean") err(`${path}.boil must be true or false`);
+}
+
+// The same rules as kit/core/look.mjs lookErrors(), kept here so this file
+// stays import-free (a misspelt name gets the fuller message from lookErrors,
+// which the style validator and `launchclip validate` run).
+function validateLook(value, err, path = "look") {
+  if (value === undefined || value === null) return;
+  const names = STORY_LOOK_NAMES.join(", ");
+  if (typeof value === "string") { if (!STORY_LOOK_NAMES.includes(value)) err(`${path} must be one of ${names} (got ${JSON.stringify(value)})`); return; }
+  if (!isObject(value)) { err(`${path} must be a look name (${names}) or {name, strength?, step?, furniture?, palette?, labels?}`); return; }
+  for (const key of Object.keys(value)) if (!STORY_LOOK_KEYS.includes(key)) err(`${path}.${key} is not supported (allowed: ${STORY_LOOK_KEYS.join(", ")})`);
+  if (!STORY_LOOK_NAMES.includes(value.name)) err(`${path}.name must be one of ${names} (got ${JSON.stringify(value.name)})`);
+  if (value.strength !== undefined && !(typeof value.strength === "number" && value.strength >= 0 && value.strength <= 1)) err(`${path}.strength must be a number from 0 to 1`);
+  if (value.step !== undefined && value.step !== false && !(typeof value.step === "number" && value.step >= 6 && value.step <= 15)) err(`${path}.step must be false or 6 to 15 drawings a second (12 animates on twos)`);
+  if (value.furniture !== undefined && typeof value.furniture !== "boolean") err(`${path}.furniture must be true or false`);
+  if (value.palette !== undefined && !["look", "brand"].includes(value.palette)) err(`${path}.palette must be "look" or "brand"`);
+  if (value.labels !== undefined && !(Array.isArray(value.labels) && value.labels.length <= 6 && value.labels.every((label) => typeof label === "string" && label.trim() && label.length <= 28))) err(`${path}.labels must be up to 6 short labels (1 to 28 characters each)`);
 }
 
 function validatePanel(value, err) {

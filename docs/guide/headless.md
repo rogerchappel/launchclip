@@ -181,11 +181,11 @@ motion video:
 launchclip make "A 30-second short: Maya keeps shipping a fix that fails, and Sam shows her the check she skipped" --animation --aspect 9:16
 ```
 
-**For now it stops after the script and the voice, and renders no video.**
-The stages that design the cast, plan the shots and render are being built
-([ANIMATION_PIPELINE_RFC.md](../ANIMATION_PIPELINE_RFC.md)). `MAKE.json`
-ends with status `stopped`, `stopped.after` is `prepare`, and the later
-stages are `skipped`. For a finished video today, leave `--animation` off.
+It writes a script with speakers, voices it, designs the cast and the
+world, plans the shots with that cast, renders an animatic and has it
+reviewed, retakes the shots the review fails, then renders the video and
+has the critic look at it. The stages are in
+[ANIMATION_PIPELINE_RFC.md](../ANIMATION_PIPELINE_RFC.md).
 
 What it does write:
 
@@ -207,10 +207,113 @@ voice runs it more than 15% short of the target, or it fails at the voice's
 real pace, that one repair call is spent then instead. Errors left after the
 repair are warnings in `MAKE.json`.
 
-Under Kokoro each character borrows a voice of its own until the cast is
-designed; with ElevenLabs the narrator's voice reads every line for now. Run
-the same command again and the script and the take are reused: no model
-call, no new take.
+Under Kokoro each character speaks in a voice of its own, which the show
+bible then keeps; with ElevenLabs the narrator's voice reads every line
+until you give the characters voice ids (`launchclip cast edit <id> --voice
+<voice id>`, then `launchclip bible freeze`). Run the same command again and
+the script and the take are reused: no model call, no new take.
+
+### The show bible, and stopping to look at it
+
+After the voice, one model call designs the cast and the world, and
+`BIBLE.json` is frozen:
+
+- **The cast.** For each character of the script the model answers with the
+  same set paths `launchclip cast create --set` takes
+  (`hair.style=bob`, `outfit.top=hoodie`), so it can only choose what the
+  rig can draw; an option the rig lacks is left out and named in a warning.
+  It is told to keep people cute, relatable and simply dressed, and easy to
+  tell apart. A new character is saved to `cast/<id>.character.json`. A
+  character whose id is a starter's (`maya`, `sam`) is that starter, with
+  the model's changes. A character you saved under the script's id
+  beforehand is used as it is.
+- **The drawing style** is `chibi`, unless your style pack sets
+  `cast.drawing_style` or the prompt asks for another style.
+- **Voices.** Each character keeps the voice the script was voiced in.
+- **The world**: a kind of place, a time of day, the sets the story plays
+  on, and up to three continuity rules.
+- **A reference sheet** per character in `bible/sheets/<id>.png` (drawn in
+  Chromium, like `launchclip cast sheet`).
+
+The shots are then planned with the bible pinned: `storyboard.json` and
+`DIRECTION.json` name it (`"bible": {"file", "hash"}`), the story's cast is
+copied from it after every model pass, and the cast check runs inside the
+plan, so a pose that reaches off the frame is repaired before the render.
+`--replan` plans new shots; it never designs a new cast.
+
+To look before any shot is planned:
+
+```bash
+launchclip make "<prompt>" --animation --out ./short --stop-after bible   # ends awaiting-approval
+launchclip bible show ./short                                             # and look at ./short/bible/sheets
+launchclip make "<prompt>" --animation --out ./short --approve bible      # goes on; nothing earlier runs again
+```
+
+`MAKE.json` ends `status: "awaiting-approval"` with `stopped.after:
+"bible"`, and `next_steps` says the same. In a terminal, make asks at that
+point without the flag; with no terminal it goes on unless you pass
+`--stop-after bible`. An approval is of that bible: change the bible and it
+is asked again.
+
+To change a character before you approve: `launchclip cast edit <id>
+--instruction "…" --project ./short`, then `launchclip bible freeze ./short
+--characters <id>,<id> --force`. A frozen `BIBLE.json` that make did not
+write is always used as it is (make designs a cast only when there is
+none), so you can also bring your own: design the characters, freeze the
+bible, then run make.
+
+### The animatic, its review and retakes
+
+Before the delivery render, make renders the whole story at draft quality
+to `renders/animatic.mp4` and writes `ANIMATIC.json` (its shots, its gates
+and the hashes of the storyboard and the bible). This is `launchclip finish
+--animatic`; nothing about it is special to make.
+
+With a model that takes images, a **staging review** then looks at the
+animatic for story, staging and acting only, with each character's
+reference sheet beside the frames (`qa/animatic-critic.json`). While it
+does not say `ship`, make **retakes** the shots its blocking and major
+findings name: one small model call redirects those shots (their cues,
+framing or set; the timing is locked), only those shots render again, and
+the review looks again. A round that does not lower the findings is undone
+and the rounds stop. The rounds are in `qa/animatic-retakes.json`.
+
+Then the video is rendered. At draft quality (the default) it is the
+animatic's cut, so no shot renders twice; `--quality high` renders it
+again for delivery. The critic reviews the video as it does for any other
+kind, and on this path its repair rounds are retakes too
+(`qa/retakes.json`).
+
+`--critic-repairs` (3 by default, 0 for none) is one budget for both: a
+round spent on the animatic is not spent again on the video.
+
+| The run ends | When | Exit code |
+| --- | --- | --- |
+| `ready` | every gate passed and the critic said `ship` | 0 |
+| `needs-repair` | a gate failed, or the critic still does not say `ship` once the rounds are spent. The video is rendered, not finished | 2 |
+| `awaiting-approval` | it stopped after the bible or the animatic | 3 |
+| `ready-for-review` | no model could look at it (no vision model, or `--no-critic`) | 4 |
+| `failed` | a stage failed | 1 |
+
+To watch the animatic before the delivery render:
+
+```bash
+launchclip make "<prompt>" --animation --out ./short --stop-after animatic   # ends awaiting-approval, exit 3
+open ./short/renders/animatic.mp4                                            # the review is ./short/qa/animatic-critic.json
+launchclip make "<prompt>" --animation --out ./short --approve animatic      # renders the video; nothing earlier runs again
+```
+
+In a terminal make asks at that point without the flag; with no terminal
+it goes on unless you pass `--stop-after animatic`. A headless run goes on
+even when the review still asks for a repair: the video is rendered, the
+critic has the last word, and the run ends `needs-repair` if it agrees. An
+approval is of that storyboard's animatic: change a shot and it is asked
+again. `--approve bible,animatic` approves both.
+
+To change a shot yourself before you approve, edit its scene in
+`storyboard.json` (or run `launchclip finish ./short --animatic --retake`)
+and run the same make command again: the animatic renders only what
+changed.
 
 `--animation` needs the motion lane, so it refuses an assets folder that
 holds a voiceover or a recording with speech, and a length over 180 seconds.
