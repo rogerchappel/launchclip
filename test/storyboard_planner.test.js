@@ -477,7 +477,7 @@ const brandCaptions = (position, size = 1.15) => ({ schema: STYLE_SCHEMA, name: 
 // What make checks again after the plan: the cadence bands only warn.
 const recheck = (story, style) => checkStoryboard(story, { words: WORDS, tier: "structured", style, direction: MAP, profile: { ...SHORT_MOTION, id: "tight", measures: { coverage: { p10: 0.2, p50: 0.4, p90: 0.5 } } }, bandErrors: false });
 
-test("caption band: a plan kept on a cadence near miss is still laid out, and the captions dip under the cards in the band", async () => {
+test("caption band: a plan kept on a cadence near miss is still laid out, and the cards in the band move out of it with the captions left on", async () => {
   const tight = { ...SHORT_MOTION, id: "tight", measures: { coverage: { p10: 0.2, p50: 0.4, p90: 0.5 } } };
   const style = brandCaptions("middle");
   // The pack supplies the captions: the model writes no overlay of its own.
@@ -486,12 +486,12 @@ test("caption band: a plan kept on a cadence near miss is still laid out, and th
   const report = await plan(client, { direction: MAP, profile: tight, style, maxRepairs: 1 });
   assert.equal(report.status, "passed", report.errors.join("\n"));
   assert.ok(report.warnings.some((line) => /kept the storyboard closest to the profile/.test(line)), "the cadence miss is still a kept near miss");
-  const hid = report.warnings.filter((line) => line.startsWith("layout: tooling hid captions"));
-  assert.ok(hid.length, report.warnings.join("\n"));
-  assert.match(hid.join("\n"), /under s4/);
-  const captions = report.storyboard.overlays.find((overlay) => overlay.type === "captions");
-  assert.equal(captions.position, "middle");
-  assert.ok(captions.hide.length, "the storyboard carries the hidden ranges");
+  const cleared = report.warnings.filter((line) => line.startsWith("layout: tooling cleared the caption band: "));
+  assert.match(cleared.join("\n"), /s4 \(/, report.warnings.join("\n"));
+  assert.deepEqual(report.warnings.filter((line) => line.startsWith("layout: tooling hid captions")), [], "nothing is hidden");
+  const captions = report.storyboard.overlays?.find((overlay) => overlay.type === "captions");
+  assert.equal(captions?.hide, undefined);
+  assert.deepEqual(report.storyboard.scenes.find((scene) => scene.id === "s4").fitted, ["rect"], "the rect is tooling's, so the structured tier allows it");
   const again = recheck(report.storyboard, style);
   assert.deepEqual(again.errors.filter((line) => line.includes("caption-band")), []);
   assert.equal(again.ok, true, again.errors.join("\n"));
@@ -516,6 +516,7 @@ for (const position of ["top", "middle", "low", "auto"]) {
       const captions = report.storyboard.overlays.find((overlay) => overlay.type === "captions");
       const hid = report.warnings.filter((line) => line.startsWith("layout: tooling hid captions"));
       assert.equal(Boolean(captions.hide?.length), hid.length > 0, "a hidden range is always reported");
+      assert.deepEqual(hid, [], "the captions stay on: content or captions move instead");
       assert.equal(checkStoryboard(report.storyboard, { words: WORDS, tier: "structured", style, bandErrors: false }).ok, true);
     });
   }
@@ -530,7 +531,9 @@ test("caption band: the planner is told where this story's captions sit, not the
   // The band the layout check measures: the middle of 1080×1920, grown to the preset's tallest line at size 1.15.
   assert.match(instructions, /caption band x 65–918, y 826–1095 \(this story's captions: position "middle"\)/);
   assert.match(instructions, /captions in the middle of the frame: wherever these rules say "the caption band", it is y 826–1095/);
-  assert.match(instructions, /tooling then hides the captions under the card/);
+  assert.match(instructions, /Plan every scene's own text \(a title, a card, a label\) clear of that band/);
+  assert.match(instructions, /tooling then moves the card out of it, or moves the captions for that scene, and hides the captions only when neither fits/);
+  assert.match(instructions, /Captions hidden for more than 15% of the narration fail the storyboard/);
   assert.doesNotMatch(instructions, /caption band x 65–918, y 1190–1420;/);
   const plain = fakeClient([envelope(goodStoryboard())]);
   await plan(plain);

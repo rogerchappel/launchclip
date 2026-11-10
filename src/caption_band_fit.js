@@ -1,79 +1,457 @@
-// Tooling fits captions around cards: a storyboard that fails because a card
-// sits in the caption band while captions are visible ("layout: caption-band
-// @0.3s [cover-callouts, captions] ... while captions are visible
-// (0.3s–1.4s)") gets the captions hidden for that window instead of a failed
-// plan. A caption position the module layout does not plan for (captions in
-// the middle of the frame, where every card sits) otherwise fails every
-// attempt. The card carries the line's words while it is up, and the captions
-// come back when it goes. The layout check stays strict; this only adds
-// [start, end] ranges to the captions overlay's `hide`.
+// Tooling keeps captions and cards apart. A storyboard that fails because a
+// card sits in the caption band while captions are visible ("layout:
+// caption-band @0.3s [cover-callouts, captions] ... while captions are
+// visible (0.3s–1.4s)") is settled here instead of failing the plan. A
+// caption position the module layout does not plan for (captions in the
+// middle of the frame, where every card sits) otherwise fails every attempt.
+//
+// A brand that turned captions on expects to see them, so hiding them is the
+// last resort, scene by scene. For each scene with a clash, in this order:
+//
+//   1. the scene's own text or card moves out of the band, to the free
+//      region above or below it: a module that takes params.rect is moved
+//      there at its own size or re-fitted to the region (moduleFit); a module
+//      with a placement param takes another value (PARAM_MOVES: a clip's
+//      callout slot, a split's share);
+//   2. content that cannot move (a full-frame diagram, a module with a fixed
+//      layout) keeps its place and the captions move for that scene, to the
+//      nearest free band above or below the content, at their size and style
+//      (a zone on the captions overlay: kit/core/cast-captions.mjs
+//      placedCaptionZones; both renderers draw it through captionPlan);
+//   3. with no free band tall enough, the captions shrink into the tallest
+//      one, down to CAPTION_ZONE_MIN_SCALE of their size;
+//   4. only then are the captions hidden for the clash ([start, end] in the
+//      overlay's `hide`), and the reason is recorded.
+//
+// Every step is checked here against the same layout rules (checkLayout over
+// the scene's elements and everything on screen with it), so a move never
+// trades the clash for a collision, a safe-zone error or text under its
+// floor. In a talking-head story neither a moved card nor moved captions
+// may land on the presenter's face (the head src/face_clear_fit.js keeps
+// cards off). The layout check stays strict: the caller checks the result
+// again.
 
-const BAND_ERROR = /^layout: caption-band @[\d.]+s \[([^,\]]+), ([^\]]+)\][^]*?while captions are visible \(([\d.]+)s–([\d.]+)s\)/;
+import { CAPTION_ZONE_MIN_SCALE, captionsOverlayOf } from "@launchclip/core/captions.mjs";
+import { captionBandAt, checkLayout, elementsFromEditorialLayout, layoutExtras, profileGeometry } from "@launchclip/core/layout-check.mjs";
+import { catalogModules, isEditorialKind, moduleFit, resolveModule, sceneRenderEnd } from "@launchclip/core/modules.mjs";
+import { CAST_MODULES } from "@launchclip/core/character-story.mjs";
+import { FACE_CLEAR, presenterHeadLocator } from "./face_clear_fit.js";
+import { captionBandFor } from "./layout_check.js";
 
-/** The caption-band clashes in a list of check errors: [{scene, captions, start, end}]. */
+export const CAPTION_BAND_FIT = Object.freeze({
+  // Moved content and moved captions keep this share of the canvas height from each other.
+  gap: 0.0125,
+  // A scene whose box covers this share of the canvas is full-frame: it is never re-fitted.
+  fullFrame: 0.85,
+  // A card re-fitted above or below the band keeps at least this share of its area; a smaller one stays and the captions move instead.
+  minArea: 0.5,
+  // A clash shorter than this (seconds) is hidden outright: no caption line is lost to it.
+  sliver: 0.1,
+  // The least a caption block shrinks to (step 3).
+  minScale: CAPTION_ZONE_MIN_SCALE
+});
+
+// Placement params tooling may change to clear the band, tried in order
+// (the value in use is skipped). Each is checked like any other move.
+export const PARAM_MOVES = Object.freeze({
+  clip: (params) => [{ position: params.position === "top" ? "bottom" : "top" }],
+  "emphasis-caption": () => [{ position: "upper" }, { position: "lower" }],
+  "split-screen": (params) => [0.3, 0.58, 0.62, 0.65].filter((share) => share !== params.share).map((share) => ({ share })),
+  "footage-callout": () => [{ side: "above" }, { side: "below" }]
+});
+
+const BAND_ERROR = /^layout: caption-band @[\d.]+s \[([^,\]]+), ([^\]]+)\][^]*?caption band(?: (-?[\d.]+),(-?[\d.]+) ([\d.]+)×([\d.]+))? while captions are visible \(([\d.]+)s–([\d.]+)s\)/;
+const EPS = 1e-6;
+
+/** The caption-band clashes in a list of check errors: [{scene, captions, rect (the band the error names, or null), start, end}]. */
 export function captionBandErrors(errors) {
   const out = [];
   for (const error of errors ?? []) {
     const match = BAND_ERROR.exec(String(error));
     if (!match) continue;
-    const [, scene, captions, start, end] = match;
+    const [, scene, captions, x, y, width, height, start, end] = match;
     if (!(Number(end) > Number(start))) continue;
-    out.push({ scene: scene.trim(), captions: captions.trim(), start: Number(start), end: Number(end) });
+    out.push({ scene: scene.trim(), captions: captions.trim(), rect: x === undefined ? null : { x: Number(x), y: Number(y), width: Number(width), height: Number(height) }, start: Number(start), end: Number(end) });
   }
   return out;
 }
 
 /**
- * A copy of the storyboard with the captions hidden over each clash, and
- * what changed: {storyboard, hidden: ["captions 0.3–1.4 s under cover-callouts"]}.
- * Only overlays already in the storyboard change.
+ * A copy of the storyboard with each caption-band clash settled, and what
+ * changed. options: {resolve(storyboard) → the resolved story the checks
+ * see (style merged, anchors resolved); without it only step 4 is possible,
+ * from: the first step allowed (1 content moves, 2 captions move, 4 hide
+ * only), lay(scene, resolved, canvas) → a scene's layout elements (default:
+ * as the planner's check lays a scene out)}.
+ * → {storyboard,
+ *    moved:  ["ask (re-fitted above it)", "open (position \"top\")"],
+ *    placed: ["captions 3–6 s moved below boards (y 1114)"],
+ *    hidden: ["captions 0.28–1.42 s under cover-callouts: no free band …"],
+ *    changes: every line above, in the order made}
+ * Only the scenes named in a clash and the captions overlay change.
  */
-export function fitCaptionBand(storyboard, errors) {
+export function fitCaptionBand(storyboard, errors, { resolve = null, from = 1, lay = sceneElements } = {}) {
+  const none = { storyboard, moved: [], placed: [], hidden: [], changes: [] };
   const found = captionBandErrors(errors);
   // No overlays at all: the captions are the style pack's (applyStyle adds
   // the overlay when the story declares none), so the story gets a captions
   // overlay of its own to carry the ranges; the pack still fills the rest.
   const styled = storyboard && typeof storyboard === "object" && storyboard.overlays === undefined;
-  if (!found.length || !(styled || Array.isArray(storyboard?.overlays))) return { storyboard, hidden: [] };
+  if (!found.length || !(styled || Array.isArray(storyboard?.overlays))) return none;
+  if (!styled && !storyboard.overlays.some((item) => item?.type === "captions")) return none;
   const copy = structuredClone(storyboard);
-  if (styled) copy.overlays = [{ type: "captions" }];
-  const hidden = [];
+  const picture = resolve && from < 4 ? pictureOf(copy, resolve, lay) : null;
+  // The overlay a clash's captions belong to; made (for a styled story) only when a zone or a hidden range has to be written.
+  const overlayFor = (clash, make = false) => {
+    if (copy.overlays === undefined && make) copy.overlays = [{ type: "captions" }];
+    return (copy.overlays ?? []).find((item) => item?.type === "captions" && item.id === clash.captions.split("@")[0]) ?? (copy.overlays ?? []).find((item) => item?.type === "captions") ?? null;
+  };
+  const moved = [], placed = [], hidden = [], changes = [];
+  const say = (list, line) => { list.push(line); changes.push(line); };
+
+  // One group per scene, in the order the clashes play.
+  const groups = new Map();
   for (const clash of found) {
-    const overlay = copy.overlays.find((item) => item?.type === "captions" && item.id === clash.captions)
-      ?? copy.overlays.find((item) => item?.type === "captions");
-    if (!overlay) continue;
-    const ranges = Array.isArray(overlay.hide) ? overlay.hide : [];
-    // A hair wider than the clash, so rounding never leaves a frame of overlap.
-    const range = [round(Math.max(0, clash.start - 0.02)), round(clash.end + 0.02)];
-    if (ranges.some((entry) => Array.isArray(entry) && Number(entry[0]) <= range[0] && Number(entry[1]) >= range[1])) continue;
-    overlay.hide = [...ranges, range];
-    hidden.push(`captions ${range[0]}–${range[1]} s under ${clash.scene}`);
+    const owner = picture?.ownerOf(clash.scene) ?? null;
+    const key = owner?.id ?? clash.scene;
+    if (!groups.has(key)) groups.set(key, { owner, clashes: [] });
+    groups.get(key).clashes.push(clash);
   }
-  return { storyboard: hidden.length ? copy : storyboard, hidden };
+  for (const { owner, clashes } of [...groups.values()].sort((a, b) => a.clashes[0].start - b.clashes[0].start)) {
+    // A clash of a scene the story no longer has (a card dropped since the check ran) is not settled: nothing is there.
+    if (picture && !owner) continue;
+    let overlay = overlayFor(clashes[0]);
+    // A zone tooling placed that the check still fails is withdrawn: the captions hide there.
+    const inPlaced = clashes.some((clash) => /@placed-\d+$/.test(clash.captions));
+    if (inPlaced && Array.isArray(overlay?.zones)) {
+      overlay.zones = overlay.zones.filter((zone) => !clashes.some((clash) => zone.start < clash.end && zone.end > clash.start));
+      if (!overlay.zones.length) delete overlay.zones;
+    }
+    let why = picture ? "" : resolve && from < 4 ? "the story could not be laid out" : "";
+    // A clash shorter than a caption line can show (two timings rounded apart) is not worth a move: the captions skip it.
+    const sliver = clashes.every((clash) => clash.end - clash.start < CAPTION_BAND_FIT.sliver);
+    if (sliver) why = "";
+    if (picture && owner && !inPlaced && !sliver) {
+      const rect = clashes[0].rect ?? picture.band;
+      if (from <= 1) {
+        const move = moveContent(picture, owner, rect);
+        if (move) {
+          const target = copy.scenes.find((scene) => scene?.id === owner.id);
+          target.params = { ...(target.params ?? {}), ...move.patch };
+          // The rect is tooling's: the structured tier lets the model set none (tierErrors reads scene.fitted).
+          if (move.patch.rect) target.fitted = [...new Set([...(Array.isArray(target.fitted) ? target.fitted : []), "rect"])];
+          picture.patch(owner.id, move.patch, move.elements);
+          say(moved, `${owner.id} (${move.words})`);
+          continue;
+        }
+      }
+      // Captions with a rect of their own take no zones, and a zone already placed over this clash did not clear it: neither is tried again.
+      const zoned = Boolean(overlay?.rect) || (overlay?.zones ?? []).some((zone) => clashes.some((clash) => zone.start < clash.end && zone.end > clash.start));
+      if (zoned) why = overlay?.rect ? "the captions have a rect of their own" : "moving the captions for this scene did not clear it";
+      if (from <= 3 && !zoned) {
+        const zone = placeCaptions(picture, owner, rect);
+        if (zone) {
+          overlay = overlayFor(clashes[0], true);
+          const kept = (Array.isArray(overlay.zones) ? overlay.zones : []).filter((entry) => !(entry.start < zone.end && entry.end > zone.start));
+          overlay.zones = [...kept, { start: zone.start, end: zone.end, rect: zone.rect, ...(zone.scale < 1 ? { scale: zone.scale } : {}) }].sort((a, b) => a.start - b.start);
+          say(placed, `captions ${zone.start}–${zone.end} s ${zone.scale < 1 ? `shrunk to ${Math.round(zone.scale * 100)}% and moved` : "moved"} ${zone.side} ${owner.id} (y ${Math.round(zone.rect.y)})`);
+          continue;
+        }
+        why = `${owner.id} cannot move and leaves no other free band ${Math.round(picture.band.height * CAPTION_BAND_FIT.minScale)} px tall above or below it`;
+      }
+    } else if (inPlaced) why = "the band tooling moved them to is not clear either";
+    overlay = overlayFor(clashes[0], true);
+    for (const clash of clashes) {
+      const ranges = Array.isArray(overlay.hide) ? overlay.hide : [];
+      // A hair wider than the clash, so rounding never leaves a frame of overlap.
+      const range = [round(Math.max(0, clash.start - 0.02)), round(clash.end + 0.02)];
+      if (ranges.some((entry) => Array.isArray(entry) && Number(entry[0]) <= range[0] && Number(entry[1]) >= range[1])) continue;
+      overlay.hide = [...ranges, range];
+      say(hidden, `captions ${range[0]}–${range[1]} s under ${clash.scene}${why ? `: ${why}` : ""}`);
+    }
+  }
+  return changes.length ? { storyboard: copy, moved, placed, hidden, changes } : none;
 }
 
 /**
- * The caption band, settled: while the checks report a card in the band, the
- * captions are hidden under it and the storyboard is checked again (one
- * round can expose the next clash). check(storyboard) → {ok, errors}, the
- * caller's own check. → {storyboard, checked (the last check), hidden};
+ * The caption band, settled: while the checks report a card in the band,
+ * the clash is fitted (fitCaptionBand) and the storyboard checked again (one
+ * round can expose the next clash). A round whose moves leave the checks
+ * with more errors of another kind is taken again from the next step (the
+ * captions move instead of the content; then they hide).
+ * check(storyboard) → {ok, errors}, the caller's own check.
+ * → {storyboard, checked (the last check), moved, placed, hidden, changes};
  * nothing changes when no clash is reported or none can be fitted.
  */
-export function settleCaptionBand(storyboard, checked, check, { passes = 4 } = {}) {
-  const hidden = [];
+export function settleCaptionBand(storyboard, checked, check, { passes = 4, resolve = null, lay = undefined } = {}) {
+  const out = { moved: [], placed: [], hidden: [], changes: [] };
+  const others = (result) => (result.errors ?? []).filter((line) => !/^layout: caption-band /.test(String(line))).length;
   for (let pass = 0; pass < passes && !checked.ok; pass += 1) {
-    const fitted = fitCaptionBand(storyboard, checked.errors);
-    if (!fitted.hidden.length) break;
+    let fitted = null, rechecked = null;
+    for (const from of [1, 2, 4]) {
+      const candidate = fitCaptionBand(storyboard, checked.errors, { resolve, from, ...(lay ? { lay } : {}) });
+      if (!candidate.changes.length) break;
+      const result = check(candidate.storyboard);
+      fitted = candidate;
+      rechecked = result;
+      const tried = from === 1 ? candidate.moved.length : from === 2 ? candidate.placed.length : 0;
+      if (others(result) <= others(checked) || !tried) break;
+    }
+    if (!fitted) break;
     storyboard = fitted.storyboard;
-    hidden.push(...fitted.hidden);
-    checked = check(storyboard);
+    checked = rechecked;
+    for (const key of Object.keys(out)) out[key].push(...fitted[key]);
   }
-  return { storyboard, checked, hidden };
+  return { storyboard, checked, ...out };
 }
 
-/** The warning a stage records for the ranges settleCaptionBand hid. */
-export function captionBandWarning(hidden) {
-  return `layout: tooling hid ${hidden.join("; ")}`;
+/** The warnings a stage records for what settleCaptionBand or fitCaptionBand changed: one line per kind. */
+export function captionBandWarnings({ moved = [], placed = [], hidden = [] } = {}) {
+  return [
+    ...(moved.length ? [`layout: tooling cleared the caption band: ${moved.join("; ")}`] : []),
+    ...(placed.length ? [`layout: tooling placed ${placed.join("; ")}`] : []),
+    ...(hidden.length ? [`layout: tooling hid ${hidden.join("; ")}`] : [])
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// The picture the steps are checked against
+
+// The story laid out: every scene's elements (as the planner's check lays
+// them out), the safe zone and the band the captions take. null when the
+// story does not resolve; a scene whose module does not resolve has no
+// elements and is never moved.
+function pictureOf(storyboard, resolve, lay) {
+  let resolved;
+  try { resolved = resolve(structuredClone(storyboard)); } catch { return null; }
+  const canvas = { width: Number(resolved?.format?.width), height: Number(resolved?.format?.height) };
+  if (!(canvas.width > 0 && canvas.height > 0) || !Array.isArray(resolved.scenes)) return null;
+  const { safeZone } = profileGeometry(canvas);
+  let band;
+  // The band at the overlay's own position, grown to its tallest line (as the layout check places it).
+  try {
+    const overlay = captionsOverlayOf(resolved);
+    band = overlay?.rect ?? captionBandAt(captionBandFor(resolved, canvas), canvas, overlay?.position);
+  } catch { return null; }
+  if (!band) return null;
+  const elements = new Map();
+  for (const scene of resolved.scenes) {
+    try { elements.set(scene.id, lay(scene, resolved, canvas)); } catch { elements.set(scene.id, null); }
+  }
+  const ids = resolved.scenes.map((scene) => scene.id).sort((a, b) => b.length - a.length);
+  // A talking-head story: where the presenter's head is while a scene is up, or null.
+  let locator = null;
+  try { locator = presenterHeadLocator(resolved); } catch { locator = null; }
+  // Half the face margin less a pixel, the room fitFaceClear itself leaves under a chin.
+  const margin = Math.round(FACE_CLEAR.margin * Math.min(canvas.width, canvas.height)) / 2 - 1;
+  const headOver = (start, end) => {
+    if (!locator) return null;
+    let box = null;
+    for (let t = start; t < end - EPS; t += 1 / FACE_CLEAR.samplesPerSecond) {
+      const head = locator.at(t);
+      if (!head) continue;
+      const x = Math.min(box?.x ?? head.x, head.x), y = Math.min(box?.y ?? head.y, head.y);
+      box = { x, y, width: Math.max(box ? box.x + box.width : 0, head.x + head.width) - x, height: Math.max(box ? box.y + box.height : 0, head.y + head.height) - y };
+    }
+    return box && { x: box.x - margin, y: box.y - margin, width: box.width + 2 * margin, height: box.height + 2 * margin };
+  };
+  return {
+    resolved, canvas, safe: safeZone, band, elements, lay, headOver,
+    gap: Math.round(CAPTION_BAND_FIT.gap * canvas.height),
+    // The scene an element belongs to: its own id, or a part's ("cover-callouts" → cover).
+    ownerOf(elementId) {
+      const id = ids.find((sceneId) => elementId === sceneId || elementId.startsWith(`${sceneId}-`));
+      return id ? resolved.scenes.find((scene) => scene.id === id) : null;
+    },
+    patch(sceneId, patch, laid) {
+      const scene = resolved.scenes.find((entry) => entry.id === sceneId);
+      scene.params = { ...(scene.params ?? {}), ...patch };
+      elements.set(sceneId, laid);
+    },
+    // Everything else on screen during [start, end].
+    around(sceneId, start, end) {
+      const out = [];
+      for (const [id, list] of elements) if (id !== sceneId) for (const element of list ?? []) if (element.start < end - EPS && (element.shownEnd ?? element.end) > start + EPS) out.push(element);
+      return out;
+    }
+  };
+}
+
+// A scene's layout elements, as checkStoryboard lays a scene out (src/storyboard_planner.js).
+function sceneElements(scene, resolved, canvas) {
+  if (scene.module === "custom") return [];
+  const end = sceneRenderEnd(resolved, scene);
+  const model = resolveModule(scene, resolved, { end });
+  if (!model?.layout?.rect) return [];
+  const hidesCaptions = scene.hides_captions === true || model.hidesCaptions === true || model.layout.hidesCaptions === true;
+  const extras = layoutExtras(model.layout, { id: scene.id, start: Number(scene.start), end: Number(scene.end), canvas, hidesCaptions });
+  const shownEnd = Number.isFinite(end) && end > Number(scene.end) ? end : null;
+  return [...elementsFromEditorialLayout(model.layout, {
+    id: scene.id,
+    role: model.layout.role ?? (scene.module === "media-window" ? "media" : "text"),
+    start: Number(scene.start),
+    end: Number(scene.end),
+    canvas,
+    ...(model.layout.minTextPx !== undefined ? { minTextPx: model.layout.minTextPx } : {}),
+    ...(extras.allowOcclusion ? { allowOcclusion: extras.allowOcclusion } : {}),
+    hidesCaptions
+  }), ...extras.parts].map((element) => ({ ...element, start: element.start ?? Number(scene.start), end: element.end ?? Number(scene.end), ...(shownEnd && element.id === scene.id ? { shownEnd } : {}) }));
+}
+
+// The layout errors of a scene's elements among everything on screen with
+// it, with captions in `rect` for the scene's whole time: {band (caption-band
+// clashes of this scene), other (every other error)}.
+function errorsWith(picture, scene, laid, rect) {
+  const start = Number(scene.start), end = Math.max(Number(scene.end), ...laid.map((element) => element.shownEnd ?? element.end));
+  const own = new Set(laid.map((element) => element.id));
+  const elements = [...picture.around(scene.id, start, end), ...laid, { id: "captions", role: "caption", rect, start, end }];
+  let report;
+  // Elements the check cannot take (a rect off the rules) count as an error of another kind.
+  try { report = checkLayout({ canvas: picture.canvas, elements, captionBand: rect }); } catch { return { band: 0, other: Infinity }; }
+  const findings = report.findings.filter((finding) => finding.severity === "error" && finding.ids.some((id) => own.has(id)));
+  return { band: findings.filter((finding) => finding.rule === "caption-band").length, other: findings.filter((finding) => finding.rule !== "caption-band").length };
+}
+
+// ---------------------------------------------------------------------------
+// Step 1: the content moves
+
+// A module tooling can move by rect: it takes params.rect and does not place
+// itself around a subject (as src/face_clear_fit.js placeable).
+function takesRect(scene) {
+  // A character is not a card: a cast shot keeps its staging, and the captions move instead.
+  if (CAST_MODULES.includes(scene.module)) return false;
+  if (isEditorialKind(scene.module)) return true;
+  const definition = catalogModules()[scene.module];
+  if (!definition || definition.needs?.includes("subject")) return false;
+  return Object.hasOwn(definition.params ?? {}, "rect");
+}
+
+// → {patch, elements, words} | null
+function moveContent(picture, scene, band) {
+  const laid = picture.elements.get(scene.id);
+  if (!laid?.length) return null;
+  const before = errorsWith(picture, scene, laid, band);
+  // On the presenter's face: the scene's own elements that meet the head while it is up.
+  const head = picture.headOver(Number(scene.start), Number(scene.end));
+  const onFace = (elements) => (head ? elements.filter((element) => element.role !== "decor" && element.rect && !isFullFrame(element.rect, picture.canvas) && meets(element.rect, head)).length : 0);
+  const faceBefore = onFace(laid);
+  const accept = (patch) => {
+    const patched = { ...scene, params: { ...(scene.params ?? {}), ...patch } };
+    let elements;
+    try { elements = picture.lay(patched, picture.resolved, picture.canvas); } catch { return null; }
+    if (!elements.length) return null;
+    const after = errorsWith(picture, patched, elements, band);
+    return after.band === 0 && after.other <= before.other && onFace(elements) <= faceBefore ? elements : null;
+  };
+  for (const candidate of rectMoves(picture, scene, laid, band)) {
+    const elements = accept({ rect: candidate.rect });
+    if (elements) return { patch: { rect: candidate.rect }, elements, words: `${candidate.resized ? "re-fitted" : "moved"} ${candidate.side} it` };
+  }
+  for (const patch of PARAM_MOVES[scene.module]?.(scene.params ?? {}) ?? []) {
+    if (Object.entries(patch).every(([key, value]) => scene.params?.[key] === value)) continue;
+    const elements = accept(patch);
+    if (elements) return { patch, elements, words: Object.entries(patch).map(([key, value]) => `${key} ${JSON.stringify(value)}`).join(", ") };
+  }
+  return null;
+}
+
+// The rects a card may take above or below the band, nearest first: at its
+// own size, then re-fitted to the region.
+function rectMoves(picture, scene, laid, band) {
+  if (!takesRect(scene)) return [];
+  const box = laid.find((element) => element.id === scene.id)?.rect ?? scene.params?.rect;
+  if (!box || isFullFrame(box, picture.canvas)) return [];
+  const { safe, gap } = picture;
+  // Below the band a card may reach the safe zone's foot; a module that
+  // keeps itself above the usual caption band refuses that rect, so the
+  // region is also tried ending short of where that band starts.
+  const usual = profileGeometry(picture.canvas).captionBand;
+  const top = band.y + band.height + gap, k = picture.canvas.height / 1920;
+  const regions = [
+    { side: "above", x: safe.x, y: safe.y, width: safe.width, height: band.y - gap - safe.y },
+    ...[safe.y + safe.height, usual.y - 30 * k, usual.y - 60 * k].map((bottom) => ({ side: "below", x: safe.x, y: top, width: safe.width, height: Math.floor(bottom - top) }))
+  ].filter((region) => region.height > 1);
+  const centre = box.y + box.height / 2;
+  regions.sort((a, b) => Math.abs(a.y + a.height / 2 - centre) - Math.abs(b.y + b.height / 2 - centre) || b.height - a.height);
+  const out = [];
+  const clampX = (width) => Math.round(Math.min(Math.max(box.x, safe.x), safe.x + safe.width - width));
+  for (const region of regions) {
+    if (box.width <= region.width + EPS && box.height <= region.height + EPS) {
+      out.push({ side: region.side, resized: false, rect: { x: clampX(box.width), y: Math.round(region.y + (region.height - box.height) / 2), width: Math.round(box.width), height: Math.round(box.height) } });
+      continue;
+    }
+    const width = Math.min(region.width, box.width);
+    let fit;
+    try { fit = moduleFit({ ...scene, params: { ...(scene.params ?? {}), rect: { x: region.x, y: region.y, width, height: region.height } } }, picture.resolved, { width }); } catch { continue; }
+    if (fit.minHeight === null || fit.minHeight > region.height + EPS) continue;
+    const height = Math.min(region.height, Math.max(fit.minHeight, Math.min(box.height, region.height)));
+    if (width * height < CAPTION_BAND_FIT.minArea * box.width * box.height) continue;
+    out.push({ side: region.side, resized: true, rect: { x: clampX(width), y: Math.round(region.y + (region.height - height) / 2), width: Math.round(width), height: Math.round(height) } });
+  }
+  // Its own size before a re-fit, whichever side that is on.
+  return out.sort((a, b) => a.resized - b.resized);
+}
+
+// ---------------------------------------------------------------------------
+// Steps 2 and 3: the captions move, then shrink
+
+// The free band nearest the captions' own for the scene's time on screen:
+// clear of every key text and hero element up with it, inside the safe zone.
+// → {start, end, rect, scale, side} | null
+function placeCaptions(picture, scene, clashRect) {
+  const { safe, gap, band } = picture;
+  const duration = Number(picture.resolved.resolved?.duration ?? picture.resolved.format?.duration);
+  // Rounded outward, so the zone covers the scene's whole time.
+  const start = Math.max(0, Math.floor(Number(scene.start) * 100) / 100), end = Math.ceil((Number.isFinite(duration) ? Math.min(duration, Number(scene.end)) : Number(scene.end)) * 100) / 100;
+  if (!(end > start)) return null;
+  const keyed = [...(picture.elements.get(scene.id) ?? []), ...picture.around(scene.id, start, end)]
+    .filter((element) => (element.role === "text" || element.role === "hero") && !element.hidesCaptions && element.rect && element.rect.x < band.x + band.width && element.rect.x + element.rect.width > band.x);
+  // A presenter's face is as much in the way as a card.
+  const head = picture.headOver(start, end);
+  if (head && head.x < band.x + band.width && head.x + head.width > band.x) keyed.push({ rect: head });
+  // Free vertical runs of the safe zone, each obstacle grown by the gap.
+  let free = [[safe.y, safe.y + safe.height]];
+  for (const { rect } of keyed) {
+    const top = rect.y - gap, bottom = rect.y + rect.height + gap;
+    free = free.flatMap(([a, b]) => (bottom <= a || top >= b ? [[a, b]] : [[a, Math.min(b, top)], [Math.max(a, bottom), b]].filter(([from, to]) => to - from > 1)));
+  }
+  const own = (picture.elements.get(scene.id) ?? []).filter((element) => element.rect && (element.role === "text" || element.role === "hero"));
+  const contentCentre = own.length ? own.reduce((sum, element) => sum + element.rect.y + element.rect.height / 2, 0) / own.length : clashRect.y + clashRect.height / 2;
+  const side = (y, height) => (y + height / 2 < contentCentre ? "above" : "below");
+  // Step 2: at full size, in the free run that moves the captions least. A
+  // run short of the band by less than the gap still holds them: the band
+  // is the tallest line they can draw.
+  const full = free.filter(([a, b]) => b - a >= band.height - gap)
+    .map(([a, b]) => ({ a, b, y: Math.min(Math.max(band.y, a), Math.max(a, b - band.height)), height: Math.min(band.height, b - a) }))
+    .sort((p, q) => Math.abs(p.y - band.y) - Math.abs(q.y - band.y))[0];
+  if (full) {
+    // A place captions are designed to sit (the usual band, low, the top)
+    // in that same run wins over hugging the content, so moved captions land
+    // in the same place from scene to scene.
+    const usual = profileGeometry(picture.canvas).captionBand;
+    const grown = { ...usual, y: usual.y - (band.height - usual.height) / 2, height: band.height };
+    const clear = (y) => !keyed.some(({ rect }) => rect.y - gap < y + band.height && rect.y + rect.height + gap > y);
+    const designed = full.height < band.height ? undefined : ["auto", "low", "top"].map((position) => captionBandAt(grown, picture.canvas, position).y)
+      .filter((y) => y >= full.a - EPS && y + band.height <= full.b + EPS && clear(y))
+      .sort((p, q) => Math.abs(p - full.y) - Math.abs(q - full.y))[0];
+    const y = designed ?? full.y;
+    // The band the check failed, unmoved: this layout does not see the clash, so moving the captions fixes nothing.
+    if (Math.abs(y - clashRect.y) <= 1 && full.height >= clashRect.height - 1) return null;
+    return { start, end, scale: 1, side: side(y, full.height), rect: { x: Math.round(band.x), y: Math.round(y), width: Math.round(band.width), height: Math.round(full.height) } };
+  }
+  // Step 3: shrunk into the tallest run that holds them at the least scale.
+  const [a, b] = free.sort((p, q) => (q[1] - q[0]) - (p[1] - p[0]))[0] ?? [0, 0];
+  const scale = Math.floor(((b - a) / band.height) * 100) / 100;
+  if (!(scale >= CAPTION_BAND_FIT.minScale)) return null;
+  return { start, end, scale, side: side(a, b - a), rect: { x: Math.round(band.x), y: Math.round(a), width: Math.round(band.width), height: Math.round(b - a) } };
+}
+
+function meets(a, b) {
+  return Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x) > EPS && Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y) > EPS;
+}
+
+function isFullFrame(rect, canvas) {
+  return rect.width * rect.height >= CAPTION_BAND_FIT.fullFrame * canvas.width * canvas.height;
 }
 
 function round(value) {

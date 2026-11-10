@@ -10,6 +10,10 @@
 //   captions are visible (0.25s–2.728s); move it or set hidesCaptions
 //
 // under "the storyboard failed its checks after make filled in audio".
+//
+// The stage then passed by hiding the captions under each card, and a
+// delivered video had none for most of its narration. Now the card moves out
+// of the band (or the captions move for that scene) and they stay on.
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -52,8 +56,10 @@ for (const [position, size] of [["middle", 1.15], ["middle", 1.4], ["top", 1.15]
       const captions = story.overlays.find((overlay) => overlay.type === "captions");
       const hid = report.warnings.filter((line) => line.startsWith("layout: tooling hid captions"));
       assert.equal(Boolean(captions.hide?.length), hid.length > 0, "every hidden range is reported");
+      assert.deepEqual(hid, [], "nothing is hidden: the card moves out of the band, or the captions move for that scene");
       if (position === "middle") {
-        assert.match(hid.join("\n"), /under s3/, "the card in the middle band has the captions dip under it");
+        assert.ok(report.warnings.some((line) => /^layout: tooling cleared the caption band: .*s3 \(/.test(line)), report.warnings.join("\n"));
+        assert.deepEqual(story.scenes.find((scene) => scene.id === "s3").fitted, ["rect"]);
         assert.ok(report.warnings.some((line) => /kept the storyboard closest to the profile/.test(line)) || report.repairs.attempts.some((attempt) => attempt.errors.some((line) => line.startsWith("cadence: "))), "the plan is the kept near miss of the production run");
       }
       const pack = JSON.parse(await readFile(options.style, "utf8"));

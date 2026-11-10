@@ -5,6 +5,9 @@
 //
 //   castCaptionZones(story)        → [{section, start, end, rect}] (captionPlan's ctx.zones)
 //   storyCaptionZones(story, layout) → the footage layout's zones, else the cast's
+//   placedCaptionZones(story)      → the zones the captions overlay places itself (overlay.zones)
+//   withPlacedZones(story, zones)  → zones with the overlay's own laid over them
+//   layoutCaptionZones(resolved)   → the zones the layout checks measure
 //
 // One place is chosen for the whole story, so the captions do not jump from
 // shot to shot: the usual band, then the band 58% down, the middle, the top
@@ -23,7 +26,8 @@
 //
 // Imports only kit/core siblings.
 
-import { captionsOverlayOf } from './captions.mjs';
+import { CAPTION_ZONE_MIN_SCALE, captionsOverlayOf } from './captions.mjs';
+import { captionZones } from './footage-layout.mjs';
 import { CAST_MODULES, isCharacterStory } from './character-story.mjs';
 import { captionBandAt, profileGeometry } from './layout-check.mjs';
 import { resolveModule } from './modules.mjs';
@@ -108,9 +112,52 @@ export function castCaptionZones(story, { resolve = resolveModule } = {}) {
   return runs.map((run, index) => ({ section: `cast-${index + 1}`, start: round(run.start), end: round(run.end), rect, position: best.position }));
 }
 
-/** The caption zones a story is drawn with: its footage layout's (layoutPlan(story).captions) when it has them, else the cast's. */
+/**
+ * The zones a captions overlay places itself (overlay.zones: [{start, end,
+ * rect, scale?}], seconds and canvas px): for those seconds the lines sit in
+ * the rect instead of the band, at `scale` of their size (CAPTION_ZONE_MIN_SCALE
+ * to 1). Tooling writes them when a scene's content cannot leave the band
+ * (src/caption_band_fit.js). → [{section, start, end, rect, scale?, placed: true}]
+ */
+export function placedCaptionZones(story) {
+  const overlay = captionsOverlayOf(story);
+  if (!Array.isArray(overlay?.zones) || overlay.rect) return [];
+  const out = [];
+  overlay.zones.forEach((zone, index) => {
+    const start = Number(zone?.start), end = Number(zone?.end), rect = zone?.rect;
+    if (!(end > start) || !rect || ![rect.x, rect.y, rect.width, rect.height].every((value) => Number.isFinite(Number(value))) || !(rect.width > 0 && rect.height > 0)) return;
+    const scale = Number(zone.scale);
+    out.push({ section: `placed-${index + 1}`, start, end, rect: { x: Number(rect.x), y: Number(rect.y), width: Number(rect.width), height: Number(rect.height) }, ...(scale > 0 && scale < 1 ? { scale: Math.max(CAPTION_ZONE_MIN_SCALE, scale) } : {}), placed: true });
+  });
+  return out.sort((a, b) => a.start - b.start);
+}
+
+/**
+ * Zones with the overlay's own (placedCaptionZones) laid over them: any other
+ * zone is cut back to the seconds no placed zone covers, so a line spoken in
+ * a placed zone is always drawn there. `zones` comes back as given when the
+ * overlay places none.
+ */
+export function withPlacedZones(story, zones) {
+  const placed = placedCaptionZones(story);
+  if (!placed.length) return zones;
+  const out = [...placed];
+  for (const zone of Array.isArray(zones) ? zones : []) {
+    let pieces = [[Number(zone.start), Number(zone.end)]];
+    for (const hole of placed) pieces = pieces.flatMap(([a, b]) => (hole.end <= a || hole.start >= b ? [[a, b]] : [[a, Math.min(b, hole.start)], [Math.max(a, hole.end), b]].filter(([from, to]) => to - from > 1e-6)));
+    pieces.forEach(([start, end], index) => out.push({ ...zone, start, end, ...(pieces.length > 1 ? { section: `${zone.section ?? 'zone'}#${index + 1}` } : {}) }));
+  }
+  return out.sort((a, b) => a.start - b.start);
+}
+
+/** The caption zones a story is drawn with: its footage layout's (layoutPlan(story).captions) when it has them, else the cast's; the overlay's own over either. */
 export function storyCaptionZones(story, layout = null) {
-  if (Array.isArray(layout?.captions) && layout.captions.length) return layout.captions;
+  if (Array.isArray(layout?.captions) && layout.captions.length) return withPlacedZones(story, layout.captions);
   const zones = castCaptionZones(story);
-  return zones.length ? zones : layout?.captions;
+  return withPlacedZones(story, zones.length ? zones : layout?.captions);
+}
+
+/** The caption zones the layout checks measure for a resolved story: the footage layout's or the cast's, the overlay's own over either. */
+export function layoutCaptionZones(resolved) {
+  return withPlacedZones(resolved, resolved?.base ? captionZones(resolved) : castCaptionZones(resolved)) ?? [];
 }

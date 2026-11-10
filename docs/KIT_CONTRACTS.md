@@ -1382,7 +1382,7 @@ whenever the story names a style (`qa/style-check.json`, gate `style` in
 ## Caption presets (`kit/core/captions.mjs`)
 
 The captions overlay is `{type: "captions", preset | style, src?, hide?,
-position?, max_words?, max_chars?, case?, emphasis?, keywords?, font?, size?,
+zones?, position?, max_words?, max_chars?, case?, emphasis?, keywords?, font?, size?,
 colors?, stroke?, shadow?, entrance?, exit?, offset?, hide_during_moves?}`; legacy `style:
 "word-highlight" | "line" | "none"` still works (`line` → `minimal-line`,
 `style` may also name a preset, `preset` wins). `CAPTION_PRESETS` holds 15
@@ -1456,6 +1456,25 @@ timeline to every frame against the evaluator; `scripts/parity-captions.mjs`
 compares rendered stills per preset (`test/fixtures/parity-captions/`, SSIM ≥
 0.97, `LAUNCHCLIP_PARITY=1`). The layout check moves the caption band for
 `position: top|middle|low` (`captionBandAt`; `low` centres it 58% down).
+
+Placed zones: `zones: [{start, end, rect, scale?}]` (seconds, canvas px,
+`scale` 0.7–1). A line mostly spoken inside a zone is drawn in its rect
+instead of the band, at `scale` of the preset's size, in the preset's own
+style. `placedCaptionZones(story)` (`cast-captions.mjs`) reads them;
+`storyCaptionZones(story, layout)` lays them over a footage layout's or a
+cast's zones (those are cut back to the seconds no placed zone covers), so
+both compilers, the segment renderer, the legibility check and the layout
+check (`layoutCaptionZones`) use the same place. Tooling writes zones when a
+scene's content sits in the caption band and cannot move
+(`src/caption_band_fit.js`): the order is content out of the band
+(`params.rect`, marked `scene.fitted: ["rect"]` so the structured tier
+allows it, or a placement param in `PARAM_MOVES`), then a zone at full size,
+then a zone with a `scale`, then a range in `hide`. Captions hidden under
+cards (`hide`, scenes flagged `hides_captions`) for more than
+`CAPTION_HIDDEN_MAX` (15%) of the narration fail `captionVisibilityGate`
+(`src/caption_visibility.js`): a `captions:` error in the storyboard check
+and the `captions` gate in finish. A module that carries the line itself
+(`hidesCaptions`) is reported as `module_share` and not gated.
 A preset with `punctuation: false` (word-chip) shows each word without its
 leading and trailing marks (`shownWords`). In a one-word layout (`single`) a line
 leaves when the next arrives, however short its word, so two words never

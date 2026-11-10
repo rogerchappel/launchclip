@@ -23,9 +23,9 @@ import { isEditorialKind, knownModules, formatAspect, resolveModule, sceneRender
 import { DIRECTION_LANES, directionMeasures, draftDirectionMap, validateDirection } from "@launchclip/core/direction.mjs";
 import { isLongForm, structureLongForm } from "@launchclip/core/long-form.mjs";
 import { compareMeasures } from "@launchclip/core/profiles.mjs";
-import { checkLayout, elementsFromEditorialLayout, elementsFromStory, layoutExtras } from "@launchclip/core/layout-check.mjs";
-import { castCaptionZones } from "@launchclip/core/cast-captions.mjs";
-import { captionZones } from "@launchclip/core/footage-layout.mjs";
+import { captionBandAt, checkLayout, elementsFromEditorialLayout, elementsFromStory, layoutExtras } from "@launchclip/core/layout-check.mjs";
+import { captionsOverlayOf } from "@launchclip/core/captions.mjs";
+import { layoutCaptionZones } from "@launchclip/core/cast-captions.mjs";
 import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, directionPrompt, planningPrompt, suggestModules } from "@launchclip/core/planning-prompt.mjs";
 import { applyStyle } from "@launchclip/core/style.mjs";
 import { clipLedFindings, clipLedPlan } from "@launchclip/core/clip-led.mjs";
@@ -42,7 +42,8 @@ import { actingGate } from "./direction_guardrails.js";
 import { placeActions } from "./acting_place.js";
 import { lipSyncGate } from "./quality_gates.js";
 import { SHORT_FORM_HOLD, fitDurations, paceErrors } from "./duration_fit.js";
-import { captionBandWarning, settleCaptionBand } from "./caption_band_fit.js";
+import { captionBandWarnings, settleCaptionBand } from "./caption_band_fit.js";
+import { captionVisibilityGate } from "./caption_visibility.js";
 import { captionBandFor } from "./layout_check.js";
 import { fitDiagrams } from "./diagram_fit.js";
 import { fitFaceClear } from "./face_clear_fit.js";
@@ -414,15 +415,17 @@ export async function planStoryboard(options = {}) {
           checked = checkStoryboard(pinned.storyboard, checkOptions);
         }
       }
-      // A card in the caption band while captions show: the captions dip out
-      // under it (a caption position the module layout does not plan for, such
-      // as the middle of the frame, otherwise fails every attempt).
-      // Repeated, as finish does: one round can expose the next clash.
-      const banded = settleCaptionBand(pinned.storyboard, checked, (candidate) => checkStoryboard(candidate, checkOptions));
-      if (banded.hidden.length) {
+      // A card in the caption band while captions show (a caption position the
+      // module layout does not plan for, such as the middle of the frame,
+      // otherwise fails every attempt): the card moves out of the band, else
+      // the captions move for that scene, and only then do they dip out under
+      // it (src/caption_band_fit.js). Repeated, as finish does: one round can
+      // expose the next clash.
+      const banded = settleCaptionBand(pinned.storyboard, checked, (candidate) => checkStoryboard(candidate, checkOptions), { resolve: (candidate) => resolveChecked(candidate, checkOptions) });
+      if (banded.changes.length) {
         pinned.storyboard = banded.storyboard;
         checked = banded.checked;
-        pinned.warnings = [...pinned.warnings, captionBandWarning(banded.hidden)];
+        pinned.warnings = [...pinned.warnings, ...captionBandWarnings(banded)];
       }
       // A shot tooling could not give the short-form hold (no neighbour had
       // time to lend) ships as a warning: a repair call for pace alone costs
@@ -650,7 +653,7 @@ function keepRepairScope(extracted, previous, { direction, words, beats }) {
 }
 
 // fitFaceClear in the planner: cards moved (or, as a last resort, dropped)
-// off the face, the captions dipped under any card moved over their band,
+// off the face, the caption band settled for any card moved over it,
 // and the result kept only when the checks are no worse for it; else the
 // moves alone; else nothing. → {storyboard, checked, warnings}
 function clearFace(storyboard, checked, { words, beats, track, checkOptions }) {
@@ -662,17 +665,16 @@ function clearFace(storyboard, checked, { words, beats, track, checkOptions }) {
     if (!cleared.moved.length && !cleared.dropped.length) break;
     let candidate = cleared.storyboard;
     let rechecked = checkStoryboard(candidate, checkOptions);
-    const banded = settleCaptionBand(candidate, rechecked, (story) => checkStoryboard(story, checkOptions));
+    const banded = settleCaptionBand(candidate, rechecked, (story) => checkStoryboard(story, checkOptions), { resolve: (story) => resolveChecked(story, checkOptions) });
     candidate = banded.storyboard;
     rechecked = banded.checked;
-    const hidden = banded.hidden;
     if (rechecked.errors.length > checked.errors.length) {
       if (!drop) warnings.push(`face: tooling could not move ${cleared.moved.map((entry) => entry.split(" ")[0]).join(", ")} off the presenter's face without breaking other checks`);
       continue;
     }
     if (cleared.moved.length) warnings.push(`face: tooling ${cleared.moved.join("; ")}`);
     if (cleared.dropped.length) warnings.push(...cleared.dropped.map((entry) => `face: tooling ${entry}`));
-    if (hidden.length) warnings.push(captionBandWarning(hidden));
+    warnings.push(...captionBandWarnings(banded));
     return { storyboard: candidate, checked: rechecked, warnings: [...warnings, ...kept.map((entry) => `face: ${entry}`)] };
   }
   return { storyboard, checked, warnings: [...warnings, ...kept.map((entry) => `face: ${entry}`)] };
@@ -798,7 +800,7 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
       },
       // The band the captions really take: at their position, grown to the tallest line their preset and size draw (as finish checks it).
       captionBand: captionBandFor(resolved, canvas),
-      captionZones: resolved.base ? captionZones(resolved) : castCaptionZones(resolved)
+      captionZones: layoutCaptionZones(resolved)
     });
     const report = checkLayout({ canvas, elements, duration: Number(resolved.resolved?.duration) || undefined });
     layout.findings = report.findings;
@@ -813,9 +815,20 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
     errors.push(`layout: ${message(error)}`);
   }
   errors.push(...placeholderErrors(storyboard));
+  // Captions that are on are seen: ranges hidden under cards (tooling's last
+  // resort for a card in the caption band, src/caption_band_fit.js) may
+  // cover only a small share of the narration (src/caption_visibility.js).
+  const captionGate = captionVisibilityGate(resolved, words, { band: captionBandAt(captionBandFor(resolved, canvas), canvas, captionsOverlayOf(resolved)?.position) });
+  if (captionGate.status === "failed") errors.push(...captionGate.errors.map((entry) => `captions: ${entry}`));
   // minHold: a short video's shots hold at least this long (src/duration_fit.js paceErrors).
   if (minHold > 0) errors.push(...paceErrors(resolved, { hold: minHold }));
   return { ok: errors.length === 0, errors, warnings, storyboard, layout, cadence, clip_share: clipShareValue };
+}
+
+/** The resolved story checkStoryboard lays out: the style merged, the anchors resolved. Throws when the anchors do not resolve. */
+export function resolveChecked(raw, { words = [], beats = null, style = null } = {}) {
+  const input = style && raw && typeof raw === "object" && !Array.isArray(raw) && raw.style ? applyStyle(raw, style).story : raw;
+  return resolveStory(JSON.parse(JSON.stringify(input)), { words, beats });
 }
 
 // Errors a storyboard may still ship with when the repairs run out.
@@ -880,8 +893,9 @@ export function densityDial(density, style = null) {
 
 /**
  * Tier rules (RFC §7) as error strings. A tuning param that holds the style
- * pack's own value for the module is tooling's (applyStyle fills it in), so
- * the model is never asked to remove what it did not write.
+ * pack's own value for the module is tooling's (applyStyle fills it in), and
+ * so is one named in scene.fitted (src/caption_band_fit.js), so the model is
+ * never asked to remove what it did not write.
  */
 export function tierErrors(story, tier, { style = null } = {}) {
   const errors = [];
@@ -893,7 +907,9 @@ export function tierErrors(story, tier, { style = null } = {}) {
     if (tier !== "structured") return;
     const params = scene?.params && typeof scene.params === "object" ? scene.params : {};
     const styled = style?.modules?.params?.[scene?.module] ?? {};
-    for (const key of TUNING_PARAMS) if (key in params && !sameValue(params[key], styled[key])) errors.push(`${where}.params.${key} is not allowed in the structured tier; remove it (tooling places and styles modules)`);
+    // A param tooling set after the plan (scene.fitted: a card moved out of the caption band) is tooling's too.
+    const fitted = Array.isArray(scene?.fitted) ? scene.fitted : [];
+    for (const key of TUNING_PARAMS) if (key in params && !fitted.includes(key) && !sameValue(params[key], styled[key])) errors.push(`${where}.params.${key} is not allowed in the structured tier; remove it (tooling places and styles modules)`);
     if (scene?.track !== undefined && scene.track !== 0) errors.push(`${where}.track is not allowed in the structured tier; remove it`);
   });
   return errors;

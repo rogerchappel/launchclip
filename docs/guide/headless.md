@@ -123,12 +123,21 @@ Useful flags:
 4. **Plans the storyboard** from a tested module library. LaunchClip checks it
    (layout, timing, only your real files) and sends errors back to the model
    for up to four repairs. What tooling can settle never costs a repair or
-   fails the run: a card that sits in the caption band has the captions
-   hidden under it while it is up (the card carries the line), and
-   `MAKE.json` `warnings` says so (`layout: tooling hid captions 3.94–6.02 s
-   under s3`). That covers a style whose captions sit at the top, in the
-   middle or low in the frame, at any size: the planner is told where that
-   band is, and the check measures the band the captions really take.
+   fails the run. A card that sits in the caption band is one of those, and
+   the captions stay on screen: the card moves out of the band (above or
+   below it, re-fitted if it must be; a clip's label takes its other slot);
+   a scene whose content cannot move has the captions moved for that scene
+   to the nearest free band, at their size; with no band tall enough they
+   shrink, to 70% at least; and only then are they hidden under the card.
+   `MAKE.json` `warnings` says which (`layout: tooling cleared the caption
+   band: s3 (moved above it)`, `layout: tooling placed captions 15–18 s moved
+   below s5 (y 1171)`, `layout: tooling hid captions 3.94–6.02 s under s3:
+   …`). That covers a style whose captions sit at the top, in the middle or
+   low in the frame, at any size: the planner is told where that band is and
+   to plan scene text clear of it, and the check measures the band the
+   captions really take. Captions hidden for more than 15% of the narration
+   fail the storyboard (`captions: …` names the scenes) and, in `finish`,
+   the `captions` gate.
 5. **Tries a second opening and a second transition** (short motion videos,
    with a model that can see). The skill does not commit to its first idea
    for the two moments that decide a video, and neither does `make`. It

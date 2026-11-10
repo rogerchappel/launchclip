@@ -801,9 +801,10 @@ export function captionToneColors(colors, tone, brandColors = {}) {
 /**
  * The caption plan for chunks under a captions overlay.
  * ctx: {brand, format, story (auto emphasis), hide: [[from, to]], zones}.
- * zones: footage layout caption zones ([{start, end, rect}] px,
- * kit/core/footage-layout.mjs captionZones): a line mostly spoken inside one
- * is placed and wrapped within its rect instead of the band.
+ * zones: caption zones ([{start, end, rect, scale?}] px: a footage layout's,
+ * a cast's or the overlay's own, kit/core/cast-captions.mjs
+ * storyCaptionZones): a line mostly spoken inside one is placed and wrapped
+ * within its rect instead of the band, at the zone's scale of its size.
  * → {preset, options, css, nodes, tweens}
  */
 export function captionPlan(chunks, overlay = {}, ctx = {}) {
@@ -995,7 +996,7 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
     tw(chunk.id, leaveAt, exitDur, exit.ease, { ...exit.to });
   }
   o.heroScales = [...heroScales].sort((a, b) => a - b);
-  const placed = [...used].sort((a, b) => a - b).map((index) => ({ index, rect: zones[index].rect }));
+  const placed = [...used].sort((a, b) => a - b).map((index) => ({ index, rect: zones[index].rect, scale: zones[index].scale }));
   return { preset: o.preset, options: o, css: captionPlanCss(o, { zones: placed, format: ctx.format }), nodes, tweens };
 }
 
@@ -1016,12 +1017,13 @@ function captionZoneCss(o, zones, format) {
   const box = { x: b.left * W, y: o.bandTop * H, width: (1 - b.left - b.right) * W, height: b.height * H };
   const pct = (value) => `${round(value * 100)}%`;
   const out = [];
-  for (const { index, rect } of zones) {
+  for (const { index, rect, scale: own } of zones) {
     const l = (rect.x - box.x) / box.width, r = (box.x + box.width - rect.x - rect.width) / box.width;
     const t = (rect.y - box.y) / box.height, bt = (box.y + box.height - rect.y - rect.height) / box.height;
     const fw = rect.width / box.width, fh = rect.height / box.height;
     // A zone narrower than CAPTION_ZONE_WIDTH sets smaller type, so one long word still fits.
-    const scale = Math.min(1, Math.max(CAPTION_ZONE_MIN_SCALE, rect.width / (CAPTION_ZONE_WIDTH * Math.min(W, H))));
+    // A zone may also set its own scale (a placed zone shorter than the band: cast-captions.mjs placedCaptionZones).
+    const scale = Math.max(CAPTION_ZONE_MIN_SCALE, Math.min(1, rect.width / (CAPTION_ZONE_WIDTH * Math.min(W, H))) * (own > 0 && own < 1 ? own : 1));
     const size = scale < 1 ? ` font-size: ${round(o.size * scale)}px;` : '';
     out.push(`.lc-cap.lc-cap-z${index + 1} { left: ${pct(l)}; right: ${pct(r)}; top: ${pct(t)}; bottom: ${pct(bt)}; width: fit-content; height: fit-content; max-width: ${pct(fw)}; margin: auto;${size} }`);
     if (o.layout === 'band') out.push(`.lc-cap-band.lc-cap-z${index + 1} { left: ${pct(l - 0.02 * fw)}; right: ${pct(r - 0.02 * fw)}; top: ${pct(t + 0.04 * fh)}; bottom: ${pct(bt + 0.04 * fh)}; }`);

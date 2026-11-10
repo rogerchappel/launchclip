@@ -22,8 +22,8 @@ import { SHOTS_DIR, shotRequestLimit } from "../asset_provider.js";
 import { MAX_ASSET_PROVIDER_CONCURRENCY, assetProviderConcurrency, assetProviderTimeoutMs, createCommandAssetProvider } from "../asset_provider_cmd.js";
 import { CONSTRAINTS_FILE, PROJECT_CONSTRAINTS_FILE, constrainProvider, constraintsDocument, hasConstraints, loadConstraints, neverUseMatcher, storySrc } from "../constraints.js";
 import { mediaNotesLine } from "../inventory_notes.js";
-import { checkStoryboard, planStoryboard } from "../storyboard_planner.js";
-import { captionBandWarning, settleCaptionBand } from "../caption_band_fit.js";
+import { checkStoryboard, planStoryboard, resolveChecked } from "../storyboard_planner.js";
+import { captionBandWarnings, settleCaptionBand } from "../caption_band_fit.js";
 import { markProvided } from "../provided_files.js";
 import { directionJson } from "@launchclip/core/direction.mjs";
 import { profileForStory, resolveProfile } from "../profile_store.js";
@@ -1645,12 +1645,13 @@ async function planStage(ctx) {
   const checkFinal = (candidate) => checkStoryboard(candidate, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints, ...(pinned ? { script: pinned.script, castGate: true } : {}) });
   // A card in the caption band (captions in the middle of the frame, or a
   // look make just changed) is tooling's to settle here, as the planner and
-  // finish do: the captions dip under the card, and the run says so.
-  const settled = settleCaptionBand(story, checkFinal(story), checkFinal);
+  // finish do: the card moves out of the band, else the captions move for
+  // that scene, and only then do they dip under it; the run says which.
+  const settled = settleCaptionBand(story, checkFinal(story), checkFinal, { resolve: (candidate) => resolveChecked(candidate, { words: ctx.words, style: style?.pack ?? null }) });
   const recheck = settled.checked;
-  if (settled.hidden.length) {
+  if (settled.changes.length) {
     story = settled.storyboard;
-    report.warnings.push(captionBandWarning(settled.hidden));
+    report.warnings.push(...captionBandWarnings(settled));
   }
   // The same checks, for a storyboard with one scene changed (the candidates stage).
   ctx.storyCheck = (candidate) => {
