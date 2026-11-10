@@ -1684,7 +1684,8 @@ function timingLine(moved) {
  *     (fitSceneTimings);
  *   - a card on the presenter's face (subject-face) moves beside, above or
  *     below the head, or, for a module made to sit behind the presenter
- *     that the scene put in front, goes back behind (fitFaceClear);
+ *     that the scene put in front, goes back behind (fitFaceClear); a card
+ *     no room fits, or that a pass could not clear, is dropped;
  *   - a card in the caption band while captions show hides the captions
  *     under it (fitCaptionBand), whatever other errors there are.
  * → {storyboard, changes: [warning lines]}; no changes when nothing applied.
@@ -1702,11 +1703,35 @@ export async function repairLayout(ctx, layout, { resolveOptions, infos = async 
   }
   const faces = new Set(errors.filter((finding) => finding.rule === "subject-face").flatMap((finding) => finding.ids));
   if (faces.size) {
-    const cleared = fitFaceClear(storyboard, { ...resolveOptions(), infos: await infos(), behind: true, only: faces });
-    if (cleared.moved.length || cleared.behind.length) {
+    // drop: a card no room fits, and that cannot go behind, comes out. The
+    // presenter plays under where it was; that beats failing the render
+    // after the paid plan over one card.
+    const before = storyboard;
+    const cleared = fitFaceClear(storyboard, { ...resolveOptions(), infos: await infos(), behind: true, drop: true, only: faces });
+    if (cleared.moved.length || cleared.behind.length || cleared.dropped.length) {
       storyboard = cleared.storyboard;
       if (cleared.moved.length) changes.push(`face: tooling ${cleared.moved.join("; ")}`);
       changes.push(...cleared.behind.map((entry) => `face: tooling ${entry}`));
+      changes.push(...cleared.dropped.map((entry) => `face: tooling ${entry}`));
+    }
+    // The face rule samples the head through every camera and layout move;
+    // the fit judges a card by one box. A card the rule still fails after a
+    // repair pass has had its turn, or that the fit left untouched, comes out
+    // too, when it is an overlay and not the picture itself.
+    const tries = (ctx.faceRepairs ??= new Map());
+    const stuck = [];
+    for (const id of faces) {
+      const was = before.scenes?.find((scene) => scene?.id === id);
+      const now = storyboard.scenes?.find((scene) => scene?.id === id);
+      if (!now) continue;
+      const untouched = JSON.stringify(was) === JSON.stringify(now);
+      const count = (tries.get(id) ?? 0) + 1;
+      tries.set(id, count);
+      if ((untouched || count > 2) && Number(now.track ?? 0) > 0 && now.insert !== true) stuck.push(id);
+    }
+    if (stuck.length) {
+      storyboard = { ...storyboard, scenes: storyboard.scenes.filter((scene) => !stuck.includes(scene?.id)) };
+      changes.push(...stuck.map((id) => `face: tooling ${id} dropped: it still covered the presenter's face and no move cleared it (plan it beside the presenter)`));
     }
   }
   const lines = errors.map((finding) => `layout: ${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail ?? ""}`.trim());
