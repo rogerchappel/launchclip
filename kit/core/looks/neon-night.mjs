@@ -22,7 +22,7 @@ const SHIMMER_EVERY = 3;
 
 export const LOOK = {
   describe: 'a dark scene lit by pink and cyan neon: a rim light of each colour, glow on bright areas, long reflections on a wet floor, haze, and rain outdoors',
-  words: ['\\bneon\\b', '\\bcyberpunk\\b', '\\bsynthwave\\b', '\\bblade ?runner\\b', '\\brain[- ]slicked\\b'],
+  words: ['\\bneon[- ](?:night|noir|lit|look|style|city|lights)\\b', '\\bcyberpunk\\b', '\\bsynthwave\\b', '\\brain[- ]slicked\\b'],
   defaults: { strength: 1, step: 0 },
   presets: () => ({
     colors: { bg: NIGHT, primary: PINK, accent: CYAN, ink: NIGHT, paper: '#f4f0ff' },

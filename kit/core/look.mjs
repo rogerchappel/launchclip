@@ -133,7 +133,7 @@ export function stepFrame(frame, fps, step) {
   const f = Math.max(0, Math.floor(Number(frame) + 1e-6));
   if (!(step > 0) || step >= fps) return f;
   const index = Math.floor((f * step) / fps + 1e-9);
-  return Math.ceil((index * fps) / step - 1e-9);
+  return Math.ceil((index * fps) / step - 1e-9) + 0;
 }
 
 /** Which drawing (0, 1, 2, …) frame `frame` is under a step: the step number. */

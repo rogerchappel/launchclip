@@ -18,7 +18,7 @@ const VARIANTS = 6;
 
 export const LOOK = {
   describe: 'layered craft paper: rough cut edges, paper fibre and soft shadows between layers, the cast as jointed puppets with pin fasteners, animated on twos with a tiny jitter at every step',
-  words: ['\\bpaper[- ]?cut[- ]?outs?\\b', '\\bcut[- ]?out (?:animation|style|paper)\\b', '\\bcut[- ]paper\\b', '\\bpaper (?:craft|puppets?|collage)\\b', '\\bconstruction paper\\b'],
+  words: ['\\bpaper[- ]?cut[- ]?outs?\\b', '\\bcut[- ]?out (?:animation|style|paper)\\b', '\\bcut[- ]paper\\b', '\\bpaper (?:craft|puppets?)\\b', '\\bconstruction paper\\b'],
   defaults: { strength: 1, step: 12 },
   presets: () => ({
     // A light sheet: paper is the dark lettering, ink the light text on the primary.

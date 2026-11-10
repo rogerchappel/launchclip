@@ -16,7 +16,7 @@ const WHITE = '#ffffff', NOISE_EVERY = 2;
 
 export const LOOK = {
   describe: 'the scene through a black, purple, red, orange, yellow, white heat palette with slight blur and sensor noise, under a camera overlay (crosshair, scale bar, record dot, clock)',
-  words: ['\\bthermal\\b', '\\binfra[- ]?red\\b', '\\bheat[- ]?(?:map|vision|camera)\\b', '\\bFLIR\\b'],
+  words: ['\\bthermal (?:camera|vision|imaging|look|style)\\b', '\\binfra[- ]?red (?:camera|vision|look)\\b', '\\bheat[- ]?vision\\b'],
   defaults: { strength: 1, step: 0 },
   presets: () => ({
     colors: { bg: '#0a0420', primary: '#ff9a17', accent: '#ffe23a', ink: '#0a0420', paper: '#fff7d6' },

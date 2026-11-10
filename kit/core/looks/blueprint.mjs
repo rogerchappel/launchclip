@@ -17,7 +17,7 @@ const DRAW = 0.8, DIM_DELAY = 0.25, DIM = 0.7;
 
 export const LOOK = {
   describe: 'deep blue paper and a fine grid, the scene as white and cyan line drawing with dimension lines and a title block; each shot wipes in behind a drawing line',
-  words: ['\\bblueprints?\\b', '\\btechnical drawing\\b', '\\bdrafting (?:table|paper|style)\\b', '\\bcyanotype\\b'],
+  words: ['\\bblueprint (?:style|look|drawing|aesthetic|animation)\\b', '\\b(?:as|like) (?:a |an )?(?:architect\'s )?blueprints?\\b', '\\btechnical drawing\\b', '\\bcyanotype\\b'],
   defaults: { strength: 1, step: 0 },
   presets: () => ({
     colors: { bg: PAPER, primary: '#8fd8ff', accent: WHITE, ink: PAPER, paper: '#f2fbff' },

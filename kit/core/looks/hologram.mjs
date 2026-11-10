@@ -19,7 +19,7 @@ const GLITCH = { rate: 0.6, frames: 3 };
 
 export const LOOK = {
   describe: 'everything as translucent cyan light on black: a glowing rim, rolling scanlines, a faint wireframe, small glitch flickers, a glowing grid floor and floating technical labels',
-  words: ['\\bholograms?\\b', '\\bholographic\\b', '\\bholo[- ]?(?:display|projection)\\b'],
+  words: ['\\b(?:as|like) (?:a |an )?holograms?\\b', '\\bhologram (?:style|look|effect|display|projection)\\b', '\\bholographic\\b'],
   defaults: { strength: 1, step: 0 },
   presets: () => ({
     colors: { bg: VOID, primary: CYAN, accent: PALE, ink: VOID, paper: '#e9feff' },
