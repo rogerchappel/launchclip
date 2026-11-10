@@ -36,6 +36,7 @@ import {KIND_NAMES} from './kinds.mjs';
 const KIND_WORDS = {kitten: 'cat', kitty: 'cat', puppy: 'dog', bunny: 'rabbit', hare: 'rabbit', toad: 'frog', 'teddy bear': 'bear', smartphone: 'phone', mobile: 'phone', computer: 'laptop', notebook: 'laptop',
   mug: 'cup', 'coffee cup': 'cup', coffee: 'cup', 'light bulb': 'bulb', lightbulb: 'bulb', lamp: 'bulb', idea: 'bulb', bot: 'robot', android: 'robot', money: 'coin', 'gold coin': 'coin', manual: 'book',
   drop: 'droplet', 'water drop': 'droplet', raindrop: 'droplet', creature: 'monster', mascot: 'blob',
+  bird: 'songbird', robin: 'songbird', sparrow: 'songbird', finch: 'songbird', duckling: 'duck', mallard: 'duck', stag: 'deer', doe: 'deer', fawn: 'deer', 'red squirrel': 'squirrel',
   horse: 'mare', pony: 'mare', dam: 'mare', thoroughbred: 'mare', sire: 'stallion', colt: 'foal', filly: 'foal', 'baby horse': 'foal'};
 // Thoroughbred coats: the coat, the mane and tail, the lower legs.
 export const HORSE_COATS = Object.freeze({bay: ['#8a4f2d', '#2a2226', '#2a2226'], chestnut: ['#b9652f', '#c9803f', '#b9652f'], grey: ['#b7b7bb', '#f1eeea', '#8a8a92'], gray: ['#b7b7bb', '#f1eeea', '#8a8a92'], black: ['#3b2d2b', '#1f1a1c', '#1f1a1c'], brown: ['#6b4530', '#2a2226', '#3a2a24'], palomino: ['#e0b060', '#f6ecd6', '#e0b060'], white: ['#f1eeea', '#ffffff', '#d9d6d0']});
@@ -130,7 +131,7 @@ function lexicon() {
   for (const name of DRAWING_STYLES) for (const phrase of [`${key(words(name))} style`, `style ${key(words(name))}`, `${key(words(name))} drawing`]) add(phrase, [['style', name]]);
   for (const voice of KOKORO_VOICES) add(voice, [['voice', voice]]);
   for (const name of KIND_NAMES) add(name, [['kind', name]]);
-  for (const [phrase, mark] of Object.entries({blaze: 'blaze', socks: 'socks', stockings: 'socks', 'white socks': 'socks', 'white blaze': 'blaze', 'white star': 'star'})) add(phrase, [['marks+', mark]]);
+  for (const [phrase, mark] of Object.entries({blaze: 'blaze', socks: 'socks', stockings: 'socks', 'white socks': 'socks', 'white blaze': 'blaze', 'white star': 'star', antlers: 'antlers', spots: 'spots', spotted: 'spots'})) add(phrase, [['marks+', mark]]);
   for (const [phrase, name] of Object.entries(KIND_WORDS)) if (KIND_NAMES.includes(name)) add(phrase, [['kind', name]]);
   // "a 30 year old" is an age in years, not a senior.
   for (const phrase of ['year old', 'years old']) add(phrase, []);

@@ -40,7 +40,7 @@ import { profileGeometry } from '../core/layout-check.mjs';
 import { CAPTION_DEFAULT_COLORS, blurSnappedChunks, captionBlurGuard, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from '../core/captions.mjs';
 import { brandFramePlan, brandFrameRuntime } from '../core/brand-frame.mjs';
 import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumFilterAt, mediumPlan, mediumSteps } from '../core/medium.mjs';
-import { LOOK_Z, lookCss, lookFurnitureMarkup, lookGradeMarkup, lookPlan, lookSelector, lookStepEase, lookStepped, lookSteps } from '../core/look.mjs';
+import { LOOK_Z, lookCss, lookFurnitureMarkup, lookGradeMarkup, lookPlan, lookSelector, lookStageCss, lookStepEase, lookStepped, lookSteps, lookUnderMarkup } from '../core/look.mjs';
 import { brandFontStacks, fontFaceRule, fontSlug, frozenFontFaces, projectFontFamilies, registryFontFaces } from '../core/fonts.mjs';
 import { EMITTERS as EDITORIAL_EMITTERS } from './editorial-ui-modules.mjs';
 import { EMITTERS as CATALOG_A_EMITTERS } from './catalog-a.mjs';
@@ -621,6 +621,8 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   // look, nothing added. A module review has none.
   const look = isolate ? null : lookPlan(story);
   const stepped = lookStepped(look);
+  // A look's stage (its layers' transforms and the floor under them) needs the scenes in screen space: not under a camera.
+  const staged = look?.stage && !plan ? look : null;
   // The light's over group (kit/core/lighting.mjs): wrap, pulse halos and the
   // vignette, above every scene and the camera, under the dot wipes.
   const lightOver = light?.over.length ? lightLayers(light.over, 'over', 0, D) : null;
@@ -651,7 +653,7 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     .lc-ambient-blob { position: absolute; left: 0; top: 0; border-radius: 50%; transform-origin: 50% 50%; }
     .lc-drift { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; }${feelLines.length ? `\n    .lc-feel { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; transform-origin: 50% 50%; }` : ''}${wipes.length ? `\n    ${dotWipeCss(W, H).split('\n').join('\n    ')}` : ''}${sweeps.length ? `\n    ${lightSweepCss(W, H).split('\n').join('\n    ')}` : ''}
     ${placeholderCss()}
-    ${captions ? `${captions.plan.css.trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}${medium ? `\n    #${MEDIUM_LAYER_ID} { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; pointer-events: none; z-index: ${MEDIUM_Z.hyperframes}; --lc-medium-filter: ${mediumFilterAt(medium, 0)}; backdrop-filter: var(--lc-medium-filter); -webkit-backdrop-filter: var(--lc-medium-filter); }` : ''}${look ? `\n    ${lookCss(look, LOOK_Z.hyperframes).split('\n').join('\n    ')}` : ''}${frame ? `\n    #lc-frame-root { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; pointer-events: none; z-index: 90000; }\n    ${frame.css.trim().split('\n').join('\n    ')}` : ''}
+    ${captions ? `${captions.plan.css.trim().split('\n').join('\n    ')}\n    #lc-captions { z-index: 100000; }` : ''}${medium ? `\n    #${MEDIUM_LAYER_ID} { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; pointer-events: none; z-index: ${MEDIUM_Z.hyperframes}; --lc-medium-filter: ${mediumFilterAt(medium, 0)}; backdrop-filter: var(--lc-medium-filter); -webkit-backdrop-filter: var(--lc-medium-filter); }` : ''}${look ? `\n    ${lookCss(look, LOOK_Z.hyperframes).split('\n').join('\n    ')}` : ''}${staged ? `\n    ${lookStageCss(staged).split('\n').join('\n    ')}` : ''}${frame ? `\n    #lc-frame-root { position: absolute; left: 0; top: 0; width: ${W}px; height: ${H}px; pointer-events: none; z-index: 90000; }\n    ${frame.css.trim().split('\n').join('\n    ')}` : ''}
     ${css.filter(Boolean).join('\n    ')}
   </style>
   <script>${FONT_WARMUP}</script>
@@ -659,7 +661,7 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
 <body>
   <div id="launchclip-root" data-composition-id="${COMPOSITION_ID}" data-start="0" data-duration="${num(D)}" data-width="${W}" data-height="${H}" data-fps="${format.fps}" data-launchclip-cinematic-contract="phase-2" data-launchclip-story="${attr(story.schema)}">
     <div id="lc-bg" class="clip" data-start="0" data-duration="${num(D)}" data-track-index="1">${worldBackdrop?.html ?? ''}${worldLight ? `<div id="lc-light-under-world" class="lc-ambient-field" data-launchclip-light="under" aria-hidden="true">${worldLight.html}</div>` : ''}</div>
-    ${baseMarkup.join('\n    ')}
+    ${staged ? `${lookUnderMarkup(staged)}\n    ` : ''}${baseMarkup.join('\n    ')}
     ${audio}
     ${feelLines.length ? '<div id="lc-feel" class="lc-feel">' : ''}${plan ? cameraMarkup(plan, story.brand, world, worldField.html, !worldBackdrop && !covered, stack?.html ?? '') : ''}
     ${hoisted.join('\n    ')}

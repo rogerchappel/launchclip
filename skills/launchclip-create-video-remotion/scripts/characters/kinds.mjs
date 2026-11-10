@@ -6,8 +6,10 @@
 //   {kind: "cat", size?: "small" | "medium" | "large",
 //    colors?: {body?, detail?, accent?}}
 //
-//   animals  cat, dog, bear, rabbit, fox, frog, penguin, owl
-//            (a small body, a big head with ears or a beak, a tail where it reads)
+//   animals  stallion, mare, foal, deer (on four legs); cat, dog, bear,
+//            rabbit, fox, frog, penguin, owl, songbird, duck, squirrel,
+//            hedgehog (upright: a small body, a big head with ears or a
+//            beak, a tail where it reads)
 //   mascots  blob, droplet, star, monster
 //            (one soft body in the brand's colours, stubby arms and legs)
 //   objects  phone, laptop, cup, bulb, robot, coin, book, cloud
@@ -69,6 +71,13 @@ export const KINDS = Object.freeze({
   frog: K('animal', 'an upright frog: a wide head, eyes on top, a pale belly', {body: '#6fbf5c', detail: '#dcf2bd', accent: '#f08a9b'}, {body: 'skin', detail: 'belly and throat', accent: 'cheeks'}, headed(STUBBY, {rx: 214, ry: 160, up: 138, top: 34})),
   penguin: K('animal', 'a penguin: a dark coat, a white face and belly, an orange beak and feet', {body: '#323746', detail: '#fbf9f4', accent: '#f2a03d'}, {body: 'coat', detail: 'face and belly', accent: 'beak and feet'}, headed(STUBBY, {thigh: 34, shin: 34, legW: 64, torso: 232, upperArm: 100, rx: 186, ry: 172, up: 132, shoulder: 132, hip: 146, top: 0})),
   owl: K('animal', 'an owl: ear tufts, big eye discs, a small beak, wings for arms', {body: '#9d6e4d', detail: '#f3e1c5', accent: '#f2a03d'}, {body: 'feathers', detail: 'eye discs and belly', accent: 'beak and feet'}, headed(STUBBY, {thigh: 40, shin: 38, legW: 62, torso: 216, rx: 206, ry: 176, up: 140, shoulder: 122, hip: 134, top: 16})),
+  // Birds
+  songbird: K('animal', 'a small songbird: a round body, a crest, a little beak, wings and a tail', {body: '#5b9bd5', detail: '#fbf3e6', accent: '#f2a03d'}, {body: 'feathers', detail: 'belly', accent: 'beak and legs'}, headed(STUBBY, {thigh: 34, shin: 32, foot: 22, legW: 26, torso: 176, shoulder: 100, hip: 110, rx: 184, ry: 166, up: 126, top: 44, upperArm: 84, foreArm: 64, armW: 52, hand: 30})),
+  duck: K('animal', 'a duck: a wide flat bill, a tail tip, webbed feet', {body: '#fbf6e9', detail: '#ffffff', accent: '#f2a03d'}, {body: 'feathers', detail: 'belly', accent: 'bill and feet'}, headed(STUBBY, {thigh: 36, shin: 34, foot: 24, legW: 30, torso: 206, shoulder: 112, hip: 128, rx: 180, ry: 168, up: 130, top: 0, upperArm: 90, foreArm: 66, armW: 54, hand: 30})),
+  // Forest animals
+  deer: K('animal', 'a deer on four legs: big ears, a short white tail, with optional antlers and spots', {body: '#c58a55', detail: '#f8ecd8', accent: '#6b4530'}, {body: 'coat', detail: 'tail, muzzle and spots', accent: 'lower legs and antlers'}, quad({thigh: 104, shin: 104, foot: 24, legW: 28, b: 280, h: 128, rise: 140, hx: 160, rx: 116, ry: 122, neckW: 46, faceK: 1.3, top: 70}), ['antlers', 'spots']),
+  squirrel: K('animal', 'an upright squirrel: a big bushy tail, small round ears', {body: '#b9652f', detail: '#f8e6cc', accent: '#7b4326'}, {body: 'fur', detail: 'muzzle and belly', accent: 'inner ears and nose'}, headed(STUBBY, {rx: 190, ry: 172, top: 40})),
+  hedgehog: K('animal', 'a hedgehog: a round pale body with a coat of spines behind it', {body: '#8a6a4f', detail: '#f5e3c8', accent: '#3b302c'}, {body: 'spines', detail: 'face, belly and paws', accent: 'nose'}, single(SOFT, {w: 206, h: 400, faceK: 2.1, turn: 0.7, faceY: 208, rx: 188, area: 178, ry: 140, armY: 170, armX: 190, legX: 90, top: 58})),
   // Mascots (brand colours)
   blob: K('mascot', 'a round blob with a sprout on top', {body: 'primary', detail: 'paper', accent: 'accent'}, {body: 'the blob', detail: 'its shine', accent: 'the sprout'}, single(SOFT, {w: 232, h: 440, faceK: 2.2, turn: 0.75, faceY: 226, rx: 212, area: 200, ry: 150, armY: 196, armX: 214, legX: 96, top: 62})),
   droplet: K('mascot', 'a droplet: round below, a point on top', {body: 'primary', detail: 'paper', accent: 'accent'}, {body: 'the drop', detail: 'its shine', accent: 'its cheeks'}, single(SOFT, {w: 216, h: 560, faceK: 2.1, turn: 0.7, faceY: 204, rx: 196, area: 186, ry: 150, armY: 190, armX: 204, legX: 92})),

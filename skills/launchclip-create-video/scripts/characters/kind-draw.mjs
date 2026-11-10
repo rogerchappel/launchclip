@@ -235,6 +235,52 @@ const SHAPES = {
     };
   },
 
+  songbird(d, P, F) {
+    const {rx, ry} = d, hc = -d.up, H = d.hip;
+    return {
+      ...trunk(d, P), look: {limb: 'body', hand: 'body', leg: 'accent', foot: 'accent'},
+      behind: [P.shape(poly(-H + 30, -70, -H - 78, -22, -H - 62, 30, -H + 40, -6), 'bodyShade')],
+      ears: [P.shape(`M-26 ${n(hc - ry * 0.9)}Q-30 ${n(hc - ry - 46)} 6 ${n(hc - ry - 40)}Q34 ${n(hc - ry - 30)} 30 ${n(hc - ry * 0.9)}Z`, 'body')],
+      head: [P.ellipse(0, hc, rx, ry, 'body')],
+      features: [beak(F)]
+    };
+  },
+  duck(d, P, F) {
+    const {rx, ry} = d, hc = -d.up, H = d.hip;
+    return {
+      ...trunk(d, P), look: {limb: 'body', hand: 'body', leg: 'accent', foot: 'accent'},
+      behind: [P.shape(poly(-H + 34, -96, -H - 60, -120, -H + 20, -30), 'body')],
+      head: [P.ellipse(0, hc, rx, ry, 'body')],
+      features: [F.ellipse(0, 51, 37, 17, 'accent', {width: 3.5})]
+    };
+  },
+  squirrel(d, P, F) {
+    const {rx, ry} = d, hc = -d.up, H = d.hip;
+    return {
+      ...trunk(d, P), look: FUR,
+      // The tail stands up behind it, as tall as its head, curling over at the top.
+      behind: [P.shape(`M${H - 40} 10C${H + 130} 26 ${H + 190} -250 ${H + 140} -410C${H + 106} -486 ${H + 8} -462 ${H + 24} -384C${H + 86} -356 ${H + 78} -200 ${H - 30} -110Z`, 'body'), P.line(`M${H + 62} -56C${H + 128} -140 ${H + 136} -300 ${H + 92} -392`, 'bodyLight', 20)],
+      ears: both(sx => [P.shape(poly(sx * rx * 0.78, hc - ry * 0.58, sx * rx * 0.7, hc - ry - 38, sx * rx * 0.34, hc - ry * 0.86), 'body'), P.shape(poly(sx * rx * 0.7, hc - ry * 0.7, sx * rx * 0.66, hc - ry - 12, sx * rx * 0.46, hc - ry * 0.86), 'accent', {outline: false})]),
+      head: [P.ellipse(0, hc, rx, ry, 'body')],
+      features: [muzzle(F, 33, 23), nose(F, 'accent', 8.5, 6)]
+    };
+  },
+  hedgehog(d, P, F) {
+    const {w, h} = d, cy = -h * 0.5;
+    // The spines: a zigzag round the back, from one foot over the top to the other.
+    const points = [];
+    for (let i = 0; i <= 22; i++) {
+      const a = Math.PI * (1.12 - (1.24 * i) / 22), r = i % 2 ? 1.34 : 1.12;
+      points.push(Math.cos(a) * w * r, cy - Math.sin(a) * h * 0.5 * r);
+    }
+    return {
+      look: {limb: 'detail', hand: 'detail', foot: 'detail'},
+      behind: [P.shape(poly(...points), 'body'), ...both(sx => [P.ellipse(sx * w * 0.7, -h * 0.9, 36, 36, 'detail')])],
+      body: [P.shape(dome(w, h, 0.46, 130), 'detail')],
+      features: [nose(F, 'accent', 9, 6.6)]
+    };
+  },
+
   blob(d, P) {
     const {w, h} = d;
     return {
@@ -391,8 +437,8 @@ function limbs({id, g, j, P, c, look, thin, sticks, classic, isStatic, props}) {
     // Feet point outward (the leg's own +x is toward the body's centre line).
     const reach = g.thigh + g.shin + g.foot - g.thigh;
     const foot = sticks ? (classic ? rod(`M0 ${n(reach - 4)}L-24 ${n(reach - 2)}`, 'outline') : tip(-12, reach - 9, 24, 12, look.foot)) : thin ? [P.ellipse(-13, g.shin + g.foot - 17, 31, 17, look.foot)] : [P.ellipse(-g.legW * 0.1, g.shin + g.foot * 0.26, g.legW * 0.68, g.foot * 0.74, look.foot)];
-    const shin = J(id, `shin-${side}`, 0, g.thigh, {rotation: j[`shin${s}`]}, P.within({mirror}, () => [...(thin ? stick(sticks ? reach - 6 : g.shin, g.legW) : P.limb(g.shin - 8, g.legW * 0.92, look.limb)), ...foot]));
-    const thigh = P.within({mirror}, () => (thin ? stick(g.thigh, g.legW) : P.limb(g.thigh, g.legW, look.limb)));
+    const shin = J(id, `shin-${side}`, 0, g.thigh, {rotation: j[`shin${s}`]}, P.within({mirror}, () => [...(thin ? stick(sticks ? reach - 6 : g.shin, g.legW) : P.limb(g.shin - 8, g.legW * 0.92, look.leg ?? look.limb)), ...foot]));
+    const thigh = P.within({mirror}, () => (thin ? stick(g.thigh, g.legW) : P.limb(g.thigh, g.legW, look.leg ?? look.limb)));
     return J(id, `leg-${side}`, side === 'l' ? -g.legX : g.legX, g.hipY + 10, {rotation: j[`leg${s}`], scaleY: j.legScale}, [shin, ...thigh], mirror);
   };
   return {arm, leg};
@@ -409,7 +455,7 @@ function horse({id, kind, d, g, j, P, F, c, sx, sticks, classic, marks, isStatic
   const {b: B, h: H, rx, ry} = d;
   const rod = rodOf(P, c, classic);
   const X = v => n(sx * v);
-  const foal = kind === 'foal', sire = kind === 'stallion';
+  const foal = kind === 'foal', sire = kind === 'stallion', deer = kind === 'deer';
   const socks = marks.includes('socks');
   const forward = sx === 1;
   const near = forward ? 'r' : 'l', far = forward ? 'l' : 'r';
@@ -433,33 +479,38 @@ function horse({id, kind, d, g, j, P, F, c, sx, sticks, classic, marks, isStatic
   };
   // Torso frame: the hips' line at y = 0, the body's centre at x = 0.
   const rootX = -(B / 2 - 14), rootY = sticks ? -6 : -H + 44;
-  const tailPath = foal ? `M${X(rootX)} ${rootY}Q${X(rootX - 58)} ${rootY + 4} ${X(rootX - 52)} ${rootY + 74}` : `M${X(rootX)} ${rootY}C${X(rootX - 84)} ${rootY - 26} ${X(rootX - 108)} ${rootY + 92} ${X(rootX - 72)} ${rootY + (sire ? 214 : 196)}`;
+  const tailPath = deer ? `M${X(rootX + 6)} ${rootY - 6}Q${X(rootX - 44)} ${rootY - 34} ${X(rootX - 34)} ${rootY - 78}` : foal ? `M${X(rootX)} ${rootY}Q${X(rootX - 58)} ${rootY + 4} ${X(rootX - 52)} ${rootY + 74}` : `M${X(rootX)} ${rootY}C${X(rootX - 84)} ${rootY - 26} ${X(rootX - 108)} ${rootY + 92} ${X(rootX - 72)} ${rootY + (sire ? 214 : 196)}`;
   const tail = sticks ? rod(tailPath, 'detail') : P.strand(tailPath, 'detail', foal ? 26 : sire ? 40 : 32);
   const neckFrom = [B / 2 - (sticks ? 54 : 66), sticks ? -6 : -H + 48], neckTo = [d.hx, top + ry * 0.5];
   const neckPath = `M${X(neckFrom[0])} ${n(neckFrom[1])}L${X(neckTo[0])} ${n(neckTo[1])}`;
   // The mane runs down the back of the neck (a foal's is a row of tufts) and shows behind it.
   const back = d.neckW * 0.5 + (sire ? 28 : 22);
   const along = t => [neckTo[0] + (neckFrom[0] - neckTo[0]) * t - back, neckTo[1] + (neckFrom[1] - neckTo[1]) * t];
-  const mane = sticks ? (classic ? [] : rod(`M${X(along(0)[0])} ${n(along(0)[1])}L${X(along(1)[0])} ${n(along(1)[1] - 16)}`, 'detail', 9)) : foal
+  const mane = deer ? [] : sticks ? (classic ? [] : rod(`M${X(along(0)[0])} ${n(along(0)[1])}L${X(along(1)[0])} ${n(along(1)[1] - 16)}`, 'detail', 9)) : foal
     ? [0.12, 0.42, 0.72].map(t => P.ellipse(sx * along(t)[0], along(t)[1] - 6, 24, 24, 'detail'))
     : P.strand(`M${X(along(-0.1)[0] + 8)} ${n(along(-0.1)[1])}Q${X(along(0.5)[0] - 22)} ${n(along(0.5)[1])} ${X(along(1)[0] - 6)} ${n(along(1)[1] - 14)}`, 'detail', sire ? 58 : 44);
   const body = sticks
     ? [...rod(`M${X(-legX)} -6L${X(legX)} -6`, 'body', ROD + 4), ...rod(neckPath, 'body')]
-    : [P.shape(rr(-B / 2, -H, B / 2, 26, Math.min(H * 0.48, 86)), 'body'), ...P.strand(neckPath, 'body', d.neckW), P.ellipse(sx * (neckFrom[0] - 4), neckFrom[1] + 16, d.neckW * 0.5, 34, 'body', {outline: false})];
+    : [P.shape(rr(-B / 2, -H, B / 2, 26, Math.min(H * 0.48, 86)), 'body'), ...P.strand(neckPath, 'body', d.neckW), P.ellipse(sx * (neckFrom[0] - 4), neckFrom[1] + 16, d.neckW * 0.5, 34, 'body', {outline: false}),
+      // A fawn's spots along the back.
+      ...(marks.includes('spots') ? [[-0.34, 0.2, 13], [-0.2, 0.42, 11], [-0.04, 0.22, 13], [0.1, 0.44, 10], [0.22, 0.24, 12]].map(([x, y, r]) => P.ellipse(sx * B * x, -H * (1 - y), r, r * 0.9, 'detail', {outline: false})) : [])];
   // Head frame: the pivot under the chin, the head's centre at 0, hc.
   const hc = -ry * 0.9, tip = hc - ry - d.top + 8;
   const head = {
-    // Small upright ears, close together.
-    ears: both(sg => [P.shape(`M${n(sg * rx * 0.22)} ${n(hc - ry * 0.8)}Q${n(sg * rx * 0.3)} ${n(tip + 10)} ${n(sg * rx * 0.52)} ${n(tip)}Q${n(sg * rx * 0.76)} ${n(tip + 30)} ${n(sg * rx * 0.7)} ${n(hc - ry * 0.62)}Z`, 'body')]),
+    // A horse: small upright ears, close together. A deer: big ears held wide, and antlers if it has them.
+    ears: deer
+      ? [...(marks.includes('antlers') ? both(sg => [P.line(`M${n(sg * rx * 0.26)} ${n(hc - ry * 0.9)}L${n(sg * rx * 0.4)} ${n(tip + 4)}M${n(sg * rx * 0.34)} ${n(hc - ry * 1.2)}L${n(sg * rx * 0.7)} ${n(hc - ry * 1.38)}`, 'accent', 13)]) : []),
+        ...both(sg => [P.shape(`M${n(sg * rx * 0.46)} ${n(hc - ry * 0.72)}Q${n(sg * rx * 1.36)} ${n(hc - ry * 1.3)} ${n(sg * rx * 1.14)} ${n(hc - ry * 0.4)}Q${n(sg * rx * 0.86)} ${n(hc - ry * 0.3)} ${n(sg * rx * 0.46)} ${n(hc - ry * 0.72)}Z`, 'body')])]
+      : both(sg => [P.shape(`M${n(sg * rx * 0.22)} ${n(hc - ry * 0.8)}Q${n(sg * rx * 0.3)} ${n(tip + 10)} ${n(sg * rx * 0.52)} ${n(tip)}Q${n(sg * rx * 0.76)} ${n(tip + 30)} ${n(sg * rx * 0.7)} ${n(hc - ry * 0.62)}Z`, 'body')]),
     head: [P.ellipse(0, hc, rx, ry, 'body')],
     marks: [
-      P.ellipse(0, hc + ry * 0.5, rx * 0.66, ry * 0.38, 'muzzle', {outline: false}),
+      P.ellipse(0, hc + ry * 0.5, rx * 0.66, ry * 0.38, deer ? 'detail' : 'muzzle', {outline: false}),
       ...(marks.includes('blaze') ? [P.shape(rr(-rx * 0.13, hc - ry * 0.86, rx * 0.13, hc + ry * 0.22, rx * 0.12), 'marking', {outline: false})] : []),
       ...(marks.includes('star') ? [P.shape(poly(0, hc - ry * 0.56, rx * 0.15, hc - ry * 0.4, 0, hc - ry * 0.24, -rx * 0.15, hc - ry * 0.4), 'marking', {outline: false})] : []),
       // The forelock falls between the ears over the forehead.
-      P.shape(`M${n(-rx * 0.36)} ${n(hc - ry * 0.9)}C${n(-rx * 0.2)} ${n(hc - ry * 1.2)} ${n(rx * 0.4)} ${n(hc - ry * 1.18)} ${n(rx * 0.44)} ${n(hc - ry * 0.84)}C${n(rx * 0.4)} ${n(hc - ry * 0.56)} ${n(rx * 0.16)} ${n(hc - ry * 0.5)} ${n(rx * 0.04)} ${n(hc - ry * 0.58)}C${n(-rx * 0.02)} ${n(hc - ry * 0.74)} ${n(-rx * 0.2)} ${n(hc - ry * 0.72)} ${n(-rx * 0.36)} ${n(hc - ry * 0.9)}Z`, 'detail')
+      ...(deer ? [] : [P.shape(`M${n(-rx * 0.36)} ${n(hc - ry * 0.9)}C${n(-rx * 0.2)} ${n(hc - ry * 1.2)} ${n(rx * 0.4)} ${n(hc - ry * 1.18)} ${n(rx * 0.44)} ${n(hc - ry * 0.84)}C${n(rx * 0.4)} ${n(hc - ry * 0.56)} ${n(rx * 0.16)} ${n(hc - ry * 0.5)} ${n(rx * 0.04)} ${n(hc - ry * 0.58)}C${n(-rx * 0.02)} ${n(hc - ry * 0.74)} ${n(-rx * 0.2)} ${n(hc - ry * 0.72)} ${n(-rx * 0.36)} ${n(hc - ry * 0.9)}Z`, 'detail')])
     ],
-    features: [F.ellipse(-9, 43, 3.2, 4.4, 'outline', {outline: false}), F.ellipse(9, 43, 3.2, 4.4, 'outline', {outline: false})],
+    features: deer ? [nose(F, 'outline', 8.5, 6)] : [F.ellipse(-9, 43, 3.2, 4.4, 'outline', {outline: false}), F.ellipse(9, 43, 3.2, 4.4, 'outline', {outline: false})],
     dy: 0.2
   };
   return {head, near, far, front, hind, torso: farFront => [farFront, ...tail, ...mane, ...body]};
@@ -509,7 +560,7 @@ const LOOK = 44;
 // Kinds whose face sits on the detail colour (a screen, a label, a white face).
 // The shape of a single body that bounds its face, where it is not the body's first (a screen, a label, the glass).
 const AREA = {phone: ['front', 0], laptop: ['front', 0], book: ['front', 0], coin: ['body', 1], bulb: ['body', 3]};
-const ON_DETAIL = new Set(['fox', 'penguin', 'owl', 'phone', 'laptop', 'robot', 'coin', 'book']);
+const ON_DETAIL = new Set(['fox', 'penguin', 'owl', 'hedgehog', 'phone', 'laptop', 'robot', 'coin', 'book']);
 
 /**
  * Draw a character of a kind (kinds.mjs) in a drawing style.

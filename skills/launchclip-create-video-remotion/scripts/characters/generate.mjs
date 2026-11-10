@@ -26,7 +26,7 @@ import {normalizeRigParams, rigFingerprint} from './rig.mjs';
 import {NEUTRALS, SKIN_ORDER} from './palette.mjs';
 import {STARTER_IDS} from './cast.mjs';
 import {DRAWING_STYLES} from './styles.mjs';
-import {KINDS, isFourLegged, isKind, kindsOf} from './kinds.mjs';
+import {KINDS, isKind, kindsOf} from './kinds.mjs';
 
 // ---------------------------------------------------------------------------
 // PRNG: a 32-bit string hash seeding mulberry32.
@@ -153,7 +153,9 @@ export const CHARACTER_SETS = ({
 // 1 the rest are the set's people, taking turns).
 Object.assign(CHARACTER_SETS, {
   'horse-family': {...BASE, describe: 'a thoroughbred family on four legs: sires, dams and foals in bay, chestnut, grey and black, some with a blaze or socks', kinds: ['stallion', 'mare', 'foal'], share: 1, props: []},
-  'animal-friends': {...BASE, describe: 'animals: horses on four legs, and an upright cat, dog, bear, rabbit, fox, frog, penguin and owl', kinds: kindsOf('animal'), share: 1, props: ['phone', 'book', 'ball']},
+  'forest-friends': {...BASE, describe: 'forest animals: a fox, a deer, a rabbit, a squirrel, a bear, a hedgehog and an owl', kinds: ['fox', 'deer', 'rabbit', 'squirrel', 'bear', 'hedgehog', 'owl'], share: 1, props: []},
+  birds: {...BASE, describe: 'birds: a songbird, a duck, an owl and a penguin', kinds: ['songbird', 'duck', 'owl', 'penguin'], share: 1, props: []},
+  'animal-friends': {...BASE, describe: 'animals of every kind: horses and a deer on four legs, and an upright cat, dog, bear, rabbit, fox, frog, squirrel, hedgehog and birds', kinds: kindsOf('animal'), share: 1, props: ['phone', 'book', 'ball']},
   mascots: {...BASE, describe: 'soft mascots in the palette\'s colours: blobs, droplets, stars and little monsters', kinds: kindsOf('mascot'), share: 1, props: []},
   'everyday-objects': {...BASE, describe: 'objects with faces: a phone, a laptop, a coffee cup, a light bulb, a robot, a coin, a book, a cloud', kinds: kindsOf('object'), share: 1, props: []},
   'mixed-company': {...BASE, describe: 'people with an animal, a mascot or an object among them, turn about',
@@ -165,7 +167,7 @@ Object.freeze(CHARACTER_SETS);
 const KIND_NAMES_POOL = ['Pip', 'Dot', 'Bean', 'Nugget', 'Pickle', 'Waffle', 'Sprout', 'Button', 'Noodle', 'Peanut', 'Tofu', 'Maple', 'Jelly', 'Pepper', 'Cricket', 'Acorn', 'Domino', 'Flick', 'Kiwi', 'Loop', 'Marble', 'Orbit', 'Pom', 'Quill', 'Tumble', 'Wisp', 'Zest', 'Dumpling']
   .filter(name => !STARTER_IDS.includes(slug(name)) && !NAMES.some(([person]) => slug(person) === slug(name)));
 // Coats an animal may wear instead of its kind's own (body colours).
-const COATS = {cat: ['#f0b46a', '#2b2a33', '#f4efe8', '#b9a48c'], dog: ['#f3e3c8', '#8a5a3c', '#3b3a40'], bear: ['#f4efe8', '#4a3a33', '#d9a46a'], rabbit: ['#b9a48c', '#8f93a8', '#e9c9a4'], fox: ['#c9482f', '#e9e4dc'], frog: ['#3fae8a', '#9fc95a'], penguin: ['#3f5a86', '#4a4f5c'], owl: ['#d8d2c8', '#6b5a4c']};
+const COATS = {cat: ['#f0b46a', '#2b2a33', '#f4efe8', '#b9a48c'], dog: ['#f3e3c8', '#8a5a3c', '#3b3a40'], bear: ['#f4efe8', '#4a3a33', '#d9a46a'], rabbit: ['#b9a48c', '#8f93a8', '#e9c9a4'], fox: ['#c9482f', '#e9e4dc'], frog: ['#3fae8a', '#9fc95a'], penguin: ['#3f5a86', '#4a4f5c'], owl: ['#d8d2c8', '#6b5a4c'], songbird: ['#e8734a', '#f2c14e', '#7fb069'], duck: ['#f6d860', '#8a6a4f'], squirrel: ['#8f93a8', '#d0803a']};
 
 const HORSE_COAT_LIST = [['#8a4f2d', '#2a2226', '#2a2226'], ['#b9652f', '#c9803f', '#b9652f'], ['#b7b7bb', '#f1eeea', '#8a8a92'], ['#3b2d2b', '#1f1a1c', '#1f1a1c'], ['#6b4530', '#2a2226', '#3a2a24']];
 
@@ -175,13 +177,14 @@ function kindMember(rng, kind, colors) {
   const group = KINDS[kind].group;
   const own = {};
   let marks = null;
-  if (isFourLegged(kind)) {
+  if (KINDS[kind].marks.includes('blaze')) {
     // A horse takes a whole coat (coat, mane and tail, points) and, sometimes, white markings.
     const [body, detail, accent] = rng.pick(HORSE_COAT_LIST);
     Object.assign(own, {body, detail, accent});
     marks = ['blaze', 'socks', 'star'].filter(() => rng.chance(0.3));
     if (marks.includes('blaze')) marks = marks.filter(name => name !== 'star');
-  } else if (group === 'animal' && rng.chance(0.5)) own.body = rng.pick(COATS[kind]);
+  } else if (group === 'animal' && COATS[kind] && rng.chance(0.5)) own.body = rng.pick(COATS[kind]);
+  if (kind === 'deer') marks = ['antlers', 'spots'].filter(() => rng.chance(0.4));
   if (group === 'mascot') { own.body = colors.roles.length && rng.chance(0.6) ? rng.pick(colors.roles) : rng.pick(colors.tops); if (own.body === 'accent') own.accent = 'primary'; }
   if (group === 'object' && rng.chance(0.4)) own.accent = rng.chance(0.5) && colors.roles.length ? rng.pick(colors.roles) : rng.pick(colors.tops);
   return {kind, ...(size !== 'medium' ? {size} : {}), ...(marks?.length ? {marks} : {}), colors: own};

@@ -40,8 +40,8 @@ test('people are untouched: every starter person keeps its look in every style, 
 });
 
 test('a kind takes kind, size and three colours, in a fixed shape, and refuses a person\'s params by name', () => {
-  assert.equal(KIND_NAMES.length, 23);
-  assert.deepEqual(KIND_GROUPS.map(group => kindsOf(group).length), [11, 4, 8]);
+  assert.equal(KIND_NAMES.length, 28);
+  assert.deepEqual(KIND_GROUPS.map(group => kindsOf(group).length), [16, 4, 8]);
   for (const kind of KIND_NAMES) {
     const params = normalizeRigParams({kind});
     assert.deepEqual(Object.keys(params), ['kind', 'colors'], `${kind}: medium is not stored`);
@@ -62,11 +62,11 @@ test('a kind takes kind, size and three colours, in a fixed shape, and refuses a
 });
 
 test('the starter cast has about two dozen animals, mascots and objects: every kind, a personality and a voice each, no id shared with a generated name', () => {
-  assert.equal(STARTER_KIND_IDS.length, 30);
+  assert.equal(STARTER_KIND_IDS.length, 36);
   assert.deepEqual(STARTER_KIND_IDS.slice(0, 6), ['comet', 'duchess', 'sprig', 'misty', 'copper', 'shadow'], 'the horses come first');
   const kinds = STARTER_KIND_IDS.map(id => starterCharacter(id).params.kind);
   assert.deepEqual([...new Set(kinds)].sort(), [...KIND_NAMES].sort(), 'every kind has a starter');
-  assert.equal(STARTER_IDS.indexOf(STARTER_KIND_IDS[0]), STARTER_IDS.length - 30, 'they come after the people, so earlier ids keep their places');
+  assert.equal(STARTER_IDS.indexOf(STARTER_KIND_IDS[0]), STARTER_IDS.length - 36, 'they come after the people, so earlier ids keep their places');
   const generated = new Set(Object.keys(CHARACTER_SETS).flatMap(set => [1, 2, 3].flatMap(k => generateCast({seed: `s${k}`, set, count: 12}).map(member => member.id))));
   for (const id of STARTER_KIND_IDS) {
     const entry = STARTER_CAST.find(one => one.id === id);
@@ -100,7 +100,7 @@ test('every kind draws in every style, size and pose: finite, feet on the floor,
   for (const kind of KIND_NAMES) {
     const [small, medium, large] = KIND_SIZES.map(size => styleHeight('flat', normalizeRigParams({kind, size})));
     assert.ok(small < medium && medium < large, kind);
-    assert.ok(medium > 520 && medium < 900, `${kind}: ${medium} rig units, beside a person of about 1000`);
+    assert.ok(medium > 480 && medium < 900, `${kind}: ${medium} rig units, beside a person of about 1000`);
   }
 });
 
@@ -311,7 +311,7 @@ test('a horse family: a stallion, a mare and a foal on four legs, told apart by 
   const legShare = params => -styleGeometry('flat', params).hipY / styleHeight('flat', params);
   assert.ok(legShare(foal) > legShare(dam) + 0.03);
   assert.ok(KINDS.foal.dims.b < KINDS.mare.dims.b * 0.7 && KINDS.stallion.dims.neckW > KINDS.mare.dims.neckW);
-  assert.deepEqual([...KIND_MARKS].sort(), ['blaze', 'socks', 'star']);
+  assert.deepEqual([...KIND_MARKS].sort(), ['antlers', 'blaze', 'socks', 'spots', 'star']);
   assert.deepEqual(normalizeRigParams({kind: 'mare', marks: ['socks', 'blaze', 'socks']}), {kind: 'mare', marks: ['blaze', 'socks'], colors: KINDS.mare.colors});
   assert.deepEqual(Object.keys(normalizeRigParams({kind: 'mare', marks: []})), ['kind', 'colors'], 'no marks, nothing stored');
   assert.throws(() => normalizeRigParams({kind: 'mare', marks: ['stripes']}), /marks\[0\] must be one of blaze, socks, star/);
@@ -414,4 +414,25 @@ test('horses in words, files and generated casts: a coat names all three colours
   assert.deepEqual(storyCastErrors({characters: family}), []);
   assert.deepEqual(family, generateCast({seed: '7f3a91c2', set: 'horse-family', count: 6}));
   assert.deepEqual(castMember(resolveStoryCast({cast: {characters: [{id: 'x', from: 'duchess', marks: ['socks']}]}}), 'x').params.marks, ['socks']);
+});
+
+test('birds and forest animals: a songbird, a duck, a deer on four legs, a squirrel and a hedgehog, with starters and sets', () => {
+  for (const kind of ['songbird', 'duck', 'deer', 'squirrel', 'hedgehog']) assert.equal(KINDS[kind].group, 'animal');
+  assert.ok(isFourLegged('deer') && !isFourLegged('duck'));
+  assert.deepEqual(normalizeRigParams({kind: 'deer', marks: ['spots', 'antlers']}).marks, ['antlers', 'spots']);
+  assert.throws(() => normalizeRigParams({kind: 'deer', marks: ['blaze']}), /marks\[0\] must be one of antlers, spots/);
+  assert.throws(() => normalizeRigParams({kind: 'mare', marks: ['antlers']}), /must be one of blaze, socks, star/);
+  // Antlers stand above the head; spots are pale shapes on the coat.
+  const deer = marks => drawingBounds(drawn('chibi', normalizeRigParams({kind: 'deer', marks}), 'stand'));
+  assert.ok(deer(['antlers']).top < deer([]).top - 20);
+  for (const id of ['chirp', 'dabble', 'hazel', 'bramble', 'nutmeg', 'thistle']) assert.ok(STARTER_KIND_IDS.includes(id), id);
+  for (const [set, kinds] of [['forest-friends', ['fox', 'deer', 'rabbit', 'squirrel', 'bear', 'hedgehog', 'owl']], ['birds', ['songbird', 'duck', 'owl', 'penguin']]]) {
+    const cast = generateCast({seed: '7f3a91c2', set, count: kinds.length});
+    assert.deepEqual(cast.map(member => member.kind).sort(), [...kinds].sort(), set);
+    assert.deepEqual(storyCastErrors({characters: cast}), []);
+  }
+  const sets = text => describeCharacter(text).sets.map(set => `${set.path}${set.op}${set.value}`);
+  assert.deepEqual(sets('a little bird'), ['size=small', 'kind=songbird']);
+  assert.deepEqual(sets('a stag with antlers'), ['kind=deer', 'marks+=antlers']);
+  assert.deepEqual(sets('a spotted fawn'), ['marks+=spots', 'kind=deer']);
 });
