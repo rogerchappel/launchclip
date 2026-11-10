@@ -169,6 +169,8 @@ export async function planStoryboard(options = {}) {
   if (bible) {
     fixed.cast = bibleCast(bible);
     fixed.bible = bibleRef(bible);
+    // The bible's world is the story's place (its sets stay the bible's own list).
+    if (typeof bible.world?.kind === "string") fixed.world = { kind: bible.world.kind, ...(bible.world.time ? { time: bible.world.time } : {}) };
     if (style?.cast) planStyle = { ...style, cast: { ...style.cast, drawing_style: fixed.cast.style, members: fixed.cast.characters } };
     direction = pinMap(direction);
   }
@@ -826,6 +828,8 @@ export function pinInputs(story, fixed) {
   }
   // The show bible the story is pinned to (kit/core/bible.mjs withBible).
   if (fixed.bible) copy.bible = { ...fixed.bible };
+  // Its world too: the place and the time are the bible's; props and detail stay the plan's.
+  if (fixed.world) copy.world = { ...(copy.world && typeof copy.world === "object" && !Array.isArray(copy.world) ? copy.world : {}), ...fixed.world };
   if (fixed.style) {
     if (copy.style !== undefined && (typeof copy.style === "string" ? copy.style : copy.style?.name) !== fixed.style) warnings.push("style was changed by the model and has been reset to the fixed input");
     copy.style = typeof copy.style === "object" && copy.style?.name === fixed.style ? copy.style : fixed.style;
@@ -922,7 +926,7 @@ export function biblePrompt(bible) {
   return [
     "## Show bible (frozen)",
     "",
-    `story.cast is fixed by the show bible and tooling writes it: ${members.join("; ")}, drawn ${cast.style}. Name characters in cast-scene and character-cameo by these ids only. Never add, drop, rename or restyle a character, and never write a look into a scene: a scene names who is in it, their pose, expression and cues.${sets}`
+    `story.cast is fixed by the show bible and tooling writes it: ${members.join("; ")}, drawn ${cast.style}. Name characters in cast-scene and character-cameo by these ids only. Never add, drop, rename or restyle a character, and never write a look into a scene: a scene names who is in it, their pose, expression and cues.${sets}${bible.world?.kind ? ` story.world is the bible's too: ${bible.world.kind}${bible.world.time ? `, ${bible.world.time}` : ""}.` : ""}`
   ].join("\n");
 }
 

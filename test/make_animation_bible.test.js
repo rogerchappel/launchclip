@@ -97,6 +97,7 @@ test("make --animation designs and freezes a show bible, then plans a storyboard
     assert.equal(direction.sections[0].lines[0].cast[0].id, "maya", "a cue that spells a bible character by name takes its id");
     assert.deepEqual(direction.sections.flatMap((section) => section.lines.map((line) => line.line)), ["l1", "l2", "l3", "l5", "l6", "l8", "l9", "l10"]);
     assert.equal(story.audio.narration.lines.length, 8);
+    assert.deepEqual([story.world.kind, story.world.time], ["office", "day"], "the story's place is the bible's, not the seeded style's");
 
     // The three checks the phase is done by.
     const validated = await runStoryCommand("validate", path.join(t.project, "storyboard.json"));
