@@ -602,7 +602,7 @@ export function phonemeVisemes(phonemes, start, end) {
   }
   const last = runs.length - 1;
   const until = runs[last].shape === 'small' && end - runs[last].time > TAIL_HOLD ? runs[last].time + TAIL_HOLD : end;
-  return runs.map((run, i) => ({time: run.time, shape: run.shape, ...(i === last ? {until} : {})}));
+  return runs.map((run, i) => ({time: rt(run.time), shape: run.shape, ...(i === last ? {until: rt(until)} : {})}));
 }
 
 // Shapes for speech with no text to read, in turn.
