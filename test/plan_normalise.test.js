@@ -232,3 +232,13 @@ test("an ordinary video: scenes overlapping on a track are trimmed to meet, anch
   assert.equal(checkStoryboard(ordinary(), { words: ORDINARY_WORDS }).ok, true);
   assert.deepEqual(overlap(fixed.storyboard), []);
 });
+
+test("a call to action's icon with no handle is taken off; with a handle it stays", () => {
+  const story = { scenes: [{ id: "end", module: "cta", params: { action: "Follow", icon: "arrow" } }, { id: "end2", module: "cta", params: { action: "Follow", icon: "arrow", handle: "@baker" } }, { id: "end3", module: "cta", params: { action: "Follow", icon: "none" } }] };
+  const fixed = normalisePlan(story);
+  assert.equal(fixed.storyboard.scenes[0].params.icon, undefined);
+  assert.equal(fixed.storyboard.scenes[1].params.icon, "arrow");
+  assert.equal(fixed.storyboard.scenes[2].params.icon, "none");
+  assert.deepEqual(fixed.changed, ["end: icon taken off (a call to action's icon sits in its handle pill, and the scene has no handle)"]);
+  assert.equal(story.scenes[0].params.icon, "arrow");
+});
