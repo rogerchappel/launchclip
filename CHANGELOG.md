@@ -4,6 +4,18 @@
 
 ### Added
 
+- Storyboard edit rounds: a plan that fails its checks on timing and value
+  slips (overlapping scenes, an anchor that does not resolve, a cue outside
+  its window, a card on screen too briefly, a scene held too long) is now
+  corrected by small edits to the scenes the checks name. The model is shown
+  the failing checks, where every scene sits, the named scenes and the
+  narration's word times, and returns set, delete and remove-scene edits;
+  tooling applies them and checks again, up to six rounds. Each call is a few
+  thousand tokens, where a full repair resends the planning prompt and
+  rewrites the storyboard. A round that leaves the plan no better is not
+  kept, and a plan that needs a new scene or another module still goes to
+  the full repair. `storyboard-plan.json` records each round as an `edit`
+  attempt and counts them in `edit_rounds`.
 - `launchclip preview <project>`: play a planned video in a browser before
   any render. The resolved story is compiled to the page the HyperFrames
   renderer draws and a player drives its timeline from the mix (play, pause,
@@ -40,6 +52,9 @@
 
 ### Fixed
 
+- A hosted model that thinks by default no longer fails a stage by spending
+  its whole output limit on reasoning: the call is made again with a small
+  reasoning budget, which the run then keeps for that model.
 - Storyboard: two slips that each cost a whole repair call are now tooling's
   to fix. A character scene a little under its module's shortest length is
   lengthened like any other scene (the cast check reports it under its own
