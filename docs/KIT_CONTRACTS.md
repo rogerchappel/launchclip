@@ -6053,3 +6053,52 @@ equal `params.latex`), reports a kept TeX error against the scene, and
 accepts only SVG path data as glyphs. Glyph outlines sit once, in the base
 layer's `<defs>`, under ids scoped to the scene (`<id>-g-<key>`).
 
+## Model access (`src/make/models.js`, `launchclip doctor --models`)
+
+`checkModelAccess(options)` answers one question: with the keys in the
+environment and the local model on this machine, which roles can a model
+play? `launchclip doctor --models [--json] [--model provider:model]
+[--agent]` prints it, and `launchclip make` writes it into `MAKE.json` as
+`model_access` for the client the run uses.
+
+```json
+{
+  "schema": "launchclip.model-access.v1",
+  "text": { "available": true, "source": "default for ANTHROPIC_API_KEY", "provider": "anthropic", "model": "claude-opus-4-8", "spec": "anthropic:claude-opus-4-8", "local": false },
+  "vision": { "available": true, "source": "default for ANTHROPIC_API_KEY", "provider": "anthropic", "model": "claude-opus-4-8" },
+  "roles": { "writer": "available", "designer": "available", "director": "available", "critic": "available", "hand-in judge": "available" },
+  "keys": { "OPENAI_API_KEY": false, "ANTHROPIC_API_KEY": true, "OPENROUTER_API_KEY": false, "OPENAI_COMPATIBLE_API_KEY": false, "OPENAI_COMPATIBLE_BASE_URL": false, "OLLAMA_BASE_URL": false },
+  "local": { "provider": "ollama", "base_url": "http://localhost:11434", "reachable": false }
+}
+```
+
+- **It reports text and vision only.** LaunchClip draws everything in code
+  and generates no images or video, so there is nothing else to report.
+- **No paid call.** The check reads the environment (presence only; a key's
+  value is never in the report) and may send one `GET <ollama>/api/tags`,
+  which lists installed models and loads none. `doctor --models` always asks
+  Ollama; `make` asks only when the model is an Ollama one or
+  `OLLAMA_BASE_URL` is set, and `local.reachable` is `null` when it was not
+  asked.
+- **`text`** is the model `make` would use: `--model`, then
+  `LAUNCHCLIP_MAKE_MODEL`, then the default for `OPENAI_API_KEY`, then for
+  `ANTHROPIC_API_KEY` (`selectMakeModel`). It is not available, with a
+  `reason`, when no model is selected (OpenRouter and OpenAI-compatible keys
+  have no default model), when the selected provider's key or address is not
+  set, or when an Ollama address does not answer or lacks the model. `local`
+  is true for an Ollama on this machine.
+- **`vision`** is a property of that same model's client (`modelVision`):
+  OpenAI and Anthropic send images; OpenRouter and OpenAI-compatible routes
+  send them and carry a `note` that reading them depends on the model; the
+  Ollama client sends text only. One key is enough for both: the critic uses
+  the model that wrote the script.
+- **`roles`** (`MODEL_ROLES`): `writer`, `designer` and `director` need
+  text; `critic` and `hand-in judge` need vision. Each is `"available"`,
+  `"pending: no text model"` or `"pending: no vision model"`. With `--agent`
+  (the skill path, where the agent is the model) every role is `"agent"`.
+
+**Images on the Anthropic client.** `AnthropicPlannerClient.runStructured`
+(`src/storyboard_planner.js`) takes the same `images: [{url}]` the other
+clients take. A base64 `data:` URL (JPEG, PNG, GIF or WebP) or an http(s)
+URL becomes an image block, placed before the text (`anthropicContent`).
+`detail` is ignored. With no images the request is unchanged.

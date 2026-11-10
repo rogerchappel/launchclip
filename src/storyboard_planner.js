@@ -1035,7 +1035,7 @@ export function createPlannerClient(modelSpec, options = {}) {
   const provider = separator > 0 ? spec.slice(0, separator).toLowerCase() : "";
   if (provider === "anthropic") {
     const model = spec.slice(separator + 1);
-    return { client: new AnthropicPlannerClient({ model, apiKey: options.apiKey }), provider, model };
+    return { client: new AnthropicPlannerClient({ model, apiKey: options.apiKey, sdk: options.sdk }), provider, model };
   }
   const route = parseModelRoute(spec);
   return { client: (options.createClient ?? createStructuredClient)(route, options), provider: route.provider, model: route.model, reasoning: route.reasoning };
@@ -1071,6 +1071,7 @@ export class AnthropicPlannerClient {
   constructor({ model, apiKey, sdk } = {}) {
     if (!nonEmpty(model)) throw new Error("anthropic planner needs a model id");
     this.provider = "anthropic";
+    this.supportsImages = true;
     this.model = model;
     this.apiKey = apiKey ?? process.env.ANTHROPIC_API_KEY;
     if (!this.apiKey && !sdk) throw new Error("ANTHROPIC_API_KEY is not set");
@@ -1083,13 +1084,12 @@ export class AnthropicPlannerClient {
       this.sdk = new Anthropic({ apiKey: this.apiKey });
     }
     const text_ = typeof options.input === "string" ? options.input : JSON.stringify(options.input ?? {});
-    // Images (the headless critic's contact sheets) go first, as image content blocks; the text follows them.
-    const images = anthropicImageBlocks(options.images);
+    // Images (the headless critic's contact sheets) go first, as image content blocks; the text follows them (anthropicContent).
     const request = {
       model: options.model ?? this.model,
       max_tokens: Number(options.maxOutputTokens ?? 16_000),
       system: String(options.instructions ?? ""),
-      messages: [{ role: "user", content: images.length ? [...images, { type: "text", text: text_ }] : text_ }]
+      messages: [{ role: "user", content: anthropicContent(text_, options.images) }]
     };
     // A large max_tokens is streamed: the SDK refuses a non-streaming request that could run past its timeout.
     const message = request.max_tokens > ANTHROPIC_STREAM_ABOVE ? await this.sdk.messages.stream(request).finalMessage() : await this.sdk.messages.create(request);
@@ -1109,6 +1109,17 @@ export class AnthropicPlannerClient {
       }
     };
   }
+}
+
+/**
+ * The user turn for the Messages API. Text alone stays a string. With images
+ * it is the image blocks first (anthropicImageBlocks), then the text, as the
+ * API reference recommends. `detail` is an OpenAI field and is not sent.
+ */
+export function anthropicContent(input, images = []) {
+  const text = typeof input === "string" ? input : JSON.stringify(input ?? {});
+  const blocks = anthropicImageBlocks(images);
+  return blocks.length ? [...blocks, { type: "text", text }] : text;
 }
 
 // ---------------------------------------------------------------------------

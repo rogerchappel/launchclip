@@ -30,6 +30,18 @@
   the lines said. `examples/story/dialogue-9x16` is a two-character dialogue
   with a script.
 
+- `launchclip doctor --models` reports what your keys cover before you
+  spend anything: whether you have a model that can write (script, cast,
+  storyboard) and one that can see (the critic), and what to set if not. It
+  reads the environment and a local Ollama's model list and makes no paid
+  call. `--json` for scripts, `--model provider:model` to check another
+  model, `--agent` for the skill path. `make` records the same report in
+  `MAKE.json` as `model_access`.
+- The critic now runs with an Anthropic key. The Anthropic client sends the
+  contact sheets as images, so `make` with only `ANTHROPIC_API_KEY` writes
+  `qa/critic.json` instead of leaving the critic pending. This adds one
+  paid call per critic pass to those runs; `--no-critic` skips it.
+
 - Custom modules render in HyperFrames. A `custom` scene may name a form
   per renderer, `"source": {"remotion": "remotion/Label.tsx", "hyperframes":
   "hyperframes/label.html"}`: the HyperFrames form is an HTML fragment with
