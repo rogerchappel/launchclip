@@ -8,6 +8,10 @@
 //   headed  a trunk with a head above it (animals, the robot). The head
 //           tilts on C-head, turns on C-turn and its features cross it on
 //           C-gaze, as a person's do.
+//   quad    four legs, seen from the side with the head turned to the
+//           camera (the horses): the front legs are the arm joints, the
+//           hind legs the leg joints, and it faces the way its scene
+//           faces it.
 //   single  one body that carries the face (mascots, most objects). The
 //           face is the "head": it tilts on C-head about its chin and moves
 //           across the body for a look; the body leans and squashes on
@@ -21,6 +25,10 @@
 // A kind is drawn at its medium size and then resized (KIND_SIZE_SCALE):
 // shapes, pivots and line weights scale; joint values do not, so the op list
 // moves every size the same way.
+//
+// In the stick styles every kind is a stick figure: lines for the limbs and
+// the spine (ink alone in stick-classic), the head or the body's outline,
+// and the face.
 //
 // The pen follows the cast's drawing style: flat fills with one even heavy
 // outline (the chibi line) for most, line art for line and stick-classic,
@@ -38,7 +46,7 @@ import {outlinedPen} from './style-outlined.mjs';
 import {paperPen} from './style-paper.mjs';
 import {softShadePen} from './style-soft-shade.mjs';
 import {luma} from './pens.mjs';
-import {KINDS, KIND_SIZE_SCALE, kindDims, kindGeometry} from './kinds.mjs';
+import {KIND_SIZE_SCALE, kindDims, kindGeometry} from './kinds.mjs';
 
 const n = value => Math.round(value * 10) / 10;
 const group = (children, attrs) => el('g', null, null, children, attrs);
@@ -50,6 +58,11 @@ const BASE = 7;
 // The outline, in flat's outline widths (the chibi style's line).
 const INK = 1.45;
 const PAPER = '#fbf9f4';
+// A stick figure's ink edge, in flat's outline widths, and its lines' widths.
+const STICK_INK = 0.7;
+const ROD = 12;
+const STICK_STYLES = ['stick', 'stick-classic'];
+const strokeNode = (d, color, width) => el('path', null, null, [], {d, fill: 'none', stroke: color, strokeWidth: width, strokeLinecap: 'round', strokeLinejoin: 'round'});
 
 /** A pen whose outlines and lines are k times as heavy (flat: its limbs and strands too). */
 function weighted(pen, k, flat) {
@@ -77,6 +90,8 @@ const LINE_ART = ['line', 'stick-classic'];
 /** The pen a kind is drawn with in a drawing style, and the face's pen (lighter by the face's scale). */
 function pens(style, colors, faceColors, {id, light}, faceK) {
   const make = STYLE_PENS[style];
+  // The coloured stick figure: flat fills with a fine ink edge.
+  if (style === 'stick') return {P: weighted(flatPen(colors), STICK_INK, true), F: weighted(weighted(flatPen(faceColors), STICK_INK, true), 1 / faceK, true)};
   if (!make) {
     const P = weighted(flatPen(colors), INK, true);
     return {P, F: weighted(weighted(flatPen(faceColors), INK, true), 1 / faceK, true)};
@@ -346,8 +361,17 @@ const SHAPES = {
 const J = (id, part, x, y, values, children, mirror = false) => ({tag: 'joint', id: part ? `${id}-${part}` : null, pivot: {x: n(x), y: n(y), mirror},
   transform: {x: values.x ?? 0, y: values.y ?? 0, rotation: values.rotation ?? 0, scaleX: values.scaleX ?? 1, scaleY: values.scaleY ?? 1}, children});
 
-function limbs({id, g, j, P, look, thin, isStatic, props}) {
-  const stick = (length, width) => [P.line(`M0 0L0 ${n(length)}`, look.limb, width)];
+/**
+ * A stick figure's line along d: one ink line (classic), or the colour with an ink edge.
+ * rod(P, c, classic)(d, colour) → nodes.
+ */
+const rodOf = (P, c, classic) => (d, color, width = ROD) => (classic || color === 'outline' ? [strokeNode(d, c.outline, classic ? 8 : width)] : P.strand(d, color, width));
+
+function limbs({id, g, j, P, c, look, thin, sticks, classic, isStatic, props}) {
+  const rod = rodOf(P, c, classic);
+  const stick = (length, width) => (sticks ? rod(`M0 0L0 ${n(length)}`, look.limb) : [P.line(`M0 0L0 ${n(length)}`, look.limb, width)]);
+  // A stick figure's hands and feet: small, and none at all in the classic figure.
+  const tip = (x, y, rx, ry, fill) => (classic ? [] : [P.ellipse(x, y, rx, ry, fill)]);
   const arm = side => {
     const s = side === 'l' ? 'L' : 'R', mirror = side === 'r';
     const handY = g.foreArm + g.hand * 0.35;
@@ -356,7 +380,7 @@ function limbs({id, g, j, P, look, thin, isStatic, props}) {
     const fore = J(id, `fore-${side}`, 0, g.upperArm, {rotation: j[`fore${s}`]}, P.within({mirror}, () => [
       ...(thin ? stick(g.foreArm, g.armW) : P.limb(g.foreArm, g.armW * 0.92, look.limb)),
       ...(wrap ? [wrap] : []),
-      P.ellipse(0, handY, g.hand, g.hand * 1.04, look.hand),
+      ...(sticks ? tip(0, g.foreArm + 6, 15, 15, look.hand) : [P.ellipse(0, handY, g.hand, g.hand * 1.04, look.hand)]),
       ...(props?.[side] ? [group(props[side], {transform: `translate(0 ${n(handY)})`})] : [])
     ]));
     const upper = P.within({mirror}, () => (thin ? stick(g.upperArm, g.armW) : P.limb(g.upperArm, g.armW, look.limb)));
@@ -365,12 +389,75 @@ function limbs({id, g, j, P, look, thin, isStatic, props}) {
   const leg = side => {
     const s = side === 'l' ? 'L' : 'R', mirror = side === 'r';
     // Feet point outward (the leg's own +x is toward the body's centre line).
-    const foot = thin ? P.ellipse(-13, g.shin + g.foot - 17, 31, 17, look.foot) : P.ellipse(-g.legW * 0.1, g.shin + g.foot * 0.26, g.legW * 0.68, g.foot * 0.74, look.foot);
-    const shin = J(id, `shin-${side}`, 0, g.thigh, {rotation: j[`shin${s}`]}, P.within({mirror}, () => [...(thin ? stick(g.shin, g.legW) : P.limb(g.shin - 8, g.legW * 0.92, look.limb)), foot]));
+    const reach = g.thigh + g.shin + g.foot - g.thigh;
+    const foot = sticks ? (classic ? rod(`M0 ${n(reach - 4)}L-24 ${n(reach - 2)}`, 'outline') : tip(-12, reach - 9, 24, 12, look.foot)) : thin ? [P.ellipse(-13, g.shin + g.foot - 17, 31, 17, look.foot)] : [P.ellipse(-g.legW * 0.1, g.shin + g.foot * 0.26, g.legW * 0.68, g.foot * 0.74, look.foot)];
+    const shin = J(id, `shin-${side}`, 0, g.thigh, {rotation: j[`shin${s}`]}, P.within({mirror}, () => [...(thin ? stick(sticks ? reach - 6 : g.shin, g.legW) : P.limb(g.shin - 8, g.legW * 0.92, look.limb)), ...foot]));
     const thigh = P.within({mirror}, () => (thin ? stick(g.thigh, g.legW) : P.limb(g.thigh, g.legW, look.limb)));
     return J(id, `leg-${side}`, side === 'l' ? -g.legX : g.legX, g.hipY + 10, {rotation: j[`leg${s}`], scaleY: j.legScale}, [shin, ...thigh], mirror);
   };
   return {arm, leg};
+}
+
+// ---------------------------------------------------------------------------
+// Four legs (kinds.mjs quad): the body seen from the side, the head turned to
+// the camera. Drawn facing right (sx = 1) or left (sx = -1). The front legs
+// carry the arm joints, the hind legs the leg joints; every leg joint turns
+// so that a positive angle swings the leg forward. The legs on the far side
+// are drawn first, in the coat's shade.
+
+function horse({id, kind, d, g, j, P, F, c, sx, sticks, classic, marks, isStatic}) {
+  const {b: B, h: H, rx, ry} = d;
+  const rod = rodOf(P, c, classic);
+  const X = v => n(sx * v);
+  const foal = kind === 'foal', sire = kind === 'stallion';
+  const socks = marks.includes('socks');
+  const forward = sx === 1;
+  const near = forward ? 'r' : 'l', far = forward ? 'l' : 'r';
+  const legX = B / 2 - 54, top = -(H + d.rise);
+  const limb = (length, width, fill) => (sticks ? rod(`M0 0L0 ${n(length)}`, fill) : P.limb(length, width, fill));
+  const lower = isFar => P.within({mirror: forward}, () => [
+    ...limb(g.shin - 6, d.legW * 0.8, sticks ? 'body' : socks ? 'marking' : isFar ? 'accentShade' : 'accent'),
+    ...(sticks ? (classic ? [] : [P.ellipse(-3, g.shin + 4, 13, 9, 'hoof')]) : [P.ellipse(-4, g.shin + g.foot * 0.42, d.legW * 0.58, g.foot * 0.62, 'hoof')])
+  ]);
+  const upper = isFar => P.within({mirror: forward}, () => limb(g.thigh, d.legW, sticks ? 'body' : isFar ? 'bodyShade' : 'body'));
+  const front = (side, isFar) => {
+    const s = side === 'l' ? 'L' : 'R';
+    const finger = J(id, `finger-${side}`, 0, g.shin, {}, []);
+    const wrap = isStatic ? [] : [el('g', `${id}-fingerwrap-${side}`, {opacity: j[`finger${s}`]}, [finger])];
+    return J(id, `arm-${side}`, sx * (legX - (isFar ? 26 : 0)), sticks ? -6 : 10, {rotation: j[`arm${s}`], y: j.shoulderY}, [...upper(isFar), J(id, `fore-${side}`, 0, g.thigh, {rotation: j[`fore${s}`]}, [...lower(isFar), ...wrap])], forward);
+  };
+  const hind = (side, isFar) => {
+    const s = side === 'l' ? 'L' : 'R';
+    return J(id, `leg-${side}`, -sx * (legX + (isFar ? 26 : 0)), g.hipY + (sticks ? -6 : 10), {rotation: j[`leg${s}`], scaleY: j.legScale}, [J(id, `shin-${side}`, 0, g.thigh, {rotation: j[`shin${s}`]}, lower(isFar)), ...upper(isFar)], forward);
+  };
+  // Torso frame: the hips' line at y = 0, the body's centre at x = 0.
+  const rootX = -(B / 2 - 14), rootY = sticks ? -6 : -H + 44;
+  const tailPath = foal ? `M${X(rootX)} ${rootY}Q${X(rootX - 58)} ${rootY + 4} ${X(rootX - 52)} ${rootY + 74}` : `M${X(rootX)} ${rootY}C${X(rootX - 84)} ${rootY - 26} ${X(rootX - 108)} ${rootY + 92} ${X(rootX - 72)} ${rootY + (sire ? 214 : 196)}`;
+  const tail = sticks ? rod(tailPath, 'detail') : P.strand(tailPath, 'detail', foal ? 26 : sire ? 40 : 32);
+  const neckFrom = [B / 2 - (sticks ? 54 : 66), sticks ? -6 : -H + 48], neckTo = [d.hx, top + ry * 0.5];
+  const neckPath = `M${X(neckFrom[0])} ${n(neckFrom[1])}L${X(neckTo[0])} ${n(neckTo[1])}`;
+  const back = d.neckW * 0.5 + 6;
+  const mane = sticks ? [] : foal
+    ? [0.2, 0.5, 0.8].map(t => P.ellipse(sx * (neckTo[0] + (neckFrom[0] - neckTo[0]) * t - back), neckTo[1] + (neckFrom[1] - neckTo[1]) * t - 8, 22, 22, 'detail'))
+    : P.strand(`M${X(neckTo[0] - back)} ${n(neckTo[1] - 10)}Q${X((neckTo[0] + neckFrom[0]) / 2 - back - 16)} ${n((neckTo[1] + neckFrom[1]) / 2)} ${X(neckFrom[0] - back - 4)} ${n(neckFrom[1] - 20)}`, 'detail', sire ? 50 : 36);
+  const body = sticks
+    ? [...rod(`M${X(-legX)} -6L${X(legX)} -6`, 'body', ROD + 4), ...rod(neckPath, 'body')]
+    : [P.shape(rr(-B / 2, -H, B / 2, 26, Math.min(H * 0.48, 86)), 'body'), ...P.strand(neckPath, 'body', d.neckW), P.ellipse(sx * (neckFrom[0] - 4), neckFrom[1] + 16, d.neckW * 0.5, 34, 'body', {outline: false})];
+  // Head frame: the pivot under the chin, the head's centre at 0, hc.
+  const hc = -ry * 0.9, tip = hc - ry - d.top + 8;
+  const head = {
+    ears: both(sg => [P.shape(poly(sg * rx * 0.3, hc - ry * 0.78, sg * rx * 0.6, tip, sg * rx * 0.84, hc - ry * 0.5), 'body'), ...(sticks ? [] : [P.shape(poly(sg * rx * 0.46, hc - ry * 0.8, sg * rx * 0.6, tip + 26, sg * rx * 0.72, hc - ry * 0.66), 'bodyShade', {outline: false})])]),
+    head: [P.ellipse(0, hc, rx, ry, 'body')],
+    marks: [
+      P.ellipse(0, hc + ry * 0.46, rx * 0.6, ry * 0.36, 'muzzle', {outline: false}),
+      ...(marks.includes('blaze') ? [P.shape(rr(-rx * 0.13, hc - ry * 0.86, rx * 0.13, hc + ry * 0.22, rx * 0.12), 'marking', {outline: false})] : []),
+      ...(marks.includes('star') ? [P.shape(poly(0, hc - ry * 0.74, rx * 0.15, hc - ry * 0.56, 0, hc - ry * 0.38, -rx * 0.15, hc - ry * 0.56), 'marking', {outline: false})] : []),
+      P.shape(`M${n(-rx * 0.3)} ${n(hc - ry * 0.95)}C${n(-rx * 0.1)} ${n(hc - ry * 1.13)} ${n(rx * 0.36)} ${n(hc - ry * 1.09)} ${n(rx * 0.38)} ${n(hc - ry * 0.86)}C${n(rx * 0.22)} ${n(hc - ry * 0.64)} ${n(-rx * 0.02)} ${n(hc - ry * 0.72)} ${n(-rx * 0.3)} ${n(hc - ry * 0.95)}Z`, 'detail')
+    ],
+    features: [F.ellipse(-9, 43, 3.2, 4.4, 'outline', {outline: false}), F.ellipse(9, 43, 3.2, 4.4, 'outline', {outline: false})],
+    dy: 0.07
+  };
+  return {head, near, far, front, hind, torso: farFront => [farFront, ...tail, ...mane, ...body]};
 }
 
 // ---------------------------------------------------------------------------
@@ -427,10 +514,10 @@ const ON_DETAIL = new Set(['fox', 'penguin', 'owl', 'phone', 'laptop', 'robot', 
  *            static, props, facing, light, gaze, turns
  * → node: a <g> with the feet at (0, 0).
  */
-export function drawKind(style, params, colors, {id, joints: j, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, light = null, gaze = false, turns = false}) {
-  const spec = KINDS[params.kind];
+export function drawKind(style, params, colors, {id, joints: j, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', light = null, gaze = false, turns = false}) {
   const medium = {kind: params.kind};
-  const d = kindDims(medium), g = kindGeometry(medium);
+  const sticks = STICK_STYLES.includes(style), classic = style === 'stick-classic';
+  const d = kindDims(medium), g = kindGeometry(medium, {stick: sticks});
   const s = KIND_SIZE_SCALE[params.size ?? 'medium'];
   const k = d.faceK;
   const lineArt = LINE_ART.includes(style);
@@ -440,11 +527,17 @@ export function drawKind(style, params, colors, {id, joints: j, expression = 'ne
   // A dark face area takes light ink, so the eyes and mouth still read.
   const dark = !lineArt && luma(c[on]) < 0.3;
   c.whisker = dark ? c.inkLight : c.outline;
+  c.muzzle = lineArt ? PAPER : c.bodyLight;
   const faceColors = {...c, blush: on === 'detail' ? c.blushDetail : c.blush, ...(dark ? {outline: c.inkLight} : {}), mixBrow: dark ? c.inkLight : c.outline, hairShade: c.outline, browDark: c.outline};
   const {P, F} = pens(style, c, faceColors, {id, light}, k);
-  const shapes = SHAPES[params.kind](d, P, F);
-  const headed = d.plan === 'headed';
+  const quad = d.plan === 'quad';
+  const sx = facing === 'left' ? -1 : 1;
+  const four = quad ? horse({id, kind: params.kind, d, g, j, P, F, c, sx, sticks, classic, marks: params.marks ?? [], isStatic}) : null;
+  const shapes = quad ? four.head : SHAPES[params.kind](d, P, F);
+  const headed = d.plan !== 'single';
   const ctx = {id, static: isStatic};
+  // A stick figure's trunk is its spine.
+  if (sticks && d.plan === 'headed') Object.assign(shapes, {body: rodOf(P, c, classic)(`M0 -4L0 ${n(-d.torso + 6)}`, shapes.look.limb === 'outline' ? 'outline' : 'body', ROD + 5), front: []});
   // How much of a look the head (or a single body's face) takes, over the toon head's.
   const size = k * (d.turn ?? 1) * s;
   const shift = (headed ? 0.4 : 0.75) * LOOK * k * (d.turn ?? 1);
@@ -453,7 +546,7 @@ export function drawKind(style, params, colors, {id, joints: j, expression = 'ne
   const faceCtx = {id, g: {head: {rx: n(cheek), ry: 106, cy: 0}}, c: faceColors, p: FACE_PARAMS, j, expression, static: isStatic, P: F, cute: true, eyeScale: 1};
   const faces = [...new Set([expression, ...expressions])].map(name => face(faceCtx, name)).filter(Boolean);
   // Head frame: the pivot is the head joint's (the trunk's top, or the face area's chin).
-  const centre = headed ? -d.up + (shapes.dy ?? 0.16) * d.ry : -d.ry;
+  const centre = quad ? -d.ry * 0.9 + shapes.dy * d.ry : headed ? -d.up + (shapes.dy ?? 0.16) * d.ry : -d.ry;
   const features = [Object.assign(group([...(shapes.features ?? []), ...faces], {transform: `translate(${n(shapes.dx ?? 0)} ${n(centre - 38 * k)}) scale(${Math.round(k * 1000) / 1000})`}), {[UNIT]: true})];
   // The head's outline, for bounds checks: a head's own, or the area of a single body the face sits on.
   const [at, index] = headed ? ['head', 0] : AREA[params.kind] ?? ['body', 0];
@@ -463,23 +556,23 @@ export function drawKind(style, params, colors, {id, joints: j, expression = 'ne
     ...(shapes.head ?? []),
     ...(shapes.marks ?? []),
     ...faceView(ctx, turns, gazeJoint(ctx, j, gaze, features, size)),
-    ...backView(ctx, turns, () => (headed ? [...SHAPES[params.kind](d, P, F).head] : [])),
+    ...backView(ctx, turns, () => (quad ? [P.ellipse(0, -d.ry * 0.9, d.rx, d.ry, 'body')] : headed ? [...SHAPES[params.kind](d, P, F).head] : [])),
     ...(shapes.crown ?? [])
   ], size);
   const tilt = {rotation: j.head, y: j.headY};
-  const {arm, leg} = limbs({id, g, j, P, look: shapes.look, thin: d.limbs === 'thin', isStatic, props});
-  const torsoKids = [
-    J(id, 'hb', 0, g.neckY, tilt, [J(id, 'hbidle', 0, 0, {}, [])]),
-    ...(shapes.behind ?? []),
-    ...shapes.body,
-    ...frontView(ctx, turns, shapes.front ?? []),
-    J(id, 'head', 0, g.neckY, tilt, [J(id, 'headidle', 0, 0, {}, headKids)]),
-    arm('l'),
-    arm('r')
-  ];
-  const breath = J(id, 'breath', 0, 0, {}, torsoKids);
-  const torso = J(id, 'torso', 0, g.hipY, {rotation: j.lean, scaleY: j.squash}, [breath]);
-  const body = J(id, 'body', 0, 0, {y: j.bodyY}, [leg('l'), leg('r'), torso]);
+  const headX = quad ? sx * d.hx : 0;
+  const headJoints = [J(id, 'hb', headX, g.neckY, tilt, [J(id, 'hbidle', 0, 0, {}, [])]), J(id, 'head', headX, g.neckY, tilt, [J(id, 'headidle', 0, 0, {}, headKids)])];
+  let body;
+  if (quad) {
+    const breath = J(id, 'breath', 0, 0, {}, [headJoints[0], ...four.torso(four.front(four.far, true)), headJoints[1], four.front(four.near, false)]);
+    const torso = J(id, 'torso', 0, g.hipY, {rotation: j.lean, scaleY: j.squash}, [breath]);
+    body = J(id, 'body', 0, 0, {y: j.bodyY}, [four.hind(four.far, true), torso, four.hind(four.near, false)]);
+  } else {
+    const {arm, leg} = limbs({id, g, j, P, c, look: shapes.look, thin: d.limbs === 'thin' || sticks, sticks, classic, isStatic, props});
+    const breath = J(id, 'breath', 0, 0, {}, [headJoints[0], ...(shapes.behind ?? []), ...shapes.body, ...frontView(ctx, turns, shapes.front ?? []), headJoints[1], arm('l'), arm('r')]);
+    const torso = J(id, 'torso', 0, g.hipY, {rotation: j.lean, scaleY: j.squash}, [breath]);
+    body = J(id, 'body', 0, 0, {y: j.bodyY}, [leg('l'), leg('r'), torso]);
+  }
   const ground = asShadow(P.ground());
   const defs = [...(P.defs ? P.defs() : []), ...(F.defs ? F.defs() : [])];
   const drawing = resized(group([...defs, ...ground, body]), s);

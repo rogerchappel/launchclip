@@ -248,6 +248,8 @@ export function poseJoints(name, {facing = 'right', seated = false, geometry} = 
   // point, so the toon's knees-in would cross its shins).
   const lower = lowerName === 'sit' && geometry?.sitLegs ? {...LOWER.sit, ...geometry.sitLegs} : LOWER[lowerName];
   if (name === 'sit' && geometry?.sitArms) Object.assign(upper, geometry.sitArms);
+  // A body that lies down when seated folds its front legs in any pose (a four-legged kind, kinds.mjs).
+  if (lowerName === 'sit' && geometry?.seatedArms) Object.assign(upper, geometry.seatedArms);
   const drop = lower.drop && geometry ? geometry.sitDrop : 0;
   const joints = {
     armL: upper.armL, foreL: upper.foreL, armR: upper.armR, foreR: upper.foreR,
