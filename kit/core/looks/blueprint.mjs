@@ -1,11 +1,12 @@
 // Blueprint: deep blue paper with a fine grid, the scene as white and cyan
 // line drawing, dimension lines with measurements, and a title block. Each
-// shot wipes in from the left behind a drawing line.
+// shot draws in from the left behind a drawing line: a faint ghost of the
+// sheet ahead of the line, the full drawing behind it.
 //
 // Grade: brightness edges become lines (a morphological outline, so every
 // line has one weight) and fills keep only a faint lift of the paper, all
 // through one blue ramp. Text is outlined like drafting lettering.
-// Furniture: the grid, the sheet border, the wipe, two dimension lines that
+// Furniture: the grid, the sheet border, the draw-in, two dimension lines that
 // draw in and carry the safe zone's real size in pixels, and the title block
 // (the story's title, the scale and the sheet number, one sheet per shot).
 
@@ -14,9 +15,11 @@ import { blend, easeOut, grey, linear, outline, ramp, rgba, shotAt, text, zones 
 const PAPER = '#0a2a66', LINE = '#a9e2ff', WHITE = '#ffffff';
 const RAMP = [PAPER, '#12408f', '#3f86c9', LINE, WHITE];
 const DRAW = 0.8, DIM_DELAY = 0.25, DIM = 0.7;
+// The sheet ahead of the drawing line is a faint ghost, never hidden: text stays readable through the draw-in.
+const COVER = 0.58;
 
 export const LOOK = {
-  describe: 'deep blue paper and a fine grid, the scene as white and cyan line drawing with dimension lines and a title block; each shot wipes in behind a drawing line',
+  describe: 'deep blue paper and a fine grid, the scene as white and cyan line drawing with dimension lines and a title block; each shot draws in behind a drawing line',
   words: ['\\bblueprint (?:style|look|drawing|aesthetic|animation)\\b', '\\b(?:as|like) (?:a |an )?(?:architect\'s )?blueprints?\\b', '\\btechnical drawing\\b', '\\bcyanotype\\b'],
   defaults: { strength: 1, step: 0 },
   presets: () => ({
@@ -67,8 +70,8 @@ export const LOOK = {
       html: `<div class="lc-look-bp-grid"></div><div class="lc-look-bp-cover"><div class="lc-look-bp-grid"></div></div><div class="lc-look-bp-pen"></div><div class="lc-look-bp-border"></div>${svg}${labels}${block}`,
       css: [
         `.lc-look-bp-grid { position: absolute; inset: 0; background: ${grid(0.07, 0.14)}; }`,
-        // The wipe: paper over the part of the sheet not drawn yet, and the drawing line at its edge.
-        `.lc-look-bp-cover { position: absolute; inset: 0; background: ${PAPER}; clip-path: inset(0 0 0 calc(var(--lc-look-draw, 1) * 100%)); }`,
+        // The draw-in: a veil of paper over the part of the sheet not drawn yet, and the drawing line at its edge.
+        `.lc-look-bp-cover { position: absolute; inset: 0; background: ${PAPER}; opacity: ${COVER}; clip-path: inset(0 0 0 calc(var(--lc-look-draw, 1) * 100%)); }`,
         `.lc-look-bp-pen { position: absolute; top: 0; bottom: 0; left: calc(var(--lc-look-draw, 1) * 100%); width: ${Math.max(3, Math.round(5 * u))}px; background: ${WHITE}; box-shadow: 0 0 ${Math.round(22 * u)}px ${Math.round(4 * u)}px ${rgba(LINE, 0.7)}; opacity: var(--lc-look-drawing, 0); }`,
         `.lc-look-bp-border { position: absolute; left: ${m}px; top: ${m}px; right: ${m}px; bottom: ${m}px; border: ${stroke}px solid ${rgba(LINE, 0.75)}; }`,
         `.lc-look-bp-dims { position: absolute; left: 0; top: 0; }`,

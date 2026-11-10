@@ -276,7 +276,8 @@ export function lookMarkup(plan) {
   const style = Object.entries(lookVarsAt(plan, 0)).map(([key, value]) => `${key}:${value}`).join(';');
   return [
     plan.grade ? `<div id="${LOOK_LAYER_ID}" data-launchclip-look="${plan.name}" aria-hidden="true" style="${style}"></div>` : '',
-    plan.furniture ? `<div id="${LOOK_FURNITURE_ID}" data-launchclip-look="${plan.name}" aria-hidden="true" style="${style}">${plan.furniture.html}</div>` : ''
+    // Furniture is decoration over the scenes: the layout audit leaves it out.
+    plan.furniture ? `<div id="${LOOK_FURNITURE_ID}" data-launchclip-look="${plan.name}" data-layout-ignore="true" data-layout-allow-overflow="true" data-layout-allow-overlap="true" aria-hidden="true" style="${style}">${plan.furniture.html}</div>` : ''
   ].join('');
 }
 

@@ -318,7 +318,7 @@ test("the HyperFrames compile draws the look under the frame and captions, and i
   const plan = lookPlan(resolved);
   const { html } = await compileStoryToHyperFrames(resolved, { write: false, sourceDir: MINIMAL });
   assert.match(html, new RegExp(`<div id="${LOOK_LAYER_ID}" data-launchclip-look="hologram" aria-hidden="true" style="--lc-look-filter:url\\(#lc-look-0\\)`));
-  assert.match(html, new RegExp(`<div id="${LOOK_FURNITURE_ID}" data-launchclip-look="hologram" aria-hidden="true"`));
+  assert.match(html, new RegExp(`<div id="${LOOK_FURNITURE_ID}" data-launchclip-look="hologram" data-layout-ignore="true" data-layout-allow-overflow="true" data-layout-allow-overlap="true" aria-hidden="true"`), "the layout audit leaves the furniture out");
   assert.match(html, /#lc-look \{ position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; pointer-events: none; z-index: 81000; backdrop-filter: var\(--lc-look-filter\);/);
   assert.equal((html.match(/<filter id="lc-look-\d"/g) ?? []).length, plan.variants);
   assert.ok(html.indexOf(`id="${LOOK_FURNITURE_ID}"`) < html.indexOf('id="lc-captions"'), "the look comes before the captions");

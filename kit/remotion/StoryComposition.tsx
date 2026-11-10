@@ -548,7 +548,7 @@ const LookLayer: React.FC<{ plan: any }> = ({ plan }) => {
       {plan.grade ? <div style={{ position: "absolute", width: 0, height: 0 }} aria-hidden dangerouslySetInnerHTML={defs} /> : null}
       <style>{css}</style>
       {plan.grade ? <div id={LOOK_LAYER_ID} data-launchclip-look={plan.name} style={vars} aria-hidden /> : null}
-      {furniture ? <div id={LOOK_FURNITURE_ID} data-launchclip-look={plan.name} style={vars} aria-hidden dangerouslySetInnerHTML={furniture} /> : null}
+      {furniture ? <div id={LOOK_FURNITURE_ID} data-launchclip-look={plan.name} data-layout-ignore="true" data-layout-allow-overflow="true" data-layout-allow-overlap="true" style={vars} aria-hidden dangerouslySetInnerHTML={furniture} /> : null}
     </>
   );
 };
