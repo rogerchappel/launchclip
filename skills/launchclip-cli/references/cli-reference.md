@@ -1671,6 +1671,13 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip finish <candidate-project> --candidate <id> [--into <project>] [--kind opening|transition] [--boundary s3] [--comparison id] [--at 0.4,1.2,2.6] [--music synth|none] [--renderer remotion|hyperframes] # cheap rendered candidate: no paid calls, receipt in <project>/qa/rendered-candidates.json
   ```
 
+- `preview`: Play a planned video in a browser before any render. The project must be planned (make --stop-after storyboard, make --speed draft, make --refine or finish --plan-only), so it holds PLAYER-MANIFEST.json. The resolved story is compiled to the page the HyperFrames renderer draws, and a player drives that page's timeline from the clock of the mix: play, pause, scrub, mute. Nothing is rendered and no model is called. By default the player is written to .launchclip/preview in the project and served on localhost (--port, 4173 by default; --no-open does not open a browser). --export <dir> writes the same folder of static files (index.html the player, composition.html the video, preview.json, assets, fonts, the animation library) and stops, for a host to serve or embed in a frame; index.html?bare hides the controls, and the page takes launchclip:play, launchclip:pause and launchclip:seek messages and posts launchclip:ready, launchclip:time and launchclip:ended. The sound is the unmastered mix. Run it again after a refine or an edit to the storyboard to see the new plan.
+
+  ```text
+  launchclip preview <project> [--port 4173] [--no-open] [--json] # play a planned video in a browser before any render: the page the renderer draws, driven by the mix
+  launchclip preview <project> --export <dir> [--json] # write the player as a folder of static files for a host to serve or embed
+  ```
+
 - `publish-manifest`: Write publish.json next to the video: the title and title options (from SCRIPT.json, else the storyboard), a description, hashtags, the CTA, aspect, duration, the video, the designed cover and any .srt/.vtt captions, and whether it fits each platform (YouTube Shorts, TikTok, Reels, YouTube, LinkedIn, X; App Store and Product Hunt on request). --link attaches a URL; --utm tags it per platform (utm_source=<platform>, utm_medium=video, utm_campaign=<campaign>). finish and make write it after every finished video.
 
   ```text

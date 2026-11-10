@@ -4,6 +4,14 @@
 
 ### Added
 
+- `launchclip preview <project>`: play a planned video in a browser before
+  any render. The resolved story is compiled to the page the HyperFrames
+  renderer draws and a player drives its timeline from the mix (play, pause,
+  scrub, mute); nothing is rendered and no model is called. It is served on
+  localhost, or written as a folder of static files with `--export <dir>`
+  for a host to serve or embed in a frame (the page takes play, pause and
+  seek messages and posts its time). Works after `--stop-after storyboard`,
+  `--speed draft` and `--refine`.
 - Plan-only mode: `launchclip make --stop-after storyboard` stops once the
   video is planned and renders nothing. The project then holds what a
   browser player needs (the resolved story, the narration and its word
