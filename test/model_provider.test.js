@@ -84,6 +84,22 @@ test("a model that takes no temperature is asked again without it, and not sent 
   assert.deepEqual(bodies.map((body) => "temperature" in body), [true, false, false]);
 });
 
+test("a model that spends its output limit on reasoning is asked again with a small budget, and keeps it", async () => {
+  const bodies = [];
+  const client = createStructuredClient({ provider: "openrouter", model: "example/thinker", reasoning: "none", apiKey: "router-test" }, {
+    fetch: async (_url, init) => {
+      const body = JSON.parse(init.body);
+      bodies.push(body);
+      if (!body.reasoning) return new Response(JSON.stringify({ choices: [{ finish_reason: "length", message: { content: "" } }], usage: { completion_tokens: 16000, completion_tokens_details: { reasoning_tokens: 15997 } } }), { status: 200 });
+      return new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: "{\"ok\":true}" } }] }), { status: 200 });
+    }
+  });
+  const first = await client.runStructured({ schema: { type: "object" }, schemaName: "result", input: "go", maxOutputTokens: 16000 });
+  assert.deepEqual(first.value ?? first.output, { ok: true });
+  await client.runStructured({ schema: { type: "object" }, schemaName: "result", input: "again" });
+  assert.deepEqual(bodies.map((body) => body.reasoning?.effort ?? null), [null, "low", "low"]);
+});
+
 test("allows prompt-validated provider fallback for the dynamic OpenRouter free route", async () => {
   let body;
   const client = createStructuredClient({ provider: "openrouter", model: "openrouter/free", reasoning: "none", apiKey: "router-test" }, {
