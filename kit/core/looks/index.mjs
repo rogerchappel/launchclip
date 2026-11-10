@@ -16,6 +16,7 @@ import { LOOK as paperCutout } from './paper-cutout.mjs';
 import { LOOK as watercolour } from './watercolour.mjs';
 import { LOOK as animeCel } from './anime-cel.mjs';
 import { LOOK as asciiTerminal } from './ascii-terminal.mjs';
+import { LOOK as clay2d } from './clay-2d.mjs';
 
 export const LOOKS = Object.freeze({
   blueprint,
@@ -25,7 +26,8 @@ export const LOOKS = Object.freeze({
   'paper-cutout': paperCutout,
   watercolour,
   'anime-cel': animeCel,
-  'ascii-terminal': asciiTerminal
+  'ascii-terminal': asciiTerminal,
+  'clay-2d': clay2d
 });
 
 /** What a look (story.look: a name or {name}) asks of the cast's drawing, or null: {pins: true} for paper cutout, {face: "cute"} for anime cel. */

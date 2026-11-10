@@ -49,7 +49,7 @@ export const LOOK_FURNITURE_ID = 'lc-look-furniture';
 export const LOOK_Z = Object.freeze({ hyperframes: Object.freeze({ grade: 81000, under: 79900, furniture: 82000 }), remotion: 49 });
 export const LOOK_INFO = Object.freeze(Object.fromEntries(Object.entries(LOOKS).map(([name, look]) => [name, Object.freeze({ describe: look.describe, honest: look.honest ?? null, step: look.defaults?.step ?? 0 })])));
 // Names people write for a look: the validator names the look to use instead.
-const ALIASES = Object.freeze({ holo: 'hologram', holographic: 'hologram', 'thermal-camera': 'thermal', infrared: 'thermal', neon: 'neon-night', 'neon-noir': 'neon-night', cyberpunk: 'neon-night', 'paper-cut': 'paper-cutout', cutout: 'paper-cutout', 'cut-out': 'paper-cutout', iso: 'isometric', anime: 'anime-cel', cel: 'anime-cel', ascii: 'ascii-terminal', terminal: 'ascii-terminal', watercolor: 'watercolour', claymation: 'clay', plasticine: 'clay', blueprints: 'blueprint' });
+const ALIASES = Object.freeze({ holo: 'hologram', holographic: 'hologram', 'thermal-camera': 'thermal', infrared: 'thermal', neon: 'neon-night', 'neon-noir': 'neon-night', cyberpunk: 'neon-night', 'paper-cut': 'paper-cutout', cutout: 'paper-cutout', 'cut-out': 'paper-cutout', iso: 'isometric-layers', anime: 'anime-cel', cel: 'anime-cel', ascii: 'ascii-terminal', terminal: 'ascii-terminal', watercolor: 'watercolour', claymation: 'clay-2d', clay: 'clay-2d', plasticine: 'clay-2d', isometric: 'isometric-layers', blueprints: 'blueprint' });
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isUnit = (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
