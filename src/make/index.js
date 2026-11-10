@@ -18,7 +18,7 @@ import path from "node:path";
 import { DEFAULT_BRAND, suggestMotion } from "@launchclip/core/planning-prompt.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
 import { SHOTS_DIR, shotRequestLimit } from "../asset_provider.js";
-import { assetProviderConcurrency, assetProviderTimeoutMs, createCommandAssetProvider } from "../asset_provider_cmd.js";
+import { MAX_ASSET_PROVIDER_CONCURRENCY, assetProviderConcurrency, assetProviderTimeoutMs, createCommandAssetProvider } from "../asset_provider_cmd.js";
 import { CONSTRAINTS_FILE, PROJECT_CONSTRAINTS_FILE, constrainProvider, constraintsDocument, hasConstraints, loadConstraints, neverUseMatcher, storySrc } from "../constraints.js";
 import { mediaNotesLine } from "../inventory_notes.js";
 import { checkStoryboard, planStoryboard } from "../storyboard_planner.js";
@@ -29,11 +29,13 @@ import { profileForStory, resolveProfile } from "../profile_store.js";
 import { resolveStyleV2 } from "../style_store.js";
 import { generateProjectStyle, projectSeedStyle, promptConstraints, promptTone, adoptStyleLook } from "../style_seed_store.js";
 import { getVoiceProvider } from "../voice/index.js";
-import { VOICE_SETTINGS, narrationDocument, narrationRequest, normalizeVoiceSettings, synthesizeNarration, voiceCacheDir } from "../voice/narrate.js";
+import { VOICE_SETTINGS, narrationCacheKey, narrationDocument, narrationRequest, normalizeVoiceSettings, storeNarrationTake, synthesizeNarration, voiceCacheDir } from "../voice/narrate.js";
 import { normalizePronunciation } from "../voice/pronunciation.js";
 import { inventoryAssets } from "./assets.js";
 import { describeMakeAssets, featuredForMake } from "./describe.js";
 import { approvals, validateMakeOptions } from "./options.js";
+import { DRAFT_REASONING, DRAFT_VERSION, DRAFT_VOICE_CONCURRENCY, RULES_MODEL, applyDraftDirection, deadlineProvider, draftDirection, draftModelSpec, draftWaits, joinSentenceTakes, ruleClient, takeCached } from "./draft.js";
+import { draftStoryboard } from "./draft_plan.js";
 import { animationBrief, isAnimation, isLongForm, routeLane } from "./routing.js";
 import { ANIMATION_PROFILE, checkAnimationScript, estimatedPace, repairScreenplay, standInCast, writersRoom } from "./animation.js";
 import { DEFAULT_DRAWING_STYLE, animationBriefLines, designBible, makeBible, savedForDesign } from "./show_bible.js";
@@ -55,9 +57,10 @@ import { directLongFormVisuals, revertCards, typographyShare, unresolvedScenes }
 import { checkModelAccess, createMakeClient, selectMakeModel } from "./models.js";
 import { alternativeTransition, candidatesMode, comparisonEntry, designOpening, judgeCandidates, meanScore, openingScene, renderCandidate, rendererStill, riskyBoundary, sceneResolves, sceneTimes, selectCandidate, storyWith, transitionTimes, writeReceipt } from "./candidates.js";
 import { characterLed, explainerContent, explainerSeed } from "./explainer.js";
+import { defaultExplainerCast } from "@launchclip/core/explainer.mjs";
 import { conceptLookLines, conceptSummary, conceptsMode, planConceptStory, readConceptStory, storySeconds } from "./concept_story.js";
 import { needsResize, planVoiceSpeed, RULES_HEADING, runsShort, SCRIPT_VERSION, takeClock, WORDS_PER_MINUTE, writeScript } from "./script.js";
-import { checkScript } from "../script_check.js";
+import { checkScript, splitSentences } from "../script_check.js";
 import { checkStorage, interruptedByStorage } from "../storage_check.js";
 import { SCRIPT_SKELETONS, chooseScriptPlan, scriptPlanOptions } from "@launchclip/core/script-formats.mjs";
 import { chooseSkeleton, skeletonPlanLines, skeletonScriptPlan, storyboardStructureErrors } from "@launchclip/core/skeleton-library.mjs";
@@ -95,6 +98,8 @@ export const MAKE_PATHS = Object.freeze({
   retention: "STORY.json",
   words: "NARRATION.json",
   story: "storyboard.json",
+  // The draft's storyboard, kept when --refine plans over it.
+  draftStory: ".launchclip/draft/storyboard.json",
   direction: "DIRECTION.json",
   constraints: PROJECT_CONSTRAINTS_FILE,
   beatMap: "BEATMAP.json",
@@ -158,7 +163,7 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   const clock = adapters.clock ?? (() => new Date().toISOString());
   const text = String(prompt ?? "").trim();
   if (!text) throw new Error("launchclip make needs a prompt: launchclip make \"A 30-second launch video for …\" [--assets ./assets]");
-  const { voice: voiceProvider, renderer, quality, script: scriptOptions } = validateMakeOptions(options);
+  const { voice: voiceProvider, renderer, quality, speed, script: scriptOptions } = validateMakeOptions(options);
   const modelLimit = modelConcurrency(options.modelConcurrency, env);
   const cwd = path.resolve(options.cwd ?? process.cwd());
   // Inside a library (options.library, src/library.js) a project without
@@ -177,12 +182,14 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     project,
     library: library?.file ?? null,
     assets_dir: assetsDir,
-    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(Number(options.minShots) > 0 ? { min_shots: Number(options.minShots) } : {}), profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, ...(options.musicVolume != null ? { music_volume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { music_duck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { music_prompt: String(options.musicPrompt) } : {}), ...(options.sfx != null ? { sfx: String(options.sfx).toLowerCase() } : {}), ...(options.layout != null ? { layout: talkingHeadLayout(options.layout) } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", critic_repairs: criticRepairBudget(options.criticRepairs), visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.pace != null ? { pace: String(options.pace).toLowerCase() } : {}), ...(options.ctaKeyword != null ? { cta_keyword: String(options.ctaKeyword) } : {}), ...(options.ctaOffer != null ? { cta_offer: String(options.ctaOffer) } : {}), ...(options.episode != null ? { episode: String(options.episode) } : {}), ...(options.choices != null ? { choices: String(options.choices) } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", critic_repairs: criticRepairBudget(options.criticRepairs), visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.research ? { research: researchMode(options.research) } : {}), ...(options.stopAfter != null ? { stop_after: String(options.stopAfter).toLowerCase() } : {}), ...(approvals(options.approve).length ? { approve: approvals(options.approve) } : {}) },
+    options: { aspect: options.aspect ?? null, duration: options.duration ?? null, style: options.style ?? null, seed: options.seed ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(Number(options.minShots) > 0 ? { min_shots: Number(options.minShots) } : {}), profile: options.profile ?? null, voice: voiceProvider, voice_id: options.voiceId ?? null, music: options.music ?? null, ...(options.musicVolume != null ? { music_volume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { music_duck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { music_prompt: String(options.musicPrompt) } : {}), ...(options.sfx != null ? { sfx: String(options.sfx).toLowerCase() } : {}), ...(options.layout != null ? { layout: talkingHeadLayout(options.layout) } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", critic_repairs: criticRepairBudget(options.criticRepairs), visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.pace != null ? { pace: String(options.pace).toLowerCase() } : {}), ...(options.ctaKeyword != null ? { cta_keyword: String(options.ctaKeyword) } : {}), ...(options.ctaOffer != null ? { cta_offer: String(options.ctaOffer) } : {}), ...(options.episode != null ? { episode: String(options.episode) } : {}), ...(options.choices != null ? { choices: String(options.choices) } : {}), renderer, quality, replan: Boolean(options.replan), critic: options.critic ?? "auto", critic_repairs: criticRepairBudget(options.criticRepairs), visual_history_dir: options.visualHistoryDir ?? null, ...scriptOptions, ...(options.research ? { research: researchMode(options.research) } : {}), ...(options.stopAfter != null ? { stop_after: String(options.stopAfter).toLowerCase() } : {}), ...(approvals(options.approve).length ? { approve: approvals(options.approve) } : {}), ...(speed === "draft" ? { speed } : {}), ...(options.refine ? { refine: true } : {}) },
     model: null,
     model_access: null,
     routing: null,
     stages: {},
     timings: {},
+    // Seconds from the start of the run to the script, the voice and the storyboard (script_seconds, voice_seconds, plan_seconds).
+    milestones: {},
     costs: { items: [], estimated_usd: 0, complete: true },
     model_calls: null,
     repairs: null,
@@ -200,6 +207,17 @@ export async function runMake(prompt, options = {}, adapters = {}) {
   // Every model call of the run goes through one gate: at most --model-concurrency in flight, and a rate limit is waited out.
   const gate = createModelGate({ limit: modelLimit, now, say, ...(adapters.sleep ? { sleep: adapters.sleep } : {}) });
   const ctx = { project, env, adapters, options, report, state, say, progress, voiceProvider, renderer, quality, text, assetsDir, gate };
+  // A milestone is the first time something is ready in this run, in seconds from its start.
+  ctx.mark = (name) => { report.milestones[`${name}_seconds`] ??= round1((now() - started) / 1000); return report.milestones[`${name}_seconds`]; };
+  // --speed draft (src/make/draft.js): the script, the voice and the storyboard the fast way, then stop. --refine: the full plan on a draft's script and voice.
+  ctx.draft = speed === "draft" ? { waits: draftWaits(env) } : null;
+  if (ctx.draft || options.refine) {
+    report.draft = { schema_version: DRAFT_VERSION, mode: ctx.draft ? "draft" : "refine", parts: {} };
+    // A draft writes from the brief alone, and its refine keeps that script: nothing is researched.
+    ctx.researchDecision = { mode: researchMode(options.research), run: false, reason: ctx.draft ? "--speed draft: the script is written from the brief alone" : "--refine: the draft's script is kept", signals: [] };
+    report.research_decision = ctx.researchDecision;
+    if (researchMode(options.research) === "on") report.warnings.push(`--research on ignored: ${ctx.researchDecision.reason}`);
+  }
 
   const stages = [
     ["model", stageModel],
@@ -288,6 +306,16 @@ async function stageModel(ctx) {
     ctx.model = { ...createMakeClient(spec, adapters.clientOptions ?? {}), spec, source };
   }
   ctx.model.client = ctx.gate.wrap(ctx.model.client);
+  // The draft's calls: --draft-model (or LAUNCHCLIP_DRAFT_MODEL) when given, else the run's model at low reasoning.
+  if (ctx.draft) {
+    const spec = adapters.client || adapters.draftClient ? null : draftModelSpec(options.draftModel, env);
+    if (adapters.draftClient) ctx.draft.model = { reasoning: DRAFT_REASONING, spec: `${adapters.draftClient.provider}:${adapters.draftClient.model}`, ...adapters.draftClient, client: ctx.gate.wrap(adapters.draftClient.client) };
+    else if (spec) {
+      const made = createMakeClient(/@(none|low|medium|high|xhigh|max)$/i.test(spec) ? spec : `${spec}@${DRAFT_REASONING}`, adapters.clientOptions ?? {});
+      ctx.draft.model = { client: ctx.gate.wrap(made.client), provider: made.provider, model: made.model, reasoning: made.reasoning, spec };
+    } else ctx.draft.model = { client: ctx.model.client, provider: ctx.model.provider, model: ctx.model.model, reasoning: DRAFT_REASONING, spec: ctx.model.spec };
+    report.draft.model = { spec: ctx.draft.model.spec, provider: ctx.draft.model.provider, model: ctx.draft.model.model, reasoning: ctx.draft.model.reasoning };
+  }
   report.model = { spec: ctx.model.spec, source: ctx.model.source, provider: ctx.model.provider, model: ctx.model.model, reasoning: ctx.model.reasoning ?? null, vision: Boolean(ctx.model.vision) };
   // Which roles this run's model can play (text and vision), so an app can
   // show what the run will and will not check. No paid call (models.js).
@@ -677,17 +705,21 @@ async function prepareVoiceover(ctx) {
 // over the target duration. The duration is a ceiling: a take that runs short
 // is kept, and the video is shorter.
 async function prepareMotion(ctx) {
+  if (ctx.draft) return prepareDraftMotion(ctx);
   const { project, routing, report, state, options, voiceProvider } = ctx;
   const target = routing.format.duration;
   const briefNotes = await notesText(ctx);
+  // --refine: the draft's script and voice are kept as they are, so nothing here writes, researches or resizes.
+  const refine = Boolean(options.refine);
+  if (refine && !(state.script?.draft && (await readJson(path.join(project, MAKE_PATHS.script)))?.narration)) throw new Error(`--refine continues a fast draft, and ${project} has no draft script (run launchclip make "<prompt>" --speed draft --out ${project} first)`);
   // --research on: the brief is checked against sources, and the script pass writes from what they state (src/research/make.js).
-  const research = await researchBrief(ctx, briefNotes);
+  const research = refine ? null : await researchBrief(ctx, briefNotes);
   if (research) startCaptures(ctx);
   const notes = research ? [...briefNotes, research.notes] : briefNotes;
   const rules = rulesText(ctx);
   const assetLines = assetManifestLines(ctx).map((item) => item.line);
   // The skeleton library (docs/VIRAL_FORMATS_RFC.md): a short video whose brief fits a library skeleton is built on it (--skeleton pins one).
-  const skeleton = chooseMakeSkeleton(ctx, target);
+  const skeleton = refine ? noLibrarySkeleton(ctx, "--refine: the draft's script is on its format's own beats") : chooseMakeSkeleton(ctx, target);
   // The planning pass: format, goal and awareness (flags, else the brief's defaults), on the library skeleton's beats when there is one.
   const pinned = !skeleton && SCRIPT_SKELETONS[options.skeleton] ? options.skeleton : undefined;
   const planOptions = { prompt: ctx.text, duration: target, aspect: routing.aspect, assets: ctx.inventory?.entries?.filter((entry) => !entry.provided), ...scriptPlanOptions(options), ...scriptCraftOptions(options), ...(pinned ? { skeleton: pinned } : {}) };
@@ -695,10 +727,10 @@ async function prepareMotion(ctx) {
   ctx.scriptPlan = plan;
   const planChecks = { format: plan.format, goal: plan.goal, awareness: plan.awareness, pace: plan.pace, ...(plan.cta?.keyword ? { ctaKeyword: plan.cta.keyword } : {}), ...(plan.series?.choices ? { choices: plan.series.choices } : {}) };
   // Concept and story first (docs/MAKE_SKILL_PARITY.md, phase 3): five concepts judged in a fresh context, the winner written and edited as a story.
-  const conceptStory = await stageConceptStory(ctx, { notes, rules, assets: assetLines, duration: target, wpm: plan.wpm });
+  const conceptStory = refine ? skipConceptStory(ctx, "--refine: the draft's script is kept") : await stageConceptStory(ctx, { notes, rules, assets: assetLines, duration: target, wpm: plan.wpm });
   const scriptHash = hashValue({ prompt: ctx.text, notes, assets: assetLines, target, model: ctx.model.spec, voice: voiceProvider, ...(options.voiceId ? { voice_id: String(options.voiceId) } : {}), plan: [plan.format, plan.goal, plan.awareness, plan.pace, plan.cta ?? null, plan.series ?? null], skeleton: [plan.skeleton, skeleton?.version ?? null], ...(rules ? { rules } : {}), ...(conceptStory ? { story: hashValue(conceptStory.story.narration) } : {}), v: 3 });
   let script = await readJson(path.join(project, MAKE_PATHS.script));
-  const reuse = script && state.script?.hash === scriptHash && script.narration;
+  const reuse = refine || (script && state.script?.hash === scriptHash && script.narration);
   if (!reuse) {
     ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (script pass, ${plan.format}, about ${plan.word_target} words)`);
     const written = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, skeleton, ...(conceptStory ? { story: conceptStory } : {}) });
@@ -712,6 +744,7 @@ async function prepareMotion(ctx) {
       script = { ...repaired, passes: [...script.passes, { kind: "repair", words: repaired.word_count, errors: first.errors.map((error) => error.id), cost_usd: repaired.cost_usd }] };
     }
   }
+  ctx.mark("script");
   if (voiceProvider === "elevenlabs") ctx.say("voice: PAID ElevenLabs text-to-speech for the narration (cached per text in .launchclip/voice)");
   let take = await synthesize(ctx, script.narration);
   if (!reuse && needsResize(take.duration, target)) {
@@ -737,7 +770,10 @@ async function prepareMotion(ctx) {
   await writeJson(path.join(project, MAKE_PATHS.script), script);
   // The angle the script is written on (a short video's script pass finds it): the agent path's ANGLE.json.
   if (script.angle) await writeJson(path.join(project, MAKE_PATHS.angle), { schema_version: "launchclip.angle.v1", ...script.angle, source: "script pass" });
-  state.script = { hash: scriptHash };
+  // A refined project stays a draft's script: the next --refine keeps it too.
+  if (!refine) state.script = { hash: scriptHash };
+  ctx.mark("voice");
+  if (refine) Object.assign(report.draft.parts, { script: "draft", voice: "draft" });
   ctx.script = script;
   ctx.words = take.words;
   ctx.narrationText = script.narration;
@@ -746,9 +782,128 @@ async function prepareMotion(ctx) {
   else if (Math.abs(ctx.format.duration - target) > 0.5) report.warnings.push(`the narration runs ${take.duration}s, so the video is ${ctx.format.duration}s (target ${target}s)`);
   ctx.audio = { words: MAKE_PATHS.words };
   ctx.narration = { text: script.narration, ...narrationVoice(ctx) };
-  report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, target_words: plan.word_target, plan: script.plan ?? null, passes: script.passes?.length ?? 1, reused: Boolean(reuse), take: script.take, check: { ok: script.check.ok, errors: script.check.errors.map((error) => error.id), warnings: script.check.warnings.map((warning) => warning.id) }, ...(script.angle ? { angle: { file: MAKE_PATHS.angle, chosen: script.angle.angles[script.angle.chosen]?.angle ?? null } } : {}), ...(script.title_scores ? { titles: script.title_scores.map((entry) => ({ title: entry.title, score: entry.score })) } : {}) };
+  report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, target_words: plan.word_target, plan: script.plan ?? null, passes: script.passes?.length ?? 1, reused: Boolean(reuse), ...(script.draft ? { draft: true } : {}), take: script.take, check: { ok: script.check.ok, errors: script.check.errors.map((error) => error.id), warnings: script.check.warnings.map((warning) => warning.id) }, ...(script.angle ? { angle: { file: MAKE_PATHS.angle, chosen: script.angle.angles[script.angle.chosen]?.angle ?? null } } : {}), ...(script.title_scores ? { titles: script.title_scores.map((entry) => ({ title: entry.title, score: entry.score })) } : {}) };
   if (options.duration == null && routing.duration_source === "default") report.warnings.push("no --duration and none named in the prompt; sized for 30 s");
   return { status: "done" };
+}
+
+// No library skeleton (a fast draft, and its refine): the script is on its format's own beats.
+function noLibrarySkeleton(ctx, reason) {
+  ctx.skeleton = null;
+  ctx.report.skeleton = { id: SCRIPT_SKELETONS[ctx.options.skeleton] ? ctx.options.skeleton : null, library: false, version: null, medium: skeletonMedium(ctx), reasons: [reason] };
+  return null;
+}
+
+function skipConceptStory(ctx, reason) {
+  ctx.conceptStory = null;
+  ctx.report.concept = { status: "off", reason };
+  return null;
+}
+
+// A fast draft's script and voice (src/make/draft.js): one streamed call from
+// the brief on the plan's word budget (no research, concepts, repair or
+// resize pass), and a take per sentence, started as each sentence arrives and
+// joined into the narration. The joined take is filed in the voice cache
+// under the whole narration, so finish and a later --refine reuse it.
+async function prepareDraftMotion(ctx) {
+  const { project, routing, report, state, options, voiceProvider, draft } = ctx;
+  const target = routing.format.duration;
+  const notes = await notesText(ctx);
+  const rules = rulesText(ctx);
+  const assetLines = assetManifestLines(ctx).map((item) => item.line);
+  noLibrarySkeleton(ctx, "--speed draft: the script is on its format's own beats (a library skeleton's key shot needs a designed plan)");
+  skipConceptStory(ctx, "--speed draft");
+  const pinned = SCRIPT_SKELETONS[options.skeleton] ? options.skeleton : undefined;
+  const plan = chooseScriptPlan({ prompt: ctx.text, duration: target, aspect: routing.aspect, assets: ctx.inventory?.entries?.filter((entry) => !entry.provided), ...scriptPlanOptions(options), ...scriptCraftOptions(options), ...(pinned ? { skeleton: pinned } : {}) });
+  ctx.scriptPlan = plan;
+  const planChecks = { format: plan.format, goal: plan.goal, awareness: plan.awareness, pace: plan.pace, ...(plan.cta?.keyword ? { ctaKeyword: plan.cta.keyword } : {}), ...(plan.series?.choices ? { choices: plan.series.choices } : {}) };
+  const scriptHash = hashValue({ draft: 1, prompt: ctx.text, notes, assets: assetLines, target, model: draft.model.spec, reasoning: draft.model.reasoning, voice: voiceProvider, ...(options.voiceId ? { voice_id: String(options.voiceId) } : {}), plan: [plan.format, plan.goal, plan.awareness, plan.pace, plan.cta ?? null, plan.series ?? null, plan.skeleton], ...(rules ? { rules } : {}) });
+  let script = await readJson(path.join(project, MAKE_PATHS.script));
+  const reuse = Boolean(script && state.script?.hash === scriptHash && script.narration);
+  // Sentence takes: started as the script streams, at most DRAFT_VOICE_CONCURRENCY at once, each cached like any take.
+  const pool = createLimiter(DRAFT_VOICE_CONCURRENCY);
+  const takes = new Map();
+  const speak = (sentence) => {
+    if (takes.has(sentence)) return takes.get(sentence);
+    const index = takes.size;
+    const take = pool(() => synthesizeSentence(ctx, sentence, index));
+    take.catch(() => {}); // awaited when the narration is joined
+    takes.set(sentence, take);
+    return take;
+  };
+  const voiced = { sentences: 0, streamed: 0, first_sentence_seconds: null };
+  if (!reuse) {
+    ctx.say(`model: PAID call to ${draft.model.provider} ${draft.model.model} (draft script, ${plan.format}, ${plan.word_ceiling} words at most; reasoning ${draft.model.reasoning})`);
+    if (voiceProvider === "elevenlabs") ctx.say("voice: PAID ElevenLabs text-to-speech, a take per sentence as the script arrives (cached per sentence in .launchclip/voice)");
+    const written = await writeScript({ client: draft.model.client, model: draft.model.model, provider: draft.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, draft: {
+      reasoning: draft.model.reasoning,
+      ...(draft.model.model !== ctx.model.model ? { model: draft.model.model } : {}),
+      onSentence: (sentence) => {
+        voiced.streamed += 1;
+        voiced.first_sentence_seconds ??= ctx.mark("first_sentence");
+        // A host shows the script as it is written: one line a sentence.
+        ctx.progress({ stage: "prepare", step: "sentence", index: voiced.streamed, text: sentence });
+        speak(sentence);
+      }
+    } });
+    addCost(report, "draft-script", draft.model, written);
+    script = { ...written, draft: true, passes: [{ kind: "draft", words: written.word_count, cost_usd: written.cost_usd }] };
+  }
+  ctx.progress({ stage: "prepare", step: "script", status: "ready", words: script.word_count, seconds: ctx.mark("script") });
+  const sentences = splitSentences(script.narration).map((sentence) => sentence.text.trim()).filter(Boolean);
+  const request = narrationRequest({ text: script.narration, ...narrationVoice(ctx) });
+  const cacheDir = voiceCacheDir(project);
+  // The narration's own take is not in the cache yet: join the sentence takes into it. A sentence the word budget cut is not spoken.
+  if (sentences.length > 1 && !takeCached(cacheDir, narrationCacheKey(request))) {
+    try {
+      const parts = await Promise.all(sentences.map((sentence) => speak(sentence)));
+      const joined = await joinSentenceTakes(parts, path.join(project, ".launchclip", "make", "sentences", "joined.wav"));
+      await storeNarrationTake(request, joined, cacheDir);
+      voiced.sentences = parts.length;
+    } catch (error) {
+      report.warnings.push(`draft: the sentence takes could not be joined (${String(error?.message ?? error).split("\n")[0]}); the narration is voiced in one take`);
+    }
+  }
+  const take = await synthesize(ctx, script.narration);
+  ctx.progress({ stage: "prepare", step: "voice", status: "ready", seconds: ctx.mark("voice") });
+  script.take = { seconds: take.duration, words: take.words.length, wpm: Math.round(take.words.length / Math.max(0.1, take.duration) * 60), cached: Boolean(take.cached) && !voiced.sentences, ...(voiced.sentences ? { sentences: voiced.sentences } : {}) };
+  const short = runsShort(take.duration, target);
+  if (short) script.take.short_of_target_seconds = round1(target - take.duration);
+  // The checks are the receipt: a draft has no repair pass, so what fails is a warning the refined script (or an edit) answers.
+  script.check = checkScript({ narration: script.narration, ...takeClock({ narration: script.narration, seconds: take.duration, target, pace: plan.pace }), brief: { prompt: ctx.text, notes, assets: assetLines }, ...planChecks });
+  if (script.fit?.cut?.length) report.notices.push(`script: ${script.fit.cut.length} sentence(s) cut to fit the ${plan.word_ceiling}-word ceiling (${script.fit.words_before} → ${script.word_count} words)`);
+  if (script.fit?.call_to_action_added) report.notices.push(`script: the narration had no call to action; it ends on "${script.fit.call_to_action_added}"`);
+  if (!script.check.ok) report.warnings.push(`the draft script fails ${script.check.errors.length} script check(s): ${script.check.errors.map((error) => `${error.id}: ${error.message}`).join("; ")} (a draft has no repair pass; launchclip script check ${MAKE_PATHS.script})`);
+  if (needsResize(take.duration, target)) report.warnings.push(`the draft narration runs ${take.duration}s, over the ${target}s target (a draft has no resize pass)`);
+  await writeJson(path.join(project, MAKE_PATHS.script), script);
+  state.script = { hash: scriptHash, draft: true };
+  ctx.script = script;
+  ctx.words = take.words;
+  ctx.narrationText = script.narration;
+  ctx.format = { ...routing.format, duration: round1(take.duration + 0.8) };
+  if (short) report.notices.push(`the script had ${take.duration}s to say, so the video is ${ctx.format.duration}s (the ${target}s target is a ceiling; nothing is padded to reach it)`);
+  ctx.audio = { words: MAKE_PATHS.words };
+  ctx.narration = { text: script.narration, ...narrationVoice(ctx) };
+  Object.assign(report.draft.parts, { script: "draft", voice: "draft" });
+  report.draft.script = { reused: reuse, streamed_sentences: voiced.streamed, ...(voiced.first_sentence_seconds != null ? { first_sentence_seconds: voiced.first_sentence_seconds } : {}), words: script.word_count, word_ceiling: plan.word_ceiling };
+  report.draft.voice = { sentences: voiced.sentences, at_once: DRAFT_VOICE_CONCURRENCY, joined: Boolean(voiced.sentences) };
+  report.script = { source: "model", file: MAKE_PATHS.script, title: script.title, words: script.word_count, target_words: plan.word_target, plan: script.plan ?? null, passes: 1, reused: reuse, draft: true, take: script.take, check: { ok: script.check.ok, errors: script.check.errors.map((error) => error.id), warnings: script.check.warnings.map((warning) => warning.id) } };
+  if (options.duration == null && routing.duration_source === "default") report.warnings.push("no --duration and none named in the prompt; sized for 30 s");
+  return { status: "done" };
+}
+
+// One sentence's take, cached like any other (the cache key is its text and voice).
+async function synthesizeSentence(ctx, text, index) {
+  const { project, adapters } = ctx;
+  const request = narrationRequest({ text, ...narrationVoice(ctx) });
+  const file = path.join(project, ".launchclip", "make", "sentences", `${String(index + 1).padStart(2, "0")}-${narrationCacheKey(request).slice(0, 8)}.wav`);
+  const take = await synthesizeNarration(request, {
+    outFile: file,
+    cacheDir: voiceCacheDir(project),
+    voiceProvider: adapters.voiceProvider ?? ((name, providerOptions) => getVoiceProvider(name, providerOptions)),
+    normalizeVoice: adapters.normalizeVoice ?? (async (input, output) => (await import("../voice/supplied.js")).normalizeLoudness(input, output))
+  });
+  return { ...take, file };
 }
 
 // Animation (docs/ANIMATION_PIPELINE_RFC.md §4.1, §6.1): the writers' room
@@ -1301,7 +1456,37 @@ async function synthesize(ctx, text) {
   return take;
 }
 
+// The storyboard stage. A fast draft and its refine end the run here (src/make/draft.js): the plan is the result, and nothing is rendered.
 async function stageStoryboard(ctx) {
+  const { project, report, state, options } = ctx;
+  // --refine plans over the draft's storyboard: the draft's own is kept beside it.
+  if (options.refine && state.plan?.draft && existsSync(path.join(project, MAKE_PATHS.story))) {
+    // A copy, not a link: the storyboard file is written over in place.
+    await mkdir(path.dirname(path.join(project, MAKE_PATHS.draftStory)), { recursive: true });
+    await copyFile(path.join(project, MAKE_PATHS.story), path.join(project, MAKE_PATHS.draftStory));
+  }
+  const result = await planStage(ctx);
+  const seconds = ctx.mark("plan");
+  if (ctx.draft || options.refine) {
+    report.draft.parts.storyboard = options.refine ? "refined" : state.plan?.draft ? "draft" : "full";
+    if (options.refine && existsSync(path.join(project, MAKE_PATHS.draftStory))) report.draft.draft_storyboard = MAKE_PATHS.draftStory;
+    report.draft.parts.render = "none";
+    ctx.progress({ stage: "storyboard", step: "plan", status: "ready", seconds });
+    const again = `launchclip make ${JSON.stringify(ctx.text)} --out ${project}`;
+    ctx.stop = {
+      after: "storyboard",
+      status: "awaiting-approval",
+      reason: ctx.draft ? "a fast draft ends at the plan (--speed draft): nothing is rendered" : "the refined plan is ready (--refine): nothing is rendered",
+      next: [
+        ...(ctx.draft ? [`The full-quality plan on this script and voice: ${again} --refine (the direction map and the storyboard are planned the ordinary way; ${MAKE_PATHS.story} is replaced when it is ready).`] : []),
+        `Render the plan as it is: launchclip finish ${project} --renderer ${ctx.renderer}.`
+      ]
+    };
+  }
+  return result;
+}
+
+async function planStage(ctx) {
   await settleCaptures(ctx);
   if (ctx.longForm) return stageLongFormStoryboard(ctx);
   const { project, report, state, options, routing } = ctx;
@@ -1310,7 +1495,9 @@ async function stageStoryboard(ctx) {
   const manifest = assetManifestLines(ctx);
   const brief = await composeBrief(ctx, manifest);
   // A one-prompt explainer with nothing to show is carried by a small cast (src/make/explainer.js, kit/core/explainer.mjs).
-  const explainer = characterLed(explainerContentOf(ctx), style);
+  // A fast draft is always carried by characters: the rule-made plan casts them (src/make/draft_plan.js). A recording as the base, a show bible and long form plan the ordinary way.
+  const drafting = Boolean(ctx.draft) && routing.lane !== "footage-led" && !ctx.bible;
+  const explainer = drafting || characterLed(explainerContentOf(ctx), style);
   // A character story (--animation): the frozen show bible is pinned in every plan, repair and replan, and the script's line ids are checked.
   const pinned = ctx.bible ? { bible: ctx.bible, script: ctx.script } : null;
   // A critic repair round (criticRepairs): a replan carries the critic's
@@ -1341,7 +1528,7 @@ async function stageStoryboard(ctx) {
   const laidOut = layout !== "full" && lane === "footage-led" ? layout : null;
   if (layout !== "full" && !laidOut) report.warnings.push(`--layout ${layout} ignored: it lays out a talking head, and this video is ${lane} (no recording with speech is the base)`);
   if (laidOut === "stacked" && !(ctx.format.height > ctx.format.width)) report.warnings.push("--layout stacked ignored: it is for 9:16; this video is not portrait");
-  const planHash = hashValue({ brief, lane, format: ctx.format, ...(explainer ? { explainer: 1 } : {}), ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(laidOut ? { layout: laidOut } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}), ...(subjectTrack ? { face_track: hashValue(subjectTrack.frames) } : {}), ...(pinned ? { bible: pinned.bible.hash } : {}) });
+  const planHash = hashValue({ brief, lane, format: ctx.format, ...(drafting ? { draft: 1, direction_ms: ctx.draft.waits.directionMs } : {}), ...(explainer ? { explainer: 1 } : {}), ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(laidOut ? { layout: laidOut } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}), ...(subjectTrack ? { face_track: hashValue(subjectTrack.frames) } : {}), ...(pinned ? { bible: pinned.bible.hash } : {}) });
   // --min-shots: only an asset provider can supply shots; above what a plan of this length may ask for it is clamped.
   if (Number(options.minShots) > 0 && !hasProvider) report.warnings.push(`--min-shots ${options.minShots} ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for shots`);
   if (String(options.cardBackdrops ?? "off").toLowerCase() === "footage" && !hasProvider) report.warnings.push("--card-backdrops footage ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for footage");
@@ -1354,6 +1541,7 @@ async function stageStoryboard(ctx) {
   if (!round && !options.replan && state.plan?.hash === planHash && existsSync(storyFile) && (!state.plan.direction || existsSync(directionFile))) {
     report.repairs = state.plan.repairs ?? null;
     if (state.plan.shot_counts) report.shot_counts = state.plan.shot_counts;
+    if (drafting && state.plan.draft) report.draft.storyboard = { ...state.plan.draft, reused: true };
     if (history) await lintVariety(ctx, await readJson(storyFile), style, history, state.plan.variety ?? []);
     return { status: "cached", reason: "plan inputs unchanged (pass --replan for a new storyboard)" };
   }
@@ -1374,14 +1562,16 @@ async function stageStoryboard(ctx) {
   // Footage-led overlays must sit on track 1+, which the structured tier
   // forbids (it bans scene.track), so footage-led plans at the guided tier.
   const tier = lane === "footage-led" ? "guided" : "structured";
-  ctx.say(`model: PAID calls to ${ctx.model.provider} ${ctx.model.model} (direction map, then storyboard; up to ${maxRepairs} repair passes)`);
+  if (!drafting) ctx.say(`model: PAID calls to ${ctx.model.provider} ${ctx.model.model} (direction map, then storyboard; up to ${maxRepairs} repair passes)`);
   // The app's asset provider (adapters.assets, or --asset-provider-cmd): the
   // planner may ask it for shots, filed under assets/shots/.
-  const provider = ctx.adapters.assets ?? (ctx.options.assetProviderCmd ? createCommandAssetProvider(ctx.options.assetProviderCmd, { timeoutMs: assetProviderTimeoutMs(ctx.env), concurrency: assetProviderConcurrency(ctx.env), notice: ctx.say, env: ctx.env, cwd: ctx.project }) : null);
+  // A draft sends every request at once (the command takes up to its limit together) and waits a short time for each.
+  const provider = ctx.adapters.assets ?? (ctx.options.assetProviderCmd ? createCommandAssetProvider(ctx.options.assetProviderCmd, { timeoutMs: drafting ? Math.min(assetProviderTimeoutMs(ctx.env), ctx.draft.waits.shotMs + 1000) : assetProviderTimeoutMs(ctx.env), concurrency: drafting ? Math.max(assetProviderConcurrency(ctx.env), MAX_ASSET_PROVIDER_CONCURRENCY) : assetProviderConcurrency(ctx.env), notice: ctx.say, env: ctx.env, cwd: ctx.project }) : null);
   // never_use: the provider is told, and a shot that is one is refused.
-  const assets = provider && constraints?.never_use.length ? constrainProvider(provider, constraints, { assetsDir: ctx.assetsDir, notice: ctx.say }) : provider;
-  if (assets) ctx.say(`assets: the planner may ask ${ctx.adapters.assets ? "the app" : "the asset provider command"} for shots`);
-  const plan = await planStoryboard({
+  const constrained = provider && constraints?.never_use.length ? constrainProvider(provider, constraints, { assetsDir: ctx.assetsDir, notice: ctx.say }) : provider;
+  const assets = constrained && drafting ? deadlineProvider(constrained, ctx.draft.waits.shotMs) : constrained;
+  if (assets) ctx.say(drafting ? `assets: the draft asks ${ctx.adapters.assets ? "the app" : "the asset provider command"} for its shots at once, and waits ${round1(ctx.draft.waits.shotMs / 1000)} s for each` : `assets: the planner may ask ${ctx.adapters.assets ? "the app" : "the asset provider command"} for shots`);
+  const planOptions = {
     brief: planBrief,
     words: ctx.words,
     lane,
@@ -1411,7 +1601,8 @@ async function stageStoryboard(ctx) {
     ...(pinned ?? {}),
     ...(explainer ? { explainer: true } : {}),
     extraCheck: (story) => [...assetErrors(story, allowed, { shots: Boolean(assets) }), ...storyboardStructureErrors(story, ctx.skeleton)]
-  }).finally(() => assets?.close?.());
+  };
+  const plan = await (drafting ? planDraft(ctx, planOptions, { media: [...featured.map((item) => media.find((entry) => entry.src === item.src)).filter(Boolean), ...media.filter((entry) => !featured.some((item) => item.src === entry.src))], shots: assets ? { min: minShots, max: shotLimit } : null, assets }) : planStoryboard(planOptions)).finally(() => assets?.close?.());
   if (plan.explainer) {
     report.explainer = { cast: plan.explainer.cast.characters.map((member) => member.id), roles: plan.explainer.roles, character_share: plan.explainer.character_share };
     ctx.say(`explainer: carried by ${plan.explainer.roles.map((role) => `${role.id} (${role.plays})`).join(", ") || plan.explainer.cast.characters.map((member) => member.id).join(", ")}${plan.explainer.character_share != null ? `; a character is on screen for ${Math.round(plan.explainer.character_share * 100)}% of it` : ""}`);
@@ -1428,8 +1619,9 @@ async function stageStoryboard(ctx) {
   // Card backdrops: which full-screen cards sit on footage, how it measured, and which kept a stock plate.
   if (cardBackdrops) report.card_backdrops = { mode: cardBackdrops, placed: (plan.shots ?? []).filter((shot) => shot.slot === "backdrop").map((shot) => ({ scene_id: shot.scene_id, src: shot.src, kind: shot.kind, ...(shot.treatment ? { treatment: shot.treatment } : {}), ...(shot.footage ? { footage: shot.footage } : {}) })), kept_stock: (plan.warnings ?? []).filter((warning) => /keeps the story's plate$/.test(warning)).length };
   const costPrefix = round ? `critic-${round.round}-` : "";
-  for (const attempt of plan.direction_attempts ?? []) addCost(report, `${costPrefix}${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
-  for (const attempt of plan.attempts) addCost(report, `${costPrefix}storyboard-${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
+  // A draft's plan is rule-made: its attempts are no model calls (its one direction call is counted where it is made).
+  if (!drafting) for (const attempt of plan.direction_attempts ?? []) addCost(report, `${costPrefix}${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
+  if (!drafting) for (const attempt of plan.attempts) addCost(report, `${costPrefix}storyboard-${attempt.kind}-${attempt.attempt}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
   await writeJson(path.join(project, MAKE_PATHS.plan), { ...plan, brief: MAKE_PATHS.brief });
   if (plan.clip_led?.mode && plan.clip_led.mode !== "graphics") report.clip_led = { mode: plan.clip_led.mode, density: plan.clip_led.density, target: plan.clip_led.target, share: plan.clip_led.share };
   report.repairs = { tier, used: plan.repairs_used, max: plan.max_repairs, valid_first_attempt: plan.valid_first_attempt, attempts: plan.attempts.map((attempt) => ({ attempt: attempt.attempt, kind: attempt.kind, ok: attempt.ok, errors: attempt.errors.slice(0, 12) })) };
@@ -1463,8 +1655,81 @@ async function stageStoryboard(ctx) {
   if (plan.direction) await writeFile(directionFile, directionJson(plan.direction));
   if (history) await lintVariety(ctx, story, style, history, varied);
   report.direction = plan.direction ? { file: MAKE_PATHS.direction, source: plan.direction_source, ...(plan.cadence ? { coverage: plan.cadence.coverage, face_time: plan.cadence.face_time, longest_undressed_seconds: plan.cadence.longest_undressed_seconds } : {}) } : null;
-  state.plan = { hash: planHash, repairs: report.repairs, direction: Boolean(plan.direction), ...(report.shot_counts ? { shot_counts: report.shot_counts } : {}), ...(history ? { variety: varied } : {}) };
+  state.plan = { hash: planHash, repairs: report.repairs, direction: Boolean(plan.direction), ...(report.shot_counts ? { shot_counts: report.shot_counts } : {}), ...(history ? { variety: varied } : {}), ...(drafting ? { draft: report.draft.storyboard } : {}) };
   return { status: "done" };
+}
+
+// A fast draft's storyboard (src/make/draft.js). The rule-made plan goes
+// through the planner at once, as a model's would: the fixed inputs pinned,
+// the shots asked for together, tooling's repairs and every check. Beside
+// it, one fast direction call may recast it and rewrite its acting and card
+// words; its plan is used when it arrives in time and passes the same
+// checks, and the rule-made plan stands when it is late, fails or is invalid.
+async function planDraft(ctx, planOptions, { media, shots, assets }) {
+  const { report, draft } = ctx;
+  const now = ctx.adapters.now ?? (() => performance.now());
+  const started = now();
+  const { clips: _clips, density: _density, featured: _featured, ...common } = planOptions;
+  const rule = { words: ctx.words, format: ctx.format, lane: planOptions.lane, title: ctx.script?.title ?? null, shots, media };
+  const made = draftStoryboard(rule);
+  // Both plans ask for the same shots: one set of requests, sent once.
+  const shotCache = new Map();
+  const planWith = (storyboard, fallbacks, cast) => planStoryboard({ ...common, model: RULES_MODEL, client: ruleClient(storyboard), maxRepairs: 0, direction: true, explainer: true, minShots: 0, shotCache, shotFallback: fallbacks, explainerCast: cast });
+  const roles = defaultExplainerCast().roles;
+  const ruled = planWith(made.storyboard, made.fallbacks, { cast: made.cast, roles });
+  ruled.catch(() => {}); // awaited below
+  const direction = { status: "off" };
+  let directed = null;
+  if (draft.waits.directionMs > 0) {
+    ctx.say(`model: PAID call to ${draft.model.provider} ${draft.model.model} (draft direction: one fast pass over the rule-made storyboard, reasoning ${draft.model.reasoning}; the rule-made plan stands if it takes over ${round1(draft.waits.directionMs / 1000)} s)`);
+    const abort = new AbortController();
+    let timer;
+    const late = new Promise((resolve) => { timer = setTimeout(() => resolve({ late: true }), draft.waits.directionMs); });
+    const call = draftDirection({ client: draft.model.client, model: draft.model.model !== ctx.model.model ? draft.model.model : null, provider: draft.model.provider, reasoning: draft.model.reasoning, prompt: ctx.text, lines: made.lines, storyboard: made.storyboard, signal: abort.signal }).then((result) => ({ result }), (error) => ({ error }));
+    const outcome = await Promise.race([call, late]);
+    clearTimeout(timer);
+    direction.seconds = round1((now() - started) / 1000);
+    if (outcome.late) {
+      // The call is let go: its answer is not waited for, and what it cost is not known here.
+      abort.abort();
+      direction.status = "late";
+      report.costs.items.push({ stage: "draft-direction", provider: draft.model.provider, model: draft.model.model, estimated_usd: null, fallback: false, note: "not answered in time; let go" });
+    } else if (outcome.error) {
+      direction.status = "failed";
+      direction.reason = String(outcome.error?.message ?? outcome.error).split("\n")[0];
+    } else {
+      addCost(report, "draft-direction", draft.model, outcome.result);
+      const applied = applyDraftDirection(rule, outcome.result.answer);
+      if (!applied) { direction.status = "invalid"; direction.reason = "the answer changed nothing the kit can draw"; }
+      else {
+        const plan = await planWith(applied.storyboard, applied.fallbacks, applied.explainer ?? { cast: made.cast, roles });
+        if (plan.status === "passed") { directed = plan; direction.status = "applied"; direction.changed = applied.changed.length; }
+        else { direction.status = "invalid"; direction.reason = `the directed storyboard failed its checks (${(plan.errors ?? []).slice(0, 2).join("; ")})`; }
+      }
+    }
+    if (direction.status !== "applied") ctx.say(`draft: the direction call was ${direction.status}${direction.reason ? ` (${direction.reason})` : ""}; the rule-made storyboard stands`);
+  }
+  let plan = directed ?? await ruled;
+  // A rule-made plan that fails its checks is planned again plain (a character beside each line's words, no shots, media or
+  // diagrams): a draft does not fail on a clip or a layout slip.
+  if (plan.status !== "passed") {
+    const drawn = draftStoryboard({ ...rule, plain: true });
+    const again = await planWith(drawn.storyboard, {}, { cast: drawn.cast, roles });
+    if (again.status === "passed") {
+      report.warnings.push(`draft: the rule-made storyboard failed its checks (${(plan.errors ?? []).slice(0, 2).join("; ")}); the plain one is used (characters and the call to action only)`);
+      plan = again;
+    }
+  }
+  for (const warning of plan.warnings ?? []) if (/^assets: .*the scene is drawn instead/.test(warning)) report.warnings.push(`draft: ${warning.slice(8)}`);
+  report.draft.storyboard = {
+    source: directed ? "rules+direction" : "rules",
+    lines: made.lines.length,
+    character_share: plan.explainer?.character_share ?? made.character_share,
+    direction,
+    ...(assets ? { shots: { asked: plan.shot_counts?.requested ?? 0, answered: plan.shot_counts?.answered ?? 0, late: assets.late?.length ?? 0, deadline_seconds: round1(draft.waits.shotMs / 1000) } } : {}),
+    seconds: round1((now() - started) / 1000)
+  };
+  return { ...plan, warnings: (plan.warnings ?? []).filter((warning) => !/^direction: the model returned no valid direction map/.test(warning)) };
 }
 
 // --visual-history-dir (docs/COLLECTIONS_RFC.md §6): the index of earlier
