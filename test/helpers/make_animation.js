@@ -84,7 +84,8 @@ export async function room(options = {}) {
     finish: options.finish ?? (async (project) => { finished.push(project); return { status: "passed", seconds: 0, stages: [], gates: {}, final: null, warnings: [] }; })
   };
   const project = path.join(cwd, "short");
-  const make = (extra = {}) => runMake(PROMPT, { animation: true, voice: "test", cwd, out: "short", ...extra }, adapters);
+  // A fixed --seed: the generated style (its frame, its motion) is the same in every run, so the checks see the same geometry.
+  const make = (extra = {}) => runMake(PROMPT, { animation: true, voice: "test", cwd, out: "short", ...(extra.style ? {} : { seed: "7f3a91c2" }), ...extra }, adapters);
   const read = async (file) => JSON.parse(await readFile(path.join(project, file), "utf8"));
   return { cwd, project, calls, takes, notices, sheets, finished, adapters, make, read, done: () => rm(cwd, { recursive: true, force: true }) };
 }

@@ -890,7 +890,7 @@ async function stageBible(ctx) {
       designed = null;
     }
   } else if (frozen && !mine) {
-    throw new Error(`${BIBLE_FILE} is frozen but does not fit this script:\n- ${found.check.errors.slice(0, 8).join("\n- ")}\nFreeze it again for these characters (launchclip bible freeze ${project} --characters ${ids.join(",")} --force), or delete it and make designs the cast`);
+    throw new Error(`${BIBLE_FILE} is frozen but is not valid for this project:\n- ${found.check.errors.slice(0, 8).join("\n- ")}\nFreeze it again for the script's characters (launchclip bible freeze ${project} --characters ${ids.join(",")} --force), or delete it and make designs the cast`);
   } else {
     const own = state.bible?.designed ?? [];
     ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (show bible: the cast of ${ids.length} and the world)`);
@@ -1380,10 +1380,10 @@ async function stageStoryboard(ctx) {
   // The look dials that would repeat the latest videos move to unused values
   // (never the ones a chosen style pack pins); the recheck covers the change.
   const varied = history ? varyStory(story, history.avoid, { seed: hashValue({ prompt: ctx.text, project }), style: style?.pack ?? null, locked: lockedDials(style, ctx) }).changes : [];
-  const recheck = checkStoryboard(story, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints, ...(pinned ? { script: pinned.script } : {}) });
+  const recheck = checkStoryboard(story, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints, ...(pinned ? { script: pinned.script, castGate: true } : {}) });
   // The same checks, for a storyboard with one scene changed (the candidates stage).
   ctx.storyCheck = (candidate) => {
-    const checked = checkStoryboard(candidate, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints, ...(pinned ? { script: pinned.script } : {}) });
+    const checked = checkStoryboard(candidate, { words: ctx.words, tier, style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints, ...(pinned ? { script: pinned.script, castGate: true } : {}) });
     return [...(checked.ok ? [] : checked.errors), ...assetErrors(candidate, allowed, { shots: Boolean(assets) }), ...storyboardStructureErrors(candidate, ctx.skeleton)];
   };
   if (!recheck.ok) throw new Error(`the storyboard failed its checks after make filled in audio:\n- ${recheck.errors.slice(0, 10).join("\n- ")}`);

@@ -5,7 +5,7 @@
   "cast": { "style": "flat", "characters": [{ "id": "maya" }, { "id": "sam" }, { "id": "theo" }] },
   "scenes": [
     { "id": "desk", "module": "cast-scene", "start": 0, "end": "word:Did-0.2",
-      "params": { "set": "desk-laptop", "cast": [
+      "params": { "set": "desk-laptop", "shot": "medium", "cast": [
         { "id": "maya", "pose": "type", "expression": "focused", "says": "auto", "cues": [
           { "at": "word:Again.", "pose": "slump", "expression": "frustrated" }
         ] }

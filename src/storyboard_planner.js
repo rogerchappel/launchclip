@@ -36,6 +36,7 @@ import { restoreMisses, varyInserts } from "./insert_variety.js";
 import { fitTimings } from "./timing_fit.js";
 import { fitDirectionCast, normalizeCastCues, plannedCast } from "./cast_fit.js";
 import { bibleCast, bibleRef, directionWithBible } from "@launchclip/core/bible.mjs";
+import { castGate } from "./cast.js";
 import { SHORT_FORM_HOLD, fitDurations, paceErrors } from "./duration_fit.js";
 import { fitCaptionBand } from "./caption_band_fit.js";
 import { fitDiagrams } from "./diagram_fit.js";
@@ -315,7 +316,7 @@ export async function planStoryboard(options = {}) {
         pinned.storyboard = diagrams.storyboard;
         pinned.warnings = [...pinned.warnings, ...diagrams.changed.map((entry) => `diagrams: tooling ${entry}`)];
       }
-      const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints, minHold: SHORT_FORM_HOLD, ...(script ? { script } : {}) };
+      const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints, minHold: SHORT_FORM_HOLD, ...(script ? { script } : {}), ...(bible ? { castGate: true } : {}) };
       checked = checkStoryboard(pinned.storyboard, checkOptions);
       // A scene shorter than its module allows, or an event time just outside
       // its module's window, is tooling's to fix, not a repair call's; a fix
@@ -582,7 +583,7 @@ function clearFace(storyboard, checked, { words, beats, track, checkOptions }) {
  * {errors, warnings, findings}}. Error strings are prefixed by stage:
  * "validation:", "tier:", "anchors:", "params:", "layout:".
  */
-export function checkStoryboard(raw, { words = [], beats = null, tier = "structured", style = null, direction = null, profile = null, bandErrors = true, clipLed = null, constraints = null, minHold = 0, script = null } = {}) {
+export function checkStoryboard(raw, { words = [], beats = null, tier = "structured", style = null, direction = null, profile = null, bandErrors = true, clipLed = null, constraints = null, minHold = 0, script = null, castGate: gated = false } = {}) {
   const errors = [];
   const warnings = [];
   const layout = emptyLayout();
@@ -629,6 +630,13 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
         else warnings.push(line);
       }
     }
+  }
+  // castGate: the cast gate finish runs (src/cast.js), here so a repair can
+  // fix what it finds: a limb off the canvas, a character who changes sides.
+  // On for a story pinned to a show bible, whose every shot is a cast shot.
+  if (second.ok && gated) {
+    const gate = castGate(resolved, { direction });
+    if (gate.status === "failed") errors.push(...[...new Set(gate.findings.map((finding) => `cast: ${finding.detail}`))].filter((entry) => !errors.some((error) => error.endsWith(entry.slice(6)))).slice(0, 8));
   }
   // The app's constraints (src/constraints.js): hidden ranges covered,
   // must_use present, never_use absent; errors are prefixed "constraints:".

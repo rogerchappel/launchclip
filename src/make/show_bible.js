@@ -328,6 +328,7 @@ export function animationBriefLines({ script, bible }) {
     "- Change the shot with the story: a new shot when the place, the speaker or the feeling changes, and no shot longer than about six seconds. Move between a wide two-shot and a medium or close shot of one character (`shot`), and give each shot a pose or expression cue on a word, so nobody stands frozen while someone talks.",
     "- The listener reacts: a look, a change of expression or a pose on the line that lands on them.",
     "- Keep each character on its side of the frame in every shot it shares.",
+    "- The cast check fails a limb or a head that reaches off the canvas or out of the safe zone. A closer shot (`shot: \"medium\"` or `\"close\"`) of one seated or gesturing character usually brings it back inside; so does a calmer pose.",
     ""
   );
   return lines;
