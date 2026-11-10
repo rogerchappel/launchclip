@@ -96,5 +96,6 @@ test("the player page drives the composition's timeline and takes a host's messa
   const page = playerPage({ title: "T", composition: "composition.html", composition_id: "launchclip-story", format: FORMAT, plan: "full" });
   assert.match(page, /__timelines\[ID\]/);
   assert.match(page, /launchclip:seek/);
+  assert.match(page, /style\.visibility = on \? "" : "hidden"/);
   assert.match(page, /max="12\.5"/);
 });

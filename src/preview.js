@@ -244,6 +244,8 @@ export function playerPage(info) {
     for (const clip of clips) {
       const local = t - clip.start, on = local >= 0 && local < clip.duration;
       const el = clip.el;
+      // A clip is on the page for its own stretch only (the renderer's runtime does the same).
+      if (el.tagName === "VIDEO") el.style.visibility = on ? "" : "hidden";
       if (!on) { if (!el.paused) el.pause(); continue; }
       const want = clip.mediaStart + local;
       if (el !== master || !playing) { if (Math.abs(el.currentTime - want) > (playing ? 0.3 : 0.03)) { try { el.currentTime = want; } catch (e) {} } }
