@@ -18,14 +18,14 @@
 // blurred toward the top and bottom edges.
 // No furniture.
 
-import { arithmetic, blend, blur, channel, composite, curve, displace, fadeDown, fe, filled, freq, linear, matrix, noise, outline, r, rand } from './parts.mjs';
+import { arithmetic, blend, blur, channel, composite, curve, displace, fadeDown, fe, filled, freq, linear, matrix, noise, outline, r, stepPick } from './parts.mjs';
 
 const VARIANTS = 5;
 
 export const LOOK = {
   describe: 'a flat drawing shaded to suggest plasticine: soft rounded rims, a fingerprint texture, warm studio light, held on twos with a slight wobble, the top and bottom of the frame out of focus. Not real clay: the shading follows colour edges',
   honest: 'a 2D shading pass, not 3D clay: no real thickness, undersides or object-aware shadows',
-  words: ['\\bclay(?:mation)?\\b', '\\bplasticine\\b', '\\bstop[- ]motion clay\\b'],
+  words: ['\\bclaymation\\b', '\\bplasticine\\b', '\\bclay (?:animation|look|style)\\b', '\\bstop[- ]motion clay\\b'],
   defaults: { strength: 1, step: 12 },
   presets: () => ({
     // A light sheet: paper is the dark lettering, ink the light text on the primary.
@@ -35,12 +35,7 @@ export const LOOK = {
   }),
   variants: VARIANTS,
   // A seeded drawing per step, never the one before it.
-  variantAt(plan, frame) {
-    const step = Math.floor((frame * (plan.step || 12)) / plan.fps + 1e-9);
-    const pick = (k) => Math.floor(rand(`${plan.seed}:wobble`, k) * VARIANTS);
-    const now = pick(step);
-    return step > 0 && now === pick(step - 1) ? (now + 1) % VARIANTS : now;
-  },
+  variantAt: (plan, frame) => stepPick(`${plan.seed}:wobble`, Math.floor((frame * (plan.step || 12)) / plan.fps + 1e-9), VARIANTS),
   grade(plan, v) {
     const u = plan.unit, s = plan.strength, H = plan.height;
     return [
