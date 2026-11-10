@@ -29,7 +29,7 @@ import { DRAWING_STYLES, KOKORO_VOICES } from "@launchclip/core/characters/cues.
 import { SETS } from "@launchclip/core/characters/sets.mjs";
 import { WORLD_KINDS, WORLD_TIMES, suggestWorld } from "@launchclip/core/worlds/index.mjs";
 import { freezeBible } from "../bible.js";
-import { castCreate, characterOptionLines, checkedSets } from "../cast_design.js";
+import { castCreate, characterOptionLines, checkedSets, kindConsistentSets } from "../cast_design.js";
 import { listCharacters, loadCharacter } from "../character_store.js";
 import { estimateModelUsageCost } from "../cost_tracker.js";
 import { RULES_HEADING } from "./script.js";
@@ -89,6 +89,7 @@ const DESIGNER_ROLE = `You are the character and world designer of a short anima
 For each character of the script, give:
 - use: "" to design a new character, which is the usual choice. Name a starter or a saved character (lists below) only when the brief asks for one, or one plainly is this role.
 - sets: the look, as set paths. Each value must be one of the options listed for its path; choose the nearest option when the words name something the rig lacks. For a new character set at least skin, hair.style, hair.color, outfit.top and colors.top. With use, sets are the changes to that character, and [] keeps it as it is.
+- A character is a person unless the story makes it an animal, a mascot or an object (a foal, a cat, a robot, a coffee cup). For one of those, set kind to the nearest option and then only size, marks, colors.body, colors.detail and colors.accent: it has no skin, hair, age, build, outfit or accessories, and those are left out if you set them.
 - position: the side of the frame the character keeps in every shot it shares: left, centre or right, a different one each. The lead usually takes the left.
 
 The look to aim for is cute, relatable and simply dressed:
@@ -180,7 +181,10 @@ export function normalizeBibleDesign(value, { characters = [], places = [], prom
   const cast = characters.map((character) => {
     const entry = given.get(character.id) ?? {};
     const allowed = (Array.isArray(entry.sets) ? entry.sets : []).filter((set) => DESIGN_PATHS.includes(set?.path));
-    const { kept, rejected } = checkedSets(allowed);
+    const checked = checkedSets(allowed);
+    // A foal with a person's age or hair: keep what applies to what the character is, and report the rest.
+    const agreed = kindConsistentSets(checked.kept);
+    const kept = agreed.kept, rejected = [...checked.rejected, ...agreed.rejected];
     const side = POSITIONS.includes(entry.position) && !taken.has(entry.position) ? entry.position : null;
     if (side) taken.add(side);
     return { id: character.id, use: slug(entry.use) || null, sets: kept.map(({ path: where, op, value: option }) => ({ path: where, op, value: option })), rejected, position: side };
