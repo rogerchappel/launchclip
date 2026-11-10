@@ -58,6 +58,10 @@ The profile follows the story's lane, aspect, duration and platform (`launchclip
 | character_screen_time | share of the runtime with a character on screen | p10 and p90 |
 | expression_changes_per_min | pose or expression changes per minute | p10 and p90 |
 | problem_lands_seconds | how soon the problem beat lands | p90 (a ceiling) |
+| speaker_turns_per_min | changes of speaker per minute (the narrator is a speaker) | p10 and p90 |
+| line_seconds | length of a spoken line | p10 and p90 |
+| reaction_share | share of the time a character speaks that the picture is on a listener reacting | p10 (a floor) |
+| longest_framing_seconds | longest stretch on one framing (the same set, shot size and people) | p90 (a ceiling) |
 
 The motion gate holds still_share and longest_still_seconds to the profile's p90 when it has them, else to defaults by format: motion and character stories at most 10% still and 0.6 s, product demos 25% and 1.5 s, footage-led (a talking head) only a frozen picture of 4 s. A failing render lists its worst still spans with a fix for each: zoom-kick, drift, whip, dot-wipe or new visual.
 
@@ -203,6 +207,10 @@ A fully animated story told by a cast (setup, problem, attempt, turn, resolution
 | character_screen_time | 40% | 70% | 95% |
 | expression_changes_per_min | 3 | 8 | 20 |
 | problem_lands_seconds | — | 5 | 12 |
+| speaker_turns_per_min | 4 | 12 | 30 |
+| line_seconds | 0.8 | 2.2 | 5 |
+| reaction_share | 10% | 30% | — |
+| longest_framing_seconds | — | 6 | 12 |
 | caption_words_on_screen | — | 3 | 6 |
 | flow_velocity_p90 | 2 | — | — |
 | hold_ratio | — | — | 80% |

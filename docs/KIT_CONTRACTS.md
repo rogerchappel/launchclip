@@ -4016,23 +4016,71 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   and the named expressions (`neutral happy delighted frustrated confused
   surprised focused`) as face parts. Positive arm and leg angles swing a limb
   away from the body on its own side.
+- `kinds.mjs`: the character kinds that are not people. A person is the
+  rig's default and stores no `kind`, so every person keeps the params and
+  fingerprint it had. Any other kind has its own parameter set, `{kind,
+  size?: small | medium | large, colors: {body, detail, accent}}`
+  (`normalizeKindParams`, reached through `normalizeRigParams`; medium is
+  not stored), and refuses a person's params by name ("hair does not apply
+  to a cup"). `KINDS` lists 20 in three groups (`KIND_GROUPS`, `kindsOf`):
+  animals `cat dog bear rabbit fox frog penguin owl`, mascots `blob droplet
+  star monster` (brand colours by default) and objects with faces `phone
+  laptop cup bulb robot coin book cloud`; each entry says what its three
+  colour slots paint (`slots`). `kindGeometry` reports rig geometry in the
+  shape `rigGeometry` does (hips, shoulders, the head or the face area, the
+  seat drop), so poses, sets, framing and aiming treat a kind as a person;
+  `kindColors` resolves the slots and the face's colours. Pose restatements
+  (`geometry.poses`): a headed kind raises its arms wide of its big head; a
+  single body's arms are shorter than it is wide, so `think` and `look`
+  touch the body's edge beside the face, `facepalm` covers the near side,
+  `arms-crossed` and `hands-on-hips` rest both hands on the front and
+  `point-self` points at the body. A medium kind is 550 to 900 rig units
+  tall beside a person of about 1000.
+- `kind-draw.mjs`: `drawKind(style, params, colours, options)` draws a
+  kind on the rig's joints with the toon's cute face (`toon.mjs face`), so
+  the op list, gaze, blinks and speech mouths act it as they act a person
+  and both renderers draw it alike. Two body plans: headed (a trunk and a
+  head: the animals and the robot; the head tilts, turns and its features
+  cross it as a person's) and single (one body carrying the face: the face
+  tilts on `C-head` about its chin and moves across the body for a look,
+  the body leans and squashes on `C-torso`, and from behind the face is
+  gone). Part ids are the toon's. A dark face area takes light ink. The
+  cast's drawing style chooses the pen: flat fills with the chibi outline
+  for most, line art for `line` and `stick-classic`, comic ink for
+  `outlined`, cut paper for `paper`, soft shading for `soft-shade`,
+  `avatar`, `lifelike` and `cinematic`. A size resizes shapes, pivots and
+  line weights and leaves joint values alone.
 - `palette.mjs`: skin tones, hair colours, clothing neutrals and brand roles.
   A colour slot is a palette name, a brand role (`primary accent paper ink
   bg`) or a hex. Roles come from the story brand, overridden by the cast's
   colour mapping.
-- `cast.mjs`: the starter cast (71 characters: the original set, then a wider cast with a personality each and one accessory at most). `RETIRED_CAST` holds characters no longer offered (`fatima`): not listed and not in `STARTER_IDS`, but a story that names one by id still draws it (`isStarterId`). Ids are stable and never
+- `cast.mjs`: the starter cast (95 characters: the original set, then a wider cast with a personality each and one accessory at most, then 24 animals, mascots and objects with faces, `STARTER_KIND_IDS`: `mochi soot biscuit bruno clover rusty ember puddle pebble hoot`, `bloop fizz drip twinkle grumble`, `ping byte latte watt rivet cog penny paige nimbus`). `RETIRED_CAST` holds characters no longer offered (`fatima`): not listed and not in `STARTER_IDS`, but a story that names one by id still draws it (`isStarterId`). Ids are stable and never
   change once shipped.
 - `generate.mjs`: `generateCast({seed, set, count, palette})` → story cast
   entries, always the same for the same inputs. `CHARACTER_SETS` (office-team,
   startup-founders, family, kids, seniors, students, chefs, medical,
   athletes, creators, city-crowd) fix the wardrobe, age mix and props; the
   seed varies the people (skin tones spread across the range, no two members
-  alike). `castFromStyle(pack.cast)` turns a style pack's `{drawing_style,
+  alike). Four more sets give the kinds that are not people:
+  `animal-friends`, `mascots`, `everyday-objects` (each kind once before a
+  repeat, in its own colours or a seeded variation) and `mixed-company`
+  (people and kinds turn about). A seed chooses only among the sets of
+  people (`PEOPLE_SET_NAMES`), so seeded styles keep the casts they gave;
+  the four are for `character_set` or `cast.set` to ask for.
+  `castFromStyle(pack.cast)` turns a style pack's `{drawing_style,
   set, members}` into `story.cast`.
 - `styles.mjs`: the drawing styles (`DRAWING_STYLES`, flat first) and
   `drawCharacter(style, params, colours, options)`, `styleHeight`,
   `styleGeometry`. Every style draws the same rig, poses, expressions and
   part ids, so any cast works in any style and acting.mjs animates them all.
+  A kind other than a person has one body in every style (`kind-draw.mjs`);
+  the style chooses its pen. `stageHeight(style, params, {tight})` is the
+  height a set sizes its cast by: a person's drawn height; for a kind no
+  less than a person's (`KIND_STAGE`), so a cat is never blown up to a
+  person's height (less in the same measure in a style that draws people
+  shorter, such as `chibi`); and where slots are narrow (`tight`: several
+  characters across a portrait frame; `alone`: one in a portrait frame)
+  more the wider the kind reaches, so an open laptop fits its slot.
 - `toon.mjs`: the toon body shared by the cartoon styles: one builder lays
   out every shape from the rig and hands each to a pen (`shape`, `ellipse`,
   `line`, `limb`, `strand`, `ground`, `within`, `defs?`), which decides how it
@@ -4269,7 +4317,11 @@ scaleX and scaleY for its speech shape).
 ```
 
 An id (or `from`) naming a starter starts from its params; the fields given
-override them. Other ids need their own skin and hair. When the cast lists
+override them. Other ids need their own skin and hair, or a `kind`: `{ "id":
+"mug", "kind": "cup", "size": "small", "colors": { "accent": "red" } }` is an
+animal, a mascot or an object with a face (`kinds.mjs`), which takes `kind`,
+`size` and `colors {body, detail, accent}` and none of a person's fields. A
+kind may start `from` a starter of the same kind only. When the cast lists
 characters, scenes may only use those; without a cast, scenes may use any
 starter. `position` (left, centre or right) is the side the character
 takes in every cast scene it shares, unless a scene says otherwise. `acting`
@@ -4302,6 +4354,11 @@ One designed character as a file, used by the CLI, by agents (the
               "colors": { "top": "red", "bottom": "denim", "shoes": "white", "accent": "accent" } } }
 ```
 
+- A kind other than a person stores `"params": { "kind": "cat", "size":
+  "small", "colors": { "body": "tangerine", "detail": "cream", "accent":
+  "rose" } }`; the set paths `kind`, `size`, `colors.body` and
+  `colors.detail` edit it, and a description names it ("a small orange
+  cat").
 - `params` are rig params; `normalizeCharacter` validates them with
   `normalizeRigParams` and writes the file in canonical form (fixed key
   order, optional fields only when set), so equal characters are equal
@@ -4876,6 +4933,31 @@ the cadence profile whose `problem_lands_seconds` p90 is the limit (default
 `story-characters`), `--brief` the prompt and notes the script was written
 from. `--json` includes `narration.lines`. A version 1 `SCRIPT.json` is
 checked exactly as before.
+
+### The gate (`src/script_gate.js`)
+
+`scriptGate({project, resolved, words, profile})` holds a finished project's
+`SCRIPT.json` to `validateScreenplay` and returns `{status, file, profile,
+duration, wpm, rules, errors, warnings, stats}`. `rules` lists the contract
+error ids that failed (`speaker-unknown`, `character-unused`, `fits-length`,
+`problem-lands`, `problem-missing`, and the shape ids). The length is the
+script's `duration`, else `plan.duration`, else the story's; the pace is
+`plan.wpm`, else measured from the take's words, else 150. No `SCRIPT.json`
+or a version 1 script is `skipped`. It runs none of the copy checks above.
+`finish` does not call it yet; the animation scorecard does
+(docs/ANIMATION_MEASUREMENT.md).
+
+### Dialogue measures (`kit/core/cadence.mjs`)
+
+`characterMeasures(shots, {duration, words, script})` takes the shot list
+(`shotList()` in `src/story_shots.js`) and returns the character measures a
+cadence profile may carry: `scene_seconds`, `character_screen_time`,
+`expression_changes_per_min`, `problem_lands_seconds`, and the four in
+`DIALOGUE_MEASURES`: `speaker_turns_per_min`, `line_seconds`,
+`reaction_share` and `longest_framing_seconds`. A measure the project cannot
+answer is `null`. `spokenRuns(words, {script})` gives the spoken lines of a
+take. `story-characters` carries seed bands for all of them; the four
+dialogue bands are provisional (docs/ANIMATION_MEASUREMENT.md).
 
 ### The writers' room (`src/make/animation.js`, `launchclip make --animation`)
 

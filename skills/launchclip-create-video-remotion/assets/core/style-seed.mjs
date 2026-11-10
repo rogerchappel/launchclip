@@ -34,7 +34,7 @@
 import { seededRandom } from './ambient.mjs';
 import { CAPTION_PRESETS } from './captions.mjs';
 import { DRAWING_STYLES } from './characters/cues.mjs';
-import { CHARACTER_SET_NAMES, generateCast } from './characters/generate.mjs';
+import { CHARACTER_SET_NAMES, PEOPLE_SET_NAMES, generateCast } from './characters/generate.mjs';
 import { V1_MODULE_VARIANTS, V2_MODULE_VARIANTS } from './style-seed-variants.mjs';
 import { AMBIENCE_BEDS, GENRE_SPECS, MUSIC_GENRES, SOUND_PALETTES, TONE_SOUND } from './sound/options.mjs';
 import { BACKGROUND_MOTIFS } from './backgrounds.mjs';
@@ -129,7 +129,9 @@ export const SEED_DRAWING_STYLES = DRAWING_STYLES;
 // chefs, medical, athletes, ...); art direction pins one with character_set.
 // generateCast builds the people from the seed. [set, weight].
 export const NEUTRAL_CHARACTER_SETS = Object.freeze(['office-team', 'startup-founders', 'students', 'creators', 'city-crowd']);
-export const SEED_CHARACTER_SETS = Object.freeze(CHARACTER_SET_NAMES.map((name) => Object.freeze([name, NEUTRAL_CHARACTER_SETS.includes(name) ? 2 : 1])));
+// A seed chooses among the sets of people, so seeds keep the casts they always gave; the sets with animals,
+// mascots or objects (animal-friends, mascots, everyday-objects, mixed-company) are for character_set to ask for.
+export const SEED_CHARACTER_SETS = Object.freeze(PEOPLE_SET_NAMES.map((name) => Object.freeze([name, NEUTRAL_CHARACTER_SETS.includes(name) ? 2 : 1])));
 // Topic-neutral worlds (from the worlds kit) the seed may draw for any prompt;
 // topical ones (kitchen, gym, server-room, ...) are left to art direction.
 // Props stay empty: a world dresses itself, and props are for direction.

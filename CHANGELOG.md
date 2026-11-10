@@ -32,6 +32,19 @@
   there; in a terminal make asks instead. The run ends `ready` on a `ship`
   verdict and `needs-repair` once the rounds are spent, with the animation
   path's exit codes (0, 1, 2, 3 `awaiting-approval`, 4 `ready-for-review`).
+- Measurement for character stories. `npm run eval:formats -- --animation`
+  scores six character-Short briefs from finished projects (contracts,
+  story, design, direction, cadence, gates, critic, cost) without rendering,
+  and `npm run eval:animation-parity` writes the make-against-skill table to
+  `benchmarks/ANIMATION_PARITY.md`. The briefs have not been run on either
+  path yet, so the table says so and holds no numbers. The `story-characters`
+  profile gains four dialogue measures (speaker turns per minute, seconds
+  per line, the share of speech on a listener's reaction, the longest
+  stretch on one framing); their bands are hand-set and marked provisional.
+  `scriptGate` (`src/script_gate.js`) fails a project whose `SCRIPT.json`
+  has an unknown speaker, a character who never speaks or acts, a script
+  over its length or a problem that lands late; `finish` does not call it
+  yet. See `docs/ANIMATION_MEASUREMENT.md`.
 - `launchclip make --animation` now makes the whole video. After the script
   and the voice it designs the cast and the world in one model call, from
   the rig's own options (the set paths `cast create` takes), freezes

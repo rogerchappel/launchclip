@@ -86,11 +86,11 @@ export function castUsage(story, direction = null) {
 export async function castList(target, { project, home } = {}) {
   const { story, project: storyProject } = await loadStoryFile(target);
   const saved = await listCharacters({ projectDir: project ?? storyProject ?? process.cwd(), home });
-  const rows = STARTER_CAST.map((entry) => ({ id: entry.id, name: entry.name, summary: entry.summary, voice: entry.voice, source: "starter" }));
+  const rows = STARTER_CAST.map((entry) => ({ id: entry.id, name: entry.name, summary: entry.summary, voice: entry.voice, ...(entry.params.kind ? { kind: entry.params.kind } : {}), source: "starter" }));
   let storyRows = [];
   if (story?.cast) {
     const resolved = resolveStoryCast(story);
-    storyRows = [...resolved.members.values()].map((member) => ({ id: member.id, name: member.name, voice: member.voice, build: member.params?.build ?? null, hair: member.params?.hair?.style ?? null, ...(member.sprite ? { art: member.art } : {}), source: "story" }));
+    storyRows = [...resolved.members.values()].map((member) => ({ id: member.id, name: member.name, voice: member.voice, build: member.params?.build ?? null, hair: member.params?.hair?.style ?? null, ...(member.params?.kind ? { kind: member.params.kind } : {}), ...(member.sprite ? { art: member.art } : {}), source: "story" }));
   }
   return { stage: "cast", action: "list", status: "ready", starter: rows, saved, story: storyRows };
 }
@@ -125,7 +125,8 @@ function cellNode(member, pose, expression, id, { face = false } = {}) {
     const scale = (CELL.face * 0.34) / geometry.head.ry;
     return characterView(drawing, { id, x: CELL.face / 2, y: CELL.face * 0.56 - headY * scale, scale });
   }
-  const scale = (CELL.height - 70) / Math.max(1150, styleHeight(member.style, member.params));
+  // People share one scale (so heights compare); the shorter kinds (animals, mascots, objects) are drawn larger to read.
+  const scale = (CELL.height - 70) / Math.max(member.params.kind ? 820 : 1150, styleHeight(member.style, member.params));
   return characterView(drawing, { id, x: CELL.width / 2, y: CELL.height - 24, scale });
 }
 
