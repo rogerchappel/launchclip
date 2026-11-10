@@ -189,3 +189,14 @@ for (const [position, size] of [["middle", 1.4], ["top", 1.15], ["top", 1.6], ["
     for (const zone of overlay?.zones ?? []) assert.ok(zone.rect.y >= 0 && zone.rect.y + zone.rect.height <= 1920 && (zone.scale ?? 1) >= CAPTION_BAND_FIT.minScale);
   });
 }
+
+test("captions are not moved twice for one clash: a zone already over it, or an overlay with its own rect, hides instead", () => {
+  const resolve = (story) => resolveChecked(story, { words: BAND_WORDS, style: bandStyle() });
+  const mixClash = "layout: caption-band @15s [mix-text, captions] mix-text sits in the caption band 65,826 853×269 while captions are visible (15s–18s); move it or set hidesCaptions";
+  const zoned = { ...bandStory((scenes) => [scenes[5]]), overlays: [{ type: "captions", zones: [{ start: 15, end: 18, rect: { x: 65, y: 1171, width: 853, height: 269 } }] }] };
+  const again = fitCaptionBand(zoned, [mixClash], { resolve });
+  assert.deepEqual(again.placed, []);
+  assert.match(again.hidden[0], /^captions 14\.98–18\.02 s under mix-text: moving the captions for this scene did not clear it$/);
+  const own = { ...bandStory((scenes) => [scenes[5]]), overlays: [{ type: "captions", rect: { x: 65, y: 826, width: 853, height: 269 } }] };
+  assert.match(fitCaptionBand(own, [mixClash], { resolve }).hidden[0], /the captions have a rect of their own$/);
+});

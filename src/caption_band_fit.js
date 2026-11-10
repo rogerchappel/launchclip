@@ -137,7 +137,10 @@ export function fitCaptionBand(storyboard, errors, { resolve = null, from = 1, l
           continue;
         }
       }
-      if (from <= 3) {
+      // Captions with a rect of their own take no zones, and a zone already placed over this clash did not clear it: neither is tried again.
+      const zoned = Boolean(overlay?.rect) || (overlay?.zones ?? []).some((zone) => clashes.some((clash) => zone.start < clash.end && zone.end > clash.start));
+      if (zoned) why = overlay?.rect ? "the captions have a rect of their own" : "moving the captions for this scene did not clear it";
+      if (from <= 3 && !zoned) {
         const zone = placeCaptions(picture, owner, rect);
         if (zone) {
           overlay = overlayFor(clashes[0], true);
