@@ -235,6 +235,7 @@ export async function runCli(argv, io = {}) {
         candidate: flags.candidate,
         prototype: Boolean(flags.prototype),
         animatic: Boolean(flags.animatic),
+        planOnly: Boolean(flags["plan-only"]),
         into: flags.into,
         comparison: flags.comparison,
         kind: flags.kind,
@@ -445,6 +446,8 @@ export function makeExitCode(report, { allowNeedsRepair = false } = {}) {
   const status = report?.status;
   if (status === "failed") return MAKE_EXIT_CODES.failed;
   if (status === "needs-repair") return allowNeedsRepair ? 0 : MAKE_EXIT_CODES["needs-repair"];
+  // A run stopped after its storyboard (--stop-after storyboard) waits for an approval whatever kind of video it is.
+  if (status === "awaiting-approval" && report?.stopped?.after === "storyboard") return MAKE_EXIT_CODES[status];
   if (ANIMATION_ONLY_EXITS.includes(status) && report?.routing?.kind === "animation") return MAKE_EXIT_CODES[status];
   return 0;
 }
@@ -644,7 +647,7 @@ export function parseFlags(args) {
     }
     const name = token.slice(2);
     // make --approve bible names what is approved; elsewhere --approve is a switch.
-    if (name === "approve" && /^(bible|animatic)(,(bible|animatic))*$/.test(args[index + 1] ?? "")) {
+    if (name === "approve" && /^(bible|animatic|storyboard)(,(bible|animatic|storyboard))*$/.test(args[index + 1] ?? "")) {
       flags[name] = args[index + 1];
       index += 1;
       continue;

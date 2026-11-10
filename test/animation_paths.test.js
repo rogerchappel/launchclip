@@ -97,7 +97,9 @@ test("both routes check a contract with the same code: the validator behind the 
 test("the two approval points are make's stop points", async (t) => {
   assert.deepEqual([...APPROVAL_POINTS], ["bible", "animatic"]);
   if (!has("src/make/options.js")) return;
-  const { MAKE_STOP_POINTS } = await load("src/make/options.js");
+  // The character story's stops: make's other stop (storyboard, plan-only mode) is any video's, not a skill approval.
+  const options = await load("src/make/options.js");
+  const MAKE_STOP_POINTS = options.ANIMATION_STOP_POINTS ?? options.MAKE_STOP_POINTS;
   if (!MAKE_STOP_POINTS) { t.diagnostic("src/make/options.js has no MAKE_STOP_POINTS in this checkout; not compared"); return; }
   for (const point of MAKE_STOP_POINTS) assert.ok(APPROVAL_POINTS.includes(point), `make stops after ${point}; the skill must stop there too`);
   const pending = APPROVAL_POINTS.filter((point) => !MAKE_STOP_POINTS.includes(point));
