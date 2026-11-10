@@ -204,7 +204,10 @@ Three small steps, as the writers' room in \`make\` takes them:
    what changes.
 2. **Loglines.** Write five one-sentence versions of the story. Have them
    judged in a fresh context (a subagent given only the brief and the
-   loglines) and take the winner. They are this path's five concepts.
+   loglines) and take the winner. They are this path's five concepts: the gate at the end
+   reads them from \`CONCEPTS.json\` and the story from \`STORY.json\`
+   ([cinematic-production.md](cinematic-production.md) has both formats), so
+   write those two now.
 3. **Script.** Write ${code(script.file)}:
 
 \`\`\`json
@@ -226,7 +229,7 @@ Three small steps, as the writers' room in \`make\` takes them:
       { "id": "l4", "speaker": null, "action": "Dov says nothing and waits.", "seconds": 1 } ] }
   ],
   "narration": "Pia is about to ship on a Friday. Did you test the rollback? It worked last month.",
-  "title_options": ["Test the rollback"]
+  "title_options": ["Test the rollback", "She almost shipped on a Friday", "It worked last month", "Better now than at midnight", "The ten-minute test"]
 }
 \`\`\`
 
@@ -246,6 +249,7 @@ Three small steps, as the writers' room in \`make\` takes them:
   lowercase (\`^[a-z][a-z0-9-]{0,23}$\`) and become the cast ids.
 - \`playing\` is a note for the acting. It is never spoken.
 - \`narration\` is every spoken line's text joined in order with spaces.
+  \`title_options\` holds five titles, the best first.
 - Keep it short: lines of three to nine words, two characters, two sets. At
   the check's pace of ${SCREENPLAY_WPM} words a minute a 30-second Short holds about 60
   spoken words less its pauses.
@@ -343,12 +347,12 @@ it unchanged:
   "lane": "motion",
   "format": { "width": 1080, "height": 1920, "fps": 30, "duration": 30, "platform": "youtube-shorts" },
   "world": { "kind": "office", "time": "day" },
-  "motion": { "grammar": "cinematic", "feel": "kinetic" },
+  "motion": { "feel": "kinetic" },
   "audio": { "narration": { "provider": "kokoro", "voice": "bf_emma", "lines": [
     { "speaker": "${NARRATOR}", "text": "Pia is about to ship on a Friday." },
     { "speaker": "dov", "text": "Did you test the rollback?" },
     { "speaker": "pia", "text": "It worked last month.", "gap": 1 } ] } },
-  "overlays": [{ "type": "captions", "style": "word-highlight" }],
+  "overlays": [{ "type": "captions" }],
   "scenes": []
 }
 \`\`\`
@@ -356,7 +360,11 @@ it unchanged:
 \`audio.narration.voice\` is the narrator's voice. \`world\` is the bible's
 world (its kind and time): the cast then stands in that place, full frame,
 and not in a small room of its own. \`motion\` keeps the camera alive under
-people who stand and talk. Do not write a \`cast\`: the bible supplies it. Pin the story to the bible, then voice it:
+people who stand and talk. With the seeded style from the quick path's
+step 1, name it in \`style\` as [workflow.md](workflow.md) ("No style
+given") says, leave the caption style and \`motion.grammar\` to it, and pass
+it to the bible too (\`bible freeze --pack <style>\`). Do not write a
+\`cast\`: the bible supplies it. Pin the story to the bible, then voice it:
 
 \`\`\`bash
 launchclip bible freeze <project>     # changes nothing in the bible; writes the story's cast and "bible": {file, hash}
@@ -364,9 +372,10 @@ ${run(narration.write)}
 \`\`\`
 
 \`voice\` speaks each line in its speaker's voice (local Kokoro, free,
-cached), writes ${code(narration.file)} with a speaker on every word, and prints one
+cached, at speed 1.2), writes ${code(narration.file)} with a speaker on every word, and prints one
 row per line with its start, end and first-word anchor. Set
-\`format.duration\` to the measured duration plus 0.5 to 0.8 seconds, and add
+\`format.duration\` to the measured duration plus 1 to 2 seconds (the closing
+card needs the hold), and add
 \`"words": "${narration.file}"\` to \`audio\`. If the take is too long, cut lines
 in ${code(script.file)} (check it again, copy the new lines across, voice again); never
 guess a length from a word count.
@@ -420,17 +429,25 @@ per spoken script line:
 \`\`\`
 
 - One \`cast-scene\` per shot, on track 0, back to back: a scene ends where the
-  next starts, and both are anchored to words (\`word:<text>\`,
-  \`word:<text>#2\` for a second occurrence, \`±seconds\`).
+  next starts, and both are anchored to words (\`word:<text>#1\`,
+  \`word:<text>#2\` for a second occurrence, \`±seconds\`). Leave \`in\` out
+  between two shots that share a character: a plain cut. A whip-pan or a
+  fade there draws the character twice and fails the ghosting gate.
+- A cue sits at least 0.45 seconds before its scene ends.
 - \`"says": "auto"\` on a character moves its mouth on its own lines. Give it
   to every character who speaks in the shot.
 - Cut on a speaker change or a story beat, not on every line: three to six
   shots for 30 seconds. A two-shot (both characters, \`standing\`) carries an
   exchange; a single carries a reaction.
-- Frame with \`shot\`. In 9:16 use \`close\` for talk: faces read on a phone
-  and sit in the top third of the frame, which the density gate wants filled
-  for most of the story. A character at a desk or seated needs \`medium\` or
-  \`close\`; \`wide\` there can leave the frame.
+- Frame with \`shot\`, and look at the animatic to see what you got. In 9:16
+  the \`standing\` set framed \`close\` puts faces in the top third of the
+  frame, which the density gate wants filled for most of the story. A set
+  with furniture (a desk, a counter) hides the body and the pose cues behind
+  it: use it for one character and one beat, framed \`medium\` or \`close\`
+  (\`wide\` there can leave the frame), and play the talk on \`standing\`.
+- The story's object (the thing pointed at, the thing that breaks) has to be
+  on screen: a \`set-prop\` or a world prop from
+  [storyboard-modules.md](storyboard-modules.md), or the closing card.
 - Give every shot something to watch. Cue a pose or expression change on the
   key word of each line (from the script's \`playing\` notes) and a reaction
   from the listener on the line that lands on them, so nobody holds one pose
@@ -443,7 +460,8 @@ per spoken script line:
   a second or two past the last word: text must stay up long enough to read
   (0.22 seconds a word, the ghosting gate).
 
-Check, then read the shot list:
+Write \`STORYBOARD.md\`, \`DESIGN.md\` and \`QUALITY.md\` as the quick path's
+step 4 asks. Check, then read the shot list:
 
 \`\`\`bash
 launchclip bible freeze <project>            # pins a newly written ${DIRECTION_FILE}
@@ -453,6 +471,8 @@ ${run(storyboard.view)}
 \`\`\`
 
 \`story validate\` checks the storyboard, the map and the script line ids.
+Read its \`status\` (\`passed\`), not its exit code; the same goes for
+\`finish\`, which exits 0 on \`needs-repair\`.
 In \`story shots\`, look for a speaker marked off screen without a reason, a
 shot with nothing said, and script lines listed as unplaced.
 
@@ -474,8 +494,12 @@ step uses.
 1. **Gates first.** \`gates_failed\` in ${code(animatic.file)} must be empty. A failing
    gate names its fix (\`cast\`, \`bible\`, \`direction\`, \`acting\`,
    \`lip-sync\`, \`layout\`, \`motion\`, \`density\`…). Repair the storyboard,
-   never the gate. \`motion\` is the hard one for dialogue: it lists each
-   still span in \`qa/finish/motion.json\`; put a cue inside each.
+   never the gate. A gate repair is not a retake: make it, render again, and
+   keep \`qa/retakes.json\` for review findings. \`motion\` is the hard one
+   for dialogue: it lists each still span in \`qa/finish/motion.json\`; put
+   a cue inside each. If it is the only gate still failing after three
+   renders, stop, and tell the user at stop 2 that the cut is
+   \`needs-repair\` on motion; do not call it finished.
 2. **Review from the frames**, in a fresh context where you can: the contact
    sheets beside each character's reference sheet, with the shot list as
    text. Judge story, staging and acting only, in these categories:
