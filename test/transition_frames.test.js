@@ -4,6 +4,8 @@
 // tweens the check evaluates, as GSAP runs them. The rendered half is the
 // footage-transitions-9x16 story in test/parity_camera.test.js.
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import path from 'node:path';
 import test from 'node:test';
 import gsap from 'gsap';
 import {getEase} from '@launchclip/core/motion.mjs';
@@ -15,6 +17,7 @@ import {
 import {TRANSITION_CHECK, transitionFindings, transitionFrameFindings, transitionFrames} from '@launchclip/core/transition-frames.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
 
+const ROOT = path.resolve(import.meta.dirname, '..');
 const W = 1080, H = 1920, FPS = 30;
 const DIRECTED = ['push', 'whip', 'pan', 'whip-pan', 'orbit', 'glow-wipe', 'push-blur'];
 const MODES = ['cuts', 'world'];
@@ -150,6 +153,21 @@ test('between two footage plates a card transition plays as a fade, and validati
   assert.equal(footageTransition({type: 'zoom', dur: 0.5}, {module: 'clip'}, {module: 'clip'}).type, 'zoom');
   const fine = validateStory(footageStory({type: 'zoom', dur: 0.5}));
   assert.ok(!fine.warnings.some((warning) => warning.includes('plays as a fade')));
+});
+
+test('the footage-transitions example: valid, five transitions between clips, no findings', async () => {
+  const raw = JSON.parse(await readFile(path.join(ROOT, 'examples/story/footage-transitions-9x16/storyboard.json'), 'utf8'));
+  const checked = validateStory(raw);
+  assert.deepEqual(checked.errors, []);
+  assert.deepEqual(checked.warnings, []);
+  const story = resolveStory(raw);
+  const windows = sceneWindows(story);
+  assert.deepEqual(windows.scenes.map((entry) => entry.transitionIn?.type ?? null), [null, 'push', 'zoom', 'pull', 'iris', 'fade']);
+  assert.deepEqual(transitionFindings(story), []);
+  // The outgoing clip keeps its opacity through every one of them.
+  for (const entry of windows.scenes) assert.ok(!entry.tweens.some((tw) => tw.role === 'out' && tw.prop === 'opacity'), `${entry.id} fades out under the next clip`);
+  const {warnings} = await compileStoryToHyperFrames(story, {write: false});
+  assert.deepEqual(warnings.filter((warning) => /root media|placeholder/.test(warning)), []);
 });
 
 // The HyperFrames timeline: every layer tween as a GSAP fromTo, parsed back from the compiled composition.
