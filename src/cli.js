@@ -656,8 +656,8 @@ export function parseFlags(args) {
       flags[name] = true;
       continue;
     }
-    // make --animation is a switch too.
-    if (name === "animation") {
+    // make --animation and make --refine are switches too.
+    if (name === "animation" || name === "refine") {
       flags[name] = true;
       continue;
     }

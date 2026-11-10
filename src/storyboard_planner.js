@@ -93,6 +93,12 @@ export const PLAN_REPAIR_ENVELOPE_SCHEMA = Object.freeze({
 // band is checked by finish and reported here as warnings.
 const PLAN_BAND_ERRORS = Object.freeze(["coverage", "longest_undressed_seconds"]);
 
+// The explainer's cast when no map chose one, in the shape castFromDirection gives: {cast: {style, characters}, roles, dropped}.
+function defaultCasting(dropped = []) {
+  const { roles, ...cast } = defaultExplainerCast();
+  return { cast, roles, dropped };
+}
+
 // What a repair does about a measure outside its band.
 function bandRepair(band) {
   if (band.measure === "coverage") return band.status === "below" ? "dress more lines (turn face lines whose intent calls for a visual into dress or insert lines with scenes)" : "hold more lines on the presenter";
@@ -160,15 +166,17 @@ export async function planStoryboard(options = {}) {
   // (a repair of a planned video) keeps the cast it has.
   const wantsCast = options.explainer === true && lane !== "footage-led" && !bible;
   let explainer = null;
-  if (wantsCast && options.seed?.storyboard?.cast?.characters?.length) explainer = { cast: JSON.parse(JSON.stringify(options.seed.storyboard.cast)), roles: [], dropped: [] };
+  // explainerCast {cast, roles}: the cast already chosen (a fast draft's rule-made or directed one), so no map casts it.
+  if (wantsCast && options.explainerCast?.cast?.characters?.length) explainer = { cast: JSON.parse(JSON.stringify(options.explainerCast.cast)), roles: options.explainerCast.roles ?? [], dropped: [] };
+  else if (wantsCast && options.seed?.storyboard?.cast?.characters?.length) explainer = { cast: JSON.parse(JSON.stringify(options.seed.storyboard.cast)), roles: [], dropped: [] };
   if (wantsMap) {
     directionPlan = await planDirection({ client, model, brief, fixed, profile, words: wordList, subject, segments: style?.segments ?? null, now, constraints, cast: castPlan, script, explainer: wantsCast && !explainer });
     direction = directionPlan.map;
     directionSource = direction ? "model" : null;
-    if (wantsCast && !explainer) explainer = directionPlan.casting ?? { ...defaultExplainerCast(), dropped: [] };
+    if (wantsCast && !explainer) explainer = directionPlan.casting ?? defaultCasting();
     else if (direction && directionPlan.bound?.length) boundCast = directionPlan.cast;
   } else if (direction) {
-    if (wantsCast && !explainer) explainer = castFromDirection(direction) ?? { ...defaultExplainerCast(), dropped: [] };
+    if (wantsCast && !explainer) explainer = castFromDirection(direction) ?? defaultCasting();
     // A given map gets the same fit: kit values for free text, names bound.
     const fit = fitDirectionCast(direction, { cast: castPlan, words: wordList });
     direction = fit.map;
@@ -178,7 +186,7 @@ export async function planStoryboard(options = {}) {
   // A bound cast is written into the storyboard (pinned like the brand), so
   // the style never re-applies its own roster; the prompt names it too.
   let planStyle = style;
-  if (wantsCast && !explainer) explainer = { ...defaultExplainerCast(), dropped: [] };
+  if (wantsCast && !explainer) explainer = defaultCasting();
   // The explainer's cast is the story's, pinned like a bound one.
   if (explainer) boundCast = explainer.cast;
   if (boundCast) {
@@ -226,7 +234,8 @@ export async function planStoryboard(options = {}) {
   const footageBackdrops = Boolean(assets) && options.cardBackdrops === "footage" && lane !== "footage-led";
   if (!assets && options.cardBackdrops === "footage") shotWarnings.push("backdrops: card backdrops ignored: there is no asset provider to ask for footage");
   const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style: planStyle, artDirection: brief, subject, profile, direction, clipLed, explainer }), ...(layout ? [layout.prompt()] : []), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : []), ...(featured?.length ? [featuredPrompt(featured)] : []), ...(bible ? [biblePrompt(bible)] : [])].join("\n\n");
-  const shotCache = new Map();
+  // shotCache: answers already asked for (a fast draft plans twice against one set of shots); shotFallback: {scene id: the drawn scene a missed shot becomes}.
+  const shotCache = options.shotCache instanceof Map ? options.shotCache : new Map();
   let shots = [];
   const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });
   // history: a "Recent videos" section (src/visual_history.js historyPrompt)
@@ -311,7 +320,7 @@ export async function planStoryboard(options = {}) {
       if (assets) {
         const requested = shotRequests(pinned.storyboard).length;
         if (footageBackdrops) pinned.storyboard = cardBackdrops(pinned.storyboard, { words: wordList, brief }).storyboard;
-        const found = await resolveShots(pinned.storyboard, { assets, words: wordList, brief, format: fixed.format, project, cache: shotCache });
+        const found = await resolveShots(pinned.storyboard, { assets, words: wordList, brief, format: fixed.format, project, cache: shotCache, fallback: options.shotFallback ?? null });
         const kept = restoreMisses(found.storyboard, found.errors, varied.originals);
         pinned.storyboard = kept.storyboard;
         shots = found.shots;
@@ -989,7 +998,7 @@ export async function planDirection({ client, model = null, brief, fixed, profil
     if (extracted.ok) {
       // The explainer's cast: what the map chose, as a story cast (a character the kit cannot draw is dropped; none at all takes the default pair).
       if (explainer) {
-        casting = castFromDirection(extracted.map) ?? { ...defaultExplainerCast(), dropped: ["the map cast no character the kit can draw; the default pair is used"] };
+        casting = castFromDirection(extracted.map) ?? defaultCasting(["the map cast no character the kit can draw; the default pair is used"]);
         extracted.map.cast = casting.cast;
         cast = { cast: casting.cast, source: "story", bindable: false };
       }
