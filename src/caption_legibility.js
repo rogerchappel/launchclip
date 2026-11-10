@@ -101,6 +101,24 @@ export function captionBandRect(options, format) {
   return { x: Math.round(b.left * W), y: Math.round(options.bandTop * H - pad), width: Math.round((1 - b.left - b.right) * W), height: Math.round(b.height * H + 2 * pad) };
 }
 
+// The least outline (px) and outline-to-text contrast that carry a line on any background.
+export const CAPTION_OUTLINE = Object.freeze({ stroke: 6, contrast: 4.5 });
+
+/**
+ * Captions that carry their own contrast: a character story's treatment
+ * (captions.mjs worldTone false), type in an outline at least
+ * CAPTION_OUTLINE.stroke px thick that contrasts with the text. Such a line
+ * needs no legibility plate: what is behind each glyph is its outline.
+ */
+export function outlinedCaptions(options) {
+  if (!options || options.worldTone !== false || !(options.stroke >= CAPTION_OUTLINE.stroke)) return false;
+  const rgba = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(String(options.strokeColor ?? ""));
+  const stroke = rgba ? rgba.slice(1, 4).map(Number) : /^#[0-9a-f]{6}$/i.test(String(options.strokeColor)) ? hexRgb(options.strokeColor) : null;
+  if (!stroke || !/^#[0-9a-f]{6}$/i.test(String(options.colors?.idle))) return false;
+  const a = luminance(hexRgb(options.colors.idle)), b = luminance(stroke);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= CAPTION_OUTLINE.contrast;
+}
+
 /**
  * Where one line is read: its caption zone (a character story's captions
  * sit clear of its cast, castCaptionZones) with the band's margin, else the
@@ -300,7 +318,10 @@ export async function measureCaptionLegibility(video, story, { chunks, frame = v
   for (const line of lines) {
     const rect = lineBandRect(options, format, line, zones);
     const image = await frame(video, line.time, format);
-    out.push({ id: line.id, text: line.text, time: line.time, plated: line.plated, ...(line.backing ? { backing: line.backing.color } : {}), ...lineLegibility(image, rect, line.colors, { size: options.size, chars: line.chars, plate: line.backing?.color ?? null, plateAlpha: line.backing?.alpha ?? 1, plateLine: line.backing?.line ?? null }) });
+    const measured = lineLegibility(image, rect, line.colors, { size: options.size, chars: line.chars, plate: line.backing?.color ?? null, plateAlpha: line.backing?.alpha ?? 1, plateLine: line.backing?.line ?? null });
+    // Outlined type reads on anything: the outline is what is behind every glyph, whatever the frame holds.
+    const outlined = outlinedCaptions(options) && !line.plated;
+    out.push({ id: line.id, text: line.text, time: line.time, plated: line.plated, ...(line.backing ? { backing: line.backing.color } : {}), ...measured, ...(outlined && measured.found ? { legible: true, outlined: true } : {}) });
   }
   return { lines: out, failed: out.filter((line) => line.found && !line.legible).map((line) => line.id) };
 }
@@ -314,7 +335,7 @@ const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b
  */
 export function predictCaptionPlates(story, chunks, elements = []) {
   const { lines, options } = captionLines(story, chunks);
-  if (!lines.length) return [];
+  if (!lines.length || outlinedCaptions(options)) return [];
   const zones = castCaptionZones(story);
   // Characters and media under the band (a card in the band is already a layout collision).
   // A photo-scene's picture (fullFrame, src/layout_check.js) is judged on the render, as before.

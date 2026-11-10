@@ -107,3 +107,18 @@ test("a style pack's caption preset is not put on a character story, unless the 
   assert.deepEqual(validateStylePack(own).errors, []);
   assert.equal(applyStyle({ ...characterStory(), style: own.name }, own).story.overlays[0].preset, "bubble");
 });
+
+test("a character story's outlined captions need no legibility plate; other captions are judged as before", async () => {
+  const { outlinedCaptions, predictCaptionPlates } = await import("../src/caption_legibility.js");
+  const story = resolved();
+  const options = captionOptions(story.overlays[0], { brand: story.brand, format: story.format, story });
+  assert.ok(outlinedCaptions(options), "white type in a dark outline");
+  // A character standing right under the line no longer plates it.
+  const under = [{ id: "cast", role: "media", rect: { x: 0, y: 0, width: 1080, height: 1920 }, start: 0, end: 11.55 }];
+  assert.deepEqual(predictCaptionPlates(story, chunkWords(characterWords()), under), []);
+  // The same words in a story with no bible: the kit's default captions, plated where a character is under them.
+  const { bible, ...raw } = characterStory();
+  const plain = resolveStory(raw, { words: characterWords() });
+  assert.ok(!outlinedCaptions(captionOptions(plain.overlays[0], { brand: plain.brand, format: plain.format, story: plain })));
+  assert.ok(predictCaptionPlates(plain, chunkWords(characterWords()), under).length > 0);
+});

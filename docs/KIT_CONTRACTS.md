@@ -2972,13 +2972,14 @@ chooses it from the storyboard alone:
 | Move | When | What |
 |---|---|---|
 | `speaker` | a `medium` or `close` shot where a character `says` a line | a push-in from rest, 2.8% a second, 4.5% to 12% in all |
-| `wide` | a `wide` shot (and a `world` plate) | a drift across at 1.05× (2% of the width a second, 4.4% at most; right on even plates, left on odd) with 40% of a push |
+| `wide` | a `wide` shot | a drift across at 1.05× (2% of the width a second, 4.4% at most; right on even plates, left on odd) with 40% of a push |
 | `reaction` | a `medium` or `close` shot where nobody speaks | a punch-in to 1.07× over 0.42 s on the grammar's camera ease, then a slow creep |
 
 A slow move is three keys with one velocity through the joins (`power1.in`,
 linear, `power1.out`; ramps of 0.3 s, at most a quarter of the move), so it
 is slow, fast, slow with no overshoot; a last key puts the camera back at
-rest as the scene ends. The view never leaves the plate. A scene gets no
+rest as the scene ends. The view never leaves the plate. A `world` plate
+keeps its own `params.camera`. A scene gets no
 move when it is shorter than 0.8 s, when it or the next plate arrives on
 anything but a cut, or when it is the last scene before an `ending`.
 `camera.moves: false` turns every default move off.
