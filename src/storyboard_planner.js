@@ -226,7 +226,8 @@ export async function planStoryboard(options = {}) {
   const footageBackdrops = Boolean(assets) && options.cardBackdrops === "footage" && lane !== "footage-led";
   if (!assets && options.cardBackdrops === "footage") shotWarnings.push("backdrops: card backdrops ignored: there is no asset provider to ask for footage");
   const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style: planStyle, artDirection: brief, subject, profile, direction, clipLed, explainer }), ...(layout ? [layout.prompt()] : []), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : []), ...(featured?.length ? [featuredPrompt(featured)] : []), ...(bible ? [biblePrompt(bible)] : [])].join("\n\n");
-  const shotCache = new Map();
+  // shotCache: answers already asked for (a fast draft plans twice against one set of shots); shotFallback: {scene id: the drawn scene a missed shot becomes}.
+  const shotCache = options.shotCache instanceof Map ? options.shotCache : new Map();
   let shots = [];
   const hints = suggestModules([brief, wordList.map((entry) => entry?.text ?? entry?.word ?? "").join(" ")].join(" "), { lane, subject: Boolean(subject?.usable) });
   // history: a "Recent videos" section (src/visual_history.js historyPrompt)
@@ -311,7 +312,7 @@ export async function planStoryboard(options = {}) {
       if (assets) {
         const requested = shotRequests(pinned.storyboard).length;
         if (footageBackdrops) pinned.storyboard = cardBackdrops(pinned.storyboard, { words: wordList, brief }).storyboard;
-        const found = await resolveShots(pinned.storyboard, { assets, words: wordList, brief, format: fixed.format, project, cache: shotCache });
+        const found = await resolveShots(pinned.storyboard, { assets, words: wordList, brief, format: fixed.format, project, cache: shotCache, fallback: options.shotFallback ?? null });
         const kept = restoreMisses(found.storyboard, found.errors, varied.originals);
         pinned.storyboard = kept.storyboard;
         shots = found.shots;

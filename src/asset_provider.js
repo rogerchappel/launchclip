@@ -331,7 +331,7 @@ const extensionOf = (value) => {
  * the same request is asked once. A provider with concurrency > 1 is asked
  * for every shot at once; otherwise one at a time, in scene order.
  */
-export async function resolveShots(storyboard, { assets, words = [], brief = "", format = null, project = null, cache = new Map(), signal, stillFrame = ffmpegStill, measure = measureFootage } = {}) {
+export async function resolveShots(storyboard, { assets, words = [], brief = "", format = null, project = null, cache = new Map(), signal, stillFrame = ffmpegStill, measure = measureFootage, fallback = null } = {}) {
   const requests = shotRequests(storyboard);
   const backdrops = backdropRequests(storyboard);
   if (!requests.length && !backdrops.length) return { storyboard, shots: [], media: [], errors: [] };
@@ -345,7 +345,15 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
   const warnings = [];
   // A card's image slot is optional: a shot that can't fill it leaves the
   // card with its own placeholder (a warning), not a failed plan.
+  // fallback {scene id: scene}: the drawn scene a plan keeps for a shot the app
+  // does not answer (a fast draft's rule-made plan): the miss is a warning.
   const miss = (still, index, scene, slot, line) => {
+    const drawn = !still && fallback && scene.id != null ? fallback[scene.id] : null;
+    if (drawn) {
+      story.scenes[index] = structuredClone(drawn);
+      warnings.push(`${line.replace(/; design this scene without one$/, "")}; the scene is drawn instead (${drawn.module})`);
+      return;
+    }
     if (!still) { errors.push(line); return; }
     const current = story.scenes[index];
     story.scenes[index] = { ...current, params: withoutPath(current.params, slot) };
