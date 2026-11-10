@@ -21,6 +21,7 @@ import {narrationDocument, narrationRequest, synthesizeNarration} from '../src/v
 import {applyPronunciation, restoreWords} from '../src/voice/pronunciation.js';
 import {finalizeWords, writeWav} from '../src/voice/words.js';
 import {LIP_SYNC, lipSyncGate} from '../src/quality_gates.js';
+import {loadWords} from '../src/finish.js';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
 const story = (scenes, extra = {}) => ({schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1920, height: 1080, fps: 30, duration: 8}, brand, cast: {characters: [{id: 'maya'}, {id: 'theo'}]}, scenes, ...extra});
@@ -253,4 +254,18 @@ test('lip-sync gate: what it skips, and what it lets through', () => {
   assert.notEqual(lipSyncGate({resolved: humming, words: hum}).status, 'failed');
   // The mouth may lead or trail a word by the slack, no more.
   assert.ok(LIP_SYNC.slack <= 0.15 && LIP_SYNC.open <= 0.2);
+});
+
+test('finish hands the narration\'s phonemes to the scenes it renders', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'lc-lipsync-finish-'));
+  await writeFile(path.join(dir, 'NARRATION.json'), JSON.stringify({schema_version: 'launchclip.narration.v1', words: WORDS}));
+  const board = story([talk([{id: 'maya', says: 'auto'}, {id: 'theo', says: 'auto'}])], {audio: {words: 'NARRATION.json'}});
+  const words = await loadWords(dir, board);
+  assert.deepEqual(words, WORDS, 'text, times, speaker and phonemes all reach the resolver');
+  const resolved = resolveStory(board, {words});
+  assert.deepEqual(resolved.scenes[0].params.cast[0].says[1].words, [[0.7, 1, 'boat', 'b:60 ˈ:45 o:70 ʊ:70 t:55']]);
+  assert.equal(shapeAt(resolveModule(resolved.scenes[0], resolved).content.actors[0].speech, 0.9), 'o', 'the mouth is on the phoneme, not the spelling');
+  // A narration with no phonemes loads as before.
+  await writeFile(path.join(dir, 'NARRATION.json'), JSON.stringify({words: WORDS.map(({phonemes, ...word}) => word)}));
+  assert.ok((await loadWords(dir, board)).every(word => !('phonemes' in word)));
 });

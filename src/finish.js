@@ -2391,12 +2391,12 @@ async function writeResolvedCopy(ctx) {
   if (ctx.resolved) await writeJson(path.join(ctx.project, PATHS.resolved), ctx.resolved);
 }
 
-async function loadWords(project, story) {
+export async function loadWords(project, story) {
   const file = typeof story?.audio?.words === "string" ? path.join(project, story.audio.words) : null;
   if (!file || !existsSync(file)) return null;
   const words = narrationWords(await readJson(file, story.audio.words));
-  // A dialogue's words keep their speaker (character scenes' says: "auto").
-  return words.map((word) => ({ text: String(word.text ?? word.word ?? ""), start: Number(word.start), end: Number(word.end), ...(typeof word.speaker === "string" ? { speaker: word.speaker } : {}) }));
+  // A dialogue's words keep their speaker (character scenes' says: "auto") and their phonemes (mouth shapes).
+  return words.map((word) => ({ text: String(word.text ?? word.word ?? ""), start: Number(word.start), end: Number(word.end), ...(typeof word.speaker === "string" ? { speaker: word.speaker } : {}), ...(typeof word.phonemes === "string" ? { phonemes: word.phonemes } : {}) }));
 }
 
 // Every assets/ path referenced anywhere in the resolved story.
