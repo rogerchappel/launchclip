@@ -232,6 +232,8 @@ The fixture `eval/fixtures/long-form-16min` is an original script about a fictio
 
 `eval/formats.json` holds a golden brief per format. Each brief has a short sample: an example project, a minute of the beat-map fixture, or a Short cut from it. The runner stages, validates, layout-checks, compiles and renders each sample (`--renderer hyperframes|remotion`, `--quality draft`), then measures the video:
 
+`--animation` scores the six character-Short briefs from finished projects instead, with no render: see [ANIMATION_MEASUREMENT.md](ANIMATION_MEASUREMENT.md).
+
 - **Cadence.** Every frame's ffmpeg scene score is read in one pass. Events are frames over 0.04, 0.08 or 0.15, merged when closer than 1.5 s (or the format's p10 floor). The gate reads 0.08 on every frame, as on the reference, so the numbers compare with the benchmark. Cuts come from 0.15.
 - **Soft events.** The same thresholds on frames 0.25 s apart, as a diagnostic that can warn but not fail. A fade or a build on a quiet frame spreads its change over many frames and never reaches the reference's thresholds at full frame rate.
 - **Motion on hold.** `freezedetect` (noise 0.002, 1 s minimum) gives the share of the runtime that keeps moving.

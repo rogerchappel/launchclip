@@ -11,11 +11,20 @@
 // the manifest; a cited sample id expands to its two evidence ids, and an
 // unknown id is dropped with a warning (a finding left with none is kept and
 // cites the sheet's samples, so the citation gate still has evidence).
+//
+// Character stories (docs/ANIMATION_PIPELINE_RFC.md §4.7): with a show bible
+// in the project, each character's reference sheet (bible/sheets/<id>.png) is
+// shown beside the frames, and the critique lists them under
+// reviewer.reference_sheets. `review: "animatic"` is the staging review of the
+// animatic (§4.4): story, staging and acting only, written to
+// qa/animatic-critic.json; reviewAnimatic() also records its verdict in
+// ANIMATIC.json.
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { RULES_HEADING } from "./script.js";
 import { estimateModelUsageCost } from "../cost_tracker.js";
+import { ANIMATIC_REVIEW_FILE, recordAnimaticReview } from "../animatic.js";
 
 // The rubric (VIDEO_QUALITY_RFC §11.3): the craft categories, plus
 // missed-opportunity (a line whose intent calls for a visual has none),
@@ -23,10 +32,18 @@ import { estimateModelUsageCost } from "../cost_tracker.js";
 // scene that breaks the style or the brand frame), and for character stories
 // acting (a pose or expression that does not match its line, or a character
 // holding still while the story moves) and character-consistency (a character
-// that looks different between shots).
-export const CRITIC_CATEGORIES = Object.freeze(["narrative", "composition", "typography", "motion", "asset", "timing", "audio", "mount", "factual", "missed-opportunity", "sparseness", "brand-consistency", "acting", "character-consistency"]);
+// that looks different between shots, or unlike its reference sheet) and
+// lip-sync (a mouth that does not match its line: closed while the character
+// speaks, moving while it is silent, or the wrong character's mouth moving).
+export const CHARACTER_CATEGORIES = Object.freeze(["acting", "character-consistency", "lip-sync"]);
+export const CRITIC_CATEGORIES = Object.freeze(["narrative", "composition", "typography", "motion", "asset", "timing", "audio", "mount", "factual", "missed-opportunity", "sparseness", "brand-consistency", ...CHARACTER_CATEGORIES]);
+// The animatic's staging review judges story, staging and acting only (§4.4):
+// they are cheap to fix before the delivery render. Polish waits for the final.
+export const STAGING_CATEGORIES = Object.freeze(["narrative", "composition", "timing", ...CHARACTER_CATEGORIES]);
+export const CRITIC_REVIEWS = Object.freeze(["final", "animatic"]);
+export const CRITIC_FILE = "qa/critic.json";
 
-export const MAKE_CRITIC_SCHEMA = Object.freeze({
+const criticSchema = (categories) => Object.freeze({
   type: "object",
   additionalProperties: false,
   required: ["verdict", "summary", "findings"],
@@ -42,7 +59,7 @@ export const MAKE_CRITIC_SCHEMA = Object.freeze({
         properties: {
           id: { type: "string" },
           severity: { type: "string", enum: ["blocking", "major", "minor"] },
-          category: { type: "string", enum: CRITIC_CATEGORIES },
+          category: { type: "string", enum: categories },
           message: { type: "string" },
           evidence_ids: { type: "array", items: { type: "string" } }
         }
@@ -50,6 +67,8 @@ export const MAKE_CRITIC_SCHEMA = Object.freeze({
     }
   }
 });
+export const MAKE_CRITIC_SCHEMA = criticSchema(CRITIC_CATEGORIES);
+export const STAGING_CRITIC_SCHEMA = criticSchema(STAGING_CATEGORIES);
 
 const INSTRUCTIONS = `You are a fresh-context motion-design critic reviewing a rendered draft from contact sheets.
 
@@ -62,6 +81,8 @@ Judge density and style too, not only polish:
 - sparseness: a long stretch with no designed graphic, past what the format allows.
 - brand-consistency: a scene that breaks the style (palette, type, caption treatment) or drops the brand frame the other scenes carry.
 - acting and character-consistency (character stories only): a pose or expression that does not match its line, a character holding still while the story moves, or a character who looks different between shots.
+- lip-sync (character stories only): a mouth that does not match its line: closed in every tile while that character speaks, open while it is silent, or the wrong character's mouth moving. You see stills, so report it only when the tiles of a spoken line show it.
+- When reference sheets are attached, each one is how that character must look in every shot (hair, skin, clothes, build, what they wear or carry). A character who does not match their sheet is a character-consistency finding. Never cite a reference sheet as evidence; cite the tile that shows the mismatch.
 
 Rules:
 - Cite evidence ids exactly as listed for the tiles you are describing. Every finding needs at least one.
@@ -71,15 +92,43 @@ Rules:
 
 Return only the JSON object.`;
 
+const STAGING_INSTRUCTIONS = `You are a fresh-context story editor reviewing an animatic from contact sheets: the whole story drawn by the character rig at draft quality, before the delivery render. Problems found here are cheap to fix, so this review is about story, staging and acting only.
+
+Each sheet shows samples in time order, as pairs of tiles: left = the renderer's browser still, right = the same moment decoded from the encoded draft. The overview strip shows one frame every 1.5 s. The shot list says who is in each shot, what is said during it, and the poses planned.
+
+Judge:
+- narrative: does the story read from the pictures alone: who wants what, what goes wrong, what changes? Is the opening shot a hook? Is a beat missing, or shown in the wrong order?
+- composition (staging): is the speaker on screen and easy to find, are the characters framed and facing each other, does the framing change when the story turns, is anyone cropped, hidden or standing on a caption?
+- timing: a shot that outstays its line, or one too short to read.
+- acting: a pose or expression that does not match its line, or a character holding still while the story moves.
+- character-consistency: a character who looks different between shots, or unlike their reference sheet. Each attached reference sheet is how that character must look in every shot.
+- lip-sync: a mouth closed in every tile of that character's line, open while silent, or the wrong character's mouth moving. You see stills, so report it only when the tiles of a spoken line show it.
+
+Do not judge polish: draft encoding, type refinement, colour, music or sound. Do not judge audio; you cannot hear it.
+
+Rules:
+- Cite evidence ids exactly as listed for the tiles you are describing. Every finding needs at least one. Never cite a reference sheet as evidence.
+- Do not invent defects in moments you were not shown.
+- verdict "ship" only with no blocking or major findings; "repair" when one or a few shots need new staging or acting; "replan" when the story or the shot order is wrong.
+- Keep each message actionable: which shot, what is wrong, and the smallest change to its poses, framing or set.
+
+Return only the JSON object.`;
+
 /**
  * options: {project, client, model, provider, maxSheets (default 12),
  * quality: the findings finish's coverage gate proved from the direction map
  * and the storyboard ([{category, severity, at, message}], src/quality_gates.js).
  * They go to the model as known facts and into qa/critic.json as tooling
  * findings, each citing the evidence sample nearest its time.}
- * → {status: "written"|"skipped"|"failed", file, verdict, findings, reviewed, warnings, usage, cost_usd, reason?}
+ * review: "final" (default; qa/critic.json) or "animatic" (the staging
+ * review; qa/animatic-critic.json). referenceSheets: false leaves the show
+ * bible's sheets out; shots: the shot list's shots (src/story_shots.js), given
+ * to the model as text when present.
+ * → {status: "written"|"skipped"|"failed", file, verdict, findings, reviewed, warnings, usage, cost_usd, reference_sheets, reason?}
  */
-export async function runHeadlessCritic({ project, client, model = null, provider = null, maxSheets = 12, quality = [], rules = null } = {}) {
+export async function runHeadlessCritic({ project, client, model = null, provider = null, maxSheets = 12, quality = [], rules = null, review = "final", referenceSheets = true, shots = null } = {}) {
+  if (!CRITIC_REVIEWS.includes(review)) throw new Error(`review must be one of ${CRITIC_REVIEWS.join(", ")}; got ${review}`);
+  const staging = review === "animatic";
   const manifestFile = path.join(project, "qa/temporal-evidence/manifest.json");
   const indexFile = path.join(project, "qa/critic-sheets/index.json");
   if (!existsSync(manifestFile) || !existsSync(indexFile)) return { status: "skipped", reason: "finish wrote no temporal evidence or critic sheets" };
@@ -106,6 +155,15 @@ export async function runHeadlessCritic({ project, client, model = null, provide
   const overview = path.join(project, "qa/critic-sheets/overview-every-1.5s.jpg");
   if (existsSync(overview)) { images.push({ url: await dataUrl(overview), detail: "low" }); lines.push(`Image ${images.length}: the overview strip (context only; cite the sheet tiles)`); }
   if (!images.length) return { status: "skipped", reason: "no critic sheet images were found" };
+  // The show bible's reference sheets, beside the frames (§4.7).
+  const references = referenceSheets ? await bibleReferenceSheets(project) : [];
+  if (references.length) lines.push("", "Reference sheets (how each character must look in every shot; not evidence, never cite them):");
+  for (const reference of references) {
+    images.push({ url: await dataUrl(path.join(project, reference.file)), detail: "high" });
+    lines.push(`  Image ${images.length}: ${reference.name} (${reference.character})${reference.must_keep.length ? `; must keep: ${reference.must_keep.join(", ")}` : ""}`);
+  }
+  const shotLines = shotListLines(shots);
+  if (shotLines.length) lines.push("", "The shot list (who is in each shot, what is said, the poses planned):", ...shotLines);
   if (quality.length) {
     lines.push("", "Measured from the direction map and the storyboard (already proven; look for more of the same, and do not repeat these):");
     for (const finding of quality) lines.push(`  ${finding.category} at ${finding.at} s: ${finding.message}`);
@@ -116,14 +174,21 @@ export async function runHeadlessCritic({ project, client, model = null, provide
   const known = new Set((manifest.entries ?? []).map((entry) => entry.evidence_id));
   let result;
   try {
-    result = await client.runStructured({ instructions: INSTRUCTIONS, input: `${lines.join("\n")}\n`, images, schema: MAKE_CRITIC_SCHEMA, schemaName: "launchclip_make_critic", maxOutputTokens: 6000 });
+    result = await client.runStructured({ instructions: staging ? STAGING_INSTRUCTIONS : INSTRUCTIONS, input: `${lines.join("\n")}\n`, images, schema: staging ? STAGING_CRITIC_SCHEMA : MAKE_CRITIC_SCHEMA, schemaName: staging ? "launchclip_animatic_review" : "launchclip_make_critic", maxOutputTokens: 6000 });
   } catch (error) {
     return { status: "failed", reason: `critic model call failed: ${String(error?.message ?? error).split("\n")[0]}` };
   }
   const value = result?.value ?? parseText(result?.text);
   if (!value || !["ship", "repair", "replan"].includes(value.verdict)) return { status: "failed", reason: "the critic returned no valid verdict" };
   const warnings = [];
-  const findings = (Array.isArray(value.findings) ? value.findings : []).map((finding, i) => {
+  const allowed = staging ? STAGING_CATEGORIES : CRITIC_CATEGORIES;
+  const raised = (Array.isArray(value.findings) ? value.findings : []).filter((finding) => {
+    if (allowed.includes(finding?.category)) return true;
+    // A model without strict schemas can answer outside the rubric.
+    warnings.push(`finding ${finding?.id ?? "?"} has category ${finding?.category ?? "none"}, which ${staging ? "the staging review does not judge" : "is not in the rubric"}; dropped`);
+    return false;
+  });
+  const findings = raised.map((finding, i) => {
     const cited = [];
     for (const id of Array.isArray(finding.evidence_ids) ? finding.evidence_ids : []) {
       if (known.has(id)) cited.push(id);
@@ -141,16 +206,54 @@ export async function runHeadlessCritic({ project, client, model = null, provide
     summary: String(value.summary ?? ""),
     findings,
     evidence_ids_reviewed: reviewed,
-    reviewer: { kind: "launchclip-make-headless-critic", model: result?.model ?? model, sheets: sheets.map((sheet) => sheet.sheet), note: "Reviewed contact sheets only (no audio, no full-motion playback)." }
+    reviewer: { kind: staging ? "launchclip-animatic-staging-review" : "launchclip-make-headless-critic", review, model: result?.model ?? model, sheets: sheets.map((sheet) => sheet.sheet), ...(references.length ? { reference_sheets: references.map((reference) => ({ character: reference.character, file: reference.file })) } : {}), note: staging ? "Reviewed the animatic's contact sheets for story, staging and acting only (no audio, no full-motion playback, no polish)." : "Reviewed contact sheets only (no audio, no full-motion playback)." }
   };
-  const file = path.join(project, "qa/critic.json");
+  const file = path.join(project, staging ? ANIMATIC_REVIEW_FILE : CRITIC_FILE);
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, `${JSON.stringify(critique, null, 2)}\n`);
   const usage = result?.usage ?? {};
   const cost = estimateModelUsageCost(provider ?? client?.provider ?? "openai", result?.model ?? model, usage);
   const unreviewed = [...known].filter((id) => !reviewed.includes(id));
   if (unreviewed.length) warnings.push(`${unreviewed.length} evidence id(s) were on sheets past --critic's sheet limit and were not reviewed`);
-  return { status: "written", file, critique, verdict, findings: findings.length, reviewed: reviewed.length, unreviewed: unreviewed.length, warnings, usage, cost_usd: cost.estimated_usd, model: result?.model ?? model };
+  return { status: "written", file, review, critique, verdict, findings: findings.length, reviewed: reviewed.length, unreviewed: unreviewed.length, reference_sheets: references.map((reference) => reference.file), warnings, usage, cost_usd: cost.estimated_usd, model: result?.model ?? model };
+}
+
+/**
+ * The staging review of the animatic (§4.4): the critic over the animatic's
+ * evidence for story, staging and acting, written to qa/animatic-critic.json,
+ * with the verdict recorded in ANIMATIC.json's `review`. Takes
+ * runHeadlessCritic's options; `critic` replaces the model call (tests, a host).
+ * → runHeadlessCritic's result, plus `animatic` (the updated ANIMATIC.json, or null).
+ */
+export async function reviewAnimatic({ critic = runHeadlessCritic, ...options } = {}) {
+  const result = await critic({ ...options, review: "animatic" });
+  if (result.status !== "written") return result;
+  const animatic = await recordAnimaticReview(options.project, { verdict: result.verdict });
+  return { ...result, animatic };
+}
+
+/**
+ * The reference sheets of the project's show bible that are on disk:
+ * [{character, name, file (project-relative), must_keep}]. Empty with no bible.
+ */
+export async function bibleReferenceSheets(project) {
+  let bible = null;
+  try { bible = JSON.parse(await readFile(path.join(project, "BIBLE.json"), "utf8")); } catch { return []; }
+  const cast = Array.isArray(bible?.cast) ? bible.cast : Array.isArray(bible?.cast?.characters) ? bible.cast.characters : [];
+  return cast
+    .filter((entry) => entry && typeof entry.id === "string" && typeof entry.sheet === "string" && !path.isAbsolute(entry.sheet) && !entry.sheet.split(/[\\/]/).includes("..") && existsSync(path.join(project, entry.sheet)))
+    .map((entry) => ({ character: entry.id, name: String(entry.name ?? entry.id), file: entry.sheet, must_keep: Array.isArray(entry.must_keep) ? entry.must_keep.map(String) : [] }));
+}
+
+// The shot list as the critic reads it: one line per shot, then what is said.
+function shotListLines(shots) {
+  const out = [];
+  for (const shot of Array.isArray(shots) ? shots : []) {
+    out.push(`  ${shot.id}  ${shot.start}–${shot.end} s  ${shot.framing ? `${shot.framing} shot, ` : ""}${shot.set ? `set ${shot.set}, ` : ""}who: ${(shot.who ?? []).join(", ") || "nobody"}`);
+    for (const [who, poses] of Object.entries(shot.poses ?? {})) if (poses?.length) out.push(`    ${who}: ${poses.map((pose) => `${pose.at} ${pose.pose}${pose.expression ? `, ${pose.expression}` : ""}`).join(" → ")}`);
+    for (const line of shot.lines ?? []) out.push(`    ${line.start}–${line.end}  ${line.speaker ?? "?"}${line.on_screen === false && line.speaker && line.speaker !== "narrator" ? " (off screen)" : ""}: "${line.text}"`);
+  }
+  return out;
 }
 
 /**
