@@ -22,16 +22,13 @@ headlessly ("Make a video headlessly" in the launchclip-cli reference). Use it
 when the user wants a hands-off draft or has no agent subscription; use this
 skill when they want the bespoke, reviewed path below.
 
-**A story told by characters takes the animation branch.** When the brief is
-people talking to each other or a scene acted out (an animated short, a skit,
-a two-hander, "meet Pia and Dov"), do step 1, then follow
-[references/animation.md](references/animation.md) in place of steps 2 to 4.
-It takes you through the script with speakers (`SCRIPT.json`), the cast and
-the frozen show bible (`BIBLE.json`), the voices, the shot list and the
-animatic (`ANIMATIC.json`), and it stops twice for the user: after the bible,
-to approve the cast, and after the animatic, before the delivery render. It
-rejoins this path at step 5. `launchclip make "<prompt>" --animation` is the
-headless equivalent and writes the same files.
+**Characters telling a story** (an animated short, a skit, people talking to
+each other) take the animation branch: after step 1, follow
+[references/animation.md](references/animation.md) in place of steps 2 to 4
+(`SCRIPT.json` with speakers, the frozen show bible `BIBLE.json`, the shot
+list, the animatic `ANIMATIC.json`), stop for the user after the bible and
+after the animatic, then rejoin at step 5. Headless:
+`launchclip make "<prompt>" --animation`.
 
 1. **Brief.** Ask at most three grouped questions (story, delivery, materials
    and audio), default the rest, and write `BRIEF.md`, `EVIDENCE.md` and
@@ -157,11 +154,8 @@ Read a reference when its step comes up, not all at once.
   `DIRECTION.json` you write before the storyboard: an intent and a treatment
   for every narration line, the shared intent rules, and what `story validate`
   checks.
-- [references/animation.md](references/animation.md): a story told by
-  characters, from one prompt: the script with a narrator and dialogue, the
-  cast and the frozen show bible, the shot list, the animatic and its staging
-  review, single-shot retakes, and the two points that stop for the user's
-  approval. The same contract files as `launchclip make --animation`.
+- [references/animation.md](references/animation.md): the animation branch:
+  script, show bible, shot list, animatic, retakes and the two approval stops.
 - [references/profiles.md](references/profiles.md): the cadence profiles
   (coverage, face time, pacing and motion bands per format) that the map and
   the gates measure against.

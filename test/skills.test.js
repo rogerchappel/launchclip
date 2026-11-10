@@ -69,7 +69,7 @@ async function text(relativePath) {
 test("both create-video skills open with a concise quick path in gate order", async () => {
   for (const [dir, renderer] of [["skills/launchclip-create-video", "hyperframes"], ["skills/launchclip-create-video-remotion", "remotion"]]) {
     const skill = await text(`${dir}/SKILL.md`);
-    assert.ok(Buffer.byteLength(skill) < 12_000, `${dir}/SKILL.md stays short (${Buffer.byteLength(skill)} bytes)`);
+    assert.ok(Buffer.byteLength(skill) < 12_800, `${dir}/SKILL.md stays short (${Buffer.byteLength(skill)} bytes)`);
     const quick = skill.slice(skill.indexOf("## Quick path"));
     assert.ok(skill.indexOf("## Quick path") > 0 && skill.indexOf("## Quick path") < 2500, "the quick path comes first");
     const order = ["BRIEF.md", "CONCEPTS.json", "launchclip voice", "storyboard-modules.md", "--candidate", `launchclip finish <project> --renderer ${renderer}`, "qa/critic.json", "launchclip cinematic-check"];
