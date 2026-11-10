@@ -26,10 +26,12 @@ const wait = (ms) => (ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms))
  * jitter (true: a later call of the same kind answers sooner, so answers
  * arrive out of order when calls overlap), screenshots (the handed-in
  * screenshots beside the fixture's clip and logo; [] for none), direction (the
- * map the direction call answers with; none by default, so make drafts one)}.
+ * map the direction call answers with; none by default, so make drafts one),
+ * board (a change to every recorded storyboard)}. run's hooks.adapters are
+ * merged over the run's own.
  * → {run(makeOptions, {sleep, now, refuse}) → {report, lines, calls, peak}, project, cwd, assets, cleanup()}
  */
-export async function recordedRun({ callMs = 0, stillMs = 0, finishMs = 0, jitter = false, screenshots = SCREENSHOTS, direction = null } = {}) {
+export async function recordedRun({ callMs = 0, stillMs = 0, finishMs = 0, jitter = false, screenshots = SCREENSHOTS, direction = null, board = null } = {}) {
   const assets = await assetsDir();
   for (const name of screenshots) await writeFile(path.join(assets, name), `screenshot ${name}`);
   const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-recorded-run-"));
@@ -53,7 +55,10 @@ export async function recordedRun({ callMs = 0, stillMs = 0, finishMs = 0, jitte
       const wins = kind === "open" ? "b" : "a";
       return { model: "gpt-5.6-luna", usage, value: { rationale: `Candidate ${kind}-${wins} reads sooner.`, candidates: ["a", "b"].map((letter) => ({ id: `${kind}-${letter}`, admissible: true, weakness: letter === wins ? "" : "Slower to read.", scores: scores(letter === wins ? 8 : 6) })) } };
     }
-    return answer(request);
+    const answered = await answer(request);
+    // board(storyboard) → the storyboard the recorded model returns instead (a shot request, say).
+    if (board && request.schemaName === "launchclip_storyboard") return { ...answered, value: { storyboard_json: JSON.stringify(board(JSON.parse(answered.value.storyboard_json))) } };
+    return answered;
   };
   fake.model.client.runStructured = recorded;
   const model = withConcepts(fake.model);
@@ -91,7 +96,7 @@ export async function recordedRun({ callMs = 0, stillMs = 0, finishMs = 0, jitte
     refuse = hooks.refuse ?? null;
     // The description cache is the run's own, so a second run in the same project reuses it and another project never sees it.
     const describeAssets = (found, settings) => describeInventory(found, { ...settings, cacheDir: path.join(cwd, "descriptions"), adapters: { motion: async () => null, ocr: async () => null, images: async () => ({ images: [{ url: "data:image/jpeg;base64,AA==", detail: "high" }], times: [0] }) } });
-    const adapters = { env: {}, client: model, inventory, describeAssets, candidateStill: still, critic, notice: (line) => lines.push(line), finish: async (...args) => { await wait(finishMs); return finish(...args); }, ...(hooks.sleep ? { sleep: hooks.sleep } : {}), ...(hooks.now ? { now: hooks.now } : {}) };
+    const adapters = { env: {}, client: model, inventory, describeAssets, candidateStill: still, critic, notice: (line) => lines.push(line), finish: async (...args) => { await wait(finishMs); return finish(...args); }, ...(hooks.sleep ? { sleep: hooks.sleep } : {}), ...(hooks.now ? { now: hooks.now } : {}), ...(hooks.adapters ?? {}) };
     const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd, out: "video", ...options }, adapters);
     return { report, lines, calls: [...calls], peak };
   };

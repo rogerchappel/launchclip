@@ -23,6 +23,7 @@ import { CONSTRAINTS_FILE, PROJECT_CONSTRAINTS_FILE, constrainProvider, constrai
 import { mediaNotesLine } from "../inventory_notes.js";
 import { checkStoryboard, planStoryboard } from "../storyboard_planner.js";
 import { captionBandWarning, settleCaptionBand } from "../caption_band_fit.js";
+import { markProvided } from "../provided_files.js";
 import { directionJson } from "@launchclip/core/direction.mjs";
 import { profileForStory, resolveProfile } from "../profile_store.js";
 import { resolveStyleV2 } from "../style_store.js";
@@ -330,9 +331,15 @@ async function stageInventory(ctx) {
       delete entry.transcript.raw;
     }
   }
-  // Copy (hard-link when possible) every usable file into the project's assets/.
+  // Files the asset provider fetched for an earlier plan of this project and
+  // wrote into --assets (src/provided_files.js): described from the request
+  // they answered and the provider's notes, never by a model, and not routed
+  // as the user's media, so a rerun or --replan starts from the same inputs.
+  const provided = await markProvided(inventory, { project, root: assetsDir });
+  if (provided.length) ctx.say(`assets: ${provided.length} file${provided.length === 1 ? "" : "s"} in --assets ${provided.length === 1 ? "was" : "were"} fetched by the asset provider for an earlier plan; described from the provider's answer (no model call) and not offered as handed-in media`);
+  // Copy (hard-link when possible) every usable file into the project's assets/ (a fetched one is already under assets/shots).
   for (const entry of inventory.entries) {
-    if (entry.kind === "other") continue;
+    if (entry.kind === "other" || entry.provided) continue;
     await linkOrCopy(path.join(assetsDir, entry.path), path.join(project, "assets", entry.path));
   }
   for (const warning of inventory.notes?.warnings ?? []) report.warnings.push(`notes: ${warning}`);
@@ -348,7 +355,7 @@ async function stageInventory(ctx) {
   ctx.inventory = inventory;
   state.inventory = inventory.entries.map((entry) => [entry.path, entry.fingerprint]);
   await writeJson(path.join(project, MAKE_PATHS.assets), inventory);
-  report.assets = { file: MAKE_PATHS.assets, counts: inventory.counts, ...(brand.length ? { brand_assets: brand.length } : {}), ...(described.described.length ? { descriptions: described.counts } : {}) };
+  report.assets = { file: MAKE_PATHS.assets, counts: inventory.counts, ...(brand.length ? { brand_assets: brand.length } : {}), ...(described.described.length ? { descriptions: described.counts } : {}), ...(provided.length ? { provided: provided.length } : {}) };
   return { status: "done" };
 }
 
@@ -683,7 +690,7 @@ async function prepareMotion(ctx) {
   const skeleton = chooseMakeSkeleton(ctx, target);
   // The planning pass: format, goal and awareness (flags, else the brief's defaults), on the library skeleton's beats when there is one.
   const pinned = !skeleton && SCRIPT_SKELETONS[options.skeleton] ? options.skeleton : undefined;
-  const planOptions = { prompt: ctx.text, duration: target, aspect: routing.aspect, assets: ctx.inventory?.entries, ...scriptPlanOptions(options), ...scriptCraftOptions(options), ...(pinned ? { skeleton: pinned } : {}) };
+  const planOptions = { prompt: ctx.text, duration: target, aspect: routing.aspect, assets: ctx.inventory?.entries?.filter((entry) => !entry.provided), ...scriptPlanOptions(options), ...scriptCraftOptions(options), ...(pinned ? { skeleton: pinned } : {}) };
   const plan = skeleton ? skeletonScriptPlan(planOptions, skeleton) : chooseScriptPlan(planOptions);
   ctx.scriptPlan = plan;
   const planChecks = { format: plan.format, goal: plan.goal, awareness: plan.awareness, pace: plan.pace, ...(plan.cta?.keyword ? { ctaKeyword: plan.cta.keyword } : {}), ...(plan.series?.choices ? { choices: plan.series.choices } : {}) };
