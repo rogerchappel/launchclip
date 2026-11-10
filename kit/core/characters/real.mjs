@@ -137,33 +137,58 @@ const EYES = {
   wide: {up: 0.86, low: 0.56, iris: 0.92},
   happy: {up: 0.46, low: -0.02, iris: 1, cheek: true},
   narrow: {up: 0.3, low: 0.34, iris: 1},
-  squint: {up: 0.32, low: 0.12, iris: 1, cheek: true}
+  squint: {up: 0.32, low: 0.12, iris: 1, cheek: true},
+  // dx, dy: where the iris looks (dx toward the facing side); closed: the lids
+  // shut, their line curving 'down' (sad, asleep) or 'up' (squeezed by a smile).
+  droop: {up: 0.4, low: 0.44, iris: 1, dy: 0.25},
+  shut: {closed: 'down'},
+  shock: {up: 0.98, low: 0.66, iris: 0.66},
+  line: {up: 0.24, low: 0.2, iris: 1},
+  side: {up: 0.34, low: 0.34, iris: 1, dx: 1},
+  up: {up: 0.74, low: 0.42, iris: 0.96, dx: 0.5, dy: -0.75},
+  heart: {up: 0.52, low: 0.12, iris: 1.1, cheek: true, glint: true},
+  sparkle: {up: 0.9, low: 0.52, iris: 1.08, glint: true},
+  chevron: {closed: 'up', cheek: true}
 };
+// A wink: the left eye open, the right one shut.
+const eyeKind = (kind, sx) => (kind === 'wink' ? (sx < 0 ? 'dot' : 'chevron') : kind);
 
 function eye(ctx, sx, kind) {
   const {P, look} = ctx;
   const {ew, eh} = look;
   const spec = EYES[kind] ?? EYES.dot;
   const hw = ew / 2;
-  const up = eh * spec.up, low = eh * spec.low;
   // The outer corner sits a touch higher than the inner one.
   const inner = [-sx * hw, 0.6], outer = [sx * hw, -0.8];
   const x0 = Math.min(inner[0], outer[0]), x1 = Math.max(inner[0], outer[0]);
   const yL = x0 === inner[0] ? inner[1] : outer[1], yR = x1 === inner[0] ? inner[1] : outer[1];
+  if (spec.closed) {
+    // Shut lids: one lash line, a lash at the outer corner, the crease above.
+    const bend = spec.closed === 'down' ? eh * 0.95 : -eh * 1.05;
+    const lid = `M${r1(x0)} ${r1(yL)}Q0 ${r1(bend)} ${r1(x1)} ${r1(yR)}`;
+    return group([
+      strokeLine(lid, '#221a1c', 2.6),
+      strokeLine(`M${r1(outer[0])} ${r1(outer[1])}L${r1(outer[0] + sx * ew * 0.14)} ${r1(outer[1] + (spec.closed === 'down' ? eh * 0.3 : -eh * 0.3))}`, '#221a1c', 1.6),
+      strokeLine(`M${r1(x0 + ew * 0.14)} ${r1(-eh * 0.75)}Q0 ${r1(-eh * 1.15)} ${r1(x1 - ew * 0.1)} ${r1(-eh * 0.7)}`, darken(ctx.c.skin, 0.25), 1.1, {strokeOpacity: 0.55})
+    ], {transform: `translate(${r1(sx * ctx.look.ex)} 0)`});
+  }
+  const up = eh * spec.up, low = eh * spec.low;
   const top = `M${r1(x0)} ${r1(yL)}C${r1(x0 + ew * 0.22)} ${r1(-up * 1.25)} ${r1(x1 - ew * 0.28)} ${r1(-up * 1.3)} ${r1(x1)} ${r1(yR)}`;
   const opening = `${top}C${r1(x1 - ew * 0.3)} ${r1(low * 1.2)} ${r1(x0 + ew * 0.3)} ${r1(low * 1.2)} ${r1(x0)} ${r1(yL)}Z`;
   const clip = P.uid('ec');
   const ir = eh * 0.46 * spec.iris;
-  const shift = ctx.look.gaze * ew * 0.08;
+  const shift = ctx.look.gaze * ew * (0.08 + (spec.dx ?? 0) * 0.15);
+  const rise = (spec.dy ?? 0) * eh * 0.42;
   const out = [
     el('clipPath', clip, null, [pathNode(opening, {})]),
     pathNode(opening, {fill: '#f4efe8'}),
     group([
       pathNode(`M${r1(x0)} ${r1(-up * 1.4)}L${r1(x1)} ${r1(-up * 1.4)}L${r1(x1)} ${r1(-up * 0.2)}L${r1(x0)} ${r1(-up * 0.2)}Z`, {fill: '#000000', opacity: 0.12}),
-      el('ellipse', null, null, [], {cx: r1(shift), cy: 0, rx: r1(ir), ry: r1(ir), fill: ctx.look.iris, stroke: darken(ctx.look.iris, 0.45), strokeWidth: 0.9}),
-      el('ellipse', null, null, [], {cx: r1(shift), cy: 0, rx: r1(ir * 0.62), ry: r1(ir * 0.62), fill: lighten(ctx.look.iris, 0.18), opacity: 0.45}),
-      el('ellipse', null, null, [], {cx: r1(shift), cy: 0, rx: r1(ir * 0.44), ry: r1(ir * 0.44), fill: '#120d0e'}),
-      el('ellipse', null, null, [], {cx: r1(shift - ir * 0.35 * Math.sign(ctx.look.lx || -1)), cy: r1(-ir * 0.38), rx: r1(ir * 0.24), ry: r1(ir * 0.22), fill: '#ffffff', opacity: 0.9})
+      el('ellipse', null, null, [], {cx: r1(shift), cy: r1(rise), rx: r1(ir), ry: r1(ir), fill: ctx.look.iris, stroke: darken(ctx.look.iris, 0.45), strokeWidth: 0.9}),
+      el('ellipse', null, null, [], {cx: r1(shift), cy: r1(rise), rx: r1(ir * 0.62), ry: r1(ir * 0.62), fill: lighten(ctx.look.iris, 0.18), opacity: 0.45}),
+      el('ellipse', null, null, [], {cx: r1(shift), cy: r1(rise), rx: r1(ir * 0.44), ry: r1(ir * 0.44), fill: '#120d0e'}),
+      el('ellipse', null, null, [], {cx: r1(shift - ir * 0.35 * Math.sign(ctx.look.lx || -1)), cy: r1(rise - ir * 0.38), rx: r1(ir * 0.24), ry: r1(ir * 0.22), fill: '#ffffff', opacity: 0.9}),
+      ...(spec.glint ? [el('ellipse', null, null, [], {cx: r1(shift + ir * 0.3 * Math.sign(ctx.look.lx || -1)), cy: r1(rise + ir * 0.36), rx: r1(ir * 0.15), ry: r1(ir * 0.15), fill: '#ffffff', opacity: 0.85})] : [])
     ], {clipPath: `url(#${clip})`}),
     // Upper lid line and lashes, the lower lid, the crease above.
     strokeLine(top, '#221a1c', 2.4),
@@ -223,8 +248,49 @@ function mouthShape(ctx, name) {
     case 'grimace': return [pathNode(`M${r1(-m * 1.1)} -3.6L${r1(m * 1.1)} -3.6L${r1(m * 1.1)} 4L${r1(-m * 1.1)} 4Z`, {fill: teeth, stroke: lipLow, strokeWidth: 3.4, strokeLinejoin: 'round'}), strokeLine(`M${r1(-m * 1.05)} 0.2L${r1(m * 1.05)} 0.2`, '#8d8079', 0.9), ...[-0.5, 0, 0.5].map(t => strokeLine(`M${r1(m * t)} -3L${r1(m * t)} 3.4`, '#b8ada3', 0.6))];
     case 'side': return open(m * 0.55, 5, {top: false, dx: m * 0.35});
     case 'gasp': return open(m * 0.62, 13, {top: false});
+    case 'wobble': return [...lips(-0.5, -1.8), line(`M${r1(-m)} 2.4Q${r1(-m / 2)} -1.8 0 1Q${r1(m / 2)} -1.8 ${r1(m)} 2.4`)];
+    case 'zigzag': return open(m * 0.86, 3, {smile: -1.6, tongueOn: false});
+    case 'wail': return open(m * 0.92, 11, {smile: -3.4, top: false});
+    case 'shout': return open(m * 1.06, 13, {smile: -1.6});
+    case 'smirk': return [...lips(0.4, 1), line(`M${r1(-m)} 0.8Q${r1(m * 0.2)} 2.6 ${r1(m * 1.14)} -3.6`), strokeLine(`M${r1(m * 1.2)} -6.4Q${r1(m * 1.4)} -3 ${r1(m * 1.22)} -0.4`, darken(c.skin, 0.25), 1.1, {strokeOpacity: 0.6})];
+    case 'beam': return open(m * 1.12, 11, {smile: 3});
+    case 'awkward': return [...open(m * 1.1, 5.6, {smile: 2, tongueOn: false}), strokeLine(`M${r1(-m * 1.02)} 2.4Q0 4.2 ${r1(m * 1.02)} 2.4`, '#8d8079', 0.9)];
+    case 'pucker': return [group([...lips(-m * 0.3, 0.4), line(`M${r1(-m * 0.7)} 0.4Q0 1 ${r1(m * 0.7)} -0.6`)], {transform: `translate(${r1(m * 0.32)} 0)`})];
     default: return [...lips(0, 0.6), line(`M${r1(-m)} 0Q0 1.4 ${r1(m)} 0`, 1.3)];
   }
+}
+
+/** A drop (a tear, a bead of sweat), point up, centred on (x, y), k times 18 units tall. */
+function drop(x, y, k) {
+  const d = `M${r1(x)} ${r1(y - 10 * k)}C${r1(x + 5 * k)} ${r1(y - 3 * k)} ${r1(x + 8 * k)} ${r1(y + k)} ${r1(x + 8 * k)} ${r1(y + 4 * k)}C${r1(x + 8 * k)} ${r1(y + 11 * k)} ${r1(x - 8 * k)} ${r1(y + 11 * k)} ${r1(x - 8 * k)} ${r1(y + 4 * k)}C${r1(x - 8 * k)} ${r1(y + k)} ${r1(x - 5 * k)} ${r1(y - 3 * k)} ${r1(x)} ${r1(y - 10 * k)}Z`;
+  return [
+    pathNode(d, {fill: '#bfe3f7', stroke: '#6fa9cf', strokeWidth: 0.8, opacity: 0.92}),
+    el('ellipse', null, null, [], {cx: r1(x - 2.4 * k), cy: r1(y + 3.6 * k), rx: r1(1.8 * k), ry: r1(2.8 * k), fill: '#ffffff', opacity: 0.85})
+  ];
+}
+
+/** An expression's mark: tears on the cheeks, a bead of sweat at the temple, an anger mark beside the brow. */
+function faceMark(ctx, kind) {
+  const {look} = ctx;
+  const {rx} = ctx.g.head;
+  const k = look.eh / 7.4;
+  if (kind === 'tears') return [-1, 1].flatMap(sx => [
+    strokeLine(`M${r1(sx * look.ex * 1.02)} ${r1(look.eyeY + look.eh * 0.7)}L${r1(sx * look.ex * 1.06)} ${r1(look.eyeY + look.eh * 1.9)}`, '#bfe3f7', 1.6 * k, {strokeOpacity: 0.85}),
+    ...drop(sx * look.ex * 1.08, look.eyeY + look.eh * 2.7, k * 0.5)
+  ]);
+  // Beside the eye, below where the hair comes down over the temple.
+  if (kind === 'sweat') return drop(rx * 0.74, look.eyeY - look.eh * 0.5, k * 0.5);
+  if (kind === 'anger') {
+    const x = rx * 0.74, y = look.eyeY - look.eh * 1.1, u = k * 0.5;
+    const arm = (ax, ay) => `M${r1(x + ax * 10 * u)} ${r1(y + ay * 3 * u)}Q${r1(x + ax * 3 * u)} ${r1(y + ay * 3 * u)} ${r1(x + ax * 3 * u)} ${r1(y + ay * 10 * u)}`;
+    return [strokeLine(`${arm(-1, -1)}${arm(1, -1)}${arm(1, 1)}${arm(-1, 1)}`, '#c8323c', 2.6 * u)];
+  }
+  // Hearts by the cheekbones (the eyes stay eyes in a lifelike face).
+  if (kind === 'hearts') return [-1, 1].map(sx => {
+    const x = sx * rx * 0.72, y = look.eyeY + look.eh * 0.2, u = k * 0.42;
+    return pathNode(`M${r1(x)} ${r1(y + 11 * u)}C${r1(x - 18 * u)} ${r1(y - 2 * u)} ${r1(x - 10 * u)} ${r1(y - 15 * u)} ${r1(x)} ${r1(y - 5 * u)}C${r1(x + 10 * u)} ${r1(y - 15 * u)} ${r1(x + 18 * u)} ${r1(y - 2 * u)} ${r1(x)} ${r1(y + 11 * u)}Z`, {fill: '#e8476a', stroke: '#b8304f', strokeWidth: 0.8});
+  });
+  return [];
 }
 
 function faceNode(ctx, name) {
@@ -233,8 +299,9 @@ function faceNode(ctx, name) {
   const kids = [];
   const spec = EYES[parts.eyes] ?? EYES.dot;
   if (parts.blush || spec.cheek) for (const sx of [-1, 1]) kids.push(el('ellipse', null, null, [], {cx: r1(sx * look.ex * 1.15), cy: r1(look.eyeY + look.eh * 3.4), rx: r1(look.ew * 0.8), ry: r1(look.eh * 1.5), fill: `url(#${look.blushGrad})`, opacity: parts.blush ? 0.9 : 0.55}));
-  kids.push(joint(ctx, `eyes-${name}`, 0, look.eyeY, {}, [eye(ctx, -1, parts.eyes), eye(ctx, 1, parts.eyes)]));
+  kids.push(joint(ctx, `eyes-${name}`, 0, look.eyeY, {}, [eye(ctx, -1, eyeKind(parts.eyes, -1)), eye(ctx, 1, eyeKind(parts.eyes, 1))]));
   kids.push(brow(ctx, -1, parts.brows[0]), brow(ctx, 1, parts.brows[1]));
+  if (parts.extra || parts.eyes === 'heart') kids.push(...faceMark(ctx, parts.extra ?? 'hearts'));
   const closed = group(mouthShape(ctx, parts.mouth.closed), {transform: `translate(0 ${r1(look.mouthY)})`});
   const open = group(mouthShape(ctx, parts.mouth.open === 'grin' ? 'grin_open' : parts.mouth.open), {transform: `translate(0 ${r1(look.mouthY)})`});
   const show = ctx.expression === name ? 1 : 0;
