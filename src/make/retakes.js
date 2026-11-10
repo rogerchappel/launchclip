@@ -224,7 +224,8 @@ export async function runRetakes(options = {}) {
       const changed = changedScenes(state.loaded.resolved, after.resolved);
       if (changed === null) throw new Error("the retake moved the timeline; a retake may not change when a shot starts or ends");
       const scenes = changed.length ? changed : scoped.changed;
-      Object.assign(entry, { tried: answer?.note ?? `${plan.step} of ${scoped.changed.join(", ")}`, changed: scoped.changed, ...(scoped.ignored.length ? { ignored: scoped.ignored } : {}) });
+      const ignored = [...new Set([...(Array.isArray(answer?.ignored) ? answer.ignored : []), ...scoped.ignored])];
+      Object.assign(entry, { tried: answer?.note ?? `${plan.step} of ${scoped.changed.join(", ")}`, changed: scoped.changed, ...(ignored.length ? { ignored } : {}) });
       const report = await render({ project, scenes, round });
       if (report?.status === "failed") {
         const failed = (report.stages ?? []).find((stage) => stage.status === "failed");
