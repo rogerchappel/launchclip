@@ -284,9 +284,9 @@ launchclip cast create dov --project <project> --style ${ANIMATION_DRAWING_STYLE
 - Three or four traits a viewer would notice are enough: hair, one garment
   and its colour, one accessory. Make the two silhouettes and the two top
   colours different, so they read apart at phone size.
-- Give every speaking character a different \`--voice\` (\`launchclip cast
-  options voice\`), and none of them the narrator's.
-- \`cast create\` refuses an id that is a starter's (\`"pia" is a starter
+- Give every speaking character a different \`--voice\`, and none of them
+  the narrator's (\`launchclip cast options voice\` lists the voices).
+- \`cast create\` refuses an id that is a starter's (\`"<id>" is a starter
   character\`). Then either rename the character in ${code(script.file)} and
   run the script check again, or use the starter as it is by naming it in
   \`--characters\` below.

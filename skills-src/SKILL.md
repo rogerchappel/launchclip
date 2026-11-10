@@ -26,6 +26,11 @@ Read a reference when its step comes up, not all at once.
   `DIRECTION.json` you write before the storyboard: an intent and a treatment
   for every narration line, the shared intent rules, and what `story validate`
   checks.
+- [references/animation.md](references/animation.md): a story told by
+  characters, from one prompt: the script with a narrator and dialogue, the
+  cast and the frozen show bible, the shot list, the animatic and its staging
+  review, single-shot retakes, and the two points that stop for the user's
+  approval. The same contract files as `launchclip make --animation`.
 - [references/profiles.md](references/profiles.md): the cadence profiles
   (coverage, face time, pacing and motion bands per format) that the map and
   the gates measure against.
