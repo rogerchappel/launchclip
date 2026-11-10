@@ -147,6 +147,8 @@ export function isDescribable(entry) {
  */
 export async function describeInventory(inventory, options = {}) {
   const { mode = "auto", client = null, vision = false, model = null, limit = MAX_VISION_FILES, notice = () => {} } = options;
+  // concurrency: how many files the model is asked about at once (default 1, one at a time).
+  const concurrency = Math.max(1, Math.floor(Number(options.concurrency)) || 1);
   const out = { described: [], results: [], warnings: [], counts: { notes: 0, vision: 0, local: 0 } };
   const entries = (inventory?.entries ?? []).filter(isDescribable);
   for (const entry of inventory?.entries ?? []) delete entry.understanding;
@@ -159,7 +161,47 @@ export async function describeInventory(inventory, options = {}) {
   let announced = false;
   let limited = false;
   let failures = 0;
+  // Each file's hash, and the files the model will be asked about: no notes of
+  // their own, not described before, and not the same bytes as an earlier one
+  // (that one's answer is in the cache by the time the loop reaches it).
+  const hashes = new Map();
+  const ahead = [];
+  const asked = new Set();
   for (const entry of entries) {
+    const own = entry.notes ?? null;
+    if (own?.shows || own?.description) continue;
+    const file = root ? path.join(root, entry.path) : null;
+    let sha = null;
+    try { sha = file ? await adapters.hash(file) : null; } catch { sha = null; }
+    hashes.set(entry, sha);
+    if (!sha || !useVision || path.extname(entry.path).toLowerCase() === ".svg" || asked.has(sha) || ahead.length >= limit) continue;
+    if (mode !== "local" && (await readCache(path.join(cacheDir, `${sha}.json`))).vision?.notes) continue;
+    asked.add(sha);
+    ahead.push({ entry, file, call: null });
+  }
+  // The model calls run ahead of the loop, `concurrency` at most started and
+  // not yet used; the loop below takes each answer in file order, so what is
+  // written is the same as asking one file at a time. Once the loop stops
+  // asking (two failures in a row), nothing new is started.
+  let started = 0;
+  let taken = 0;
+  const fill = () => {
+    while (started < ahead.length && started - taken < concurrency && failures < MAX_VISION_FAILURES) {
+      const job = ahead[started];
+      started += 1;
+      job.call = describeWithVision(job.file, job.entry, { client, adapters });
+      job.call.catch(() => {});
+    }
+  };
+  const take = (entry) => {
+    const job = ahead.find((candidate) => candidate.entry === entry);
+    if (!job?.call || job.taken) return null;
+    job.taken = true;
+    taken += 1;
+    return job.call;
+  };
+  for (const entry of entries) {
+    fill();
     const own = entry.notes ?? null;
     // The caller already says what it shows: theirs stands, nothing is computed.
     if (own?.shows || own?.description) {
@@ -169,8 +211,7 @@ export async function describeInventory(inventory, options = {}) {
       continue;
     }
     const file = root ? path.join(root, entry.path) : null;
-    let sha = null;
-    try { sha = file ? await adapters.hash(file) : null; } catch { sha = null; }
+    const sha = hashes.get(entry) ?? null;
     if (!sha) continue; // listed but unreadable: it keeps the inventory's own line
     const cacheFile = path.join(cacheDir, `${sha}.json`);
     const cached = await readCache(cacheFile);
@@ -188,7 +229,7 @@ export async function describeInventory(inventory, options = {}) {
         calls += 1;
         if (!announced) { notice(`assets: PAID calls to ${model ?? "the model"} to describe what each new image and clip shows (one per file, cached by content; --asset-descriptions local turns this off)`); announced = true; }
         try {
-          const seen = await describeWithVision(file, entry, { client, adapters });
+          const seen = await (take(entry) ?? describeWithVision(file, entry, { client, adapters }));
           out.results.push(seen.result);
           if (seen.notes) {
             source = "vision"; notes = seen.notes; usedModel = seen.result?.model ?? model;
@@ -221,6 +262,12 @@ export async function describeInventory(inventory, options = {}) {
     entry.understanding = { source, sha256: sha, cached: hit, ...(usedModel ? { model: usedModel } : {}) };
     out.counts[source] += 1;
     out.described.push({ path: entry.path, source, cached: hit });
+  }
+  // A call started ahead that the loop then did not use (it had stopped asking): its answer is dropped, its cost is not.
+  for (const job of ahead) {
+    if (!job.call || job.taken) continue;
+    const unused = await job.call.catch(() => null);
+    if (unused?.result) out.results.push(unused.result);
   }
   return out;
 }

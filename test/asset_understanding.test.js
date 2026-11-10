@@ -151,6 +151,54 @@ test("describeInventory stops asking a model that keeps failing", async () => {
   }
 });
 
+test("describeInventory asks about several files at once and writes what asking one at a time writes", async () => {
+  const names = ["a.png", "b.png", "c.png", "d.png", "e.png", "twin-of-a.png"];
+  const describe = async (concurrency, { failing = false } = {}) => {
+    const dir = await folder(Object.fromEntries(names.map((name, index) => [name, name.startsWith("twin") ? "0" : String(index)])));
+    try {
+      const inventory = { dir, entries: names.map((file) => image(file)) };
+      const order = [];
+      let inFlight = 0;
+      let peak = 0;
+      const client = {
+        async runStructured(request) {
+          const file = /File: (\S+)/.exec(request.input)[1];
+          order.push(file);
+          inFlight += 1;
+          peak = Math.max(peak, inFlight);
+          // Later files answer sooner, so answers arrive out of order.
+          await new Promise((resolve) => setTimeout(resolve, 30 - names.indexOf(file) * 5));
+          inFlight -= 1;
+          if (failing && ["b.png", "c.png"].includes(file)) throw new Error("503 the model is down");
+          return { value: { shows: `screen ${file}`, description: `What ${file} shows.`, text: [], fits: [], people: false, windows: [] }, usage: { input_tokens: 900, output_tokens: 80 }, model: "seer-1" };
+        }
+      };
+      const result = await describeInventory(inventory, { client, vision: true, concurrency, cacheDir: path.join(dir, ".cache"), adapters: { ...quiet, images: async () => ({ images: [{ url: "data:image/jpeg;base64,AA==" }], times: [0] }) } });
+      return { result, order, peak, entries: inventory.entries.map((entry) => ({ path: entry.path, notes: entry.notes, understanding: entry.understanding })) };
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+  const one = await describe(1);
+  const four = await describe(4);
+  assert.equal(one.peak, 1);
+  assert.equal(four.peak, 4);
+  assert.deepEqual(four.order, one.order, "the files are asked about in the same order");
+  assert.deepEqual(four.order, ["a.png", "b.png", "c.png", "d.png", "e.png"], "the twin's bytes are a.png's: it is never sent");
+  assert.deepEqual(four.entries, one.entries);
+  assert.deepEqual(four.result, one.result);
+  assert.deepEqual(four.entries.at(-1).understanding.cached, true, "the twin takes a.png's description from the cache, as it does one at a time");
+
+  // Two failures in a row stop the asking. Calls already started ahead are not used: the result is the same.
+  const oneDown = await describe(1, { failing: true });
+  const fourDown = await describe(4, { failing: true });
+  assert.deepEqual(oneDown.order, ["a.png", "b.png", "c.png"]);
+  assert.deepEqual(fourDown.order, ["a.png", "b.png", "c.png", "d.png", "e.png"], "d and e were already in flight when c failed");
+  assert.deepEqual(fourDown.entries, oneDown.entries);
+  assert.deepEqual({ ...fourDown.result, results: fourDown.result.results.length }, { ...oneDown.result, results: oneDown.result.results.length + 2 }, "the two unused answers are dropped, and their cost is still counted");
+  assert.deepEqual(fourDown.entries.map((entry) => entry.understanding.source), ["vision", "local", "local", "local", "local", "vision"]);
+});
+
 test("featuredAssets: the notes, a file the prompt names, the one file that is what the prompt asks to show, or a handful handed in", () => {
   const many = [
     { src: "assets/pricing.png", kind: "image", notes: { shows: "pricing page" } },
