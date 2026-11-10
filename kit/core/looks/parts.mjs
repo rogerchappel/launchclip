@@ -31,6 +31,16 @@ export function rand(seed, index = 0) {
   return (h >>> 0) / 4294967296;
 }
 
+/**
+ * A seeded drawing for a step, out of `count`, never the one the step before
+ * it shows: even steps draw from the even drawings and odd steps from the odd.
+ */
+export function stepPick(seed, step, count) {
+  const odd = step % 2 === 1 && count > 1;
+  const choices = odd ? Math.floor(count / 2) : Math.ceil(count / 2);
+  return 2 * Math.floor(rand(seed, step) * choices) + (odd ? 1 : 0);
+}
+
 // ---------------------------------------------------------------------------
 // Filter primitives
 

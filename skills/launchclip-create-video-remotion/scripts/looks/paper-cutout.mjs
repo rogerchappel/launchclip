@@ -12,7 +12,7 @@
 // so held frames breathe like repositioned paper.
 // No furniture.
 
-import { arithmetic, blend, blur, channel, displace, filled, freq, grey, linear, noise, nudge, offset, rand } from './parts.mjs';
+import { arithmetic, blend, blur, channel, displace, filled, freq, grey, linear, noise, nudge, offset, rand, stepPick } from './parts.mjs';
 
 const VARIANTS = 6;
 
@@ -29,12 +29,7 @@ export const LOOK = {
   cast: Object.freeze({ pins: true }),
   variants: VARIANTS,
   // A seeded drawing per step, never the one before it.
-  variantAt(plan, frame) {
-    const step = Math.floor((frame * (plan.step || 12)) / plan.fps + 1e-9);
-    const pick = (k) => Math.floor(rand(`${plan.seed}:jitter`, k) * VARIANTS);
-    const now = pick(step);
-    return step > 0 && now === pick(step - 1) ? (now + 1) % VARIANTS : now;
-  },
+  variantAt: (plan, frame) => stepPick(`${plan.seed}:jitter`, Math.floor((frame * (plan.step || 12)) / plan.fps + 1e-9), VARIANTS),
   grade(plan, v) {
     const u = plan.unit, s = plan.strength;
     const dx = (rand('paper-cutout:dx', v) - 0.5) * 3.2 * u, dy = (rand('paper-cutout:dy', v) - 0.5) * 3.2 * u;

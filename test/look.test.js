@@ -4,8 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import gsap from "gsap";
-import { LOOK_FURNITURE_ID, LOOK_INFO, LOOK_KEYS, LOOK_LAYER_ID, LOOK_NAMES, LOOK_STEP, applyLook, lookCss, lookDefs, lookErrors, lookFromText, lookPlan, lookPresets, lookPrimitives, lookStepEase, lookStepFrame, lookStepped, lookSteps, lookVariantAt, lookVarsAt, normalizeLook, stepFrame, stepIndex } from "@launchclip/core/look.mjs";
+import { LOOK_FURNITURE_ID, LOOK_INFO, LOOK_KEYS, LOOK_LAYER_ID, LOOK_NAMES, LOOK_STEP, LOOK_UNDER_ID, applyLook, lookCss, lookPlaneStyle, lookStageCss, lookUnderMarkup, lookDefs, lookErrors, lookFromText, lookPlan, lookPresets, lookPrimitives, lookStepEase, lookStepFrame, lookStepped, lookSteps, lookVariantAt, lookVarsAt, normalizeLook, stepFrame, stepIndex } from "@launchclip/core/look.mjs";
 import { LOOKS, lookCastOptions } from "@launchclip/core/looks/index.mjs";
+import { asciiCell } from "@launchclip/core/looks/ascii-terminal.mjs";
+import { isometricFit } from "@launchclip/core/looks/isometric-layers.mjs";
 import { rand } from "@launchclip/core/looks/parts.mjs";
 import { STORY_LOOK_KEYS, STORY_LOOK_NAMES, resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { applyStyle, contrastRatio, validateStylePack } from "@launchclip/core/style.mjs";
@@ -314,6 +316,72 @@ test("watercolour is the medium plus a pencil under it, held at the boil's rate;
   for (let frame = 0; frame < 180; frame += 1) assert.equal(lookVarsAt(calm, frame)["--lc-look-speed-a"] + lookVarsAt(calm, frame)["--lc-look-speed-b"], 0, `frame ${frame}`);
 });
 
+test("ASCII terminal is a real conversion: cells, nine characters by brightness, a typed command", () => {
+  const plan = planOf("ascii-terminal");
+  const cell = asciiCell(plan.unit);
+  assert.deepEqual(cell, { p: 3, rx: 9, ry: 13, cw: 19, ch: 27 });
+  for (const unit of [0.5, 0.667, 1, 2]) { const c = asciiCell(unit); assert.ok(c.cw % 2 === 1 && c.ch % 2 === 1 && c.cw >= 5 * c.p && c.ch >= 7 * c.p, `unit ${unit}`); }
+  const markup = lookPrimitives(plan, 0);
+  assert.equal((markup.match(/<feImage /g) ?? []).length, 9, "one bitmap tile per character");
+  assert.equal((markup.match(/type="discrete"/g) ?? []).length, 9 * 3, "one brightness band per character");
+  assert.match(markup, /operator="dilate" radius="9 13"/, "a cell's sample spread over the cell");
+  assert.doesNotMatch(markup, /font-family|<text/, "its own bitmap font, so every machine draws the same characters");
+  assert.equal(applyLook(story({ look: "ascii-terminal" })).story.world.time, "night");
+  // The command types at the start of each shot (24 characters a second after 0.2 s) and the cursor blinks.
+  assert.equal(lookVarsAt(plan, 0)["--lc-look-typed"], 0);
+  assert.equal(lookVarsAt(plan, 21)["--lc-look-typed"], 12);
+  assert.equal(lookVarsAt(plan, 90)["--lc-look-typed"], 0, "a new shot types again");
+  assert.deepEqual([0, 7, 8, 15].map((frame) => lookVarsAt(plan, frame)["--lc-look-cursor"]), [1, 1, 0, 1]);
+  assert.match(planOf({ name: "ascii-terminal", labels: ["tail -f deploy.log"] }).furniture.html, /tail -f deploy\.log/);
+});
+
+test("the looks a filter cannot fully make say so in their name and their description", () => {
+  assert.match(LOOK_INFO["clay-2d"].honest, /not 3D clay/);
+  assert.match(LOOK_INFO["isometric-layers"].honest, /not 3D models/);
+  for (const name of NAMED.filter((entry) => !["clay-2d", "isometric-layers"].includes(entry))) assert.equal(LOOK_INFO[name].honest, null, name);
+  assert.match(lookErrors("claymation")[0], /"claymation" is called "clay-2d" here/);
+  assert.match(lookErrors("isometric")[0], /"isometric" is called "isometric-layers" here/);
+  const clay = planOf("clay-2d");
+  assert.equal(clay.step, 12);
+  for (let frame = 0; frame < 120; frame += 1) if (lookStepFrame(clay, frame) !== lookStepFrame(clay, frame + 1)) assert.notEqual(lookVariantAt(clay, frame), lookVariantAt(clay, frame + 1), `the wobble changes at frame ${frame + 1}`);
+  assert.match(lookPrimitives(clay, 0), /<feDiffuseLighting /);
+});
+
+test("isometric layers stages every scene layer with one affine transform, and only without a camera", async () => {
+  const plan = planOf("isometric-layers");
+  assert.ok(!plan.grade && plan.stage);
+  assert.deepEqual(Object.keys(plan.stage.planes).sort(), ["idea", "pair", "room", "street"]);
+  for (const plane of Object.values(plan.stage.planes)) assert.match(plane.transform, /^matrix\(0\.\d+, -0\.\d+, 0, 0\.\d+, [\d.]+, [\d.]+\)$/);
+  assert.notEqual(plan.stage.planes.room.transform, plan.stage.planes.pair.transform, "a higher track stands in front");
+  assert.equal(plan.stage.planes.room.transform, plan.stage.planes.street.transform);
+  assert.deepEqual(lookPlaneStyle(plan, "room"), { transformOrigin: "0 0", transform: plan.stage.planes.room.transform, filter: plan.stage.planes.room.filter });
+  assert.deepEqual(lookPlaneStyle(plan, "nope"), {});
+  assert.deepEqual(lookPlaneStyle(planOf("hologram"), "room"), {});
+  // Every layer's corners stay on the canvas, in both formats.
+  for (const format of [{ width: 1080, height: 1920 }, { width: 1920, height: 1080 }]) for (const tracks of [1, 2, 3]) {
+    const fit = isometricFit(format, tracks);
+    for (let track = 0; track < tracks; track += 1) for (const [x, y] of [[0, 0], [format.width, 0], [0, format.height], [format.width, format.height]]) {
+      const sx = fit.x - 0.7071 * fit.s * 0.1 * format.width * track + 0.7071 * fit.s * x, sy = fit.y + 0.4082 * fit.s * 0.1 * format.width * track - 0.4082 * fit.s * x + 0.8165 * fit.s * y;
+      assert.ok(sx >= -1 && sx <= format.width + 1 && sy >= -1 && sy <= format.height + 1, `${format.width}x${format.height} track ${track} corner ${x},${y} lands at ${Math.round(sx)},${Math.round(sy)}`);
+    }
+  }
+  assert.equal(applyLook(story({ look: "isometric-layers" })).story.camera.mode, "cuts");
+  assert.equal(applyLook(story({ look: "isometric-layers", camera: { mode: "world" } })).story.camera.mode, "world", "the story's own camera wins");
+  assert.match(plan.furniture.html, /lc-look-iso-card/);
+  assert.equal(plan.icons[0], "rocket", "the cards carry the story's own icons");
+  const { base, words } = await minimal();
+  const resolved = resolveStory(applyLook({ ...base, look: "isometric-layers" }).story, { words });
+  const { html } = await compileStoryToHyperFrames(resolved, { write: false, sourceDir: MINIMAL });
+  assert.match(html, /#lc-scene-s1, #lc-scene-s1-loop, #lc-scene-s1-behind \{ transform-origin: 0 0; transform: matrix\(/);
+  assert.ok(html.indexOf(`id="${LOOK_UNDER_ID}"`) > 0 && html.indexOf(`id="${LOOK_UNDER_ID}"`) < html.indexOf('id="lc-scene-s1"'), "the floor is under every scene");
+  assert.equal(lookStageCss(planOf("hologram")), "");
+  assert.equal(lookUnderMarkup(planOf("hologram")), "");
+  // Under a world camera the scenes ride the camera's plates: no stage.
+  const world = await compileStoryToHyperFrames(resolveStory({ ...base, look: "isometric-layers", camera: { mode: "world" } }, { words }), { write: false, sourceDir: MINIMAL });
+  assert.doesNotMatch(world.html, new RegExp(`${LOOK_UNDER_ID}|#lc-scene-s1, `));
+  assert.match(world.html, /lc-look-iso-card/, "the cards still float");
+});
+
 test("plain words name a look, and a subject does not", () => {
   assert.equal(lookFromText("A 30 second short as a hologram"), "hologram");
   assert.equal(lookFromText("blueprint style explainer of our API"), "blueprint");
@@ -321,6 +389,10 @@ test("plain words name a look, and a subject does not", () => {
   assert.equal(lookFromText("a cyberpunk city short"), "neon-night");
   assert.equal(lookFromText("paper cutout story for kids"), "paper-cutout");
   assert.equal(lookFromText("an anime short about a launch"), "anime-cel");
+  assert.equal(lookFromText("ASCII art version of the demo"), "ascii-terminal");
+  assert.equal(lookFromText("a claymation short"), "clay-2d");
+  assert.equal(lookFromText("an isometric explainer"), "isometric-layers");
+  assert.equal(lookFromText("a clay pottery studio promo"), null);
   assert.equal(lookFromText("watercolour and pencil, hand drawn"), "watercolour");
   assert.equal(lookFromText("soft watercolour, dreamy"), null, "watercolour alone names the medium (mediumFromText)");
   for (const text of ["our blueprint for growth", "a neon sign shop promo", "heat map of sales", "use the paper-collage style", "a company that makes holograms", "", null]) assert.equal(lookFromText(text), null, String(text));
@@ -386,6 +458,8 @@ test("the Remotion story draws the same layers after the medium and freezes the 
   assert.match(source, /lookStepFrame\(look, Math\.floor\(frame \/ rate \+ 1e-6\)\) \* rate/);
   assert.equal((source.match(/\{look \? <LookLayer plan=\{look\} \/> : null\}\n\s*<BrandFrame/g) ?? []).length, 2, "both paths draw it right before the brand frame");
   assert.equal((source.match(/\{picture\(feelWrap\(<>/g) ?? []).length, 2, "both paths freeze the scenes");
+  assert.match(source, /style=\{lookPlaneStyle\(look, entry\.scene\.id\) as React\.CSSProperties\}/, "a scene's Sequence takes its stage transform");
+  assert.match(source, /\{look\?\.stage \? <div [^\n]*lookUnderMarkup\(look\)/, "the floor is drawn before the scenes, on the path with no camera");
 });
 
 async function chromeAvailable() {
