@@ -211,6 +211,43 @@ the new plan. The candidates stage (the rendered comparison of the opening
 and one transition) does not run in this mode, before or after the approval:
 the story you were shown is the story that is rendered.
 
+### Play the plan in a browser
+
+```bash
+launchclip preview ./video                    # serves the player on http://localhost:4173 and opens it
+launchclip preview ./video --export ./player  # writes the same player as static files and stops
+```
+
+`launchclip preview` plays a planned project before any render. It compiles
+the resolved story to the page the HyperFrames renderer draws, and puts a
+player around it that drives the page's timeline from the clock of the mix:
+play, pause, scrub and mute. No renderer starts and no model is called, so
+it takes a second or two. It works on any planned project: after
+`--stop-after storyboard`, after `--speed draft`, and again after `--refine`
+or an edit to `storyboard.json` (run it again to see the new plan).
+
+The player is a folder of static files, written to `.launchclip/preview` in
+the project, or to the folder `--export` names:
+
+```
+index.html         the player (index.html?bare hides its controls)
+composition.html   the video: one page, one paused timeline
+preview.json       the format, the title, draft or full plan, the story's sha256
+assets/ fonts/     the media and the fonts the page uses
+vendor/            the animation library, so the page needs no network
+```
+
+A host serves that folder and shows `index.html` in a frame. The page takes
+`launchclip:play`, `launchclip:pause` and `launchclip:seek` (`{type, time}`)
+messages from its parent and posts `launchclip:ready`, `launchclip:time` and
+`launchclip:ended` back. It has to come from a web server: a browser will
+not play it from `file://`.
+
+What the preview is not: the sound is the unmastered mix, a caption plate
+added after measuring rendered frames is not there, and nothing that needs
+rendered pixels (the pixel gates, the critic) has run. `preview.json` lists
+these under `not_in_preview`.
+
 ### What a planned project holds
 
 ```
