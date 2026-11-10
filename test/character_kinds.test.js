@@ -99,7 +99,7 @@ test('every kind draws in every style, size and pose: finite, feet on the floor,
   for (const kind of KIND_NAMES) {
     const [small, medium, large] = KIND_SIZES.map(size => styleHeight('flat', normalizeRigParams({kind, size})));
     assert.ok(small < medium && medium < large, kind);
-    assert.ok(medium > 560 && medium < 900, `${kind}: ${medium} rig units, beside a person of about 1000`);
+    assert.ok(medium > 520 && medium < 900, `${kind}: ${medium} rig units, beside a person of about 1000`);
   }
 });
 

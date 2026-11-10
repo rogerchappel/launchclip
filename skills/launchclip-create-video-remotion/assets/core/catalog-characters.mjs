@@ -24,7 +24,7 @@ import {createBase, fitText, r2, rt} from './catalog-b-base.mjs';
 import {abs, el, svgRoot, tw, set} from './catalog-b-view.mjs';
 import {media, mediaNode} from './catalog-e.mjs';
 import {EXPRESSIONS, HELD_AIDS, POSES} from './characters/rig.mjs';
-import {drawCharacter, styleGeometry, styleHeight} from './characters/styles.mjs';
+import {drawCharacter, stageHeight, styleGeometry, styleHeight} from './characters/styles.mjs';
 import {lightErrors, normalizeLight} from './characters/light.mjs';
 import {characterView} from './characters/view.mjs';
 import {drawingBounds} from './characters/bounds.mjs';
@@ -485,7 +485,7 @@ function resolveCastScene(params, ctx) {
   if (new Set(ids).size !== ids.length) check.fail('params.cast', 'names a character twice');
   // Heights first (the set scales to the tallest), then the layout.
   const heights = p.cast.map((entry, i) => {
-    try { const member = castMember(cast, entry?.id, `params.cast[${i}].id`); return styleHeight(member.style, member.params); } catch { return 1000; }
+    try { const member = castMember(cast, entry?.id, `params.cast[${i}].id`); return stageHeight(member.style, member.params); } catch { return 1000; }
   });
   const inWorldSet = stage.backdrop === 'world';
   const layout = layoutSet(setName, {canvas, colors: b.colors, count: p.cast.length, heights, screen: Boolean(screen), unit: b.unit, backdrop: stage.backdrop,
