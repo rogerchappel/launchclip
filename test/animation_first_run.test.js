@@ -201,3 +201,16 @@ test("a retake is told the actions its shots must keep and the targets a cue can
   assert.match(seen, /must still happen in this shot: foal performs a cue with action "walk-to" \(another small step toward the open gate\)/);
   assert.match(seen, /target \(a character's, or a cue's\): exactly one of far, window, horizon, street, skyline, left, right, \{"character"/);
 });
+
+test("a retake of several shots keeps the ones that pass when the corrective passes run out", async () => {
+  const ready = structuredClone(STORY.scenes.find((entry) => entry.id === "foal-ready"));
+  actor(ready, "foal").cues = [{ at: "word:watched", expression: "happy" }];
+  const hopeful = structuredClone(STORY.scenes.find((entry) => entry.id === "foal-hopeful"));
+  actor(hopeful, "foal").expression = "worried";
+  const client = { runStructured: async () => ({ value: { scenes_json: JSON.stringify([ready, hopeful]), note: "restaged" }, usage: {}, model: "test" }) };
+  const kept = await redirectShots({ client, project: "/nonexistent", story: STORY, words: WORDS, step: "replan-beat", shots: ["foal-ready", "foal-hopeful"], shotList: [], problems: [] });
+  assert.deepEqual(kept.changed, ["foal-hopeful"]);
+  assert.equal(kept.attempts, 2);
+  assert.match(kept.ignored.join("\n"), /scene foal-ready's retake \(it did not pass the checks; the shot stays as it was\)/);
+  assert.deepEqual(kept.story.scenes.find((entry) => entry.id === "foal-ready"), STORY.scenes.find((entry) => entry.id === "foal-ready"));
+});

@@ -101,8 +101,10 @@ async function storyErrors(project, story, words) {
  * check(story) → [errors] (the caller's own checks on the retaken storyboard,
  * answered in the same corrective call)}
  * → {story, changed, ignored, note, attempts, rejected: [{attempt, errors}],
- * usage: [..], model}; throws when the result changes no shot or still does
- * not validate, with the same attempts, rejected and usage on the error.
+ * usage: [..], model}. When the last answer still fails, the shots of it that
+ * pass every check on their own are kept and the others are listed in
+ * `ignored`; it throws when none does (or no shot changed), with the same
+ * attempts, rejected and usage on the error.
  */
 export async function redirectShots({ client, project, story, words = [], step = "redirect", shots = [], shotList: list = [], problems = [], maxRepairs = 1, check = null } = {}) {
   if (!client || typeof client.runStructured !== "function") throw new Error("a retake needs a model client with runStructured(), or its own redirect hook");
@@ -135,6 +137,7 @@ export async function redirectShots({ client, project, story, words = [], step =
   let model = null;
   let errors = [];
   let attempts = 0;
+  let last = null;
   for (let attempt = 0; attempt <= maxRepairs; attempt += 1) {
     const input = errors.length ? `${lines.join("\n")}\n\nYour last answer did not validate. Fix these and return every scene again:\n${errors.map((error) => `- ${error}`).join("\n")}\n` : `${lines.join("\n")}\n`;
     const result = await client.runStructured({ instructions: REDIRECT_INSTRUCTIONS, input, schema: REDIRECT_SCHEMA, schemaName: "launchclip_retake", maxOutputTokens: 6000 });
@@ -154,8 +157,22 @@ export async function redirectShots({ client, project, story, words = [], step =
         if (!errors.length && typeof check === "function") errors = [...(check(scoped.story) ?? [])];
       }
     }
-    if (!errors.length) return { ...scoped, note: String(result?.value?.note ?? "").trim() || null, attempts, rejected, usage, model };
+    const note = String(result?.value?.note ?? "").trim() || null;
+    if (!errors.length) return { ...scoped, note, attempts, rejected, usage, model };
     rejected.push({ attempt: attempts, errors: errors.slice(0, RETAKE_ERRORS) });
+    last = scoped?.changed.length ? { scoped, note } : last;
+  }
+  // Out of corrective passes: the shots that pass every check on their own
+  // are kept and the rest stay as they were, rather than losing the lot.
+  if (last && last.scoped.changed.length > 1) {
+    const failing = async (candidate) => { const found = await storyErrors(project, candidate, words); return found.length || typeof check !== "function" ? found : [...(check(candidate) ?? [])]; };
+    const good = [];
+    for (const id of last.scoped.changed) if (!(await failing(scopedRetake(story, last.scoped.story, [id]).story)).length) good.push(id);
+    const partial = good.length ? scopedRetake(story, last.scoped.story, good) : null;
+    if (partial?.changed.length && !(await failing(partial.story)).length) {
+      const dropped = last.scoped.changed.filter((id) => !good.includes(id));
+      return { ...partial, ignored: [...partial.ignored, ...dropped.map((id) => `scene ${id}'s retake (it did not pass the checks; the shot stays as it was)`)], note: last.note, attempts, rejected, usage, model };
+    }
   }
   throw Object.assign(new Error(`the retake did not validate after ${attempts} attempt${attempts === 1 ? "" : "s"}: ${errors.slice(0, 3).join("; ")}`), { attempts, rejected, usage, model });
 }
