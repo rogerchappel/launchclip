@@ -44,7 +44,8 @@ test("an inked reference matches an inked style, a flat one a style without outl
   assert.ok(DRAWING_STYLE_PROFILES[plain.name].outline.presence < 0.2, `${plain.name} draws outlines`);
   assert.notEqual(inked.name, plain.name);
   const withNew = matchDrawingStyle(block([scene()]).traits, { styles: [...DRAWING_STYLES, "woodcut"] });
-  assert.deepEqual(withNew.unprofiled, ["woodcut"]);
+  // Every style with no measured profile yet is named, the new one among them.
+  assert.deepEqual(withNew.unprofiled, [...DRAWING_STYLES.filter((style) => !DRAWING_STYLE_PROFILES[style]), "woodcut"]);
   assert.equal(matchDrawingStyle({ palette: {} }), null, "nothing to match on");
 });
 
