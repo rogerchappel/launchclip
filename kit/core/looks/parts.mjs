@@ -185,3 +185,21 @@ export function clockVars(prefix, seconds) {
   const mm = Math.floor(s / 60) % 100, ss = s % 60;
   return { [`${prefix}0`]: Math.floor(mm / 10), [`${prefix}1`]: mm % 10, [`${prefix}2`]: Math.floor(ss / 10), [`${prefix}3`]: ss % 10 };
 }
+
+/** An SVG document as a filter image over the box (x, y, w, h), stretched to fill it. */
+export const image = (result, svg, x, y, w, h) => fe('feImage', { href: `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`, x: r(x, 2), y: r(y, 2), width: r(w, 2), height: r(h, 2), preserveAspectRatio: 'none', result });
+/** A full-canvas mask that is clear above `y0`, opaque white below `y1` and a ramp between. */
+export const fadeDown = (result, plan, y0, y1) => image(result, `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="${plan.height}" viewBox="0 0 8 ${plan.height}"><defs><linearGradient id="g" x1="0" y1="${r(y0, 1)}" x2="0" y2="${r(y1, 1)}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity="1"/></linearGradient></defs><rect width="8" height="${plan.height}" fill="url(#g)"/></svg>`, 0, 0, plan.width, plan.height);
+/** A grey picture's red channel as light of one colour: black stays black, white becomes `hex` × gain. */
+export const tint = (result, input, hex, gain = 1) => { const [x, y, z] = rgb(hex); return matrix(result, input, [x * gain, 0, 0, 0, 0, y * gain, 0, 0, 0, 0, z * gain, 0, 0, 0, 0, 0, 0, 0, 1, 0]); };
+/**
+ * A rim light from one side: light of colour `hex` on every edge that is
+ * brighter than the picture `reach` px toward the light (dx, dy point from
+ * the light into the picture). `input` is grey.
+ */
+export const rim = (result, input, hex, dx, dy, gain = 2) => [
+  // The strip the offset uncovers at the frame's edge is filled from the picture, so it lights no rim there.
+  nudge(`${result}-o`, input, dx, dy),
+  arithmetic(`${result}-d`, input, `${result}-o`, 0, gain, -gain, 0),
+  tint(result, `${result}-d`, hex)
+].join('');

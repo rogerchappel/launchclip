@@ -175,6 +175,7 @@ export function lookPlan(story) {
     safe: geometry.safeZone, band: geometry.captionBand,
     shots, cues,
     title: typeof story?.title === 'string' ? story.title : '',
+    world: typeof story?.world?.kind === 'string' ? story.world.kind : null,
     colors: clone(def.presets?.(look)?.colors ?? {}),
     brand: clone(story?.brand?.colors ?? {})
   };

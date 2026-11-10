@@ -10,12 +10,14 @@
 import { LOOK as blueprint } from './blueprint.mjs';
 import { LOOK as hologram } from './hologram.mjs';
 import { LOOK as thermal } from './thermal.mjs';
+import { LOOK as neonNight } from './neon-night.mjs';
 import { LOOK as paperCutout } from './paper-cutout.mjs';
 
 export const LOOKS = Object.freeze({
   blueprint,
   hologram,
   thermal,
+  'neon-night': neonNight,
   'paper-cutout': paperCutout
 });
 
