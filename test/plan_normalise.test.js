@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { checkStoryboard } from "../src/storyboard_planner.js";
+import { DEFAULT_BRAND } from "@launchclip/core/planning-prompt.mjs";
 import { SPEAKER_SHIFT, normalisePlan } from "../src/plan_normalise.js";
 
 // A character story whose storyboard failed five times on mechanical slips
@@ -184,4 +185,40 @@ test("line scenes: a scene off the line's words is dropped beside one that is on
   const left = tidy(split.storyboard, split.direction);
   assert.deepEqual(left.direction.sections[3].lines[0].scenes, ["foal-medium-understands-auto"]);
   assert.ok(check(left.storyboard, left.direction).errors.some((error) => /does not overlap the line's words/.test(error)));
+});
+
+// An ordinary (no cast, no show bible) narrated video: the planner runs the same step on every lane.
+const ORDINARY_WORDS = [["Why", 0.1], ["does", 0.3], ["coffee", 0.5], ["cool", 0.9], ["fast", 1.3], ["then", 3.1], ["slow", 3.5], ["Newton", 4.2], ["named", 4.7], ["the", 5.0], ["law", 5.2], ["of", 5.5], ["cooling", 5.7], ["The", 6.6], ["gap", 6.9], ["shrinks", 7.3], ["follow", 9.4], ["for", 9.8], ["more", 10.0]].map(([text, start]) => ({ text, start, end: start + 0.25 }));
+const ordinary = () => ({
+  schema: "launchclip.story.v1", title: "Why coffee cools", lane: "voiceover-motion", format: { width: 1080, height: 1920, fps: 30, duration: 12 }, brand: DEFAULT_BRAND, audio: { voice: "assets/audio/narration.wav", words: "NARRATION.json" },
+  scenes: [
+    { id: "s1", module: "hook-title", start: 0, end: "word:then", energy: 1, params: { headline: "Why does your coffee cool so fast?", emphasis: "fast" } },
+    { id: "s2", module: "equation-lockup", start: "word:then", end: "word:the#2", energy: 2, params: { name: "Newton's law of cooling", equation: "dT/dt = −k (T − T_room)", note: "rate follows the gap" } },
+    { id: "s3", module: "checklist", start: "word:the#2", end: "word:follow", energy: 2, params: { title: "What sets the pace", rows: [{ label: "Big gap: fast", status: "done", at: 0.4 }, { label: "Small gap: slow", status: "done", at: 1.1 }] } },
+    { id: "s4", module: "cta", start: "word:follow", end: 12, energy: 1, params: { action: "Follow for more physics", loop: true } }
+  ],
+  overlays: [{ type: "captions", style: "word-highlight" }]
+});
+
+test("an ordinary video: a valid plan is returned untouched (the same object, nothing reported)", () => {
+  const storyboard = ordinary();
+  const before = JSON.stringify(storyboard);
+  const fixed = normalisePlan(storyboard, { words: ORDINARY_WORDS });
+  assert.deepEqual(fixed.changed, []);
+  assert.equal(fixed.storyboard, storyboard);
+  assert.equal(JSON.stringify(storyboard), before);
+});
+
+test("an ordinary video: scenes overlapping on a track are trimmed to meet, anchors and all", () => {
+  const storyboard = ordinary();
+  // The lockup runs 1.6 s past the word the checklist starts on.
+  storyboard.scenes[1].end = "word:the#2+1.6";
+  const overlap = (story) => checkStoryboard(story, { words: ORDINARY_WORDS }).errors.filter((error) => /overlaps scenes/.test(error));
+  assert.equal(overlap(storyboard).length, 1);
+  const fixed = normalisePlan(storyboard, { words: ORDINARY_WORDS });
+  assert.deepEqual(fixed.changed, ["s2 ran 1.6 s into s3 on track 0; its end moved 8.2 → 6.6 s"]);
+  assert.equal(fixed.storyboard.scenes[1].end, 6.6);
+  assert.equal(fixed.storyboard.scenes[2].start, "word:the#2");
+  assert.equal(checkStoryboard(ordinary(), { words: ORDINARY_WORDS }).ok, true);
+  assert.deepEqual(overlap(fixed.storyboard), []);
 });
