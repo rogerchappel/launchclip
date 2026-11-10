@@ -31,9 +31,9 @@
 // generated from kit/core/planning-prompt.mjs, long-form.md from
 // kit/core/long-form.mjs, script-formats.md from kit/core/script-formats.mjs,
 // viral-formats.md from kit/core/skeleton-library.mjs,
-// and profiles.md from the shipped
-// profiles in kit/profiles/ (GENERATED_REFERENCES), into skills-src/references/
-// and both skills.
+// profiles.md from the shipped profiles in kit/profiles/, and animation.md from
+// the animation contract table in src/animation_paths.js
+// (GENERATED_REFERENCES), into skills-src/references/ and both skills.
 //
 // The renderer-neutral scripts are maintained in
 // skills/launchclip-create-video/scripts/ and copied into the Remotion skill,
@@ -53,6 +53,7 @@ import { longFormReference } from '@launchclip/core/long-form.mjs';
 import { scriptFormatsReference } from '@launchclip/core/script-formats.mjs';
 import { skeletonLibraryReference } from '@launchclip/core/skeleton-library.mjs';
 import { usageMarkdown } from '../src/cli_usage.js';
+import { animationReference } from '../src/animation_paths.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SRC = path.join(ROOT, 'skills-src');
@@ -82,7 +83,8 @@ export const GENERATED_REFERENCES = {
   'long-form.md': longFormReference,
   'script-formats.md': scriptFormatsReference,
   'skeleton-library.md': () => skeletonLibraryReference(),
-  'profiles.md': () => profilesReference(shippedProfiles())
+  'profiles.md': () => profilesReference(shippedProfiles()),
+  'animation.md': animationReference
 };
 
 // Renderer-neutral scripts, maintained in the HyperFrames skill.

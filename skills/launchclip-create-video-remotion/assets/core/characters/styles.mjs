@@ -70,7 +70,9 @@ export function drawCharacter(style, params, colors, options) {
 export const styleHeight = (style, params) => (isKind(params) ? kindHeight(params) : styleOf(style).height(params));
 
 /** The rig geometry a style draws and poses with. */
-export const styleGeometry = (style, params) => (isKind(params) ? kindGeometry(params) : styleOf(style).geometry(params));
+/** The styles that draw a kind as a stick figure. */
+export const STICK_STYLES = Object.freeze(['stick', 'stick-classic']);
+export const styleGeometry = (style, params) => (isKind(params) ? kindGeometry(params, {stick: STICK_STYLES.includes(style)}) : styleOf(style).geometry(params));
 
 const stageCache = new Map();
 /**
@@ -81,10 +83,11 @@ const stageCache = new Map();
  * (several characters across a portrait frame); a kind then also counts as
  * taller the wider it reaches standing or seated, so it fits its slot.
  * alone: one character in a portrait frame has the frame's width to itself.
+ * shared: several characters across a landscape frame (wider slots).
  */
-export function stageHeight(style, params, {tight = false, alone = false} = {}) {
+export function stageHeight(style, params, {tight = false, alone = false, shared = false} = {}) {
   if (!isKind(params)) return styleOf(style).height(params);
-  if (!tight) return Math.max(personHeight(style), kindHeight(params), alone ? Math.round(KIND_STAGE.height * kindReach(params) / KIND_STAGE.alone) : 0);
+  if (!tight) return Math.max(personHeight(style), kindHeight(params), alone ? Math.round(KIND_STAGE.height * kindReach(params) / KIND_STAGE.alone) : 0, shared ? Math.round(KIND_STAGE.height * kindReach(params) / KIND_STAGE.shared) : 0);
   return Math.round(Math.max(kindHeight(params), KIND_STAGE.height * Math.max(1, kindReach(params) / KIND_STAGE.reach)));
 }
 

@@ -20,6 +20,18 @@
 
 ### Added
 
+- `launchclip make --animation` reviews its own work before the delivery
+  render. After the shots are planned it renders an animatic
+  (`renders/animatic.mp4`, `ANIMATIC.json`) and a vision model reviews it
+  for story, staging and acting. While the review does not say `ship`, the
+  shots its findings name are retaken and only those shots render again
+  (`qa/animatic-retakes.json`). The critic's repair rounds on the finished
+  video are retakes too (`qa/retakes.json`). `--critic-repairs` is one
+  budget for both. `--stop-after animatic` ends the run `awaiting-approval`
+  so you can watch the animatic, and `--approve animatic` goes on from
+  there; in a terminal make asks instead. The run ends `ready` on a `ship`
+  verdict and `needs-repair` once the rounds are spent, with the animation
+  path's exit codes (0, 1, 2, 3 `awaiting-approval`, 4 `ready-for-review`).
 - Measurement for character stories. `npm run eval:formats -- --animation`
   scores six character-Short briefs from finished projects (contracts,
   story, design, direction, cadence, gates, critic, cost) without rendering,

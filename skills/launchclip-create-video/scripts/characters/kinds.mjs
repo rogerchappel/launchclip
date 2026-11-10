@@ -25,7 +25,7 @@
 import {mixColor} from '../catalog-b-base.mjs';
 import {OUTLINE, isColorName, resolveColor} from './palette.mjs';
 
-const K = (group, describe, colors, slots, dims) => Object.freeze({group, describe, colors: Object.freeze(colors), slots: Object.freeze(slots), dims: Object.freeze(dims)});
+const K = (group, describe, colors, slots, dims, marks = []) => Object.freeze({group, describe, colors: Object.freeze(colors), slots: Object.freeze(slots), dims: Object.freeze(dims), marks: Object.freeze(marks)});
 
 // Limbs. Stubby: short and chunky (animals, mascots). Thin: lines with
 // round hands and small shoes (objects).
@@ -44,8 +44,22 @@ const headed = (limbs, values) => ({plan: 'headed', ...limbs, torso: 186, should
 // half-spacing. turn: how far the face moves across the body for a look.
 const single = (limbs, values) => ({plan: 'single', ...limbs, faceK: 1.9, turn: 1, top: 0, ...values});
 
+// A four-legged kind, seen from the side with its head turned to the camera:
+// a barrel (b long, h deep) on four legs, a neck rising at the front to a
+// head (half-widths rx, ry; its centre `rise` above the barrel's top and hx
+// ahead of the body's centre), a mane and a tail. The front legs are the
+// rig's arms, the hind legs its legs.
+const quad = values => ({plan: 'quad', limbs: 'stubby', thigh: 112, shin: 108, foot: 30, legW: 40, b: 340, h: 166, rise: 156, hx: 186, rx: 124, ry: 138, neckW: 66, faceK: 1.45, top: 62, ...values});
+// A horse's markings (white): a blaze down the face, a star on the forehead, socks on the lower legs.
+const HORSE_MARKS = ['blaze', 'socks', 'star'];
+const HORSE_SLOTS = {body: 'coat', detail: 'mane and tail', accent: 'lower legs (the points)'};
+
 /** Every kind but a person: its group, a description, default colours, what each colour slot paints, and its measurements. */
 export const KINDS = Object.freeze({
+  // Horses (four legs; thoroughbred coats: bay, chestnut, grey, black)
+  stallion: K('animal', 'a stallion (a sire): a tall horse on four legs with a deep chest, a thick neck and a full mane and tail', {body: '#3b2d2b', detail: '#1f1a1c', accent: '#1f1a1c'}, HORSE_SLOTS, quad({thigh: 118, shin: 114, b: 368, h: 190, rise: 166, hx: 200, rx: 130, ry: 142, neckW: 90, legW: 44}), HORSE_MARKS),
+  mare: K('animal', 'a mare (a dam): a horse on four legs, finer than the stallion, with a long mane and tail', {body: '#8a4f2d', detail: '#2a2226', accent: '#2a2226'}, HORSE_SLOTS, quad({}), HORSE_MARKS),
+  foal: K('animal', 'a foal: a young horse, leggy with a short body and a short fluffy mane and tail', {body: '#b9652f', detail: '#e0a868', accent: '#b9652f'}, HORSE_SLOTS, quad({thigh: 100, shin: 100, foot: 26, legW: 30, b: 216, h: 108, rise: 118, hx: 120, rx: 110, ry: 118, neckW: 44, faceK: 1.25, top: 50}), HORSE_MARKS),
   // Animals
   cat: K('animal', 'an upright cat: pointed ears, whiskers, a curled tail', {body: '#8f93a8', detail: '#f6efe6', accent: '#f29aa8'}, {body: 'fur', detail: 'muzzle and belly', accent: 'inner ears and nose'}, headed(STUBBY, {ry: 176, top: 86})),
   dog: K('animal', 'an upright dog: floppy ears, a light muzzle, a short tail', {body: '#d39a5b', detail: '#f8ead3', accent: '#7b4b2c'}, {body: 'fur', detail: 'muzzle and belly', accent: 'ears and tail tip'}, headed(STUBBY, {rx: 192, top: 8})),
@@ -78,7 +92,11 @@ export const kindsOf = group => KIND_NAMES.filter(name => KINDS[name].group === 
 export const KIND_SIZES = Object.freeze(['small', 'medium', 'large']);
 export const KIND_SIZE_SCALE = Object.freeze({small: 0.84, medium: 1, large: 1.14});
 export const KIND_COLOR_SLOTS = Object.freeze(['body', 'detail', 'accent']);
-const KIND_KEYS = ['kind', 'size', 'colors'];
+const KIND_KEYS = ['kind', 'size', 'marks', 'colors'];
+/** Every marking some kind takes (KINDS[kind].marks says which). */
+export const KIND_MARKS = Object.freeze([...new Set(Object.values(KINDS).flatMap(spec => spec.marks))]);
+/** True for a kind drawn on four legs. */
+export const isFourLegged = kind => KINDS[kind]?.dims.plan === 'quad';
 
 /** True for params (raw or normalised) of a kind other than a person. */
 export const isKind = params => Boolean(params) && typeof params === 'object' && params.kind !== undefined && params.kind !== null && params.kind !== 'person';
@@ -91,17 +109,23 @@ function fail(path, message) {
 }
 
 /**
- * Validate and normalise the params of a kind. → {kind, size?, colors: {body,
- * detail, accent}} with keys in a fixed order (size only when not medium).
+ * Validate and normalise the params of a kind. → {kind, size?, marks?,
+ * colors: {body, detail, accent}} with keys in a fixed order (size only when
+ * not medium, marks only for a kind that has them and when any are set).
  * A person's params (hair, outfit, skin…) are refused by name.
  */
 export function normalizeKindParams(params, path = 'character') {
   const kind = params.kind;
   if (typeof kind !== 'string' || !Object.hasOwn(KINDS, kind)) fail(`${path}.kind`, `must be person or one of ${KIND_NAMES.join(', ')}; got ${JSON.stringify(kind)}`);
-  const takes = `${kindPhrase(kind)} takes kind, size and colors {${KIND_COLOR_SLOTS.join(', ')}}`;
+  const allowed = KINDS[kind].marks;
+  const takes = `${kindPhrase(kind)} takes kind, size${allowed.length ? ', marks' : ''} and colors {${KIND_COLOR_SLOTS.join(', ')}}`;
   for (const key of Object.keys(params)) if (!KIND_KEYS.includes(key)) fail(`${path}.${key}`, `does not apply to ${kindPhrase(kind)} (${takes})`);
   const size = params.size ?? 'medium';
   if (!KIND_SIZES.includes(size)) fail(`${path}.size`, `must be one of ${KIND_SIZES.join(', ')}; got ${JSON.stringify(size)}`);
+  const marksIn = params.marks ?? [];
+  if (!Array.isArray(marksIn)) fail(`${path}.marks`, 'must be an array');
+  if (marksIn.length && !allowed.length) fail(`${path}.marks`, `does not apply to ${kindPhrase(kind)} (${takes})`);
+  const marks = [...new Set(marksIn.map((name, i) => (allowed.includes(name) ? name : fail(`${path}.marks[${i}]`, `must be one of ${allowed.join(', ')}; got ${JSON.stringify(name)}`))))].sort();
   const given = params.colors ?? {};
   if (!given || typeof given !== 'object' || Array.isArray(given)) fail(`${path}.colors`, 'must be an object');
   for (const key of Object.keys(given)) if (!KIND_COLOR_SLOTS.includes(key)) fail(`${path}.colors.${key}`, `is not a colour slot of ${kindPhrase(kind)} (allowed: ${KIND_COLOR_SLOTS.join(', ')})`);
@@ -110,7 +134,7 @@ export function normalizeKindParams(params, path = 'character') {
     colors[slot] = given[slot] ?? KINDS[kind].colors[slot];
     if (!isColorName(colors[slot])) fail(`${path}.colors.${slot}`, `must be a palette colour, brand role or six-digit hex; got ${JSON.stringify(colors[slot])}`);
   }
-  return {kind, ...(size !== 'medium' ? {size} : {}), colors};
+  return {kind, ...(size !== 'medium' ? {size} : {}), ...(marks.length ? {marks} : {}), colors};
 }
 
 const shade = (hex, amount = 0.18) => mixColor(OUTLINE, hex, amount);
@@ -135,6 +159,8 @@ export function kindColors(colors, roles) {
     blush: mixColor('#e5575f', out.body, 0.34),
     blushDetail: mixColor('#e5575f', out.detail, 0.34),
     inkLight: '#fbf7ef',
+    hoof: '#3b302c',
+    marking: '#f7f5f0',
     mouth: mixColor(OUTLINE, '#7a2b33', 0.55),
     tongue: '#e0787a',
     teeth: '#fbf8f2',
@@ -168,6 +194,30 @@ const SINGLE_POSES = Object.freeze({
   'point-self': {armA: 58, foreA: -150},
   shrug: {armL: 34, foreL: 78, armR: 34, foreR: 78}
 });
+// A four-legged kind gives each pose its own meaning: the front legs are the
+// arms, and a positive angle swings a leg forward. stand, slump, think,
+// look, shrug, arms-crossed and facepalm stand on all four and act with the
+// head and body (head low, tilted or lifted); wave paws the air; point lifts
+// a foreleg toward the target with a nod; type taps a hoof; cheer lifts both
+// forelegs in a little prance; stretch reaches both forelegs forward;
+// hands-on-hips plants the forelegs apart; lean-in steps forward; point-self
+// lifts a hoof to the chest; walk trots. Seated (the sit pose, or any pose in
+// a seated set) it lies down: the legs fold under it (seatedArms, sitLegs).
+const stood = (l = 0, r = 0) => ({armL: l, foreL: 0, armR: r, foreR: 0});
+const QUAD_POSES = Object.freeze({
+  stand: stood(), slump: stood(-3, 3), think: {armA: 0, foreA: 0, armO: 0, foreO: 0}, look: {armA: 4, foreA: 0, armO: -4, foreO: 0}, shrug: stood(8, -6), 'arms-crossed': stood(8, -8), facepalm: {armA: 0, foreA: 0, armO: 0, foreO: 0},
+  wave: {armA: 46, foreA: -72, armO: 0, foreO: 0},
+  point: {armA: 40, foreA: -10, armO: 0, foreO: 0},
+  type: {armL: 30, foreL: -50, armR: 4, foreR: 0},
+  cheer: {armL: 64, foreL: -86, armR: 50, foreR: -70},
+  walk: {armL: 2, foreL: 4, armR: 2, foreR: 4},
+  sit: stood(),
+  stretch: {armL: 52, foreL: -6, armR: 44, foreR: -6},
+  'hands-on-hips': stood(14, -12),
+  'lean-in': {armA: 22, foreA: -12, armO: -8, foreO: 0},
+  'point-self': {armA: 30, foreA: -84, armO: 0, foreO: 0}
+});
+const QUAD_SEATED = Object.freeze({armL: 86, foreL: -170, armR: 82, foreR: -166});
 // Thin legs come forward and apart when seated (as a stick figure's do).
 const THIN_SIT = Object.freeze({legL: 22, shinL: -10, legR: 22, shinR: -10});
 
@@ -187,13 +237,25 @@ export function kindDims(params) {
  * seat drop, so poses, sets, framing and aiming treat it as they do a
  * person. A single body's "head" is its face area.
  */
-export function kindGeometry(params) {
+export function kindGeometry(params, {stick = false} = {}) {
   const d = kindDims(params);
   const hipY = -(d.thigh + d.shin + d.foot);
-  const limbs = {foot: d.foot, thigh: d.thigh, shin: d.shin, hipY, armW: d.armW, legW: d.legW, upperArm: d.upperArm, foreArm: d.foreArm, hand: d.hand, sitDrop: Math.round(d.thigh * 0.78), ...(d.limbs === 'thin' ? {sitLegs: THIN_SIT} : {})};
+  if (d.plan === 'quad') {
+    const torso = d.h + d.rise - d.ry * 0.9;
+    // Lying down: the body drops until the folded legs rest on the floor.
+    const rest = 64 * d.s;
+    return {foot: d.foot, thigh: d.thigh, shin: d.shin, hipY, armW: d.legW, legW: d.legW, upperArm: d.thigh, foreArm: d.shin, hand: d.foot,
+      sitDrop: Math.round(-hipY - rest), sitLegs: {legL: 0, shinL: 0, legR: 0, shinR: 0, legScale: Math.round((rest / -hipY) * 1000) / 1000}, seatedArms: QUAD_SEATED,
+      torso, neck: 0, shoulderY: 0, shoulder: d.b / 2, waist: d.b / 2, hip: d.b / 2,
+      armX: d.b / 2 - 54 * d.s, armY: 10 * d.s, legX: d.b / 2 - 54 * d.s,
+      neckY: -torso, head: {rx: d.rx, ry: d.ry, cy: -d.ry * 0.9, x: d.hx}, poses: QUAD_POSES, noAim: true,
+      height: -hipY + d.h + d.rise + d.ry};
+  }
+  const limbs = {foot: d.foot, thigh: d.thigh, shin: d.shin, hipY, armW: d.armW, legW: d.legW, upperArm: d.upperArm, foreArm: d.foreArm, hand: d.hand, sitDrop: Math.round(d.thigh * 0.78), ...(d.limbs === 'thin' || stick ? {sitLegs: THIN_SIT} : {})};
   if (d.plan === 'headed') {
     return {...limbs, torso: d.torso, neck: 0, shoulderY: -d.torso, shoulder: d.shoulder, waist: d.hip, hip: d.hip,
-      armX: d.shoulder - d.armW * 0.42, armY: -d.torso + Math.max(d.armW * 0.55, 18 * d.s), legX: d.hip - Math.max(d.legW, 44 * d.s) * 0.5 - (d.limbs === 'thin' ? 22 * d.s : 0),
+      // A stick figure's arms and legs meet at the ends of its spine.
+      armX: stick ? 9 * d.s : d.shoulder - d.armW * 0.42, armY: -d.torso + Math.max(d.armW * 0.55, 18 * d.s), legX: stick ? 12 * d.s : d.hip - Math.max(d.legW, 44 * d.s) * 0.5 - (d.limbs === 'thin' ? 22 * d.s : 0),
       neckY: -d.torso, head: {rx: d.rx, ry: d.ry, cy: -d.up}, poses: HEADED_POSES,
       height: -hipY + d.torso + d.up + d.ry};
   }
@@ -216,5 +278,6 @@ export function kindHeight(params) {
 // fits a person, who reaches about KIND_STAGE.reach to each side; a kind
 // then counts as taller the wider it reaches (an open laptop is twice as
 // wide as a person, so the set stands further back for it).
-// alone: the reach a portrait frame gives one character on its own.
-export const KIND_STAGE = Object.freeze({height: 1000, reach: 196, alone: 300});
+// alone: the reach a portrait frame gives one character on its own;
+// shared: the reach each of several characters has across a landscape frame.
+export const KIND_STAGE = Object.freeze({height: 1000, reach: 196, alone: 300, shared: 250});

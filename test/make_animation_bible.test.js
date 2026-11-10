@@ -35,7 +35,8 @@ test("make --animation designs and freezes a show bible, then plans a storyboard
     assert.equal(report.stages.bible.status, "done");
     assert.equal(report.stages.storyboard.status, "done");
     assert.equal(report.stages.finish.status, "done", "the animation path runs through to finish");
-    assert.deepEqual(t.finished, [t.project]);
+    assert.deepEqual(t.finished, [t.project, t.project], "finish runs twice: the animatic, then the video");
+    assert.equal(report.stages.animatic.status, "done");
     assert.ok(report.costs.items.some((item) => item.stage === "bible" && item.estimated_usd > 0));
     assert.ok(t.notices.some((line) => /PAID call to openai gpt-5\.6-luna \(show bible: the cast of 2 and the world\)/.test(line)));
 
@@ -212,7 +213,7 @@ test("--stop-after bible ends awaiting-approval, and --approve bible resumes fro
     assert.equal(resumed.bible.hash, stopped.bible.hash);
     assert.deepEqual(schemas(t.calls).slice(4), ["direction", "storyboard"]);
     assert.equal(resumed.stopped, undefined);
-    assert.deepEqual(t.finished, [t.project]);
+    assert.deepEqual(t.finished, [t.project, t.project], "the animatic, then the video");
 
     // The approval is of this bible: the same command without --approve goes on too.
     const after = await t.make({ stopAfter: "bible" });
@@ -235,10 +236,12 @@ test("an attended run asks before the shots are planned; a headless one goes on"
     const yes = await t.make();
     assert.equal(yes.status, "ready", JSON.stringify(yes.stages));
     assert.equal(yes.bible.approved, true);
-    assert.equal(asked.length, 2);
-    // Approved once, this bible is not asked about again.
+    // The second question of an attended run is the animatic's (test/make_animation_animatic.test.js).
+    assert.equal(asked.length, 3);
+    assert.match(asked[2], /^animatic: watch /);
+    // Approved once, this bible and this animatic are not asked about again.
     await t.make();
-    assert.equal(asked.length, 2);
+    assert.equal(asked.length, 3);
   } finally {
     await t.done();
   }
@@ -391,8 +394,8 @@ test("--stop-after and --approve: the flags, their values and the CLI's parse", 
   assert.deepEqual(approvals("Bible, bible"), ["bible"]);
   assert.deepEqual(approvals(undefined), []);
   assert.doesNotThrow(() => validateMakeOptions({ stopAfter: "bible", approve: ["bible"] }));
-  assert.throws(() => validateMakeOptions({ stopAfter: "storyboard" }), /--stop-after must be bible; got storyboard/);
-  assert.throws(() => validateMakeOptions({ approve: "script" }), /--approve must be bible; got script/);
+  assert.throws(() => validateMakeOptions({ stopAfter: "storyboard" }), /--stop-after must be bible or animatic; got storyboard/);
+  assert.throws(() => validateMakeOptions({ approve: "script" }), /--approve must be bible or animatic; got script/);
   assert.throws(() => validateMakeOptions({ approve: true }), /--approve names what is approved: --approve bible/);
 });
 
