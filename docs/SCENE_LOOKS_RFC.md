@@ -82,3 +82,9 @@ says so in its entry (`gates`) and in the guide.
 A filter pass sees pixels, not objects: it cannot give each shape real
 thickness or light it in 3D. Looks that would need that ship under a name
 that does not overclaim, and the guide says how close they get.
+
+| Asked for | Shipped as | How close |
+|---|---|---|
+| ASCII terminal | `ascii-terminal` | The real conversion: the SVG filter pass can sample cells, band brightness and tile bitmap glyphs, so no separate pixel pass over rendered frames was needed. Small scene text is lost. |
+| Claymation | `clay-2d` | Relief shading from colour edges, fingerprints, stepping and wobble. No real thickness, undersides or object-aware shadows; that needs 3D materials. |
+| Isometric | `isometric-layers` | A true isometric projection, of the story's flat layers (a stage: one affine transform per scene layer). Nothing is modelled in 3D. Cuts mode only. |

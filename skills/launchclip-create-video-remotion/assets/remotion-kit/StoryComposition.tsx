@@ -95,7 +95,7 @@ import { breakoutNotch, layoutPlan, layoutStateAt, withLayoutCameras } from "../
 // @ts-ignore plain ESM from kit/core
 import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumLayerStyle, mediumPlan } from "../core/medium.mjs";
 // @ts-ignore plain ESM from kit/core
-import { LOOK_FURNITURE_ID, LOOK_LAYER_ID, LOOK_Z, lookCss, lookDefs, lookPlan, lookStepFrame, lookStepped, lookVarsAt } from "../core/look.mjs";
+import { LOOK_FURNITURE_ID, LOOK_LAYER_ID, LOOK_Z, lookCss, lookDefs, lookPlan, lookPlaneStyle, lookStepFrame, lookStepped, lookUnderMarkup, lookVarsAt } from "../core/look.mjs";
 // @ts-ignore plain ESM from kit/core
 import { feelPlan, feelStateAt, feelTransform } from "../core/kinetic.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -729,7 +729,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
   // One scene, or one part of a split scene. A split scene's behind part has
   // no hold drift, as in the HyperFrames compiler.
   const sceneElement = ({ entry, render, model }: any, part?: "behind" | "front") => (
-    <Sequence key={part === "behind" ? `${entry.id}-behind` : entry.id} name={`${entry.id} · ${entry.scene.module}${part === "behind" ? " (behind)" : ""}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps}>
+    <Sequence key={part === "behind" ? `${entry.id}-behind` : entry.id} name={`${entry.id} · ${entry.scene.module}${part === "behind" ? " (behind)" : ""}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps} style={lookPlaneStyle(look, entry.scene.id) as React.CSSProperties}>
       <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background} field={entry.plate ? fieldFor(entry.scene) : null} backdrop={entry.plate ? backdropFor(entry.scene) : null} light={entry.plate ? lightFor(entry.scene) : null} drift={part === "behind" ? undefined : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} zoom={part === "behind" ? undefined : zoomFor(entry, model)}>
         <SceneStartFrame.Provider value={frames(entry.start)}>{render(part)}</SceneStartFrame.Provider>
       </SceneLayer>
@@ -737,6 +737,8 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
   );
   return (
     <AbsoluteFill style={{ backgroundColor: background, fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
+      {/* The look's stage (kit/core/look.mjs): the floor under every scene layer; the layers take lookPlaneStyle. */}
+      {look?.stage ? <div style={{ position: "absolute", left: 0, top: 0 }} dangerouslySetInnerHTML={{ __html: lookUnderMarkup(look) }} /> : null}
       {picture(feelWrap(<>
       {base ? <BaseLayer base={base} cameraOps={cameraOps} rooms={subject.rooms} /> : null}
       {subject.needed ? layers.filter((layer: any) => subject.depth(layer) !== "front").map((layer: any) => sceneElement(layer, subject.depth(layer) === "split" ? "behind" : undefined)) : null}
@@ -747,7 +749,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
       {layout && layoutFill ? <LayoutFill layout={layout} plan={layoutFill} notch={breakout} /> : null}
       {layers.filter((layer: any) => subject.depth(layer) !== "behind").map((layer: any) => sceneElement(layer, subject.depth(layer) === "split" ? "front" : undefined))}
       {loop ? (
-        <Sequence key="loop" name={`loop → ${loop.sceneId}`} from={frames(loop.start)} durationInFrames={Math.max(1, frames(loop.end) - frames(loop.start))} premountFor={fps}>
+        <Sequence key="loop" name={`loop → ${loop.sceneId}`} from={frames(loop.start)} durationInFrames={Math.max(1, frames(loop.end) - frames(loop.start))} premountFor={fps} style={lookPlaneStyle(look, loop.sceneId) as React.CSSProperties}>
           <SceneLayer startFrame={frames(loop.start)} tweens={loop.tweens} plate background={background} freeze field={fieldFor(loop.scene)} backdrop={backdropFor(loop.scene)} light={lightFor(loop.scene)}>{loop.render()}</SceneLayer>
         </Sequence>
       ) : null}

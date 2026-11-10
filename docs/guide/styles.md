@@ -204,6 +204,9 @@ A **look** treats the world, the characters and the cards together, so the whole
 | `paper-cutout` | Layered craft paper: rough cut edges, paper fibre and soft shadows between layers, the cast as jointed paper puppets with pin fasteners, animated on twos with a tiny jitter at every step. |
 | `watercolour` | Soft washes that bleed at the edges with darker pooled borders and paper grain, loose pencil lines slightly off register, and washes that shift every few frames like hand-painted frames. It is the `watercolour` medium with a pencil drawing under it, held at ten drawings a second. |
 | `anime-cel` | Thin dark outlines and two-tone cel shading with hard shadow edges on the characters and the world alike, big shiny eyes, light rays, and speed lines when a character is surprised. |
+| `ascii-terminal` | The rendered scene converted to green monospace characters on black by brightness, with a screen glow, scanlines, a vignette and a typed command line. A real conversion: each character cell picks one of nine characters by how bright the scene is there. |
+| `clay-2d` | A flat drawing shaded to suggest plasticine: soft rounded rims on every shape, a fingerprint texture, warm studio light, held on twos with a slight wobble, the top and bottom of the frame out of focus. |
+| `isometric-layers` | The scene's layers standing as flat cut-outs on a pastel floor, seen from a 45-degree orthographic camera, with soft shadows between them and small floating icon cards. |
 | `none` | The default: no look, the video renders exactly as before. |
 
 A look brings its own colours, and where it needs them a drawing style for the characters, a time of day, a backdrop and lighting. Anything your video sets itself wins, then the look, then the style pack. With its dials:
@@ -213,14 +216,20 @@ A look brings its own colours, and where it needs them a drawing style for the c
 ```
 
 - `strength` (0 to 1, default 1): how far the frame moves from the clean render.
-- `step`: how many drawings a second the picture holds at. `12` animates "on twos", the way stop motion and cut-out animation move; `paper-cutout` uses it by default, and `false` turns it off. Captions and sound never step.
+- `step`: how many drawings a second the picture holds at. `12` animates "on twos", the way stop motion and cut-out animation move; `paper-cutout` and `clay-2d` use it by default (`watercolour` holds at 10), and `false` turns it off. Captions and sound never step.
 - `furniture` (default on): the look's overlay, such as the hologram's labels and grid floor or the thermal camera's crosshair. `false` leaves only the picture's treatment.
 - `palette`: `"brand"` keeps your style's colours instead of the look's. The looks that map the whole frame through their own colours (blueprint, hologram, thermal) still do.
-- `labels`: up to six short labels for the looks that show text: the hologram's floating labels, the blueprint's title and scale, the thermal scale's hottest and coldest values.
+- `labels`: up to six short labels for the looks that show text: the hologram's floating labels, the blueprint's title and scale, the thermal scale's hottest and coldest values, the ASCII terminal's command.
 
-You can also just describe it: with no style named, *"as a hologram"*, *"blueprint style"*, *"thermal camera"*, *"cyberpunk"*, *"paper cutout"*, *"watercolour and pencil"* or *"anime"* in your prompt picks the look. (*Watercolour* on its own picks the medium, without the pencil or the held frames.) From the command line, `launchclip style generate --look hologram` does the same.
+You can also just describe it: with no style named, *"as a hologram"*, *"blueprint style"*, *"thermal camera"*, *"cyberpunk"*, *"paper cutout"*, *"watercolour and pencil"*, *"anime"*, *"ASCII"*, *"claymation"* or *"isometric"* in your prompt picks the look. (*Watercolour* on its own picks the medium, without the pencil or the held frames.) From the command line, `launchclip style generate --look hologram` does the same.
 
 Captions and the brand frame are never treated, so they stay readable, and a look renders the same every time. A look and a medium can be used together: the medium paints first.
+
+Three looks are named for how far code-drawn frames can take them:
+
+- **`ascii-terminal` is the real thing**, but small text inside a scene does not survive being turned into characters. Keep the words in the captions, which stay sharp above the look, and make any on-screen title large.
+- **`clay-2d` is shading, not clay.** It follows the edges between colours, so every shape gets a rim but nothing gains real thickness, an underside or a shadow that knows what is in front of what. Real claymation needs 3D materials and lights, which LaunchClip does not render.
+- **`isometric-layers` is a true isometric view of flat layers.** The world stands at the back and the characters and cards in front of it, like a toy theatre, but a desk does not gain a top and a character does not turn. It needs `camera.mode: "cuts"` (the look sets it): with a world camera the layers stay flat and only the colours and the icon cards apply. The tilted layers have to fit the frame, so text inside a scene is drawn at about half its size on a 9:16 video and about a third on 16:9.
 
 What a look cannot do: it treats the finished picture, so it cannot tell a person from a wall. The thermal look reads brightness as heat (it sets the scene to night so people are the brightest thing in it), and the neon reflections fall on the lower part of the frame, not on a floor it can see.
 

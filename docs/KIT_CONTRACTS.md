@@ -2204,8 +2204,8 @@ true or false (each medium's defaults are `MEDIUM_DEFAULTS`).
 `story.look` (a style pack's `look`, filled by `applyStyle`) is one treatment
 for the world, the cast and the cards together ([SCENE_LOOKS_RFC.md](SCENE_LOOKS_RFC.md)):
 `none` (the default), `blueprint`, `hologram`, `thermal`, `neon-night`,
-`paper-cutout`, `watercolour` or `anime-cel`, or
-`{name, strength?, step?, furniture?, palette?, labels?}`:
+`paper-cutout`, `watercolour`, `anime-cel`, `ascii-terminal`, `clay-2d` or
+`isometric-layers`, or `{name, strength?, step?, furniture?, palette?, labels?}`:
 `strength` 0–1, `step` false or 6–15 drawings a second, `furniture` a boolean,
 `palette` `look` or `brand`, `labels` up to 6 strings of 1–28 characters.
 `lookErrors()` and `validateStory` check it (`STORY_LOOK_NAMES` and
@@ -2214,7 +2214,8 @@ names the fix. `lookPlan(story)` is null without a look, and then neither
 renderer adds anything (the HyperFrames compile is byte for byte today's).
 
 A look is `kit/core/looks/<name>.mjs`: `{describe, words, defaults, presets(),
-variants, variantAt(), under, grade(), furniture(), vars(), cast}`, built from the
+variants, variantAt(), under, grade(), stage(), furniture(), vars(), cast,
+honest}`, built from the
 shared parts in `kit/core/looks/parts.mjs`.
 
 - **Presets.** `lookPresets(value)` → `{colors?, cast?: {style}, world?,
@@ -2274,6 +2275,29 @@ shared parts in `kit/core/looks/parts.mjs`.
   gradients on the cast and the world become flat tones with a hard edge) and
   inks every colour edge; its speed lines read `plan.cues` (a cue that turns
   a character `surprised`).
+- **ASCII terminal** is a pixel pass in the grade: brightness is read at
+  each character cell's centre (`asciiCell(unit)`: odd sizes, 19 × 27 px at
+  1080) and spread over the cell with `feMorphology`, nine `discrete` bands
+  each cut one tile of a 5 × 7 bitmap glyph (`feImage` and `feTile`, the
+  bitmaps in the look file, so no font is involved), and the sum is coloured
+  by the cell's brightness over a faint ghost of the picture.
+- **Clay 2D** lights a height map (a dip at every colour edge plus the
+  contour lines of a slow noise, as fingerprints) with `feDiffuseLighting`
+  and lays it over the picture as soft light; it steps at 12 and picks a
+  seeded bend per step (`stepPick`: never the drawing the step before shows).
+  `LOOK_INFO[name].honest` says what it is not, as for isometric layers.
+- **Stage** (`isometric-layers`). A look's `stage(plan)` gives
+  `plan.stage = {planes: {sceneId: {transform, filter}}, under}`: one 2D
+  `matrix()` per scene layer (an orthographic projection of a plane is
+  affine, so there is no 3D context and both renderers agree) and markup
+  under every scene (the floor). HyperFrames emits `lookStageCss(plan)`
+  (rules for `#lc-scene-<id>`, its loop clone and its behind part) and
+  `lookUnderMarkup(plan)` after `#lc-bg`; Remotion passes
+  `lookPlaneStyle(plan, sceneId)` as the scene's `<Sequence style>` and draws
+  the same markup before the scenes. Both apply it only when no camera plan
+  carries the scenes (cuts mode with no camera transition); the look's preset
+  sets `camera.mode: "cuts"`. `plan.scenes` is every scene's id and track,
+  `plan.icons` the icons the story names.
 - A module review (`sceneFilter`, `ModuleReview`) has no look.
 - Plain words: `lookFromText(text)` reads a look from a description ("as a
   hologram" → `hologram`); `make` and `story plan` pass it to the seeded style
