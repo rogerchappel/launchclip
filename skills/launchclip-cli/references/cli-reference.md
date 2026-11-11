@@ -1675,7 +1675,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 
   ```text
   launchclip preview <project> [--port 4173] [--no-open] [--json] # play a planned video in a browser before any render: the page the renderer draws, driven by the mix
-  launchclip preview <project> --export <dir> [--json] # write the player as a folder of static files for a host to serve or embed
+  launchclip preview <project> --export <dir> [--media light|original] [--json] # write the player as a folder of static files for a host to serve or embed; its clips and soundtrack are made light for streaming unless --media original
   ```
 
 - `publish-manifest`: Write publish.json next to the video: the title and title options (from SCRIPT.json, else the storyboard), a description, hashtags, the CTA, aspect, duration, the video, the designed cover and any .srt/.vtt captions, and whether it fits each platform (YouTube Shorts, TikTok, Reels, YouTube, LinkedIn, X; App Store and Product Hunt on request). --link attaches a URL; --utm tags it per platform (utm_source=<platform>, utm_medium=video, utm_campaign=<campaign>). finish and make write it after every finished video.

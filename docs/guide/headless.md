@@ -246,6 +246,17 @@ messages from its parent and posts `launchclip:ready`, `launchclip:time` and
 `launchclip:ended` back. It has to come from a web server: a browser will
 not play it from `file://`.
 
+An exported folder's media is made light for streaming: each clip becomes a
+small H.264 proxy (fitted in 960 pixels a side, a keyframe every half second
+so a seek lands at once) and a WAV soundtrack becomes AAC. `preview.json`
+records it under `media`. `--media original` keeps the files as they are, as
+a preview served on this machine does. It needs `ffmpeg`; a file that cannot
+be converted is kept and named under `media.kept_original`.
+
+While it plays, the player waits for a clip that has not buffered instead of
+running on and jumping the clip forward, and posts `launchclip:waiting` and
+`launchclip:playing` around the wait.
+
 `poster.jpg` is drawn in a browser (Playwright's Chromium, a system Chrome or
 a renderer's). On a machine with none there is no poster, and
 `preview.json` has `"poster": null`.

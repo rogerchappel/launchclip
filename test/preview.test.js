@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import http from "node:http";
+import { promisify } from "node:util";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { chromiumSearch, loadPlaywright } from "../src/demo/record.js";
-import { POSTER_FILE, buildPreview, formatPreviewSummary, playerPage, posterImage, servePreview } from "../src/preview.js";
+import { POSTER_FILE, buildPreview, formatPreviewSummary, lightMedia, playerPage, posterImage, previewMedia, servePreview } from "../src/preview.js";
 
 const FORMAT = { width: 1080, height: 1920, fps: 30, duration: 12.5 };
 
@@ -109,6 +111,7 @@ test("the player page drives the composition's timeline and takes a host's messa
   assert.match(page, /<div id="lc-preview-canvas"><div id="launchclip-root">/);
   assert.throws(() => playerPage({ title: "T", composition_id: "x", format: FORMAT }, "<p>not a page</p>"), /no <head> and <body>/);
   assert.match(page, /launchclip:seek/);
+  assert.match(page, /launchclip:waiting/, "the picture waits for a clip that has not buffered");
   assert.match(page, /style\.visibility = on \? "" : "hidden"/);
   assert.match(page, /max="12\.5"/);
 });
@@ -168,4 +171,56 @@ test("a poster is written beside the player when a browser can draw it, and name
   const image = await readFile(path.join(dir, POSTER_FILE));
   assert.deepEqual([image[0], image[1]], [0xff, 0xd8], "a JPEG");
   assert.deepEqual([image.readUInt16BE(image.indexOf(Buffer.from([0xff, 0xc0])) + 7), image.readUInt16BE(image.indexOf(Buffer.from([0xff, 0xc0])) + 5)], [540, 960]);
+});
+
+test("an exported preview's media is made light; a preview served here keeps its files", async () => {
+  assert.deepEqual([previewMedia(undefined, { exported: true }), previewMedia(undefined), previewMedia("original", { exported: true }), previewMedia("Light")], ["light", "original", "original", "light"]);
+  assert.throws(() => previewMedia("tiny"), /--media must be light or original/);
+  const project = await plannedProject();
+  const asked = [];
+  const light = async ({ dir, html, format }) => { asked.push([path.basename(dir), format.width]); return { html: html.replace("assets/mix.wav", "assets/mix.m4a"), files: 1, saved: 7, skipped: [] }; };
+  const exported = await buildPreview(project, { out: path.join(project, "out") }, { compile, gsapFile: null, poster: NO_POSTER, lightMedia: light });
+  assert.deepEqual(asked, [["out", 1080]]);
+  assert.deepEqual(exported.media, { quality: "light", files: 1, saved_bytes: 7 });
+  assert.match(await readFile(path.join(exported.dir, "composition.html"), "utf8"), /assets\/mix\.m4a/);
+  assert.match(await readFile(path.join(exported.dir, "index.html"), "utf8"), /assets\/mix\.m4a/);
+  // Served from the project, or asked for as they are: nothing is converted.
+  const local = await buildPreview(project, {}, { compile, gsapFile: null, poster: NO_POSTER, lightMedia: () => { throw new Error("converted a local preview"); } });
+  assert.deepEqual(local.media, { quality: "original" });
+  const kept = await buildPreview(project, { out: path.join(project, "out"), media: "original" }, { compile, gsapFile: null, poster: NO_POSTER, lightMedia: () => { throw new Error("converted when told not to"); } });
+  assert.deepEqual(kept.media, { quality: "original" });
+});
+
+test("light media: a clip becomes a small fast-seeking proxy, a WAV becomes AAC, and the page follows the new names", async (t) => {
+  const run = promisify(execFile);
+  try { await run("ffmpeg", ["-version"]); } catch { t.skip("no ffmpeg on this machine"); return; }
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-light-"));
+  await mkdir(path.join(dir, "assets/shots"), { recursive: true });
+  await run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=30:duration=2", "-c:v", "libx264", "-crf", "10", "-pix_fmt", "yuv420p", path.join(dir, "assets/shots/deck clip.mov")]);
+  await run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=2", path.join(dir, "assets/mix.wav")]);
+  await writeFile(path.join(dir, "assets/music.mp3"), "already compressed");
+  const html = '<video class="clip" src="assets/shots/deck%20clip.mov"></video><audio id="lc-audio" src="assets/mix.wav"></audio><audio src="assets/music.mp3"></audio><video src="https://example.com/remote.mp4"></video><video src="assets/missing.mp4"></video>';
+  const before = (await Promise.all(["assets/shots/deck clip.mov", "assets/mix.wav"].map((file) => readFile(path.join(dir, file))))).reduce((sum, file) => sum + file.length, 0);
+  const result = await lightMedia({ dir, html, format: FORMAT });
+  assert.deepEqual([result.files, result.skipped], [2, []]);
+  assert.match(result.html, /src="assets\/shots\/deck%20clip\.mp4"/);
+  assert.match(result.html, /src="assets\/mix\.m4a"/);
+  assert.match(result.html, /src="assets\/music\.mp3"/, "a soundtrack that is already compressed is left alone");
+  assert.match(result.html, /https:\/\/example\.com\/remote\.mp4/);
+  assert.deepEqual([existsSync(path.join(dir, "assets/shots/deck clip.mov")), existsSync(path.join(dir, "assets/mix.wav"))], [false, false], "the originals are not kept in the preview folder");
+  const after = (await Promise.all(["assets/shots/deck clip.mp4", "assets/mix.m4a"].map((file) => readFile(path.join(dir, file))))).reduce((sum, file) => sum + file.length, 0);
+  assert.equal(result.saved, before - after);
+  assert.ok(after < before / 2, `${before} bytes became ${after}`);
+  const probe = await run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height,codec_name", "-of", "csv=p=0", path.join(dir, "assets/shots/deck clip.mp4")]);
+  assert.equal(probe.stdout.trim(), "h264,960,540", "fitted in 960 pixels a side");
+});
+
+test("light media: a file that cannot be converted is kept as it was", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-light-"));
+  await mkdir(path.join(dir, "assets"), { recursive: true });
+  await writeFile(path.join(dir, "assets/mix.wav"), "0123456789");
+  const html = '<audio id="lc-audio" src="assets/mix.wav"></audio>';
+  const result = await lightMedia({ dir, html, format: FORMAT }, { run: async () => { throw new Error("ffmpeg: not found"); } });
+  assert.deepEqual(result, { html, files: 0, saved: 0, skipped: ["assets/mix.wav"] });
+  assert.equal(await readFile(path.join(dir, "assets/mix.wav"), "utf8"), "0123456789");
 });
