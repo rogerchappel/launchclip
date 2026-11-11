@@ -4,6 +4,12 @@
 
 ### Added
 
+- `launchclip finish` prints machine-readable progress on stderr, as `make`
+  does: a `launchclip:progress` line as each step starts (voice, validate,
+  captions, sound, render, master, evidence, gates), the render's frames as
+  they finish (`"done"`, `"total"`, `"unit":"frames"`), and a last line with
+  the status and the seconds it took. A host that renders a saved plan on
+  demand can show how far the render has got.
 - A visual explainer's layout is measured before it is shown. The drawn
   scenes are played in a browser and every shape and piece of text is
   measured (two or three seconds, no model call): text off the frame or

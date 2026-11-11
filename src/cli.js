@@ -7,6 +7,7 @@ import { preprocessPresenter } from "./presenter_preprocess.js";
 import { writeIntake } from "./intake.js";
 import { runProductionStage } from "./production_cli.js";
 import { isProductionReviewWorkspace } from "./production_review.js";
+import { progressLine } from "./progress.js";
 import { ownConnectionFetch } from "./own_connection_fetch.js";
 import { createCostTracker, parseCostLimit } from "./cost_tracker.js";
 import { diagnoseInstallation, VERSION } from "./doctor.js";
@@ -257,7 +258,12 @@ export async function runCli(argv, io = {}) {
         kind: flags.kind,
         boundary: flags.boundary,
         at: flags.at
-      }, productionAdapters.finish).finally(restoreCache);
+      }, {
+        // Machine-readable progress on stderr, as make prints it: each step as it starts, and the render's frames as they finish.
+        progress: (event) => stderr.write(`${progressLine({ stage: "finish", ...event })}\n`),
+        ...(productionAdapters.finish ?? {})
+      }).finally(restoreCache);
+      stderr.write(`${progressLine({ stage: "finish", status: report.status, seconds: report.seconds })}\n`);
       throwIfCostLimited(tracker);
       // --review: a vision model reviews the render (the staging review of an
       // animatic, else the critic); --retake: while it does not say ship, the

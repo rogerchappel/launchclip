@@ -12,7 +12,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { build } from "esbuild";
-import { MAKE_EXIT_CODES, makeExitCode, parseFlags } from "../src/cli.js";
+import { MAKE_EXIT_CODES, makeExitCode, parseFlags, runCli } from "../src/cli.js";
 import { RENDER_ONLY_GATES, runFinish } from "../src/finish.js";
 import { formatMakeSummary } from "../src/make/index.js";
 import { MAKE_STOP_POINTS, makeOptionsFromFlags, validateMakeOptions } from "../src/make/options.js";
@@ -196,6 +196,22 @@ test("--approve storyboard renders the planned story, reusing every finished ste
     assert.ok(existsSync(path.join(fixture.project, PLAYER_MANIFEST_FILE)));
   } finally {
     await Promise.all([fixture.cleanup(), whole.cleanup()]);
+  }
+});
+
+test("the finish command prints its progress on stderr: each step as it starts, then how it ended", async () => {
+  const { fixture } = await planned();
+  try {
+    const lines = [];
+    const io = { stdout: { write: () => {} }, stderr: { write: (text) => lines.push(...String(text).split("\n").filter(Boolean)) }, productionAdapters: { finish: noRender().adapters.finishAdapters } };
+    await runCli(["finish", fixture.project, "--plan-only", "--renderer", "remotion", "--music", "synth", "--sfx", "kit", "--json"], io);
+    const events = progressEvents(lines);
+    assert.ok(events.every((event) => event.stage === "finish"), JSON.stringify(events));
+    assert.deepEqual(events.filter((event) => event.step).map((event) => event.step), ["voice", "validate", "captions", "sound", "plan"]);
+    assert.equal(events.at(-1).status, "planned");
+    assert.match(lines.filter((line) => line.startsWith("launchclip:progress ")).at(-1), /"status":"planned","seconds":[\d.]+\}$/);
+  } finally {
+    await fixture.cleanup();
   }
 });
 
