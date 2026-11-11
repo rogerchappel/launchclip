@@ -4,6 +4,12 @@
 
 ### Added
 
+- `LAUNCHCLIP_OPENROUTER_PRIORITY_MODELS` lists OpenRouter model ids whose
+  calls ask the host for its priority tier (`service_tier: "priority"`).
+  A standard-tier call can wait a minute or more before the host starts
+  answering; the priority tier costs more per token and rarely queues.
+  Models not listed are sent as before, and a listed model falls back to a
+  standard host when the priority one cannot take the call.
 - `make --script-model <provider:model[@effort]>` (or `LAUNCHCLIP_SCRIPT_MODEL`)
   gives the script its own model. The script stage's calls (the concepts,
   the judge, the story, the script and its repairs) go to it and every other

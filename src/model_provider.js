@@ -75,6 +75,7 @@ export class ChatCompletionsStructuredClient {
     this.noTemperature = new Set();
     this.noArrayBounds = new Set();
     this.lowReasoning = new Set();
+    this.priorityModels = new Set(String(options.priorityModels ?? process.env.LAUNCHCLIP_OPENROUTER_PRIORITY_MODELS ?? "").split(",").map((entry) => entry.trim()).filter(Boolean));
   }
 
   async runStructured(options = {}) {
@@ -101,6 +102,12 @@ export class ChatCompletionsStructuredClient {
         body.reasoning = { effort: options.reasoningEffort };
       }
       else if (!options.reasoningEffort && this.lowReasoning.has(model)) body.reasoning = { effort: "low" };
+      // A model named in LAUNCHCLIP_OPENROUTER_PRIORITY_MODELS asks for its host's priority tier (dearer, and it
+      // seldom queues); if that tier cannot take the call, a standard host does.
+      if (this.priorityModels.has(model)) {
+        body.service_tier = "priority";
+        body.provider.allow_fallbacks = true;
+      }
     }
     // A host that will not take array bounds in a schema (minItems, maxItems) is sent the schema without them.
     if (this.noArrayBounds.has(model)) body.response_format.json_schema.schema = withoutArrayBounds(options.schema);

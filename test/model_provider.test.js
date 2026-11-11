@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { OllamaStructuredClient, createStructuredClient, modelRouteKey, parseModelRoute, parseModelRoutes } from "../src/model_provider.js";
+import { ChatCompletionsStructuredClient, OllamaStructuredClient, createStructuredClient, modelRouteKey, parseModelRoute, parseModelRoutes } from "../src/model_provider.js";
 
 test("parses provider, model tag, and reasoning without losing model colons", () => {
   assert.deepEqual(modelRouteKey(parseModelRoute("ollama:qwen2.5-coder:latest@none")), {
@@ -210,4 +210,20 @@ test("reports the same bounded timeout when a response body stalls after headers
 
 test("rejects unsupported providers before a request", () => {
   assert.throws(() => parseModelRoute("mystery:model@low"), /Unsupported model provider/);
+});
+
+test("a model named for the priority tier asks its host for it and may fall back; other models are sent as before", async () => {
+  const bodies = [];
+  const fetch = async (_url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ id: "r", model: "m", choices: [{ message: { content: "{}" }, finish_reason: "stop" }] }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const client = new ChatCompletionsStructuredClient({ provider: "openrouter", model: "google/fast-one", apiKey: "k", fetch, priorityModels: "google/fast-one, other/model" });
+  const request = { schema: { type: "object", properties: {}, additionalProperties: false }, schemaName: "s", input: "x" };
+  await client.runStructured(request);
+  await client.runStructured({ ...request, model: "anthropic/writer" });
+  assert.equal(bodies[0].service_tier, "priority");
+  assert.deepEqual(bodies[0].provider, { require_parameters: true, allow_fallbacks: true });
+  assert.equal("service_tier" in bodies[1], false);
+  assert.deepEqual(bodies[1].provider, { require_parameters: true, allow_fallbacks: false });
 });
