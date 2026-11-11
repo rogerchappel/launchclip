@@ -12,6 +12,7 @@
 // the video with its controls; composition.html the video alone). --export writes it and stops, for a host that
 // serves it itself; without it the folder is served on localhost.
 import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import { createReadStream, existsSync } from "node:fs";
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import http from "node:http";
@@ -81,9 +82,47 @@ export async function buildPreview(projectPath, options = {}, adapters = {}) {
     bytes,
     offline
   };
+  // A still of the video for a host to show before the player is loaded. It needs a browser; without one there is none.
+  info.poster = options.poster === false ? null : await Promise.race([(adapters.poster ?? posterImage)({ dir, format: manifest.format }), new Promise((resolve) => setTimeout(() => resolve(null), POSTER_TIMEOUT_MS).unref())]).catch(() => null);
   await writeFile(path.join(dir, "preview.json"), `${JSON.stringify(info, null, 2)}\n`);
   await writeFile(path.join(dir, "index.html"), playerPage(info, html));
   return { ...info, dir, index: path.join(dir, "index.html"), warnings: compiled.warnings ?? [] };
+}
+
+export const POSTER_FILE = "poster.jpg";
+// How far into the video the poster is taken: past the opening's entrances, where the first scene is full.
+const POSTER_AT = 0.3;
+const POSTER_WIDTH = 540;
+// The preview is never held up by its poster.
+const POSTER_TIMEOUT_MS = 45_000;
+
+/**
+ * poster.jpg in the preview folder: the composition at a point early in the
+ * video, half size. → "poster.jpg", or null when there is no browser to draw
+ * it (Playwright's Chromium, a system Chrome or a renderer's browser).
+ */
+export async function posterImage({ dir, format }) {
+  const { chromiumSearch, loadPlaywright } = await import("./demo/record.js");
+  const chromium = await loadPlaywright();
+  if (!chromium) return null;
+  let pinned = null;
+  try { pinned = chromium.executablePath(); } catch { pinned = null; }
+  const found = await chromiumSearch({ playwrightPath: pinned });
+  if (!found.path) return null;
+  const browser = await chromium.launch({ executablePath: found.path });
+  try {
+    const { width, height, duration } = format;
+    const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: POSTER_WIDTH / width });
+    await page.goto(pathToFileURL(path.join(dir, "composition.html")).href, { timeout: 20000 });
+    await page.waitForFunction(() => window.__timelines && Object.keys(window.__timelines).length > 0, null, { timeout: 15000 });
+    await page.evaluate(() => Promise.race([document.fonts.ready, new Promise((resolve) => setTimeout(resolve, 3000))]));
+    // The timeline is set, not returned: a returned timeline would be copied out of the page, and it has no end.
+    await page.evaluate((at) => { Object.values(window.__timelines)[0].time(at); }, Math.min(Number(duration) * POSTER_AT, 6));
+    await page.screenshot({ path: path.join(dir, POSTER_FILE), type: "jpeg", quality: 82, timeout: 15000 });
+    return POSTER_FILE;
+  } finally {
+    await browser.close().catch(() => {});
+  }
 }
 
 /** Build the preview and serve it on localhost. → {...build, url, port, close()} */

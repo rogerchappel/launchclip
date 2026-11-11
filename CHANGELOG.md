@@ -4,6 +4,10 @@
 
 ### Added
 
+- A preview folder holds `poster.jpg`: a still of the video early on, half
+  size, for a host to show before the player is loaded (a page of several
+  previews mounts one player at a time). `preview.json` names it, or has
+  `"poster": null` on a machine with no browser to draw it.
 - `launchclip finish` prints machine-readable progress on stderr, as `make`
   does: a `launchclip:progress` line as each step starts (voice, validate,
   captions, sound, render, master, evidence, gates), the render's frames as
@@ -91,6 +95,12 @@
   of becoming a heading card.
 
 ### Fixed
+
+- `equation-lockup` sets an equation that is too long for one line on two,
+  broken before the equals sign, or before the operator that leaves the two
+  lines nearest in width. A planned video whose formula ran long failed its
+  storyboard checks after every repair; in one run that left a draft that
+  could not be refined. An equation that fits a line is set as before.
 
 - The preview player runs inside a sandboxed frame. `index.html` held the
   video in a nested frame and read into it, which a host that embeds the
