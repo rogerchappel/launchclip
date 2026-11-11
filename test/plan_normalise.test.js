@@ -242,3 +242,26 @@ test("a call to action's icon with no handle is taken off; with a handle it stay
   assert.deepEqual(fixed.changed, ["end: icon taken off (a call to action's icon sits in its handle pill, and the scene has no handle)"]);
   assert.equal(story.scenes[0].params.icon, "arrow");
 });
+
+test("zooms: one with no time to hold after its move is taken out; the shot keeps the zooms that can be seen", () => {
+  const box = { x: 100, y: 300, width: 400, height: 300 };
+  const story = { schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 12 }, brand: DEFAULT_BRAND, scenes: [
+    // 0–6 s: the first zoom holds until the second; the second has 0.66 s before the shot eases out (the saved failure).
+    { id: "boards", module: "hook-title", start: 0, end: 6, params: { headline: "Three boards" }, zooms: [{ at: 1, box }, { at: 3.74, box }] },
+    // Its only zoom ends on its own `until` too soon: the shot plays unzoomed.
+    { id: "close", module: "hook-title", start: 6, end: 12, params: { headline: "Save this" }, zooms: [{ at: 7, until: 8.2, box }] }
+  ] };
+  const before = checkStoryboard(story, { words: [] }).errors.filter((error) => /a zoom holds at least/.test(error));
+  assert.equal(before.length, 2, "both zooms fail the check as written");
+  assert.match(before[0], /scenes\[0\]\.zooms\[1\] holds 0\.66 s/);
+  const fitted = normalisePlan(story, { words: [] });
+  assert.deepEqual(fitted.storyboard.scenes[0].zooms, [{ at: 1, box }]);
+  assert.equal(fitted.storyboard.scenes[1].zooms, undefined);
+  assert.deepEqual(fitted.changed, ["boards: a zoom had under 1.2 s to hold after the 0.8 s move; taken out", "close: a zoom had under 1.2 s to hold after the 0.8 s move; taken out"]);
+  assert.deepEqual(checkStoryboard(fitted.storyboard, { words: [] }).errors.filter((error) => /zoom/.test(error)), []);
+  assert.equal(story.scenes[0].zooms.length, 2, "the input is not changed");
+  // Zooms with room are left alone.
+  const fine = { ...story, scenes: [{ ...story.scenes[0], zooms: [{ at: 1, box }, { at: 3, box }] }, { ...story.scenes[1], zooms: undefined }] };
+  delete fine.scenes[1].zooms;
+  assert.deepEqual(normalisePlan(fine, { words: [] }).changed, []);
+});

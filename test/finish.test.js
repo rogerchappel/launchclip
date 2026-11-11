@@ -376,6 +376,34 @@ test("a line time past a shortened scene and caption-band clashes are both repai
   }
 });
 
+test("repairLayout settles a caption-band clash a step further each pass: the card moves, the captions move, then they hide", async () => {
+  // A production plan failed on one 0.6 s clash: every pass moved the card again, nothing cleared it, and the passes ran out.
+  const story = {
+    schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 20 },
+    brand: { colors: { bg: "#06070d", primary: "#fdb022", accent: "#46d4ff", ink: "#06070d", paper: "#f2eee6" } },
+    overlays: [{ id: "captions", type: "captions", style: "word-highlight", position: "middle" }],
+    scenes: [
+      { id: "open", module: "hook-title", start: 0, end: 5, params: { headline: "Three boards" } },
+      { id: "ask", module: "polaroid", track: 1, start: 5, end: 9.5, params: { caption: "3.5 weeks", tilt: 4 } },
+      { id: "close", module: "cta", start: 9.5, end: 20, params: { action: "Save this" } }
+    ]
+  };
+  // The same finding after every pass: the check is not cleared by what the pass before did.
+  const layout = { findings: [{ rule: "caption-band", severity: "error", ids: ["ask", "captions"], at: 5.2, detail: "ask sits in the caption band 65,826 853×269 while captions are visible (5.2s–5.8s)" }] };
+  const ctx = { copy: story };
+  const steps = [];
+  for (let pass = 0; pass < 4; pass += 1) {
+    const repaired = await repairLayout(ctx, layout, { resolveOptions: () => ({}) });
+    steps.push(repaired.changes.join("; "));
+    ctx.copy = repaired.storyboard;
+  }
+  assert.match(steps[0], /^layout: tooling cleared the caption band: ask \(/);
+  assert.match(steps[1], /^layout: tooling placed captions .* ask/);
+  assert.match(steps[2], /^layout: tooling hid captions 5\.18–5\.82 s under ask/);
+  assert.equal(steps[3], "", "hidden once: there is nothing further to try");
+  assert.deepEqual(ctx.copy.overlays[0].hide, [[5.18, 5.82]]);
+});
+
 test("repairLayout moves cards off the face and fits the caption band even beside an error it cannot fix", async () => {
   // The second production failure: cards on the presenter's face once the
   // real timings exist, next to a caption-band clash and an unrelated error.

@@ -80,7 +80,7 @@ import { COVER_PATH, renderCover } from "./cover.js";
 import { writePublishManifest } from "./publish_manifest.js";
 import { guardRejections } from "./rejection_guard.js";
 import { PLAYER_MANIFEST_FILE, writePlayerManifest } from "./player_manifest.js";
-import { captionBandWarnings, fitCaptionBand } from "./caption_band_fit.js";
+import { captionBandErrors, captionBandWarnings, fitCaptionBand } from "./caption_band_fit.js";
 import { captionVisibilityGate } from "./caption_visibility.js";
 import { fitFaceClear } from "./face_clear_fit.js";
 import { fitSceneTimings } from "./timing_fit.js";
@@ -1739,8 +1739,14 @@ export async function repairLayout(ctx, layout, { resolveOptions, infos = async 
   }
   const lines = errors.map((finding) => `layout: ${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail ?? ""}`.trim());
   const resolve = (candidate) => resolveStory(candidate, resolveOptions());
-  let fitted = fitCaptionBand(storyboard, lines, { resolve });
-  if (fitted.moved.length && check) {
+  // A clash the last pass's fix did not clear is settled a step further each pass: the card moves, then the
+  // captions move, then they hide. The same fix tried again never clears it, and the passes run out.
+  const tried = (ctx.captionBandTries ??= new Map());
+  const clashing = [...new Set(captionBandErrors(lines).map((clash) => clash.scene))];
+  const worst = Math.max(0, ...clashing.map((id) => tried.get(id) ?? 0));
+  for (const id of clashing) tried.set(id, (tried.get(id) ?? 0) + 1);
+  let fitted = fitCaptionBand(storyboard, lines, { resolve, from: worst === 0 ? 1 : worst === 1 ? 2 : 4 });
+  if (worst === 0 && fitted.moved.length && check) {
     const others = (report) => (report.findings ?? []).filter((finding) => finding.severity === "error" && finding.rule !== "caption-band").length;
     if (others(await check(fitted.storyboard)) > others(layout)) fitted = fitCaptionBand(storyboard, lines, { resolve, from: 2 });
   }

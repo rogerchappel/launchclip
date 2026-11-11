@@ -113,6 +113,15 @@
 
 ### Fixed
 
+- Two plans that failed on arithmetic a model could not fix now pass.
+  A zoom with under 1.2 s to hold after its move (squeezed against the
+  shot's end, the next zoom or its own `until`) is taken out by the plan's
+  tooling and the shot plays unzoomed; a storyboard failed five attempts on
+  two such zooms. And `finish` settles a caption-band clash a step further
+  each pass (the card moves, then the captions move, then they hide): it
+  had moved the same card on every pass, cleared nothing, and failed the
+  plan on a 0.6 s overlap when its passes ran out.
+
 - The concept and story stage runs on Google's models. Their hosts answer
   400 "Request contains an invalid argument" to a response schema with array
   bounds (`minItems`, `maxItems`), which the router passes on as "Provider
