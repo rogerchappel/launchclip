@@ -128,7 +128,9 @@ export function emitEquationLockup(model) {
   const c = model.content;
   let body = tag(model, 'glow');
   if (c.name) body += tag(model, 'name', 'div', escape(c.name));
-  const terms = c.terms.map(term => tag(model, `term-${term.index}`, 'span', (term.index === c.highlight ? tag(model, `term-${term.index}-box`, 'span') : '') + tag(model, `term-${term.index}-text`, 'span', atomsHtml(term.atoms)))).join('');
+  const termHtml = term => tag(model, `term-${term.index}`, 'span', (term.index === c.highlight ? tag(model, `term-${term.index}-box`, 'span') : '') + tag(model, `term-${term.index}-text`, 'span', atomsHtml(term.atoms)));
+  // A long equation is set on two lines: each row is its own block.
+  const terms = c.rows.length > 1 ? c.rows.map((row, index) => tag(model, `eq-row-${index}`, 'span', row.map(at => termHtml(c.terms[at])).join(''))).join('') : c.terms.map(termHtml).join('');
   body += tag(model, 'rule-top') + tag(model, 'eq', 'div', terms) + tag(model, 'rule-bottom');
   if (c.note) body += tag(model, 'note', 'div', lineSpans(model, c.noteLines, 'note-line'));
   return shell(model, body);

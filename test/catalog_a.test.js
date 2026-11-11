@@ -526,7 +526,28 @@ test("equation-lockup validates its params", () => {
   bad({ equation: "E = mc^2", highlightAt: 1 }, /params\.highlightAt needs params\.highlight/);
   bad({ equation: "E = mc^2", highlight: 2, highlightAt: .5 }, /params\.highlightAt must come after the highlighted term has landed/);
   bad({ equation: "E = mc^2", at: 2.9, stagger: 1 }, /too late for a 4 s scene/);
-  bad({ terms: ["abcdefghijklmnopqrstuvwxyz", "abcdefghijklmnopqrstuvwxyz"] }, /too long to set at 64 px or more on one line/);
+  bad({ terms: ["abcdefghijklmnopqrstuvwxyz", "abcdefghijklmnopqrstuvwxyz"] }, /too long to set at 64 px or more on two lines/);
+  bad({ terms: ["abcdefghijklmnopqrstuvwxyz", "=", "abcdefghijklmnopqrstuvwxyz", "+", "abcdefghijklmnopqrstuvwxyz"] }, /too long to set at 64 px or more on two lines/);
+});
+
+test("equation-lockup sets an equation too long for one line on two, broken before the equals sign", () => {
+  const long = { terms: ["net force", "=", "mass", "×", "acceleration"] };
+  const model = resolve("equation-lockup", long);
+  assert.deepEqual(model.content.rows, [[0], [1, 2, 3, 4]]);
+  assert.ok(model.content.size >= 64, `set at ${model.content.size} px`);
+  const html = EMITTERS["equation-lockup"](model).html;
+  assert.match(html, /eq-row-0[\s\S]*term-0[\s\S]*eq-row-1[\s\S]*term-1[\s\S]*term-4/);
+  assert.equal(model.styles["eq-row-1"].display, "block");
+  // With no equals sign to break at, it breaks before the operator that leaves the lines nearest in width.
+  const sum = resolve("equation-lockup", { terms: ["hull drag", "+", "wave drag", "+", "wind drag"] });
+  assert.deepEqual(sum.content.rows, [[0, 1, 2], [3, 4]]);
+  // The equals sign is not the break when the line after it would be too long.
+  assert.deepEqual(resolve("equation-lockup", { terms: ["drag", "=", "density", "×", "speed^2", "×", "area"] }).content.rows, [[0, 1, 2], [3, 4, 5, 6]]);
+  // One that fits a line is set as before: no row wrappers.
+  const short = resolve("equation-lockup", EQUATION);
+  assert.deepEqual(short.content.rows, [short.content.terms.map((term) => term.index)]);
+  assert.doesNotMatch(EMITTERS["equation-lockup"](short).html, /eq-row/);
+  assert.equal(short.styles["eq-row-0"], undefined);
 });
 
 test("equation-lockup parity fixture and the golden story's s5 resolve", async () => {

@@ -973,10 +973,23 @@ function resolveEquationLockup(params, ctx) {
     term.gap = index === 0 || term.opOnly || previous.opOnly ? 0 : .18;
     if (term.opOnly) term.atoms[0].wide = true;
   });
-  const emWidth = termModels.reduce((sum, term) => sum + atomsWidth(term.atoms) + term.gap + (term.opOnly ? .2 : 0), 0);
+  const termEm = term => atomsWidth(term.atoms) + term.gap + (term.opOnly ? .2 : 0);
+  const rowEm = row => row.reduce((sum, term) => sum + termEm(term), 0);
   const maxWidth = area.width * .9;
-  const size = Math.floor(Math.min((st.portrait ? 150 : 140) * k, maxWidth / emWidth));
-  if (size < 64 * k) throw new Error('the equation is too long to set at 64 px or more on one line; split it or shorten it');
+  const sizeFor = em => Math.floor(Math.min((st.portrait ? 150 : 140) * k, maxWidth / em));
+  // One line when it sets at 64 px or more. A longer equation breaks onto a second line before an
+  // operator (the "=" for choice), at the break that leaves the two lines nearest in width.
+  let rows = [termModels];
+  if (sizeFor(rowEm(termModels)) < 64 * k) {
+    const breaks = termModels.map((term, index) => index).filter(index => index > 0 && termModels[index].opOnly);
+    const widest = index => Math.max(rowEm(termModels.slice(0, index)), rowEm(termModels.slice(index)));
+    const equals = breaks.filter(index => termModels[index].source.trim() === '=' && sizeFor(widest(index)) >= 64 * k);
+    const best = (equals.length ? equals : breaks).sort((a, b) => widest(a) - widest(b))[0];
+    if (best === undefined || sizeFor(widest(best)) < 64 * k) throw new Error('the equation is too long to set at 64 px or more on two lines; split it or shorten it');
+    rows = [termModels.slice(0, best), termModels.slice(best)];
+  }
+  const emWidth = Math.max(...rows.map(rowEm));
+  const size = sizeFor(emWidth);
   const lastLand = termModels[termModels.length - 1].time + .42;
   const highlightAt = highlight === null ? null : optional(params.highlightAt, Math.min(lastLand - s + .35, d - exitDur - .7), value => sceneTime(value, 'params.highlightAt', d, CATALOG_A_TIMING['equation-lockup'].highlightLeadOut));
   if (lastLand > base.end - exitDur - .3 + 1e-9) throw new Error(`the terms land at ${round(lastLand - s, 3)} s, too late for a ${round(d, 3)} s scene; lower params.at or params.stagger`);
@@ -986,7 +999,7 @@ function resolveEquationLockup(params, ctx) {
   if (name && textWidth(name.toUpperCase(), nameSize, fk.body, .14) > area.width) throw new Error('params.name is too wide for one line; shorten it');
   const noteFit = note ? fitLines(splitWords(note).map(word => word.text), {kind: fk.body, maxWidth: area.width * .86, maxLines: 2, maxSize: noteSize, minSize: noteSize, lineHeight: 1.25, maxHeight: noteSize * 2.6}) : null;
   if (note && !noteFit) throw new Error('params.note is too long for two lines; shorten it');
-  const eqPad = 46 * k, eqHeight = size * 1.5 + eqPad * 2;
+  const eqPad = 46 * k, eqHeight = size * 1.5 * rows.length + eqPad * 2;
   const blockHeight = (name ? nameSize * 1.25 + 30 * k : 0) + 2 * k * 2 + eqHeight + (note ? 34 * k + noteFit.lines.length * noteSize * 1.25 : 0);
   const box = placeBlock(st, blockHeight, rect, 'equation-lockup');
   const ruleWidth = Math.min(box.width, emWidth * size + 120 * k);
@@ -1024,6 +1037,7 @@ function resolveEquationLockup(params, ctx) {
     note: {position: 'relative', marginTop: px(34 * k), fontFamily: fonts.body, fontSize: px(noteSize), lineHeight: '1.25', color: theme.muted, maxWidth: px(area.width * .9)}
   };
   if (noteFit) noteFit.lines.forEach((_, index) => { styles[`note-line-${index}`] = {display: 'block'}; });
+  if (rows.length > 1) rows.forEach((_, index) => { styles[`eq-row-${index}`] = {display: 'block', whiteSpace: 'nowrap'}; });
   for (const term of termModels) {
     styles[`term-${term.index}`] = {position: 'relative', display: 'inline-block', marginLeft: em(term.gap), transformOrigin: '50% 50%'};
     styles[`term-${term.index}-text`] = {position: 'relative', display: 'inline-block', color: theme.paper};
@@ -1046,7 +1060,7 @@ function resolveEquationLockup(params, ctx) {
   };
   return assemble({module: 'equation-lockup', ctx, base, st, rect: box, theme, contrast, fonts, hidesCaptions: true,
     motion: {enterEnd: lastLand, enterFrom: {opacity: 0, y: round(size * .45)}, enterEase: 'power3.out', ...exit},
-    content: {name, note, noteLines: noteFit ? noteFit.lines.map(line => line.join(' ')) : [], size, terms: termModels, highlight, highlightTime: highlightAt === null ? null : T(s + highlightAt), lockupTime: T(lastLand), ruleWidth: round(ruleWidth),
+    content: {name, note, noteLines: noteFit ? noteFit.lines.map(line => line.join(' ')) : [], size, terms: termModels, rows: rows.map(row => row.map(term => term.index)), highlight, highlightTime: highlightAt === null ? null : T(s + highlightAt), lockupTime: T(lastLand), ruleWidth: round(ruleWidth),
       keyTextPx: [size, ...(name ? [nameSize] : []), ...(note ? [noteSize] : [])]},
     styles, classes, anim, events});
 }
