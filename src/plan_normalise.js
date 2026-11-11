@@ -23,7 +23,7 @@
 // rewrites the storyboard (and the map's scene names) the planner returned.
 
 import { moduleTiming } from "@launchclip/core/modules.mjs";
-import { CUE_SNAP, castRefId, resolveStory, storyCastIds } from "@launchclip/core/story.mjs";
+import { CUE_SNAP, STORY_ZOOM, castRefId, resolveStory, storyCastIds } from "@launchclip/core/story.mjs";
 import { offScreenSpeech, sceneCharacters } from "@launchclip/core/direction.mjs";
 import { ACTING } from "@launchclip/core/characters/acting.mjs";
 import { TARGET_REQUIRED } from "@launchclip/core/characters/actions.mjs";
@@ -63,6 +63,7 @@ export function normalisePlan(storyboard, { words = [], beats = null, direction 
   fitSpeakers(state);
   fitLineScenes(state);
   fitCueTimes(state);
+  fitZoomHolds(state);
   if (!state.changed.length) return { storyboard, direction, changed: [] };
   return { storyboard: state.story, direction: state.map ?? direction, changed: state.changed };
 }
@@ -180,6 +181,31 @@ function fitCueTimes(state) {
         cue.at = to;
       }
     }
+  });
+}
+
+// A zoom needs its hold after the move. One squeezed against the shot's end,
+// the next zoom or its own `until` cannot be seen, and a model asked to fix
+// the arithmetic often cannot: the zoom is taken out and the shot plays unzoomed.
+function fitZoomHolds(state) {
+  const timed = resolved(state);
+  if (!timed) return;
+  state.story.scenes.forEach((scene, index) => {
+    if (!Array.isArray(scene?.zooms) || !scene.zooms.length) return;
+    const end = Number(timed.scenes[index]?.end);
+    const times = (timed.scenes[index]?.zooms ?? []).map((zoom) => ({ at: Number(zoom?.at), until: zoom?.until === undefined ? null : Number(zoom.until) }));
+    if (!Number.isFinite(end) || times.length !== scene.zooms.length || times.some((time) => !Number.isFinite(time.at) || (time.until !== null && !Number.isFinite(time.until)))) return;
+    // Last first: taking a zoom out gives the one before it the time up to the next.
+    const out = new Set();
+    for (let z = times.length - 1; z >= 0; z -= 1) {
+      const next = times.find((_, later) => later > z && !out.has(later));
+      const leaves = times[z].until ?? (next ? next.at : end - STORY_ZOOM.move);
+      if (leaves - (times[z].at + STORY_ZOOM.move) < STORY_ZOOM.hold - EPS) out.add(z);
+    }
+    if (!out.size) return;
+    state.changed.push(`${label(scene, index)}: ${out.size === 1 ? "a zoom" : `${out.size} zooms`} had under ${STORY_ZOOM.hold} s to hold after the ${STORY_ZOOM.move} s move; taken out`);
+    scene.zooms = scene.zooms.filter((_, z) => !out.has(z));
+    if (!scene.zooms.length) delete scene.zooms;
   });
 }
 
