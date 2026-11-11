@@ -217,8 +217,8 @@ export async function runCli(argv, io = {}) {
       const exportDir = typeof flags.export === "string" ? flags.export : null;
       // --export writes the static folder and stops; otherwise it is served until interrupted.
       const built = exportDir
-        ? await buildPreview(target, { out: exportDir }, productionAdapters.preview)
-        : await servePreview(target, { port: flags.port, open: !flags["no-open"] }, productionAdapters.preview);
+        ? await buildPreview(target, { out: exportDir, media: flags.media }, productionAdapters.preview)
+        : await servePreview(target, { port: flags.port, open: !flags["no-open"], media: flags.media }, productionAdapters.preview);
       if (!flags.json) {
         stdout.write(formatPreviewSummary(built));
         return;

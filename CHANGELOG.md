@@ -100,6 +100,17 @@
   in-flight ceiling) is sent again once the other scenes are drawn instead
   of becoming a heading card.
 
+### Changed
+
+- An exported preview is light enough to stream. `launchclip preview
+  --export` now writes each clip as a small H.264 proxy (fitted in 960 pixels
+  a side, a keyframe every half second) and a WAV soundtrack as AAC; a real
+  plan with eight stock clips was 34 MB of media a host had to stream before
+  it played smoothly. `--media original` keeps the files as they are, as a
+  preview served on this machine does. The player also waits for a clip that
+  has not buffered, where it ran on and then jumped the clip forward, and
+  reports ready once the sound and the first clips can play.
+
 ### Fixed
 
 - The concept and story stage runs on Google's models. Their hosts answer

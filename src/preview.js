@@ -14,7 +14,9 @@
 import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { createReadStream, existsSync } from "node:fs";
-import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { promisify } from "node:util";
 import http from "node:http";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -63,6 +65,14 @@ export async function buildPreview(projectPath, options = {}, adapters = {}) {
     html = html.replace(cdn[0], '<script src="vendor/gsap.min.js"></script>');
     offline = true;
   }
+  // An exported preview is streamed to a browser, often through a host's own server: its clips become
+  // small, fast-seeking proxies and its soundtrack is compressed. A preview served here keeps the files as they are.
+  const media = previewMedia(options.media, { exported: Boolean(options.out) });
+  let lightened = null;
+  if (media === "light") {
+    lightened = await (adapters.lightMedia ?? lightMedia)({ dir, html, format: manifest.format });
+    html = lightened.html;
+  }
   await writeFile(path.join(dir, "composition.html"), html);
   // The compiler copies the project's whole assets folder; a preview keeps
   // only the files the page names (the stems behind the mix are not played).
@@ -80,13 +90,73 @@ export async function buildPreview(projectPath, options = {}, adapters = {}) {
     audio: { mastered: false },
     not_in_preview: manifest.not_in_preview ?? [],
     bytes,
-    offline
+    offline,
+    media: lightened ? { quality: "light", files: lightened.files, saved_bytes: lightened.saved, ...(lightened.skipped.length ? { kept_original: lightened.skipped } : {}) } : { quality: "original" }
   };
   // A still of the video for a host to show before the player is loaded. It needs a browser; without one there is none.
   info.poster = options.poster === false ? null : await Promise.race([(adapters.poster ?? posterImage)({ dir, format: manifest.format }), new Promise((resolve) => setTimeout(() => resolve(null), POSTER_TIMEOUT_MS).unref())]).catch(() => null);
   await writeFile(path.join(dir, "preview.json"), `${JSON.stringify(info, null, 2)}\n`);
   await writeFile(path.join(dir, "index.html"), playerPage(info, html));
   return { ...info, dir, index: path.join(dir, "index.html"), warnings: compiled.warnings ?? [] };
+}
+
+export const PREVIEW_MEDIA = Object.freeze(["light", "original"]);
+/** --media light | original. Unset: light for an exported folder, original for a preview served here. */
+export function previewMedia(value, { exported = false } = {}) {
+  if (value === undefined || value === null || value === "" || value === true) return exported ? "light" : "original";
+  const media = String(value).toLowerCase();
+  if (!PREVIEW_MEDIA.includes(media)) throw new Error(`--media must be ${PREVIEW_MEDIA.join(" or ")}; got ${value}`);
+  return media;
+}
+
+// A preview's clips: fitted in this many pixels a side, a keyframe every half second so a seek lands at once.
+const LIGHT_SIDE = 960;
+const LIGHT_VIDEO = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "30", "-pix_fmt", "yuv420p", "-g", "15", "-keyint_min", "15", "-sc_threshold", "0", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart"];
+const LIGHT_AUDIO = ["-vn", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"];
+const MEDIA_SRC = /<(video|audio)\b[^>]*?\bsrc="([^"]+)"/gi;
+
+/**
+ * The media the page plays, made light: each video a small H.264 proxy, each
+ * WAV an AAC file, in place of the originals under the preview folder; the
+ * page's src attributes follow a file whose name changed. A file ffmpeg
+ * cannot convert, or that comes out no smaller, is kept as it was.
+ * → {html, files, saved (bytes), skipped: [path]}
+ */
+export async function lightMedia({ dir, html, format }, { run = promisify(execFile) } = {}) {
+  const side = Math.min(LIGHT_SIDE, Math.max(Number(format?.width) || LIGHT_SIDE, Number(format?.height) || LIGHT_SIDE));
+  const named = new Map();
+  for (const [, tag, src] of html.matchAll(MEDIA_SRC)) {
+    const clean = decodeURI(src.split(/[?#]/)[0]);
+    if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(clean) || clean.startsWith("/") || clean.includes("..")) continue;
+    if (!named.has(clean)) named.set(clean, { tag: tag.toLowerCase(), src });
+  }
+  let out = html, saved = 0, files = 0;
+  const skipped = [];
+  const jobs = [...named].map(([relative, { tag }]) => async () => {
+    const source = path.join(dir, relative);
+    if (!existsSync(source)) return;
+    const ext = path.extname(relative).toLowerCase();
+    const video = tag === "video";
+    if (!video && ext !== ".wav") return; // an already compressed soundtrack is left alone
+    const target = video ? (ext === ".mp4" ? relative : `${relative.slice(0, -ext.length)}.mp4`) : `${relative.slice(0, -ext.length)}.m4a`;
+    const temp = path.join(dir, `${target}.light${video ? ".mp4" : ".m4a"}`);
+    try {
+      await run("ffmpeg", ["-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-i", source, ...(video ? ["-vf", `scale=w='min(iw,${side})':h='min(ih,${side})':force_original_aspect_ratio=decrease:force_divisible_by=2`, ...LIGHT_VIDEO] : LIGHT_AUDIO), temp], { maxBuffer: 8 * 1024 * 1024 });
+      const [before, after] = [(await stat(source)).size, (await stat(temp)).size];
+      if (!(after > 0) || (after >= before && target === relative)) { await rm(temp, { force: true }); skipped.push(relative); return; }
+      await rm(source, { force: true });
+      await rename(temp, path.join(dir, target));
+      saved += before - after; files += 1;
+      if (target !== relative) out = out.split(relative).join(target).split(encodeURI(relative)).join(encodeURI(target));
+    } catch {
+      await rm(temp, { force: true });
+      skipped.push(relative);
+    }
+  });
+  // A few at a time: each ffmpeg uses several cores.
+  const queue = [...jobs];
+  await Promise.all(Array.from({ length: Math.min(3, queue.length) }, async () => { while (queue.length) await queue.shift()(); }));
+  return { html: out, files, saved, skipped };
 }
 
 export const POSTER_FILE = "poster.jpg";
@@ -234,7 +304,8 @@ const escapeHtml = (value) => String(value).replace(/[&<>"]/g, (c) => ({ "&": "&
 //
 // A host page drives it by postMessage {type: "launchclip:play" |
 // "launchclip:pause" | "launchclip:seek", time}, and it posts {type:
-// "launchclip:ready" | "launchclip:time" | "launchclip:ended"} to its parent.
+// "launchclip:ready" | "launchclip:time" | "launchclip:ended"} to its parent,
+// and "launchclip:waiting" / "launchclip:playing" around a wait for a clip to buffer.
 // composition: the compiled page's HTML (composition.html).
 export function playerPage(info, composition) {
   const { width, height, duration } = info.format;
@@ -286,7 +357,7 @@ function playerScript(info) {
   if (query.has("bare")) document.body.classList.add("lc-preview-bare");
   const canvas = document.getElementById("lc-preview-canvas"), fit = document.getElementById("lc-preview-fit"), stage = document.getElementById("lc-preview-stage");
   const playButton = document.getElementById("lc-preview-play"), seek = document.getElementById("lc-preview-seek"), time = document.getElementById("lc-preview-time"), muteButton = document.getElementById("lc-preview-mute");
-  let tl = null, clips = [], master = null, playing = false, t = 0, last = 0, muted = false;
+  let tl = null, clips = [], master = null, playing = false, t = 0, last = 0, muted = false, waiting = false, stallSince = 0;
 
   function layout() {
     const scale = Math.min(stage.clientWidth / W, stage.clientHeight / H);
@@ -310,16 +381,38 @@ function playerScript(info) {
       const want = clip.mediaStart + local;
       if (el !== master || !playing) { if (Math.abs(el.currentTime - want) > (playing ? 0.3 : 0.03)) { try { el.currentTime = want; } catch (e) {} } }
       el.muted = muted; el.volume = Math.max(0, Math.min(1, clip.volume));
-      if (playing && el.paused) { const p = el.play(); if (p && p.catch) p.catch(() => {}); }
-      if (!playing && !el.paused) el.pause();
+      // While the picture waits for a clip, the sound waits too; the clip itself keeps loading.
+      const run = playing && !(waiting && el === master);
+      if (run && el.paused) { const p = el.play(); if (p && p.catch) p.catch(() => {}); }
+      if (!run && !el.paused) el.pause();
     }
     seek.value = t; time.textContent = stamp(t) + " / " + stamp(D);
   }
 
+  // A clip that is on screen and has not buffered: the picture waits for it, as a video player does,
+  // where it used to run on and then jump the clip forward to catch up.
+  function stalled() {
+    for (const clip of clips) {
+      const local = t - clip.start;
+      if (local < 0 || local >= clip.duration || clip.el.tagName !== "VIDEO") continue;
+      if (clip.el.readyState < 3 && !clip.el.error && !clip.el.ended) return true;
+    }
+    return false;
+  }
+
   function tick(now) {
     if (playing) {
+      // A clip takes a moment to show its first frame after a cut: only a stall that lasts is waited for.
+      if (!stalled()) stallSince = 0; else if (!stallSince) stallSince = now;
+      const hold = Boolean(stallSince) && now - stallSince > 250;
+      if (hold !== waiting) {
+        waiting = hold;
+        if (master) { if (hold) master.pause(); else { try { master.currentTime = t; } catch (e) {} } }
+        post(hold ? "launchclip:waiting" : "launchclip:playing");
+      }
       // The mix is the clock while it runs; the wall clock carries on without it.
-      if (master && !master.paused && !master.ended && master.readyState > 2) t = master.currentTime;
+      if (waiting) { /* the clock holds */ }
+      else if (master && !master.paused && !master.ended && master.readyState > 2) t = master.currentTime;
       else t += (now - last) / 1000;
       if (t >= D) { t = D; pause(); post("launchclip:ended"); }
       draw(); post("launchclip:time");
@@ -328,7 +421,7 @@ function playerScript(info) {
   }
 
   function play() { if (!tl) return; if (t >= D) t = 0; playing = true; playButton.innerHTML = "&#10074;&#10074;"; if (master) { try { master.currentTime = t; } catch (e) {} } draw(); }
-  function pause() { playing = false; playButton.innerHTML = "&#9654;"; draw(); }
+  function pause() { playing = false; waiting = false; stallSince = 0; playButton.innerHTML = "&#9654;"; draw(); }
   function seekTo(value) { t = Math.max(0, Math.min(D, Number(value) || 0)); if (master) { try { master.currentTime = t; } catch (e) {} } draw(); post("launchclip:time"); }
 
   playButton.onclick = () => (playing ? pause() : play());
@@ -352,7 +445,10 @@ function playerScript(info) {
     for (const clip of clips) { clip.el.preload = "auto"; clip.el.playsInline = true; if (clip.el.tagName === "VIDEO" && clip.volume === 0) clip.el.muted = true; }
     master = doc.getElementById("lc-audio");
     const fonts = doc.fonts && doc.fonts.ready ? doc.fonts.ready : Promise.resolve();
-    fonts.then(() => { seekTo(Number(query.get("t")) || 0); post("launchclip:ready"); if (query.has("autoplay")) play(); });
+    // Ready once the fonts are in and the sound and the first clips can play (or four seconds have passed).
+    const first = clips.filter((clip) => clip.start < 6).map((clip) => clip.el).concat(master ? [master] : []).filter((el, i, all) => all.indexOf(el) === i);
+    const buffered = Promise.all(first.map((el) => el.readyState >= 3 ? null : new Promise((resolve) => { el.addEventListener("canplay", resolve, { once: true }); el.addEventListener("error", resolve, { once: true }); })));
+    Promise.all([fonts, Promise.race([buffered, new Promise((resolve) => setTimeout(resolve, 4000))])]).then(() => { seekTo(Number(query.get("t")) || 0); post("launchclip:ready"); if (query.has("autoplay")) play(); });
     window.__launchclipPreview = { play: play, pause: pause, seek: seekTo, get time() { return t; }, get playing() { return playing; }, duration: D };
   })();
   requestAnimationFrame(tick);
