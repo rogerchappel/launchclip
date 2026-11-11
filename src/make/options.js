@@ -96,6 +96,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["speed", {}],
   // The model the draft's calls use (provider:model[@effort]); unset: the run's model at low reasoning.
   ["draft-model", {}],
+  // The model that writes the script (concepts, story, script and its repairs); unset: the run's model. The storyboard keeps the run's model.
+  ["script-model", {}],
   // Continue a draft project to the full-quality plan, keeping its script and its voice.
   ["refine", { boolean: true }],
   ["replan", { boolean: true }],
@@ -195,6 +197,7 @@ export function makeOptionsFromFlags(flags = {}) {
     out: flags.out,
     speed: flags.speed,
     draftModel: flags["draft-model"],
+    scriptModel: flags["script-model"],
     ...(flags.refine ? { refine: true } : {}),
     replan: Boolean(flags.replan),
     concepts: flags.concepts,
@@ -234,6 +237,7 @@ export function validateMakeOptions(options = {}) {
   if (options.refine != null && typeof options.refine !== "boolean") throw new Error(`--refine takes no value; got ${options.refine}`);
   if (options.refine && speed === "draft") throw new Error("--refine continues a draft at full quality; pass --speed draft or --refine, not both");
   if (options.draftModel != null && (options.draftModel === true || !/^[a-z][a-z0-9-]*:\S+$/i.test(String(options.draftModel).trim()))) throw new Error(`--draft-model must be provider:model (for example openai:gpt-5.6-luna@low); got ${options.draftModel}`);
+  if (options.scriptModel != null && (options.scriptModel === true || !/^[a-z][a-z0-9-]*:\S+$/i.test(String(options.scriptModel).trim()))) throw new Error(`--script-model must be provider:model (for example openrouter:google/gemini-4-carbon@low); got ${options.scriptModel}`);
   if (options.seed != null && options.style) throw new Error("--seed generates a style; pass --seed or --style, not both");
   if (options.music != null && !MUSIC_FLAG_VALUES.includes(String(options.music).toLowerCase())) throw new Error(`--music must be one of ${MUSIC_FLAG_VALUES.join(", ")}; got ${options.music}`);
   if (options.musicVolume != null) parseMusicVolume(options.musicVolume);

@@ -100,7 +100,8 @@ export async function recordedRun({ callMs = 0, stillMs = 0, finishMs = 0, jitte
     const report = await runMake(PROMPT, { assets, voice: "test", music: "synth", cwd, out: "video", ...options }, adapters);
     return { report, lines, calls: [...calls], peak };
   };
-  return { run, project, cwd, assets, cleanup: () => Promise.all([rm(assets, { recursive: true, force: true }), rm(cwd, { recursive: true, force: true })]) };
+  // model: the fixture's model (its client answers from the recording), for a test that routes some calls through another client.
+  return { run, project, cwd, assets, model, cleanup: () => Promise.all([rm(assets, { recursive: true, force: true }), rm(cwd, { recursive: true, force: true })]) };
 }
 
 /** Every file under a project as {relative path: text}, with the run's own folders written as <cwd> and <assets>. */

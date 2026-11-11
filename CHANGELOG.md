@@ -4,6 +4,12 @@
 
 ### Added
 
+- `make --script-model <provider:model[@effort]>` (or `LAUNCHCLIP_SCRIPT_MODEL`)
+  gives the script its own model. The script stage's calls (the concepts,
+  the judge, the story, the script and its repairs) go to it and every other
+  stage keeps `--model`, so a fast writer can be paired with the model that
+  plans the storyboard. `MAKE.json` records it under `script_model`, and the
+  script's costs carry its provider.
 - A preview folder holds `poster.jpg`: a still of the video early on, half
   size, for a host to show before the player is loaded (a page of several
   previews mounts one player at a time). `preview.json` names it, or has
@@ -95,6 +101,14 @@
   of becoming a heading card.
 
 ### Fixed
+
+- The concept and story stage runs on Google's models. Their hosts answer
+  400 "Request contains an invalid argument" to a response schema with array
+  bounds (`minItems`, `maxItems`), which the router passes on as "Provider
+  returned error". The stage failed in a second and the script was quietly
+  written in one pass. The client now sends the request again without the
+  bounds and keeps them off for that model; the stage still checks the
+  answer against its own contract.
 
 - `equation-lockup` sets an equation that is too long for one line on two,
   broken before the equals sign, or before the operator that leaves the two

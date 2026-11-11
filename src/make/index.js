@@ -56,7 +56,7 @@ import { captureFiles, readCaptureRequests, recordCaptures } from "./captures.js
 import { evidenceClipParams } from "@launchclip/core/catalog-d-evidence-clip.mjs";
 import { RESEARCH_PATHS } from "../research/schema.js";
 import { directLongFormVisuals, revertCards, typographyShare, unresolvedScenes } from "./long_form_direct.js";
-import { checkModelAccess, createMakeClient, selectMakeModel } from "./models.js";
+import { checkModelAccess, createMakeClient, scriptModelSpec, selectMakeModel } from "./models.js";
 import { alternativeTransition, candidatesMode, comparisonEntry, designOpening, judgeCandidates, meanScore, openingScene, renderCandidate, rendererStill, riskyBoundary, sceneResolves, sceneTimes, selectCandidate, storyWith, transitionTimes, writeReceipt } from "./candidates.js";
 import { characterLed, explainerContent, explainerSeed } from "./explainer.js";
 import { VISUAL_DIR, explainerMode, planVisualExplainer, visualExplainer } from "./visual_explainer.js";
@@ -256,8 +256,12 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     const t0 = now();
     gate.stage(name);
     progress({ stage: name, done: index, total: stages.length });
+    // The prepare stage writes the script: it runs on the script's model when one is set, and the run's model is put back after it.
+    const planner = name === "prepare" && ctx.scriptModel ? ctx.model : null;
+    if (planner) ctx.model = ctx.scriptModel;
     try {
-      const result = await fn(ctx);
+      let result;
+      try { result = await fn(ctx); } finally { if (planner) ctx.model = planner; }
       report.stages[name] = { status: result?.status ?? "done", ...(result?.reason ? { reason: result.reason } : {}) };
     } catch (error) {
       // A drive unplugged mid-job: stop with one clear line; nothing more can be written there.
@@ -333,6 +337,18 @@ async function stageModel(ctx) {
       ctx.draft.model = { client: ctx.gate.wrap(made.client), provider: made.provider, model: made.model, reasoning: made.reasoning, spec };
     } else ctx.draft.model = { client: ctx.model.client, provider: ctx.model.provider, model: ctx.model.model, reasoning: DRAFT_REASONING, spec: ctx.model.spec };
     report.draft.model = { spec: ctx.draft.model.spec, provider: ctx.draft.model.provider, model: ctx.draft.model.model, reasoning: ctx.draft.model.reasoning };
+  }
+  // The script's own model (--script-model or LAUNCHCLIP_SCRIPT_MODEL): the prepare stage's calls (concepts, judge,
+  // story, script, repair, resize) go to it, and every other stage keeps the run's model.
+  const scriptSpec = adapters.scriptClient ? null : adapters.client ? null : scriptModelSpec(options.scriptModel, env);
+  if (adapters.scriptClient) ctx.scriptModel = { ...adapters.scriptClient, spec: adapters.scriptClient.spec ?? `${adapters.scriptClient.provider}:${adapters.scriptClient.model}`, source: "adapter", client: ctx.gate.wrap(adapters.scriptClient.client) };
+  else if (scriptSpec && scriptSpec !== ctx.model.spec) {
+    const made = createMakeClient(scriptSpec, adapters.clientOptions ?? {});
+    ctx.scriptModel = { ...made, spec: scriptSpec, source: options.scriptModel != null && options.scriptModel !== true ? "--script-model" : "LAUNCHCLIP_SCRIPT_MODEL", client: ctx.gate.wrap(made.client) };
+  }
+  if (ctx.scriptModel) {
+    report.script_model = { spec: ctx.scriptModel.spec, source: ctx.scriptModel.source, provider: ctx.scriptModel.provider, model: ctx.scriptModel.model, reasoning: ctx.scriptModel.reasoning ?? null };
+    ctx.say(`model: the script is written by ${ctx.scriptModel.provider} ${ctx.scriptModel.model}; the storyboard and the rest by ${ctx.model.provider} ${ctx.model.model}`);
   }
   report.model = { spec: ctx.model.spec, source: ctx.model.source, provider: ctx.model.provider, model: ctx.model.model, reasoning: ctx.model.reasoning ?? null, vision: Boolean(ctx.model.vision) };
   // Which roles this run's model can play (text and vision), so an app can
