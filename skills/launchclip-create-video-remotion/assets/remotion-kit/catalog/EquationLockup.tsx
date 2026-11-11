@@ -8,6 +8,12 @@ export const EquationLockup: React.FC<{ model: Model }> = ({ model }) => {
   const t = useModuleTime(model);
   const st = makeStyler(model, t);
   const c = model.content;
+  const term = (item: any) => (
+    <N key={item.index} model={model} st={st} node={`term-${item.index}`} as="span">
+      {item.index === c.highlight ? <N model={model} st={st} node={`term-${item.index}-box`} as="span" /> : null}
+      <N model={model} st={st} node={`term-${item.index}-text`} as="span"><Atoms model={model} atoms={item.atoms} /></N>
+    </N>
+  );
   return (
     <AbsoluteFill>
       <Root model={model} st={st}>
@@ -15,12 +21,12 @@ export const EquationLockup: React.FC<{ model: Model }> = ({ model }) => {
         {c.name ? <N model={model} st={st} node="name">{c.name}</N> : null}
         <N model={model} st={st} node="rule-top" />
         <N model={model} st={st} node="eq">
-          {c.terms.map((term: any) => (
-            <N key={term.index} model={model} st={st} node={`term-${term.index}`} as="span">
-              {term.index === c.highlight ? <N model={model} st={st} node={`term-${term.index}-box`} as="span" /> : null}
-              <N model={model} st={st} node={`term-${term.index}-text`} as="span"><Atoms model={model} atoms={term.atoms} /></N>
-            </N>
-          ))}
+          {/* A long equation is set on two lines: each row is then its own block. */}
+          {c.rows.length > 1
+            ? c.rows.map((row: number[], index: number) => (
+                <N key={index} model={model} st={st} node={`eq-row-${index}`} as="span">{row.map((at) => term(c.terms[at]))}</N>
+              ))
+            : c.terms.map(term)}
         </N>
         <N model={model} st={st} node="rule-bottom" />
         {c.note ? <N model={model} st={st} node="note"><Lines model={model} st={st} lines={c.noteLines} prefix="note-line" /></N> : null}

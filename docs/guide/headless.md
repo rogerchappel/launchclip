@@ -233,7 +233,8 @@ the project, or to the folder `--export` names:
 ```
 index.html         the player: the video and its controls in one document (index.html?bare hides the controls)
 composition.html   the video alone: one page, one paused timeline
-preview.json       the format, the title, draft or full plan, the story's sha256
+poster.jpg         a still of the video, half size, to show before the player is loaded
+preview.json       the format, the title, draft or full plan, the story's sha256, the poster's name
 assets/ fonts/     the media and the fonts the page uses
 vendor/            the animation library, so the page needs no network
 ```
@@ -243,6 +244,10 @@ A host serves that folder and shows `index.html` in a frame. The page takes
 messages from its parent and posts `launchclip:ready`, `launchclip:time` and
 `launchclip:ended` back. It has to come from a web server: a browser will
 not play it from `file://`.
+
+`poster.jpg` is drawn in a browser (Playwright's Chromium, a system Chrome or
+a renderer's). On a machine with none there is no poster, and
+`preview.json` has `"poster": null`.
 
 The preview is HTML and JavaScript made from a model's plan, so a host should
 treat it as untrusted: serve it from an origin that is not the app's, in a

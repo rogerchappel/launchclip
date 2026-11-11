@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { chromiumSearch, loadPlaywright } from "../src/demo/record.js";
-import { buildPreview, formatPreviewSummary, playerPage, servePreview } from "../src/preview.js";
+import { POSTER_FILE, buildPreview, formatPreviewSummary, playerPage, posterImage, servePreview } from "../src/preview.js";
 
 const FORMAT = { width: 1080, height: 1920, fps: 30, duration: 12.5 };
 
@@ -18,6 +18,9 @@ async function plannedProject({ draft = false } = {}) {
   if (draft) await writeFile(path.join(project, "MAKE.json"), JSON.stringify({ draft: { parts: { storyboard: "draft" } } }));
   return project;
 }
+
+// No browser is started for the stand-in page; the poster has its own test.
+const NO_POSTER = async () => null;
 
 // Stands in for the HyperFrames compiler: the page it writes, with the CDN script the preview replaces.
 const compile = async (_story, { projectDir }) => {
@@ -33,7 +36,7 @@ test("a planned project becomes a folder a browser can play, with the animation 
   const project = await plannedProject({ draft: true });
   const library = path.join(project, "gsap.min.js");
   await writeFile(library, "/* gsap */");
-  const built = await buildPreview(project, {}, { compile, gsapFile: library });
+  const built = await buildPreview(project, {}, { poster: NO_POSTER, compile, gsapFile: library });
   assert.equal(built.dir, path.join(project, ".launchclip/preview"));
   assert.equal(built.plan, "draft");
   assert.equal(built.offline, true);
@@ -60,7 +63,7 @@ test("a planned project becomes a folder a browser can play, with the animation 
 
 test("without the library on disk the page keeps its CDN script and says so", async () => {
   const project = await plannedProject();
-  const built = await buildPreview(project, { out: path.join(project, "out") }, { compile, gsapFile: null });
+  const built = await buildPreview(project, { out: path.join(project, "out") }, { poster: NO_POSTER, compile, gsapFile: null });
   assert.equal(built.offline, false);
   assert.equal(built.plan, "full");
   assert.match(await readFile(path.join(built.dir, "composition.html"), "utf8"), /cdn\.jsdelivr/);
@@ -69,18 +72,18 @@ test("without the library on disk the page keeps its CDN script and says so", as
 
 test("a project that is not planned says how to plan it", async () => {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-preview-"));
-  await assert.rejects(buildPreview(project, {}, { compile }), /has no PLAYER-MANIFEST\.json: plan the video first/);
+  await assert.rejects(buildPreview(project, {}, { poster: NO_POSTER, compile }), /has no PLAYER-MANIFEST\.json: plan the video first/);
 });
 
 test("the preview folder cannot be the project", async () => {
   const project = await plannedProject();
-  await assert.rejects(buildPreview(project, { out: project }, { compile }), /cannot be the project/);
+  await assert.rejects(buildPreview(project, { out: project }, { poster: NO_POSTER, compile }), /cannot be the project/);
 });
 
 test("the local server answers byte ranges and stays inside the preview folder", async () => {
   const project = await plannedProject();
   let opened = null;
-  const served = await servePreview(project, { port: 0 }, { compile, gsapFile: null, open: (url) => { opened = url; } });
+  const served = await servePreview(project, { port: 0 }, { poster: NO_POSTER, compile, gsapFile: null, open: (url) => { opened = url; } });
   try {
     assert.equal(opened, served.url);
     const page = await fetch(served.url);
@@ -146,4 +149,23 @@ test("in a browser: the player runs inside a sandboxed frame with no origin of i
     await new Promise((resolve) => host.close(resolve));
     await new Promise((resolve) => preview.close(resolve));
   }
+});
+
+test("a poster is written beside the player when a browser can draw it, and named in preview.json", async (t) => {
+  const project = await plannedProject();
+  // The adapter's answer is what preview.json records; --no-poster (options.poster false) asks for none.
+  const named = await buildPreview(project, {}, { compile, gsapFile: null, poster: async ({ dir, format }) => { assert.equal(format.width, 1080); assert.ok(existsSync(path.join(dir, "composition.html"))); return "poster.jpg"; } });
+  assert.equal(named.poster, "poster.jpg");
+  assert.equal(JSON.parse(await readFile(path.join(named.dir, "preview.json"), "utf8")).poster, "poster.jpg");
+  assert.equal((await buildPreview(project, { poster: false }, { compile, gsapFile: null, poster: async () => { throw new Error("asked for a poster"); } })).poster, null);
+  assert.equal((await buildPreview(project, {}, { compile, gsapFile: null, poster: async () => { throw new Error("the browser crashed"); } })).poster, null, "a poster that cannot be drawn does not fail the preview");
+  // For real: the composition at a point early in the video, half size.
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-poster-"));
+  await writeFile(path.join(dir, "composition.html"), PAGE);
+  const file = await posterImage({ dir, format: { ...FORMAT, duration: 10 } });
+  if (!file) { t.skip("no Chromium on this machine"); return; }
+  assert.equal(file, POSTER_FILE);
+  const image = await readFile(path.join(dir, POSTER_FILE));
+  assert.deepEqual([image[0], image[1]], [0xff, 0xd8], "a JPEG");
+  assert.deepEqual([image.readUInt16BE(image.indexOf(Buffer.from([0xff, 0xc0])) + 7), image.readUInt16BE(image.indexOf(Buffer.from([0xff, 0xc0])) + 5)], [540, 960]);
 });
