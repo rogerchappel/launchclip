@@ -513,8 +513,21 @@ It is planned in two steps:
    in flight; at the default of 4 a nine-scene video draws in three rounds,
    at 16 in one.
 
+How a scene uses the frame:
+
+- **The picture fills it.** Ground, benches and big objects run to the
+  bottom edge; nothing below the captions is left as bare background.
+- **Text stays where it can be read:** inside the platform's safe zone and
+  above the caption line, in type of 30 px or more.
+- **Captions sit on top of the picture,** one or two words at a time. The
+  director may hide them in a scene whose own big type carries the spoken
+  words, in at most half the scenes and never in the opening.
+- **The camera never stops:** a slow push for the whole scene, and a punch
+  in on the director's hits.
+
 A scene's code is parsed and held to the [custom-module rules](../KIT_CONTRACTS.md)
-before it is used. A scene that fails is drawn once more with the reason. One
+before it is used. A scene that fails is drawn once more with the reason, and
+a call the provider refused is sent again once the other scenes are drawn. One
 that fails again shows its heading as a card, and the run warns about it; a
 video where most scenes are cards fails instead of shipping.
 

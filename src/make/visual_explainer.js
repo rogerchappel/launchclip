@@ -42,9 +42,11 @@ const CUES = Object.freeze(["pop", "impact", "whoosh", "tick", "success"]);
 const MIN_SCENE_SECONDS = 1.4;
 const SCENE_SECONDS = Object.freeze([2.5, 4.5]);
 const DIRECTOR_TOKENS = 30000;
-const SCENE_TOKENS = 24000;
+// A scene is a few thousand tokens of code; the limit is also what a provider holds against the account while the call is in flight.
+const SCENE_TOKENS = 14000;
+const PROPS_TOKENS = 12000;
 // The cuts between scenes, in turn: the kit's own transitions.
-const TRANSITIONS = Object.freeze([{ type: "whip", dur: 0.25, direction: "left" }, { type: "push", dur: 0.3, direction: "up" }, { type: "push", dur: 0.3, direction: "left" }, { type: "whip", dur: 0.25, direction: "up" }, { type: "fade", dur: 0.2 }]);
+const TRANSITIONS = Object.freeze([{ type: "whip", dur: 0.36, direction: "left" }, { type: "push", dur: 0.34, direction: "up" }, { type: "push", dur: 0.34, direction: "left" }, { type: "whip", dur: 0.36, direction: "up" }, { type: "fade", dur: 0.2 }]);
 
 /** --explainer: visual (default) or characters. */
 export function explainerMode(value) {
@@ -68,19 +70,28 @@ export function visualExplainer(content, { mode = "visual", renderer = null, dra
 const round2 = (value) => Math.round(Number(value) * 100) / 100;
 const whole = (value) => Math.round(Number(value));
 
+// A caption line of one or two words, with room around it.
+const CAPTION_STRIP = 0.075;
+// The most scenes that may hide the captions, as a share of the video's scenes.
+const HIDDEN_CAPTION_SHARE = 0.5;
+// Camera: the push over a scene, the punch on a hit, and how far apart punches sit.
+const PUSH = 1.07;
+const KICK = 1.06;
+const KICK_GAP = 0.9;
+
 /**
- * Where a scene may draw, in frame pixels. text: the platform's safe zone
- * above the caption band (labels, numbers and anything that must be read).
- * picture: the wider area a drawing may fill. caption: the band's top.
+ * Where a scene may draw, in frame pixels. picture: the whole frame, which
+ * the drawing fills edge to edge. text: the platform's safe zone above the
+ * captions (labels, numbers and anything that must be read). strip: where a
+ * caption line sits, over the picture.
  */
 export function visualArea(format) {
   const canvas = { width: Number(format.width), height: Number(format.height) };
   const { safeZone, captionBand } = profileGeometry(canvas, null);
   const bottom = whole(Math.min(safeZone.y + safeZone.height, captionBand.y) - 10);
   const text = { x: whole(safeZone.x), y: whole(safeZone.y), width: whole(safeZone.width), height: bottom - whole(safeZone.y) };
-  const top = whole(Math.max(canvas.height * 0.06, text.y - canvas.height * 0.08));
-  const side = whole(canvas.width * 0.04);
-  return { canvas, text, picture: { x: side, y: top, width: canvas.width - side * 2, height: bottom - top }, caption: whole(captionBand.y) };
+  const strip = { y: whole(captionBand.y), height: whole(canvas.height * CAPTION_STRIP) };
+  return { canvas, text, picture: { x: 0, y: 0, width: canvas.width, height: canvas.height }, strip, caption: strip.y };
 }
 
 function luminance(hex) {
@@ -102,7 +113,8 @@ export function visualPalette(brand) {
 /** The drawing helpers every scene's code runs with (the fragment's own script, before the props and the scene). */
 export function visualHelpers(palette) {
   return `const NS = 'http://www.w3.org/2000/svg';
-const svg = root.querySelector('svg');
+const stage = root.querySelector('svg');
+const svg = stage.appendChild(document.createElementNS(NS, 'g'));
 const ${Object.entries(palette).map(([name, value]) => `${name} = '${value}'`).join(", ")};
 const S = (tag, attrs = {}, parent = svg, text = null) => {
   const el = document.createElementNS(NS, tag);
@@ -133,7 +145,7 @@ const QUALITY = `What makes it good:
 
 function toolNotes({ area, palette, helpers }) {
   const { canvas, text, picture } = area;
-  return `How drawing works. Code builds SVG into \`svg\` (its viewBox is the frame, ${canvas.width}x${canvas.height}) and schedules motion on the GSAP timeline \`tl\`. All times are ABSOLUTE seconds of the video. These helpers and colours already exist; use them, and plain \`tl.to\` / \`tl.fromTo\` (always spread \`...O\`) for anything else:
+  return `How drawing works. Code builds SVG into \`svg\` (a group in frame pixels: the frame is ${canvas.width}x${canvas.height}) and schedules motion on the GSAP timeline \`tl\`. All times are ABSOLUTE seconds of the video. These helpers and colours already exist; use them, and plain \`tl.to\` / \`tl.fromTo\` (always spread \`...O\`) for anything else:
 
 ${helpers}
 
@@ -141,8 +153,12 @@ ${HELPER_NOTES}
 The colours: BG ${palette.BG} is the background already behind every scene, INK ${palette.INK} is the line and text colour, PAPER ${palette.PAPER} is the light fill, PRIMARY ${palette.PRIMARY} and ACCENT ${palette.ACCENT} are the brand's two colours, HIGHLIGHT ${palette.HIGHLIGHT} is for the one thing to look at.
 
 Hard rules:
-- Text, numbers and anything that must be read stay inside x ${text.x} to ${text.x + text.width}, y ${text.y} to ${text.y + text.height} (outside it the platform's own buttons cover them). Pictures may fill x ${picture.x} to ${picture.x + picture.width}, y ${picture.y} to ${picture.y + picture.height}. Captions are drawn for you from y ${area.caption} down: leave that band and everything under it empty.
-- Check that text fits: a display character is about 0.55 of its font-size wide, a mono capital about 0.62 plus its letter spacing. No text smaller than 26 px; labels 32 px or more. A label on a plate is narrower than the plate.
+- Fill the frame. The picture runs edge to edge and top to bottom (x ${picture.x} to ${picture.width}, y ${picture.y} to ${picture.height}): ground, benches, big objects and backdrops go right to the bottom edge, and the main subject is large, centred about y ${whole(canvas.height * 0.47)}. A lower half left as bare background is a fault.
+- Text, numbers and anything that must be read stay inside x ${text.x} to ${text.x + text.width}, y ${text.y} to ${text.y + text.height} (outside it the platform's own buttons cover them).
+- Captions are drawn for you on top of the picture, one or two words at a time, in the strip y ${area.strip.y} to ${area.strip.y + area.strip.height}. The picture runs behind that strip and below it, but put no text of your own and no small detail there.
+- The brand's colours stay dominant: BG is the ground of every scene, and a topic's own colours are for the objects themselves, not for backdrops that fill the frame.
+- The heading keeps its own clear band: no picture, and nothing that moves, passes over a heading.
+- Check that text fits: a display character is about 0.55 of its font-size wide, a mono capital about 0.62 plus its letter spacing. No text smaller than 30 px; labels and tags 36 px or more. A label on a plate is narrower than the plate.
 - No Math.random, no Date, no setTimeout or requestAnimationFrame, no CSS animations or transitions, no fetch, no external images or fonts. Do not redeclare the helpers.
 - An element that should appear later must be brought in with pop, slam or fly (they hide it until then).
 - Plain JavaScript only, and correct: an error means the scene is replaced by a plain card.`;
@@ -159,12 +175,13 @@ export const DIRECTOR_SCHEMA = Object.freeze({
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["id", "heading", "start", "end", "brief", "beats", "hits"],
+        required: ["id", "heading", "start", "end", "captions", "brief", "beats", "hits"],
         properties: {
           id: { type: "string" },
           heading: { type: "string" },
           start: { type: "number" },
           end: { type: "number" },
+          captions: { type: "string", enum: ["show", "hide"] },
           brief: { type: "string" },
           beats: { type: "array", items: { type: "object", additionalProperties: false, required: ["at", "what"], properties: { at: { type: "number" }, what: { type: "string" } } } },
           hits: { type: "array", items: { type: "object", additionalProperties: false, required: ["at", "cue"], properties: { at: { type: "number" }, cue: { type: "string", enum: [...CUES] } } } }
@@ -175,6 +192,7 @@ export const DIRECTOR_SCHEMA = Object.freeze({
   }
 });
 
+export const PROPS_SCHEMA = Object.freeze({ type: "object", additionalProperties: false, required: ["props"], properties: { props: { type: "string" } } });
 export const SCENE_SCHEMA = Object.freeze({ type: "object", additionalProperties: false, required: ["code"], properties: { code: { type: "string" } } });
 
 function directorInstructions({ format, tools }) {
@@ -188,7 +206,7 @@ ${tools}
 
 Answer with:
 - look: the rules every illustrator follows so the scenes match: how headings are set (position, size, class), line weights, how labels and stamps look, the colour each recurring thing always has, how elements enter, the mood. Specific enough to follow without seeing the other scenes.
-- scenes: for each, id (short, lower-case, hyphens), heading (the two to four words that name it on screen), start and end (seconds), brief (exactly what the scene shows and how it is composed: where each thing sits in the frame, and which shared props it uses), beats (at: the second, what: what lands at that moment and on which word), hits (the moments that get a sound: at, and cue pop, impact, whoosh, tick or success).
+- scenes: for each, id (short, lower-case, hyphens), heading (the two to four words that name it on screen), start and end (seconds), captions (show, or hide in a scene whose own big type puts the spoken key words on screen, so the picture has the whole frame; never the first scene, and at most half the scenes), brief (exactly what the scene shows and how it is composed: where each thing sits in the frame, and which shared props it uses), beats (at: the second, what: what lands at that moment and on which word), hits (the moments that get a sound: at, and cue pop, impact, whoosh, tick or success).
 - props: JavaScript source. Constants for this topic's own colours, and a few functions for the things that recur across scenes (how each recurring object is drawn), so every illustrator draws them the same way. Each function takes a parent group, a position and a size, returns its group, and has a one-line comment giving its arguments and what it draws. Name them prop followed by a capital (propSomething). Only definitions: nothing is drawn at the top level.`;
 }
 
@@ -222,7 +240,7 @@ What it shows: ${scene.brief}
 Beats:
 ${scene.beats.map((beat) => `- ${beat.at} s: ${beat.what}`).join("\n") || "- (none given: time each thing to the word that names it)"}
 The words spoken during it, with their times: ${spoken(words, scene.start - 0.3, scene.end)}
-${first ? "\nThis is the opening scene: its main picture is drawn with no entrance, so it is there on the very first frame. Only what is added to it animates in.\n" : ""}`;
+${scene.captions === "hide" ? "\nCaptions are hidden in this scene: your own big type carries the key words as they are spoken, and the caption strip is yours to draw in.\n" : ""}${first ? "\nThis is the opening scene: its main picture is drawn with no entrance, so it is there on the very first frame. Only what is added to it animates in.\n" : ""}`;
 }
 
 /** What is wrong with a piece of scene or props code, or null. It is parsed, never run. */
@@ -266,6 +284,7 @@ export function tileScenes(raw, duration) {
     return {
       id,
       heading: String(scene.heading ?? "").trim() || id.replace(/-/g, " "),
+      captions: scene.captions === "hide" ? "hide" : "show",
       start: scene.start,
       end,
       brief: all.map((entry) => String(entry.brief ?? "").trim()).filter(Boolean).join(" Then: "),
@@ -273,6 +292,10 @@ export function tileScenes(raw, duration) {
       hits: all.flatMap((entry) => entry.hits ?? []).filter(inside).map((hit) => ({ at: round2(hit.at), cue: CUES.includes(hit.cue) ? hit.cue : "pop" })).sort((a, b) => a.at - b.at)
     };
   });
+  // Captions may give way to a scene's own type in at most half the scenes, and never in the opening (a viewer with the sound off reads it).
+  if (scenes[0]?.captions === "hide") { scenes[0].captions = "show"; notes.push(`scene ${scenes[0].id} keeps its captions: the opening always shows them`); }
+  const hidden = scenes.filter((scene) => scene.captions === "hide");
+  for (const scene of hidden.slice(Math.floor(scenes.length * HIDDEN_CAPTION_SHARE))) { scene.captions = "show"; notes.push(`scene ${scene.id} keeps its captions: at most half the scenes may hide them`); }
   return { scenes, notes };
 }
 
@@ -300,13 +323,23 @@ export function sceneFragment({ scene, code, helpers, props, area }) {
 <svg viewBox="0 0 ${canvas.width} ${canvas.height}"></svg>
 <script>
 ${helpers}
-svg.style.setProperty('--ve-ink', INK);
+stage.style.setProperty('--ve-ink', INK);
 ${props}
 ${body}
-// The camera never stops: a slow push for the whole scene.
-tl.fromTo(svg, { scale: 1, transformOrigin: '50% 45%' }, { scale: 1.04, duration: scene.duration, ease: 'none', ...O }, scene.start);
+// The camera never stops: a slow push for the whole scene, and a punch in on each hit that eases back.
+tl.fromTo(stage, { scale: 1, transformOrigin: '50% 45%' }, { scale: ${PUSH}, duration: scene.duration, ease: 'none', ...O }, scene.start);
+for (const at of params.kicks || []) {
+  tl.to(svg, { scale: ${KICK}, svgOrigin: '${whole(canvas.width / 2)} ${whole(canvas.height * 0.45)}', duration: 0.2, ease: 'power2.inOut', ...O }, at);
+  tl.to(svg, { scale: 1, svgOrigin: '${whole(canvas.width / 2)} ${whole(canvas.height * 0.45)}', duration: 0.5, ease: 'power2.inOut', ...O }, at + 0.2);
+}
 </script>
 `;
+}
+
+function kicks(scene) {
+  const out = [];
+  for (const hit of scene.hits) if (hit.at >= scene.start + 0.4 && hit.at <= scene.end - 0.8 && (!out.length || hit.at - out.at(-1) >= KICK_GAP)) out.push(hit.at);
+  return out;
 }
 
 /** The storyboard of a directed video: one custom scene per directed scene. base: the fixed inputs ({lane, format, brand, audio}). */
@@ -328,10 +361,12 @@ export function visualStoryboard({ base, scenes, area, title = null }) {
       end: scene.end,
       ...(index ? { in: { ...TRANSITIONS[(index - 1) % TRANSITIONS.length] } } : {}),
       // rect: where the scene's text sits, for the layout and density checks (the drawing itself is the fragment's).
-      params: { component: `Visual${index + 1}`, heading: scene.heading, rect },
+      // kicks: the hits the camera punches in on, far enough apart for each to land and settle.
+      params: { component: `Visual${index + 1}`, heading: scene.heading, rect, kicks: kicks(scene), ...(scene.captions === "hide" ? { hidesCaptions: true } : {}) },
       hits: scene.hits.map((hit, at) => ({ at: hit.at, event: `${scene.id}-${at + 1}`, cue: hit.cue }))
     })),
-    overlays: [{ type: "captions", position: "auto" }]
+    // The captions sit on top of the picture: one or two words at a time.
+    overlays: [{ type: "captions", position: "auto", max_words: 2 }]
   };
 }
 
@@ -391,9 +426,18 @@ export async function planVisualExplainer({ client, model = null, provider = nul
     const answer = await ask(client, { instructions: directorInstructions({ format, tools }), input, schema: DIRECTOR_SCHEMA, schemaName: "launchclip_visual_director", maxOutputTokens: DIRECTOR_TOKENS }, who);
     const value = answer.value;
     const tiled = tileScenes(value?.scenes, duration);
-    const props = typeof value?.props === "string" ? value.props.trim() : "";
-    problem = !value ? "it was not the JSON asked for" : !tiled.scenes.length ? "it had no scenes" : props && codeProblem(props, { helpers }) ? `the props code is wrong: ${codeProblem(props, { helpers })}` : null;
+    let props = typeof value?.props === "string" ? value.props.trim() : "";
+    const propsFault = props ? codeProblem(props, { helpers }) : null;
+    problem = !value ? "it was not the JSON asked for" : !tiled.scenes.length ? "it had no scenes" : propsFault ? `the props code is wrong: ${propsFault}` : null;
     attempts.push({ kind: "director", id: `director-${attempt}`, ok: !problem, error: problem, cost_usd: answer.cost_usd, usage: answer.usage, model: answer.model, seconds: answer.seconds });
+    // A plan that is sound but for its props code keeps its scenes: only the props are asked for again.
+    if (value && tiled.scenes.length && propsFault) {
+      const fixed = await ask(client, { instructions: `You wrote the shared drawing props of a video's scenes. They could not be used and must be corrected.\n\n${tools}\n\nAnswer with props: the whole corrected JavaScript source (definitions only).`, input: `The props:\n${props}\n\nWhat is wrong: ${propsFault}.\n`, schema: PROPS_SCHEMA, schemaName: "launchclip_visual_props", maxOutputTokens: PROPS_TOKENS }, who).catch((error) => { if (error?.code === "LAUNCHCLIP_COST_LIMIT") throw error; return null; });
+      const again = typeof fixed?.value?.props === "string" ? fixed.value.props.trim() : "";
+      const still = again ? codeProblem(again, { helpers }) : "there was no code";
+      if (fixed) attempts.push({ kind: "props", id: `props-${attempt}`, ok: !still, error: still, cost_usd: fixed.cost_usd, usage: fixed.usage, model: fixed.model, seconds: fixed.seconds });
+      if (!still) { props = again; problem = null; }
+    }
     if (!problem) { plan = { look: String(value.look ?? "").trim(), props, scenes: tiled.scenes }; warnings.push(...tiled.notes); }
   }
   const directorSeconds = Math.round(performance.now() - t0) / 1000;
@@ -402,27 +446,37 @@ export async function planVisualExplainer({ client, model = null, provider = nul
 
   // 2. Every scene at once (the model gate sets how many are in flight).
   const t1 = performance.now();
-  const drawn = await Promise.all(plan.scenes.map(async (scene, index) => {
+  // A scene's code that cannot be used is asked for once more with the reason. A call the provider refused
+  // (a rate limit, an account's in-flight ceiling) is not the scene's fault: it waits and is sent again
+  // on its own once the others have finished.
+  const CALL_FAILED = Symbol("the call failed");
+  let tally = 0;
+  const drawScene = async (scene, index, { alone = false } = {}) => {
     const input = sceneInput({ brief: String(brief).trim(), plan, scene, words, first: index === 0 });
     let fault = null;
     for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const id = `${scene.id}-${tally += 1}`;
       let answer;
       try {
         answer = await ask(client, { instructions: sceneInstructions({ format, tools }), input: `${input}\nDraw it.${fault ? `\n\nYour last code could not be used: ${fault}. Answer again with the corrected code.` : ""}\n`, schema: SCENE_SCHEMA, schemaName: "launchclip_visual_scene", maxOutputTokens: SCENE_TOKENS }, who);
       } catch (error) {
         if (error?.code === "LAUNCHCLIP_COST_LIMIT") throw error;
-        fault = `the call failed (${String(error?.message ?? error).split("\n")[0].slice(0, 160)})`;
-        attempts.push({ kind: "scene", id: `${scene.id}-${attempt}`, ok: false, error: fault, cost_usd: 0, usage: {}, model, seconds: 0 });
-        continue;
+        const failure = `the call failed (${String(error?.message ?? error).split("\n")[0].slice(0, 160)})`;
+        attempts.push({ kind: "scene", id, scene: scene.id, ok: false, error: failure, cost_usd: 0, usage: {}, model, seconds: 0 });
+        if (!alone) return CALL_FAILED;
+        fault = failure;
+        break;
       }
       const code = typeof answer.value?.code === "string" ? answer.value.code.trim() : "";
       fault = codeProblem(code, { helpers, props: plan.props });
-      attempts.push({ kind: "scene", id: `${scene.id}-${attempt}`, ok: !fault, error: fault, cost_usd: answer.cost_usd, usage: answer.usage, model: answer.model, seconds: answer.seconds });
+      attempts.push({ kind: "scene", id, scene: scene.id, ok: !fault, error: fault, cost_usd: answer.cost_usd, usage: answer.usage, model: answer.model, seconds: answer.seconds });
       if (!fault) return code;
     }
     warnings.push(`scene ${scene.id} could not be drawn (${fault}); it shows its heading as a card`);
     return null;
-  }));
+  };
+  const drawn = await Promise.all(plan.scenes.map((scene, index) => drawScene(scene, index)));
+  for (const [index, code] of drawn.entries()) if (code === CALL_FAILED) drawn[index] = await drawScene(plan.scenes[index], index, { alone: true });
   const sceneSeconds = Math.round(performance.now() - t1) / 1000;
   const cards = drawn.filter((code) => code == null).length;
   if (cards > plan.scenes.length / 2) return { status: "failed", storyboard: null, fragments: [], plan, attempts, warnings, errors: [`${cards} of ${plan.scenes.length} scenes could not be drawn`], seconds: { director: directorSeconds, scenes: sceneSeconds } };
