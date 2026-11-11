@@ -81,6 +81,7 @@ Useful flags:
 | `--refine` | off | Continue a draft project to the full-quality plan, keeping its script and its voice. |
 | `--research` | `auto` | Check the brief against primary sources before the script is written. `auto` turns it on for a news or research brief (news wording such as "this week" or "just announced", a dated event, a named release, a question of fact) and leaves it off for a product video or a brief with its own script; `on` and `off` decide it yourself. `MAKE.json` says which and why under `research_decision`. It needs no key: with no web search key, stories come from company feeds, Hacker News, GDELT and Wikipedia's current events, and a brief that asks for "this week" or "the latest" leaves out anything older. Recording source pages needs the optional `playwright` dependency and a Chromium; without them the video is still made, and `MAKE.json`, the warnings and the `research` gate say which claims have no page to show and how to fix it (`launchclip doctor` checks the recorder). See [Research](../RESEARCH.md#in-make). |
 | `--replan` | off | Plan a new storyboard on a rerun. The script, the voice and every other finished step are reused unless your own inputs changed (the prompt, your notes, the files you handed in, the flags). Clips your asset provider wrote into `--assets` during an earlier run do not count as a change: see [Clips your asset provider fetched](#clips-your-asset-provider-fetched). |
+| `--explainer` | `visual` | What a video with nothing to show is made of. `visual` draws every scene for the topic; `characters` has a small cast carry it. See [A visual explainer](#a-visual-explainer-when-there-is-nothing-to-show). |
 | `--candidates` | `on` | `off` skips the rendered candidates for the opening and one transition. They need a model that can see. |
 | `--concepts` | `on` | `off` skips the five concepts and the story, and writes the script from the brief in one pass. |
 | `--no-critic` | critic on when the model takes images | Skip the automatic visual review. OpenAI, Anthropic and OpenRouter models take images; a local Ollama model does not. |
@@ -485,6 +486,62 @@ with `--approve storyboard`, renders whichever storyboard is in the project.
 
 How long a draft takes, measured, and what stands between it and the length
 of the video: [benchmarks/MAKE_FAST_DRAFT.md](../../benchmarks/MAKE_FAST_DRAFT.md).
+
+## A visual explainer when there is nothing to show
+
+A prompt with no recording, no images and no asset provider has no picture
+of its own. `make` then plans a visual explainer: every scene is a picture of
+what the narration says at that moment, drawn for the topic in an
+editorial-illustration style and timed to the spoken words. A video about
+deck materials shows the boards, the joists and what happens to each in the
+sun, not a character talking beside captions.
+
+```bash
+launchclip make "3 common deck materials in Australia" --aspect 9:16 --duration 30 --stop-after storyboard --model-concurrency 16
+launchclip preview ./launchclip-3-common-deck-materials-in-australia
+```
+
+It is planned in two steps:
+
+1. **One call directs.** The director reads the narration with the time of
+   every word and writes the look every scene follows, the scenes (their
+   times, what each shows, what lands on which word, where a sound goes) and
+   the shared props: drawing code for the things that recur, so scenes drawn
+   apart still match.
+2. **Every scene is drawn at once.** Each scene is its own call, given the
+   look, the props and its own beats. `--model-concurrency` sets how many are
+   in flight; at the default of 4 a nine-scene video draws in three rounds,
+   at 16 in one.
+
+A scene's code is parsed and held to the [custom-module rules](../KIT_CONTRACTS.md)
+before it is used. A scene that fails is drawn once more with the reason. One
+that fails again shows its heading as a card, and the run warns about it; a
+video where most scenes are cards fails instead of shipping.
+
+What the project holds afterwards:
+
+| File | What it is |
+| --- | --- |
+| `storyboard.json` | One `custom` scene per directed scene, tiling the video, with the director's sound cues as hits. |
+| `hyperframes/visual/<scene>.html` | Each scene's fragment: the drawing helpers, the shared props and that scene's code. |
+| `.launchclip/storyboard-plan.json` | The director's plan (`visual_explainer`) and every call with its cost. |
+
+`MAKE.json` records it under `visual_explainer`: how many scenes were
+directed, drawn and redrawn, how many are cards, and how long the director
+and the scenes took.
+
+Limits, today:
+
+- The scenes have a HyperFrames form only, so the run renders with
+  HyperFrames. `--renderer remotion` keeps the character-led explainer.
+- `--speed draft` and its `--refine` still plan the character-led draft.
+- The opening candidates and the critic's repair rounds are skipped: both
+  change a storyboard of kit modules, and these scenes are drawn code.
+- A style you chose (`--style`) or a brand in the assets keeps its own plan.
+  The visual explainer is the default on make's seeded style.
+
+`--explainer characters` plans the earlier default: a small cast carries the
+idea.
 
 ## Record your product with `--repo`
 

@@ -4,6 +4,16 @@
 
 ### Added
 
+- A visual explainer is what `make` plans when a video has nothing to show
+  (no recording, no images, no asset provider). Every scene is a picture of
+  what the narration says at that moment, drawn for the topic and timed to
+  the spoken words, where the default had been a small cast of characters
+  beside the captions. One call directs (the look, the scenes, the shared
+  drawing props) and then every scene is drawn at once, one call each, as
+  its own custom-module fragment under `hyperframes/visual/`. A scene whose
+  code cannot be used is drawn once more, then shows its heading as a card.
+  The run renders with HyperFrames; `--explainer characters` keeps the cast,
+  as do `--renderer remotion`, `--speed draft` and `--refine`.
 - Storyboard edit rounds: a plan that fails its checks on timing and value
   slips (overlapping scenes, an anchor that does not resolve, a cue outside
   its window, a card on screen too briefly, a scene held too long) is now
