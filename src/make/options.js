@@ -11,6 +11,7 @@ import { DESCRIPTION_MODES } from "../asset_understanding.js";
 import { DEFAULT_CRITIC_REPAIRS } from "./critic_repair.js";
 import { conceptsMode } from "./concept_story.js";
 import { candidatesMode } from "./candidates.js";
+import { explainerMode } from "./visual_explainer.js";
 import { parseSfxMode } from "../sfx/event_sounds.js";
 import { talkingHeadLayoutError } from "../talking_head_layout.js";
 
@@ -54,6 +55,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["skeleton", { setting: true }],
   // A character story: the writers' room writes a script with speakers (src/make/animation.js).
   ["animation", { boolean: true, setting: true }],
+  // What a video with nothing to show is made of: visual (default: every scene drawn for the topic) or characters (a small cast carries it).
+  ["explainer", { setting: true }],
   // The review stops: end the run awaiting approval after a stage (a character story's bible or animatic; any video's storyboard), and approve it on the next run.
   ["stop-after", {}],
   ["approve", {}],
@@ -173,6 +176,7 @@ export function makeOptionsFromFlags(flags = {}) {
     constraints: flags.constraints,
     music: flags.music,
     renderer: flags.renderer,
+    ...(flags.explainer != null ? { explainer: flags.explainer } : {}),
     quality: flags.quality,
     concurrency: flags.concurrency,
     modelConcurrency: flags["model-concurrency"],
@@ -250,6 +254,7 @@ export function validateMakeOptions(options = {}) {
   if (options.assetDescriptions != null && !DESCRIPTION_MODES.includes(String(options.assetDescriptions).toLowerCase())) throw new Error(`--asset-descriptions must be ${DESCRIPTION_MODES.join(", ")}; got ${options.assetDescriptions}`);
   if (options.longFormVisuals != null && !["model", "rules"].includes(String(options.longFormVisuals).toLowerCase())) throw new Error(`--long-form-visuals must be model or rules; got ${options.longFormVisuals}`);
   if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);
+  if (options.explainer != null) explainerMode(options.explainer);
   if (options.animation != null && typeof options.animation !== "boolean") throw new Error(`--animation takes no value; got ${options.animation}`);
   if (options.stopAfter != null && !MAKE_STOP_POINTS.includes(String(options.stopAfter).toLowerCase())) throw new Error(`--stop-after must be ${MAKE_STOP_POINTS.join(", ")}; got ${options.stopAfter}`);
   if (options.approve === true) throw new Error(`--approve names what is approved: --approve ${MAKE_STOP_POINTS.join(" | --approve ")}`);
@@ -293,6 +298,7 @@ export function settingsFromMakeReport(report) {
   set("music-prompt", options.music_prompt);
   if (options.layout && options.layout !== "full") set("layout", options.layout);
   set("renderer", options.renderer);
+  set("explainer", options.explainer);
   set("quality", options.quality);
   if (report?.model?.source === "--model") set("model", report.model.spec);
   if (options.critic === false) flags["no-critic"] = true;

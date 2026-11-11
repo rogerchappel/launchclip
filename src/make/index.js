@@ -22,7 +22,7 @@ import { SHOTS_DIR, shotRequestLimit } from "../asset_provider.js";
 import { MAX_ASSET_PROVIDER_CONCURRENCY, assetProviderConcurrency, assetProviderTimeoutMs, createCommandAssetProvider } from "../asset_provider_cmd.js";
 import { CONSTRAINTS_FILE, PROJECT_CONSTRAINTS_FILE, constrainProvider, constraintsDocument, hasConstraints, loadConstraints, neverUseMatcher, storySrc } from "../constraints.js";
 import { mediaNotesLine } from "../inventory_notes.js";
-import { checkStoryboard, planStoryboard, resolveChecked } from "../storyboard_planner.js";
+import { checkStoryboard, fixedInputs, planStoryboard, resolveChecked, styleBrand } from "../storyboard_planner.js";
 import { captionBandWarnings, settleCaptionBand } from "../caption_band_fit.js";
 import { markProvided } from "../provided_files.js";
 import { directionJson } from "@launchclip/core/direction.mjs";
@@ -59,6 +59,7 @@ import { directLongFormVisuals, revertCards, typographyShare, unresolvedScenes }
 import { checkModelAccess, createMakeClient, selectMakeModel } from "./models.js";
 import { alternativeTransition, candidatesMode, comparisonEntry, designOpening, judgeCandidates, meanScore, openingScene, renderCandidate, rendererStill, riskyBoundary, sceneResolves, sceneTimes, selectCandidate, storyWith, transitionTimes, writeReceipt } from "./candidates.js";
 import { characterLed, explainerContent, explainerSeed } from "./explainer.js";
+import { VISUAL_DIR, explainerMode, planVisualExplainer, visualExplainer } from "./visual_explainer.js";
 import { defaultExplainerCast } from "@launchclip/core/explainer.mjs";
 import { conceptLookLines, conceptSummary, conceptsMode, planConceptStory, readConceptStory, storySeconds } from "./concept_story.js";
 import { needsResize, planVoiceSpeed, RULES_HEADING, runsShort, SCRIPT_VERSION, takeClock, WORDS_PER_MINUTE, writeScript } from "./script.js";
@@ -1506,7 +1507,15 @@ async function planStage(ctx) {
   // A one-prompt explainer with nothing to show is carried by a small cast (src/make/explainer.js, kit/core/explainer.mjs).
   // A fast draft is always carried by characters: the rule-made plan casts them (src/make/draft_plan.js). A recording as the base, a show bible and long form plan the ordinary way.
   const drafting = Boolean(ctx.draft) && routing.lane !== "footage-led" && !ctx.bible;
-  const explainer = drafting || characterLed(explainerContentOf(ctx), style);
+  // With nothing to show, the default is a visual explainer: every scene is drawn for the topic (src/make/visual_explainer.js).
+  // Its scenes have a HyperFrames form only, so the run renders there; --explainer characters keeps the cast.
+  const visual = characterLed(visualContentOf(ctx), style);
+  if (visual && ctx.renderer !== "hyperframes") {
+    ctx.renderer = "hyperframes";
+    ctx.say("visual explainer: the scenes are drawn for this video and play on the HyperFrames renderer, so the run uses it (--explainer characters plans a cast on either renderer)");
+  }
+  ctx.visual = visual;
+  const explainer = drafting || (!visual && characterLed(explainerContentOf(ctx), style));
   // A character story (--animation): the frozen show bible is pinned in every plan, repair and replan, and the script's line ids are checked.
   const pinned = ctx.bible ? { bible: ctx.bible, script: ctx.script } : null;
   // A critic repair round (criticRepairs): a replan carries the critic's
@@ -1537,7 +1546,7 @@ async function planStage(ctx) {
   const laidOut = layout !== "full" && lane === "footage-led" ? layout : null;
   if (layout !== "full" && !laidOut) report.warnings.push(`--layout ${layout} ignored: it lays out a talking head, and this video is ${lane} (no recording with speech is the base)`);
   if (laidOut === "stacked" && !(ctx.format.height > ctx.format.width)) report.warnings.push("--layout stacked ignored: it is for 9:16; this video is not portrait");
-  const planHash = hashValue({ brief, lane, format: ctx.format, ...(drafting ? { draft: 1, direction_ms: ctx.draft.waits.directionMs } : {}), ...(explainer ? { explainer: 1 } : {}), ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(laidOut ? { layout: laidOut } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}), ...(subjectTrack ? { face_track: hashValue(subjectTrack.frames) } : {}), ...(pinned ? { bible: pinned.bible.hash } : {}) });
+  const planHash = hashValue({ brief, lane, format: ctx.format, ...(drafting ? { draft: 1, direction_ms: ctx.draft.waits.directionMs } : {}), ...(explainer ? { explainer: 1 } : {}), ...(visual ? { visual: 1 } : {}), ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(laidOut ? { layout: laidOut } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}), ...(subjectTrack ? { face_track: hashValue(subjectTrack.frames) } : {}), ...(pinned ? { bible: pinned.bible.hash } : {}) });
   // --min-shots: only an asset provider can supply shots; above what a plan of this length may ask for it is clamped.
   if (Number(options.minShots) > 0 && !hasProvider) report.warnings.push(`--min-shots ${options.minShots} ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for shots`);
   if (String(options.cardBackdrops ?? "off").toLowerCase() === "footage" && !hasProvider) report.warnings.push("--card-backdrops footage ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for footage");
@@ -1554,6 +1563,7 @@ async function planStage(ctx) {
     if (history) await lintVariety(ctx, await readJson(storyFile), style, history, state.plan.variety ?? []);
     return { status: "cached", reason: "plan inputs unchanged (pass --replan for a new storyboard)" };
   }
+  if (visual) return planVisual(ctx, { style, brand, brief: planBrief, profile, planHash, fixedAudio, constraints, storyFile, directionFile });
   const allowed = new Set([...manifest.map((item) => item.src), ...(ctx.base ? [ctx.base.src] : []), ...Object.values(fixedAudio).filter((value) => String(value).startsWith("assets/"))]);
   // The supplied clips and images, with their notes: the planner's
   // deterministic pass places from these and snaps videos into usable windows.
@@ -1666,6 +1676,39 @@ async function planStage(ctx) {
   if (history) await lintVariety(ctx, story, style, history, varied);
   report.direction = plan.direction ? { file: MAKE_PATHS.direction, source: plan.direction_source, ...(plan.cadence ? { coverage: plan.cadence.coverage, face_time: plan.cadence.face_time, longest_undressed_seconds: plan.cadence.longest_undressed_seconds } : {}) } : null;
   state.plan = { hash: planHash, repairs: report.repairs, direction: Boolean(plan.direction), ...(report.shot_counts ? { shot_counts: report.shot_counts } : {}), ...(history ? { variety: varied } : {}), ...(drafting ? { draft: report.draft.storyboard } : {}) };
+  return { status: "done" };
+}
+
+// A visual explainer's storyboard (src/make/visual_explainer.js): one call
+// directs, every scene is drawn at once, and each scene is written as its own
+// custom-module fragment. The storyboard then takes the same finishing and
+// the same checks as a planned one.
+async function planVisual(ctx, { style, brand, brief, profile, planHash, fixedAudio, constraints, storyFile, directionFile }) {
+  const { project, report, state, routing } = ctx;
+  ctx.say(`model: PAID calls to ${ctx.model.provider} ${ctx.model.model} (visual explainer: one direction call, then one call per scene, up to ${ctx.gate.limit} at a time; --model-concurrency sets it)`);
+  const narration = ctx.narration?.text ?? ctx.words.map((word) => word.text).join(" ");
+  const plan = await planVisualExplainer({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, brief, words: ctx.words, narration, format: ctx.format, brand: brand ?? styleBrand(style?.pack ?? null), lane: routing.lane, audio: fixedInputs({ lane: routing.lane, format: ctx.format, audio: fixedAudio }).audio, title: ctx.script?.title ?? null, profile: profile?.id ?? null, say: ctx.say });
+  const costPrefix = ctx.criticRound ? `critic-${ctx.criticRound.round}-` : "";
+  for (const attempt of plan.attempts) addCost(report, `${costPrefix}visual-${attempt.kind}-${attempt.id}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
+  const scenes = plan.attempts.filter((attempt) => attempt.kind === "scene");
+  report.visual_explainer = { scenes: plan.plan?.scenes.length ?? 0, drawn: plan.drawn ?? 0, cards: (plan.plan?.scenes.length ?? 0) - (plan.drawn ?? 0), redrawn: scenes.filter((attempt) => !attempt.ok).length, seconds: plan.seconds, files: VISUAL_DIR };
+  report.repairs = { tier: "bespoke", used: plan.attempts.filter((attempt) => !attempt.ok).length, max: 1, valid_first_attempt: plan.attempts.every((attempt) => attempt.ok), attempts: plan.attempts.map((attempt, index) => ({ attempt: index + 1, kind: attempt.kind, ok: attempt.ok, errors: attempt.error ? [attempt.error] : [] })) };
+  report.warnings.push(...plan.warnings.map((warning) => `visual explainer: ${warning}`));
+  await writeJson(path.join(project, MAKE_PATHS.plan), { status: plan.status, visual_explainer: plan.plan, attempts: plan.attempts, warnings: plan.warnings, errors: plan.errors, brief: MAKE_PATHS.brief });
+  if (plan.status !== "passed") throw new Error(`the visual explainer could not be planned:\n- ${plan.errors.join("\n- ")}`);
+  ctx.say(`visual explainer: ${plan.drawn} of ${plan.plan.scenes.length} scenes drawn in ${Math.round(plan.seconds.scenes)} s${report.visual_explainer.cards ? `; ${report.visual_explainer.cards} show a heading card instead` : ""}`);
+  // The scenes of an earlier plan are not this plan's.
+  await rm(path.join(project, VISUAL_DIR), { recursive: true, force: true });
+  await mkdir(path.join(project, VISUAL_DIR), { recursive: true });
+  for (const fragment of plan.fragments) await writeFile(path.join(project, fragment.file), fragment.html);
+  const story = finalizeStory(plan.storyboard, ctx);
+  const checked = checkStoryboard(story, { words: ctx.words, tier: "bespoke", style: style?.pack ?? null, direction: plan.direction, profile, bandErrors: false, constraints });
+  if (!checked.ok) throw new Error(`the visual explainer's storyboard failed its checks:\n- ${checked.errors.slice(0, 10).join("\n- ")}`);
+  await writeJson(storyFile, story);
+  // The direction map is the director's plan in the map's form: a section per scene.
+  await writeFile(directionFile, directionJson(plan.direction));
+  report.direction = { file: MAKE_PATHS.direction, source: "visual-explainer" };
+  state.plan = { hash: planHash, repairs: report.repairs, direction: true };
   return { status: "done" };
 }
 
@@ -1853,6 +1896,7 @@ async function stageCandidates(ctx) {
   if (candidatesMode(options.candidates) === "off") return skip("--candidates off");
   if (ctx.routing.lane === "footage-led") return skip("footage-led: the opening is the recording itself");
   if (ctx.longForm) return skip("long form: its storyboard comes from the beat map, which candidates do not change yet");
+  if (ctx.visual) return skip("visual explainer: its scenes are drawn for the video, not chosen from the kit's modules");
   if (!ctx.model.vision) return skip(`${ctx.model.spec} cannot take images, so nothing can score candidates from their frames`);
   const storyFile = path.join(project, MAKE_PATHS.story);
   let raw = await readJson(storyFile);
@@ -2388,6 +2432,11 @@ async function criticRepairs(ctx, first) {
   if (!budget) return;
   if (isAnimation(ctx.routing)) return criticRetakes(ctx, first, budget);
   report.critic_repairs = [];
+  // A visual explainer's scenes are drawn code: a repair round has no storyboard of modules to change yet.
+  if (ctx.visual) {
+    if (first?.verdict !== "ship") report.warnings.push("critic repairs skipped: a visual explainer's scenes are drawn for the video, and a repair round cannot redraw them yet");
+    return;
+  }
   // Long form on the rule-made cards has no model direction for a round to change.
   if (ctx.longForm && longFormVisuals(options) === "rules") {
     if (first?.verdict !== "ship") report.warnings.push("critic repairs skipped: --long-form-visuals rules keeps the beat director's cards, so there is no model direction to repair");
@@ -2687,7 +2736,8 @@ async function seededStyle(ctx) {
   else {
     // An explainer with nothing to show takes a lively tone when the prompt names none, and its topic's look (src/make/explainer.js).
     const asked = { tone: promptTone(ctx.text), constraints: promptConstraints(ctx.text) };
-    const { tone, constraints } = explainerContentOf(ctx) ? explainerSeed(ctx.text, asked) : asked;
+    // A visual explainer takes the tone, not the cast's whole-scene look.
+    const { tone, constraints } = visualContentOf(ctx) ? { tone: explainerSeed(ctx.text, asked).tone, constraints: asked.constraints } : explainerContentOf(ctx) ? explainerSeed(ctx.text, asked) : asked;
     const made = await generateProjectStyle(project, { seed: seed ?? undefined, tone, constraints, clock: ctx.adapters.clock });
     ctx.say(made.line);
     style = { name: made.name, pack: made.pack, file: made.file, source: "generated", warnings: [], summary: made.summary };
@@ -2696,6 +2746,11 @@ async function seededStyle(ctx) {
   report.style = { name: style.name, source: "generated", seed: style.pack.generated.seed, summary: style.summary };
   ctx.generatedStyle = style.pack;
   return style;
+}
+
+// Whether this video's content calls for a visual explainer (src/make/visual_explainer.js), whatever its style.
+function visualContentOf(ctx) {
+  return visualExplainer(explainerContentOf(ctx), { mode: explainerMode(ctx.options.explainer), renderer: ctx.options.renderer ?? null, draft: Boolean(ctx.draft) || Boolean(ctx.options.refine) });
 }
 
 // Whether this video's content calls for a character-led explainer (src/make/explainer.js), whatever its style.
