@@ -18,7 +18,7 @@ const PLAN = { look: "Headings at the top in the display face.", scenes: [scene(
 const GOOD = "const board = propBoard(svg, 200, 600, 500);\npop(board, scene.start + 0.5);";
 
 /** A client answering from a table; `scenes` maps a scene id to its answers in turn (a string is code, an Error is thrown). */
-function fakeClient({ director = [PLAN], scenes = {}, wait = 0 } = {}) {
+function fakeClient({ director = [PLAN], scenes = {}, props = ["const propBoard = ;"], wait = 0 } = {}) {
   const calls = [];
   let open = 0, peak = 0;
   return {
@@ -28,6 +28,7 @@ function fakeClient({ director = [PLAN], scenes = {}, wait = 0 } = {}) {
     async runStructured(request) {
       calls.push(request);
       const usage = { input_tokens: 100, output_tokens: 50 };
+      if (request.schemaName === "launchclip_visual_props") return { model: "test-model", usage, value: { props: props[Math.min(props.length - 1, calls.filter((call) => call.schemaName === request.schemaName).length - 1)] } };
       if (request.schemaName === "launchclip_visual_director") return { model: "test-model", usage, value: director[Math.min(director.length - 1, calls.filter((call) => call.schemaName === request.schemaName).length - 1)] };
       const id = request.input.match(/YOUR SCENE: (\S+) /)[1];
       const nth = calls.filter((call) => call.schemaName === request.schemaName && call.input.includes(`YOUR SCENE: ${id} `)).length - 1;
@@ -58,12 +59,12 @@ test("a visual explainer is the default where a video has nothing to show, on th
   assert.throws(() => validateMakeOptions({ explainer: "puppets" }), /--explainer/);
 });
 
-test("text sits in the platform's safe zone above the captions; pictures may fill more", () => {
-  const { text, picture, caption } = visualArea(FORMAT);
+test("the picture fills the frame; text sits in the platform's safe zone above the caption strip", () => {
+  const { text, picture, strip } = visualArea(FORMAT);
   assert.deepEqual(text, { x: 80, y: 280, width: 860, height: 900 });
-  assert.equal(caption, 1190);
-  assert.ok(text.y + text.height < caption && picture.y + picture.height < caption, "nothing is drawn in the caption band");
-  assert.ok(picture.x < text.x && picture.y < text.y && picture.width > text.width);
+  assert.deepEqual(picture, { x: 0, y: 0, width: 1080, height: 1920 }, "nothing below the captions is left empty");
+  assert.deepEqual(strip, { y: 1190, height: 144 });
+  assert.ok(text.y + text.height < strip.y, "a scene's own text stays clear of the caption line");
   const wide = visualArea({ width: 1920, height: 1080, duration: 12 });
   assert.ok(wide.text.x >= 0 && wide.text.x + wide.text.width <= 1920 && wide.text.y + wide.text.height < wide.caption);
 });
@@ -118,7 +119,9 @@ test("one direction call, then every scene drawn at once, each as its own fragme
   assert.deepEqual([story.scenes[0].in, story.scenes[1].in.type, story.scenes[2].in.type], [undefined, "whip", "push"]);
   assert.deepEqual(story.scenes[1].hits, [{ at: 4.5, event: "boards-1", cue: "impact" }]);
   assert.deepEqual(story.scenes[0].params.rect, visualArea(FORMAT).text);
-  assert.deepEqual(story.overlays, [{ type: "captions", position: "auto" }]);
+  // The captions sit over the picture, one or two words at a time; the camera punches in on a hit.
+  assert.deepEqual(story.overlays, [{ type: "captions", position: "auto", max_words: 2 }]);
+  assert.deepEqual([story.scenes[1].params.kicks, story.scenes[1].params.hidesCaptions], [[4.5], undefined]);
   assert.equal(story.title, "Deck boards");
   // The direction map is the director's plan in the map's form: a section per scene, its line the words spoken under it.
   assert.deepEqual(result.direction.sections.map((section) => [section.lines[0].words, section.lines[0].scenes, section.lines[0].intent]), [[[0, 4], ["yard"], "hook"], [[5, 9], ["boards"], "list"], [[10, 14], ["verdict"], "claim"]]);
@@ -137,11 +140,29 @@ test("one direction call, then every scene drawn at once, each as its own fragme
   assert.match(html, /const propBoard = /);
   assert.match(html, /pop\(board, scene\.start \+ 0\.5\)/);
   assert.match(html, /viewBox="0 0 1080 1920"/);
-  assert.match(html, /scale: 1\.04/, "the camera pushes in for the whole scene");
+  assert.match(html, /scale: 1\.07/, "the camera pushes in for the whole scene");
+  assert.match(html, /for \(const at of params\.kicks/);
+  assert.match(client.calls[0].instructions, /Fill the frame\. The picture runs edge to edge and top to bottom \(x 0 to 1080, y 0 to 1920\)/);
+  assert.match(client.calls[0].instructions, /in the strip y 1190 to 1334/);
   // What it cost, a call at a time.
   assert.deepEqual(result.attempts.map((attempt) => [attempt.kind, attempt.ok]), [["director", true], ["scene", true], ["scene", true], ["scene", true]]);
   assert.ok(result.attempts.every((attempt) => attempt.usage.input_tokens === 100));
   assert.equal(result.drawn, 3);
+});
+
+test("a scene may hide the captions when its own type carries the words, in at most half the scenes", async () => {
+  const hide = (id, start, end) => scene(id, start, end, { captions: "hide" });
+  const { scenes, notes } = tileScenes([hide("a", 0, 3), hide("b", 3, 6), hide("c", 6, 9), hide("d", 9, 12)], 12);
+  assert.deepEqual(scenes.map((entry) => entry.captions), ["show", "hide", "hide", "show"]);
+  assert.match(notes.join("\n"), /scene a keeps its captions: the opening always shows them/);
+  assert.match(notes.join("\n"), /scene d keeps its captions: at most half/);
+  const client = fakeClient({ director: [{ ...PLAN, scenes: [scene("yard", 0, 4), hide("boards", 4, 8), scene("verdict", 8, 12)] }] });
+  const result = await plan(client);
+  assert.deepEqual(result.storyboard.scenes.map((entry) => entry.params.hidesCaptions), [undefined, true, undefined]);
+  assert.match(client.calls.find((call) => call.input.includes("YOUR SCENE: boards ")).input, /Captions are hidden in this scene: your own big type carries the key words/);
+  // Hits too close together, or at a scene's edges, are not all punched in on.
+  const busy = await plan(fakeClient({ director: [{ ...PLAN, scenes: [scene("yard", 0, 6, { hits: [0.1, 1, 1.5, 2.2, 5.6].map((at) => ({ at, cue: "pop" })) }), scene("verdict", 6, 12)] }] }));
+  assert.deepEqual(busy.storyboard.scenes[0].params.kicks, [1, 2.2]);
 });
 
 test("a scene whose code cannot be used is drawn once more with the reason, then becomes a heading card", async () => {
@@ -151,7 +172,7 @@ test("a scene whose code cannot be used is drawn once more with the reason, then
   const retry = client.calls.filter((call) => call.input.includes("YOUR SCENE: boards "))[1];
   assert.match(retry.input, /Your last code could not be used: it does not parse/);
   assert.equal(result.drawn, 2);
-  assert.deepEqual(result.attempts.filter((attempt) => attempt.kind === "scene" && !attempt.ok).map((attempt) => attempt.id), ["boards-1", "verdict-1", "verdict-2"]);
+  assert.deepEqual(result.attempts.filter((attempt) => attempt.kind === "scene" && !attempt.ok).map((attempt) => [attempt.scene, attempt.error.split(" (")[0].slice(0, 24)]), [["boards", "it does not parse: Unexp"], ["verdict", "it uses a timer or anima"], ["verdict", "the call failed"], ["verdict", "the call failed"]]);
   assert.match(result.warnings.join("\n"), /scene verdict could not be drawn \(the call failed \(the provider hung up\)\); it shows its heading as a card/);
   const card = result.fragments[2].html;
   assert.match(card, /"verdict heading"/);
@@ -160,10 +181,33 @@ test("a scene whose code cannot be used is drawn once more with the reason, then
   assert.match(result.fragments[1].html, /catch \(error\)[\s\S]*"boards heading"/);
 });
 
+test("a call the provider refused is sent again on its own once the other scenes are drawn", async () => {
+  const refused = new Error("openrouter chat completions failed (402): This request would exceed your available credits given your current in-flight requests");
+  const client = fakeClient({ scenes: { boards: [refused, GOOD] }, wait: 20 });
+  const result = await plan(client);
+  assert.equal(result.status, "passed");
+  assert.equal(result.drawn, 3, "the refused scene was drawn, not turned into a card");
+  assert.deepEqual(result.warnings, []);
+  const order = client.calls.filter((call) => call.schemaName === "launchclip_visual_scene").map((call) => call.input.match(/YOUR SCENE: (\S+) /)[1]);
+  assert.deepEqual(order, ["yard", "boards", "verdict", "boards"], "its second call came after the others");
+  assert.doesNotMatch(client.calls.at(-1).input, /Your last code could not be used/, "a refused call is not a fault in the code");
+});
+
+test("props that cannot be used are corrected on their own, keeping the plan's scenes", async () => {
+  const client = fakeClient({ director: [{ ...PLAN, props: "const jitter = Math.random();" }], props: [PLAN.props] });
+  const result = await plan(client);
+  assert.equal(result.status, "passed");
+  assert.deepEqual(client.calls.slice(0, 2).map((call) => call.schemaName), ["launchclip_visual_director", "launchclip_visual_props"]);
+  assert.match(client.calls[1].input, /What is wrong: it uses Math\.random/);
+  assert.deepEqual(result.attempts.slice(0, 2).map((attempt) => [attempt.kind, attempt.ok]), [["director", false], ["props", true]]);
+  assert.match(result.fragments[0].html, /const propBoard = /);
+  assert.doesNotMatch(result.fragments[0].html, /Math\.random/);
+});
+
 test("a plan that cannot be used is asked for again; a video that is mostly cards fails", async () => {
   const fixed = await plan(fakeClient({ director: [{ ...PLAN, props: "const propBoard = ;" }, PLAN] }));
   assert.equal(fixed.status, "passed");
-  assert.deepEqual(fixed.attempts.slice(0, 2).map((attempt) => [attempt.kind, attempt.ok]), [["director", false], ["director", true]]);
+  assert.deepEqual(fixed.attempts.slice(0, 3).map((attempt) => [attempt.kind, attempt.ok]), [["director", false], ["props", false], ["director", true]]);
   const none = await plan(fakeClient({ director: [{ look: "", scenes: [], props: "" }] }));
   assert.equal(none.status, "failed");
   assert.match(none.errors[0], /it had no scenes/);

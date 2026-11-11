@@ -60,6 +60,21 @@
 - The OpenAI client streams a call that passes `onDelta`, and the cost
   tracker counts a streamed call when its stream ends.
 
+### Changed
+
+- A visual explainer fills the frame. The picture now runs edge to edge and
+  to the bottom, where every scene had stopped above the captions and left
+  the lower 40% of a 9:16 frame empty. Captions sit on top of the picture,
+  one or two words at a time, and the director may hide them in a scene
+  whose own type carries the words (never the opening, at most half the
+  scenes). The camera punches in on the director's hits as well as pushing
+  through each scene, labels are larger, and headings keep a clear band.
+- A visual explainer's planning wastes less: props code that cannot be used
+  is corrected on its own instead of the whole plan being directed again,
+  and a scene call the provider refused (a rate limit, an account's
+  in-flight ceiling) is sent again once the other scenes are drawn instead
+  of becoming a heading card.
+
 ### Fixed
 
 - Model calls sent together through OpenRouter are answered together. Node's
