@@ -73,6 +73,7 @@ export class ChatCompletionsStructuredClient {
     this.supportsImages = route.supportsImages;
     this.reasoning = route.reasoning;
     this.noTemperature = new Set();
+    this.noArrayBounds = new Set();
     this.lowReasoning = new Set();
   }
 
@@ -101,14 +102,25 @@ export class ChatCompletionsStructuredClient {
       }
       else if (!options.reasoningEffort && this.lowReasoning.has(model)) body.reasoning = { effort: "low" };
     }
+    // A host that will not take array bounds in a schema (minItems, maxItems) is sent the schema without them.
+    if (this.noArrayBounds.has(model)) body.response_format.json_schema.schema = withoutArrayBounds(options.schema);
     let payload;
-    try {
-      payload = await this.request("/chat/completions", { method: "POST", body: JSON.stringify(body) });
-    } catch (error) {
-      if (!("temperature" in body) || !refusesParameters(error)) throw error;
-      this.noTemperature.add(model);
-      delete body.temperature;
-      payload = await this.request("/chat/completions", { method: "POST", body: JSON.stringify(body) });
+    // A refusal that names something the request can do without is answered by sending it again without that:
+    // the sampling temperature first, then the schema's array bounds. The client remembers each for the model.
+    for (let sends = 0; ; sends += 1) {
+      try {
+        payload = await this.request("/chat/completions", { method: "POST", body: JSON.stringify(body) });
+        break;
+      } catch (error) {
+        if (sends >= 2) throw error;
+        if ("temperature" in body && refusesParameters(error)) {
+          this.noTemperature.add(model);
+          delete body.temperature;
+        } else if (!this.noArrayBounds.has(model) && refusesSchema(error) && hasArrayBounds(options.schema)) {
+          this.noArrayBounds.add(model);
+          body.response_format.json_schema.schema = withoutArrayBounds(options.schema);
+        } else throw error;
+      }
     }
     // A model that thinks by default can spend the whole output limit on reasoning and return nothing, or a reply cut
     // off mid-JSON. Asked again with a small reasoning budget it answers; the client then keeps that budget for the model.
@@ -184,6 +196,25 @@ export class ChatCompletionsStructuredClient {
 function refusesParameters(error) {
   const message = String(error?.message ?? "");
   return /\((?:400|404)\)/.test(message) && /requested parameters|temperature/i.test(message);
+}
+
+// Google's hosts answer 400 "Request contains an invalid argument" to a response schema with array bounds
+// (minItems, maxItems); the router passes it on as "Provider returned error". The stage that asked still
+// checks the answer against its own contract, so a list of the wrong length is caught there.
+function refusesSchema(error) {
+  const message = String(error?.message ?? "");
+  return /\(400\)/.test(message) && /provider returned error|invalid argument/i.test(message);
+}
+const ARRAY_BOUNDS = ["minItems", "maxItems"];
+function hasArrayBounds(schema) {
+  if (Array.isArray(schema)) return schema.some(hasArrayBounds);
+  if (!schema || typeof schema !== "object") return false;
+  return Object.entries(schema).some(([key, value]) => ARRAY_BOUNDS.includes(key) || hasArrayBounds(value));
+}
+function withoutArrayBounds(schema) {
+  if (Array.isArray(schema)) return schema.map(withoutArrayBounds);
+  if (!schema || typeof schema !== "object") return schema;
+  return Object.fromEntries(Object.entries(schema).filter(([key]) => !ARRAY_BOUNDS.includes(key)).map(([key, value]) => [key, withoutArrayBounds(value)]));
 }
 
 // The reply stopped at the output limit with most of it spent on reasoning.

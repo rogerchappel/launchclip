@@ -210,3 +210,9 @@ async function askOllama(env, { fetch: fetchImpl = globalThis.fetch, timeoutMs =
     return { reachable: false };
   }
 }
+
+/** --script-model, else LAUNCHCLIP_SCRIPT_MODEL, else null (the run's model writes the script too). */
+export function scriptModelSpec(flag, env = process.env) {
+  const spec = flag != null && flag !== true && String(flag).trim() ? String(flag).trim() : String(env?.LAUNCHCLIP_SCRIPT_MODEL ?? "").trim();
+  return spec || null;
+}
