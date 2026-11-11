@@ -4,6 +4,15 @@
 
 ### Added
 
+- A visual explainer's layout is measured before it is shown. The drawn
+  scenes are played in a browser and every shape and piece of text is
+  measured (two or three seconds, no model call): text off the frame or
+  outside the readable area, a heading that anything passes over, text on
+  other text, a label wider than its plate, a piece left unpositioned at the
+  top-left corner, a scene that is close to empty. A scene with faults is
+  drawn again with the measurements, and the redraw is kept only where it
+  measures better. Scenes are also told to draw no wipes of their own and
+  never to leave the frame empty at a cut.
 - A visual explainer is what `make` plans when a video has nothing to show
   (no recording, no images, no asset provider). Every scene is a picture of
   what the narration says at that moment, drawn for the topic and timed to

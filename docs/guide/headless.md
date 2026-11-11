@@ -531,6 +531,23 @@ a call the provider refused is sent again once the other scenes are drawn. One
 that fails again shows its heading as a card, and the run warns about it; a
 video where most scenes are cards fails instead of shipping.
 
+Then the layout is measured. The scenes are played in a browser (Playwright's
+Chromium, a system Chrome or a renderer's) and every shape and piece of text
+is measured up to six times a scene, with the camera's motion taken out. It
+takes two or three seconds and no model call. A scene is drawn again, with
+the measurements, when the check finds:
+
+- text off the frame, or outside the area where it can be read;
+- a heading that anything passes over, or smaller text left covered;
+- two pieces of text on top of each other;
+- a piece left unpositioned at the top-left corner (a prop called with its
+  arguments in the wrong order);
+- a scene that is close to empty.
+
+A redraw is kept only where it measures better; otherwise the first drawing
+stays and the run warns that faults remain. With no browser on the machine
+the check is skipped and the run says so.
+
 What the project holds afterwards:
 
 | File | What it is |
@@ -541,7 +558,8 @@ What the project holds afterwards:
 
 `MAKE.json` records it under `visual_explainer`: how many scenes were
 directed, drawn and redrawn, how many are cards, and how long the director
-and the scenes took.
+and the scenes took. Its `layout` lists which scenes had faults, which
+redraws were kept or reverted, and each scene's score before and after.
 
 Limits, today:
 
