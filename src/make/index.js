@@ -60,6 +60,7 @@ import { checkModelAccess, createMakeClient, selectMakeModel } from "./models.js
 import { alternativeTransition, candidatesMode, comparisonEntry, designOpening, judgeCandidates, meanScore, openingScene, renderCandidate, rendererStill, riskyBoundary, sceneResolves, sceneTimes, selectCandidate, storyWith, transitionTimes, writeReceipt } from "./candidates.js";
 import { characterLed, explainerContent, explainerSeed } from "./explainer.js";
 import { VISUAL_DIR, explainerMode, planVisualExplainer, visualExplainer } from "./visual_explainer.js";
+import { measureVisual } from "./visual_layout.js";
 import { defaultExplainerCast } from "@launchclip/core/explainer.mjs";
 import { conceptLookLines, conceptSummary, conceptsMode, planConceptStory, readConceptStory, storySeconds } from "./concept_story.js";
 import { needsResize, planVoiceSpeed, RULES_HEADING, runsShort, SCRIPT_VERSION, takeClock, WORDS_PER_MINUTE, writeScript } from "./script.js";
@@ -1687,16 +1688,18 @@ async function planVisual(ctx, { style, brand, brief, profile, planHash, fixedAu
   const { project, report, state, routing } = ctx;
   ctx.say(`model: PAID calls to ${ctx.model.provider} ${ctx.model.model} (visual explainer: one direction call, then one call per scene, up to ${ctx.gate.limit} at a time; --model-concurrency sets it)`);
   const narration = ctx.narration?.text ?? ctx.words.map((word) => word.text).join(" ");
-  const plan = await planVisualExplainer({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, brief, words: ctx.words, narration, format: ctx.format, brand: brand ?? styleBrand(style?.pack ?? null), lane: routing.lane, audio: fixedInputs({ lane: routing.lane, format: ctx.format, audio: fixedAudio }).audio, title: ctx.script?.title ?? null, profile: profile?.id ?? null, say: ctx.say });
+  const plan = await planVisualExplainer({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, brief, words: ctx.words, narration, format: ctx.format, brand: brand ?? styleBrand(style?.pack ?? null), lane: routing.lane, audio: fixedInputs({ lane: routing.lane, format: ctx.format, audio: fixedAudio }).audio, title: ctx.script?.title ?? null, profile: profile?.id ?? null, measure: ctx.adapters.visualMeasure ?? measureVisual, say: ctx.say });
   const costPrefix = ctx.criticRound ? `critic-${ctx.criticRound.round}-` : "";
   for (const attempt of plan.attempts) addCost(report, `${costPrefix}visual-${attempt.kind}-${attempt.id}`, ctx.model, { cost_usd: attempt.cost_usd, usage: attempt.usage, model: attempt.model });
   const scenes = plan.attempts.filter((attempt) => attempt.kind === "scene");
-  report.visual_explainer = { scenes: plan.plan?.scenes.length ?? 0, drawn: plan.drawn ?? 0, cards: (plan.plan?.scenes.length ?? 0) - (plan.drawn ?? 0), redrawn: scenes.filter((attempt) => !attempt.ok).length, seconds: plan.seconds, files: VISUAL_DIR };
+  report.visual_explainer = { scenes: plan.plan?.scenes.length ?? 0, drawn: plan.drawn ?? 0, cards: (plan.plan?.scenes.length ?? 0) - (plan.drawn ?? 0), redrawn: scenes.filter((attempt) => !attempt.ok).length, seconds: plan.seconds, files: VISUAL_DIR, ...(plan.layout ? { layout: plan.layout } : {}) };
   report.repairs = { tier: "bespoke", used: plan.attempts.filter((attempt) => !attempt.ok).length, max: 1, valid_first_attempt: plan.attempts.every((attempt) => attempt.ok), attempts: plan.attempts.map((attempt, index) => ({ attempt: index + 1, kind: attempt.kind, ok: attempt.ok, errors: attempt.error ? [attempt.error] : [] })) };
   report.warnings.push(...plan.warnings.map((warning) => `visual explainer: ${warning}`));
-  await writeJson(path.join(project, MAKE_PATHS.plan), { status: plan.status, visual_explainer: plan.plan, attempts: plan.attempts, warnings: plan.warnings, errors: plan.errors, brief: MAKE_PATHS.brief });
+  await writeJson(path.join(project, MAKE_PATHS.plan), { status: plan.status, visual_explainer: plan.plan, ...(plan.layout ? { layout: plan.layout } : {}), attempts: plan.attempts, warnings: plan.warnings, errors: plan.errors, brief: MAKE_PATHS.brief });
   if (plan.status !== "passed") throw new Error(`the visual explainer could not be planned:\n- ${plan.errors.join("\n- ")}`);
   ctx.say(`visual explainer: ${plan.drawn} of ${plan.plan.scenes.length} scenes drawn in ${Math.round(plan.seconds.scenes)} s${report.visual_explainer.cards ? `; ${report.visual_explainer.cards} show a heading card instead` : ""}`);
+  if (plan.layout?.status === "checked") ctx.say(`visual explainer: layout checked in a browser (${Math.round(plan.layout.seconds)} s); ${plan.layout.faulty.length ? `${plan.layout.kept.length} of ${plan.layout.faulty.length} redrawn scene(s) measured better and were kept` : "no scene needed a redraw"}${plan.layout.left.length ? `; faults remain in ${plan.layout.left.join(", ")}` : ""}`);
+  else if (plan.layout) ctx.say(`visual explainer: layout not checked (${plan.layout.reason})`);
   // The scenes of an earlier plan are not this plan's.
   await rm(path.join(project, VISUAL_DIR), { recursive: true, force: true });
   await mkdir(path.join(project, VISUAL_DIR), { recursive: true });

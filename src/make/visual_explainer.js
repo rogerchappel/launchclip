@@ -34,9 +34,11 @@ import { lintCustomFragment } from "../../kit/hyperframes/custom-module.mjs";
 import { DIRECTION_SCHEMA, classifyIntent } from "@launchclip/core/direction.mjs";
 import { profileGeometry } from "@launchclip/core/layout-check.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
+import { REDRAW_FROM, faultLines, faultScore } from "./visual_layout.js";
 
 export const VISUAL_DIR = "hyperframes/visual";
 export const EXPLAINER_MODES = Object.freeze(["visual", "characters"]);
+const MAKE_PLAN_NOTE = "the plan file lists them";
 const CUES = Object.freeze(["pop", "impact", "whoosh", "tick", "success"]);
 // The shortest scene a viewer can read, and the lengths the director aims for.
 const MIN_SCENE_SECONDS = 1.4;
@@ -157,6 +159,7 @@ Hard rules:
 - Text, numbers and anything that must be read stay inside x ${text.x} to ${text.x + text.width}, y ${text.y} to ${text.y + text.height} (outside it the platform's own buttons cover them).
 - Captions are drawn for you on top of the picture, one or two words at a time, in the strip y ${area.strip.y} to ${area.strip.y + area.strip.height}. The picture runs behind that strip and below it, but put no text of your own and no small detail there.
 - The brand's colours stay dominant: BG is the ground of every scene, and a topic's own colours are for the objects themselves, not for backdrops that fill the frame.
+- The scenes are cut together for you with a transition. Draw no wipe or transition effect of your own across the frame, and never leave the frame empty at a cut: a scene's main picture is there from its first frame, or lands within a quarter of a second.
 - The heading keeps its own clear band: no picture, and nothing that moves, passes over a heading.
 - Check that text fits: a display character is about 0.55 of its font-size wide, a mono capital about 0.62 plus its letter spacing. No text smaller than 30 px; labels and tags 36 px or more. A label on a plate is narrower than the plate.
 - No Math.random, no Date, no setTimeout or requestAnimationFrame, no CSS animations or transitions, no fetch, no external images or fonts. Do not redeclare the helpers.
@@ -241,6 +244,20 @@ Beats:
 ${scene.beats.map((beat) => `- ${beat.at} s: ${beat.what}`).join("\n") || "- (none given: time each thing to the word that names it)"}
 The words spoken during it, with their times: ${spoken(words, scene.start - 0.3, scene.end)}
 ${scene.captions === "hide" ? "\nCaptions are hidden in this scene: your own big type carries the key words as they are spoken, and the caption strip is yours to draw in.\n" : ""}${first ? "\nThis is the opening scene: its main picture is drawn with no entrance, so it is there on the very first frame. Only what is added to it animates in.\n" : ""}`;
+}
+
+function redrawInput({ input, code, faults, area }) {
+  const { canvas, text } = area;
+  return `${input}
+You drew this scene already. Here is your code:
+${code}
+
+It was played in a real browser and every shape was measured, in frame pixels (the frame is x 0 to ${canvas.width}, y 0 to ${canvas.height}; text can be read in x ${text.x} to ${text.x + text.width}, y ${text.y} to ${text.y + text.height}). These faults were found:
+${faultLines(faults).join("\n")}
+
+Work out the cause of each from the code and fix it. A piece at the top-left corner was created without being positioned: a prop called with its arguments in the wrong order or of the wrong kind (read the prop's arguments above), or a group that was never moved. A heading that something passes over needs that thing routed clear of it, or drawn before it and kept apart. A label wider than its plate needs a wider plate or smaller type. Text on other text needs to be moved apart. Text outside the readable area needs to be moved inside it.
+Change only what is needed to fix these; keep everything that works, including the timing. Answer with the whole corrected code.
+`;
 }
 
 /** What is wrong with a piece of scene or props code, or null. It is parsed, never run. */
@@ -401,13 +418,15 @@ async function ask(client, request, { provider, model }) {
  * options: {client (runStructured; the run's gated client), model, provider,
  * brief (the prompt and what the video is for), words ([{text, start, end}]),
  * narration (the spoken text), format, brand, lane, audio, title, profile
- * (the cadence profile's id), say}.
+ * (the cadence profile's id), measure (the layout check: async ({storyboard,
+ * fragments, scenes, area, words}) → Map(sceneId → {faults}) or null when it
+ * cannot run; src/make/visual_layout.js measureVisual), say}.
  * → {status: "passed" | "failed", storyboard, fragments: [{file, html}],
- *    direction (the direction map),
+ *    direction (the direction map), layout (the layout check's result, or null),
  *    plan: {look, props, scenes}, attempts: [{kind, id, ok, error, cost_usd,
  *    usage, model, seconds}], warnings, errors, seconds: {director, scenes}}
  */
-export async function planVisualExplainer({ client, model = null, provider = null, brief, words = [], narration = "", format, brand, lane = "motion", audio = null, title = null, profile = null, say = () => {} } = {}) {
+export async function planVisualExplainer({ client, model = null, provider = null, brief, words = [], narration = "", format, brand, lane = "motion", audio = null, title = null, profile = null, measure = null, say = () => {} } = {}) {
   if (!client || typeof client.runStructured !== "function") throw new Error("planVisualExplainer needs a client with runStructured()");
   const duration = Number(format.duration);
   const area = visualArea(format);
@@ -481,7 +500,62 @@ export async function planVisualExplainer({ client, model = null, provider = nul
   const cards = drawn.filter((code) => code == null).length;
   if (cards > plan.scenes.length / 2) return { status: "failed", storyboard: null, fragments: [], plan, attempts, warnings, errors: [`${cards} of ${plan.scenes.length} scenes could not be drawn`], seconds: { director: directorSeconds, scenes: sceneSeconds } };
 
-  const fragments = plan.scenes.map((scene, index) => ({ file: `${VISUAL_DIR}/${scene.id}.html`, html: sceneFragment({ scene, code: drawn[index], helpers, props: plan.props, area }) }));
-  const storyboard = visualStoryboard({ base: { lane, format: { fps: 30, ...format }, brand, audio }, scenes: plan.scenes, area, title });
-  return { status: "passed", storyboard, fragments, direction: visualDirection(plan.scenes, words, { profile }), plan, attempts, warnings, errors: [], seconds: { director: directorSeconds, scenes: sceneSeconds }, drawn: plan.scenes.length - cards };
+  const base = { lane, format: { fps: 30, ...format }, brand, audio };
+  const assemble = (codes) => ({
+    fragments: plan.scenes.map((scene, index) => ({ file: `${VISUAL_DIR}/${scene.id}.html`, html: sceneFragment({ scene, code: codes[index], helpers, props: plan.props, area }) })),
+    storyboard: visualStoryboard({ base, scenes: plan.scenes, area, title })
+  });
+
+  // 3. The layout check: the scenes are played in a browser and measured, and a scene with faults is
+  // drawn again with the measurements. A redraw is kept only where it measures better.
+  let layout = null;
+  if (measure) {
+    const t2 = performance.now();
+    const look = async (codes) => {
+      try { return await measure({ ...assemble(codes), scenes: plan.scenes, area, words }); } catch (error) {
+        if (error?.code === "LAUNCHCLIP_COST_LIMIT") throw error;
+        warnings.push(`the layout check could not run (${String(error?.message ?? error).split("\n")[0].slice(0, 160)})`);
+        return null;
+      }
+    };
+    const before = await look(drawn);
+    if (!before) layout = { status: "skipped", reason: "no browser to play the scenes in" };
+    else {
+      const faultsOf = (measured, scene) => measured.get(scene.id)?.faults ?? [];
+      const scores = Object.fromEntries(plan.scenes.map((scene) => [scene.id, { before: faultScore(faultsOf(before, scene)) }]));
+      const faulty = plan.scenes.map((scene, index) => ({ scene, index })).filter(({ scene, index }) => drawn[index] != null && scores[scene.id].before >= REDRAW_FROM);
+      const kept = [], reverted = [];
+      if (faulty.length) {
+        say(`visual explainer: the layout check found faults in ${faulty.length} of ${plan.scenes.length} scenes; drawing ${faulty.length === 1 ? "it" : "them"} again with the measurements`);
+        const candidate = [...drawn];
+        await Promise.all(faulty.map(async ({ scene, index }) => {
+          const input = redrawInput({ input: sceneInput({ brief: String(brief).trim(), plan, scene, words, first: index === 0 }), code: drawn[index], faults: faultsOf(before, scene), area });
+          const id = `${scene.id}-redraw`;
+          try {
+            const answer = await ask(client, { instructions: sceneInstructions({ format, tools }), input, schema: SCENE_SCHEMA, schemaName: "launchclip_visual_scene", maxOutputTokens: SCENE_TOKENS }, who);
+            const code = typeof answer.value?.code === "string" ? answer.value.code.trim() : "";
+            const fault = codeProblem(code, { helpers, props: plan.props });
+            attempts.push({ kind: "redraw", id, scene: scene.id, ok: !fault, error: fault, cost_usd: answer.cost_usd, usage: answer.usage, model: answer.model, seconds: answer.seconds });
+            if (!fault) candidate[index] = code;
+          } catch (error) {
+            if (error?.code === "LAUNCHCLIP_COST_LIMIT") throw error;
+            attempts.push({ kind: "redraw", id, scene: scene.id, ok: false, error: `the call failed (${String(error?.message ?? error).split("\n")[0].slice(0, 160)})`, cost_usd: 0, usage: {}, model, seconds: 0 });
+          }
+        }));
+        const tried = faulty.filter(({ index }) => candidate[index] !== drawn[index]);
+        const after = tried.length ? await look(candidate) : null;
+        for (const { scene, index } of tried) {
+          const score = after ? faultScore(faultsOf(after, scene)) : Infinity;
+          if (score < scores[scene.id].before) { drawn[index] = candidate[index]; scores[scene.id].after = score; kept.push(scene.id); }
+          else { scores[scene.id].after = scores[scene.id].before; reverted.push(scene.id); }
+        }
+      }
+      const left = plan.scenes.filter((scene) => (scores[scene.id].after ?? scores[scene.id].before) >= REDRAW_FROM).map((scene) => scene.id);
+      if (left.length) warnings.push(`the layout check still finds faults in ${left.join(", ")} (${MAKE_PLAN_NOTE})`);
+      layout = { status: "checked", scenes: plan.scenes.length, faulty: faulty.map(({ scene }) => scene.id), kept, reverted, left, scores, seconds: Math.round(performance.now() - t2) / 1000 };
+    }
+  }
+
+  const { fragments, storyboard } = assemble(drawn);
+  return { status: "passed", layout, storyboard, fragments, direction: visualDirection(plan.scenes, words, { profile }), plan, attempts, warnings, errors: [], seconds: { director: directorSeconds, scenes: sceneSeconds }, drawn: plan.scenes.length - cards };
 }
