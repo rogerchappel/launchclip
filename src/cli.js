@@ -7,6 +7,7 @@ import { preprocessPresenter } from "./presenter_preprocess.js";
 import { writeIntake } from "./intake.js";
 import { runProductionStage } from "./production_cli.js";
 import { isProductionReviewWorkspace } from "./production_review.js";
+import { ownConnectionFetch } from "./own_connection_fetch.js";
 import { createCostTracker, parseCostLimit } from "./cost_tracker.js";
 import { diagnoseInstallation, VERSION } from "./doctor.js";
 import { createStylePack, listBuiltinStyles, listStylePacks, projectStyleRoot, resolveStylePack, resolveStyleV2, upgradeStylePack } from "./style_store.js";
@@ -85,7 +86,8 @@ export async function runCli(argv, io = {}) {
   const researchCaptureTarget = command === "research" && firstArg === "capture" && rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const researchCaptureInvocation = command === "research" && firstArg === "capture" ? { target: researchCaptureTarget ?? "research", flagArgs: researchCaptureTarget ? rest.slice(1) : rest } : null;
   const flags = parseFlags(researchCaptureInvocation?.flagArgs ?? researchAttachInvocation?.flagArgs ?? evidenceInvocation?.flagArgs ?? libraryInvocation?.flagArgs ?? styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? bibleInvocation?.flagArgs ?? collectionInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? skeletonsInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? historyInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? (command === "doctor" ? rest.filter((arg) => arg !== "--agent") : rest));
-  const tracker = createCostTracker({ fetch: baseFetch, limitUsd: parseCostLimit(flags["max-cost-usd"] ?? process.env.LAUNCHCLIP_MAX_COST_USD) });
+  // Model calls in flight together each take their own connection (src/own_connection_fetch.js); a fetch the caller passed is used as it is.
+  const tracker = createCostTracker({ fetch: io.fetch ? baseFetch : ownConnectionFetch(baseFetch), limitUsd: parseCostLimit(flags["max-cost-usd"] ?? process.env.LAUNCHCLIP_MAX_COST_USD) });
   const previousFetch = globalThis.fetch;
   globalThis.fetch = tracker.fetch;
   try {

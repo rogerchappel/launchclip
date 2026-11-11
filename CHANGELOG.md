@@ -62,6 +62,16 @@
 
 ### Fixed
 
+- Model calls sent together through OpenRouter are answered together. Node's
+  fetch sends later requests down the connection an earlier one opened, and
+  OpenRouter answers the requests on one connection in turn, so from the
+  second call of a run onwards work the model gate had in flight at once (a
+  visual explainer's scenes, the long-form chunks, the asset descriptions)
+  came back one call at a time: ten scenes took 260 s where the slowest took
+  45 s. The CLI now gives each such call its own connection
+  (`src/own_connection_fetch.js`); six calls that took 122 s take 20 s. A
+  host that passes its own `fetch` keeps it.
+
 - A hosted model that thinks by default no longer fails a stage by spending
   its whole output limit on reasoning: the call is made again with a small
   reasoning budget, which the run then keeps for that model.
