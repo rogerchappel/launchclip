@@ -231,8 +231,8 @@ The player is a folder of static files, written to `.launchclip/preview` in
 the project, or to the folder `--export` names:
 
 ```
-index.html         the player (index.html?bare hides its controls)
-composition.html   the video: one page, one paused timeline
+index.html         the player: the video and its controls in one document (index.html?bare hides the controls)
+composition.html   the video alone: one page, one paused timeline
 preview.json       the format, the title, draft or full plan, the story's sha256
 assets/ fonts/     the media and the fonts the page uses
 vendor/            the animation library, so the page needs no network
@@ -243,6 +243,13 @@ A host serves that folder and shows `index.html` in a frame. The page takes
 messages from its parent and posts `launchclip:ready`, `launchclip:time` and
 `launchclip:ended` back. It has to come from a web server: a browser will
 not play it from `file://`.
+
+The preview is HTML and JavaScript made from a model's plan, so a host should
+treat it as untrusted: serve it from an origin that is not the app's, in a
+frame with `sandbox="allow-scripts"` (no `allow-same-origin`), and talk to it
+only by those messages. The player is built for that. It is one document
+with nothing nested in a frame, it reads no cookies or storage, and it makes
+no network request beyond the folder's own files.
 
 What the preview is not: the sound is the unmastered mix, a caption plate
 added after measuring rendered frames is not there, and nothing that needs

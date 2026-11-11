@@ -77,6 +77,14 @@
 
 ### Fixed
 
+- The preview player runs inside a sandboxed frame. `index.html` held the
+  video in a nested frame and read into it, which a host that embeds the
+  preview as untrusted content (a sandbox with no origin of its own, a
+  frame-ancestors policy) forbids: the player never started. It is now one
+  document, the composition's own markup scaled to fit with the controls
+  beside it, and is driven by postMessage alone. `composition.html` is still
+  written.
+
 - Model calls sent together through OpenRouter are answered together. Node's
   fetch sends later requests down the connection an earlier one opened, and
   OpenRouter answers the requests on one connection in turn, so from the
