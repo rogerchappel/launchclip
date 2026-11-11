@@ -32,7 +32,8 @@ export const DRAFT_DIRECTION = {
 
 const usage = { input_tokens: 1000, output_tokens: 200, total_tokens: 1200 };
 // unref: a call the draft stopped waiting for does not hold the test process open.
-const wait = (ms) => (ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms).unref()) : Promise.resolve());
+// Only a long wait is unref'd: a short one is awaited by the run, and on Node 22 an awaited unref'd timer lets the test's event loop end.
+const wait = (ms) => (ms > 0 ? new Promise((resolve) => { const timer = setTimeout(resolve, ms); if (ms >= 1000) timer.unref(); }) : Promise.resolve());
 
 /**
  * A run of make on the recorded answers.

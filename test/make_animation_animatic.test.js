@@ -5,6 +5,7 @@
 // real finish runs with a renderer that records the frame ranges it is asked
 // for (test/helpers/finish_offline.js).
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import test from "node:test";
 import path from "node:path";
@@ -14,6 +15,9 @@ import { ANIMATIC_RETAKES_FILE } from "../src/make/index.js";
 import { RETAKES_SCHEMA } from "../src/make/critic_repair.js";
 import { animaticAdapters } from "./helpers/finish_offline.js";
 import { fixture, room, schemas } from "./helpers/make_animation.js";
+
+// The animatic's voice stage runs ffmpeg, so these run where it is installed (the media jobs in CI).
+const needsFfmpeg = { skip: (() => { try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); return false; } catch { return "ffmpeg is not installed"; } })() };
 
 const finding = (id, severity, category, message, evidence) => ({ id, severity, category, message, evidence_ids: evidence });
 const ship = { verdict: "ship", summary: "Reads well.", findings: [] };
@@ -73,7 +77,7 @@ async function studio(recorded, options = {}) {
   return { ...t, make, sam, segmentCalls: finishAdapters.segmentCalls };
 }
 
-test("one prompt to a finished character story: a seeded bad shot is caught at the animatic and fixed by a retake that renders only that shot", async () => {
+test("one prompt to a finished character story: a seeded bad shot is caught at the animatic and fixed by a retake that renders only that shot", needsFfmpeg, async () => {
   const t = await studio({ launchclip_animatic_review: [repair, ship], launchclip_retake: [fixSam], launchclip_make_critic: [ship, ship] });
   try {
     const report = await t.make();
@@ -137,7 +141,7 @@ test("one prompt to a finished character story: a seeded bad shot is caught at t
   }
 });
 
-test("a shot no retake fixes: the round is undone, the rounds are spent once, and the report is needs-repair", async () => {
+test("a shot no retake fixes: the round is undone, the rounds are spent once, and the report is needs-repair", needsFfmpeg, async () => {
   const t = await studio({ launchclip_animatic_review: [repair, repair], launchclip_retake: [missSam], launchclip_make_critic: [repair] });
   try {
     const report = await t.make({ criticRepairs: 1 });
@@ -162,7 +166,7 @@ test("a shot no retake fixes: the round is undone, the rounds are spent once, an
   }
 });
 
-test("the final critic's rounds are retakes too: the failing shot renders again, alone, and the video is ready", async () => {
+test("the final critic's rounds are retakes too: the failing shot renders again, alone, and the video is ready", needsFfmpeg, async () => {
   // The staging review passes the animatic; the critic catches the shot in the video.
   const t = await studio({ launchclip_animatic_review: [ship], launchclip_retake: [fixSam], launchclip_make_critic: [repair, ship] });
   try {
@@ -182,7 +186,7 @@ test("the final critic's rounds are retakes too: the failing shot renders again,
   }
 });
 
-test("--stop-after animatic ends awaiting-approval before the delivery render, and --approve animatic resumes from there", async () => {
+test("--stop-after animatic ends awaiting-approval before the delivery render, and --approve animatic resumes from there", needsFfmpeg, async () => {
   const t = await studio({ launchclip_animatic_review: [ship], launchclip_make_critic: [ship, ship] });
   try {
     const stopped = await t.make({ stopAfter: "animatic" });
@@ -213,7 +217,7 @@ test("--stop-after animatic ends awaiting-approval before the delivery render, a
   }
 });
 
-test("an attended run asks before the delivery render; a no stops it there", async () => {
+test("an attended run asks before the delivery render; a no stops it there", needsFfmpeg, async () => {
   const t = await studio({ launchclip_animatic_review: [ship], launchclip_make_critic: [ship] });
   try {
     const asked = [];
@@ -232,7 +236,7 @@ test("an attended run asks before the delivery render; a no stops it there", asy
   }
 });
 
-test("with a model that cannot see, the animatic is rendered unreviewed and the video is ready-for-review", async () => {
+test("with a model that cannot see, the animatic is rendered unreviewed and the video is ready-for-review", needsFfmpeg, async () => {
   const t = await studio({}, { vision: false });
   try {
     const report = await t.make();
