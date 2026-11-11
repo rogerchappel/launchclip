@@ -95,11 +95,12 @@ test("--speed draft: one streamed script call, a take per sentence, a rule-made 
 });
 
 test("a direction call that is late leaves the rule-made plan standing, and the run does not wait for it", async () => {
-  const draft = await draftRun({ directionMs: 2500, env: { LAUNCHCLIP_DRAFT_DIRECTION_MS: "30" } });
+  // The late call takes 30 s (unref'd, so it holds nothing open): a slow machine's whole draft still ends well before it.
+  const draft = await draftRun({ directionMs: 30_000, env: { LAUNCHCLIP_DRAFT_DIRECTION_MS: "30" } });
   try {
     const started = performance.now();
     const { report } = await draft.run({ speed: "draft" });
-    assert.ok(performance.now() - started < 2400, "the run ended before the late call answered");
+    assert.ok(performance.now() - started < 20_000, "the run ended before the late call answered");
     assert.equal(report.status, "awaiting-approval");
     assert.equal(report.draft.storyboard.source, "rules");
     assert.equal(report.draft.storyboard.direction.status, "late");
@@ -135,6 +136,19 @@ test("LAUNCHCLIP_DRAFT_DIRECTION_MS=0 sends no direction call: the draft is one 
   } finally { await draft.cleanup(); }
 });
 
+test("a seeded look with stacked captions: the draft takes one-line captions instead of failing its captions gate", async () => {
+  const draft = await draftRun({ env: { LAUNCHCLIP_DRAFT_DIRECTION_MS: "0" } });
+  try {
+    // Seed f0fce246 makes a look whose captions are kinetic-stack: under the character cards they would be hidden for most of the narration.
+    const { report } = await draft.run({ speed: "draft", seed: "f0fce246" });
+    assert.equal(report.status, "awaiting-approval", JSON.stringify(report.stages.storyboard));
+    assert.ok(report.warnings.some((line) => /one-line captions/.test(line)), report.warnings.join("\n"));
+    const story = await draft.read("storyboard.json");
+    assert.equal(story.overlays.find((overlay) => overlay.type === "captions").preset, "word-highlight");
+    assert.equal(story.style, report.style.name, "the rest of the look is kept");
+  } finally { await draft.cleanup(); }
+});
+
 test("a draft asks the asset provider for every shot at once; a clip that is late is drawn instead", async () => {
   const draft = await draftRun({ env: { LAUNCHCLIP_DRAFT_SHOT_MS: "200", LAUNCHCLIP_DRAFT_DIRECTION_MS: "0" } });
   const clip = path.join(draft.cwd, "clip.mp4");
@@ -151,14 +165,14 @@ test("a draft asks the asset provider for every shot at once; a clip that is lat
         peak = Math.max(peak, open);
         // The first request answers at once; every other one takes longer than the draft waits.
         const first = asked.length === 1;
-        await wait(first ? 5 : 2500);
+        await wait(first ? 5 : 30_000);
         open -= 1;
         return first ? { file: clip, kind: "video" } : null;
       }
     };
     const started = performance.now();
     const { report } = await draft.run({ speed: "draft", minShots: 2 }, { assets });
-    assert.ok(performance.now() - started < 2400, "the run did not wait for the late clips");
+    assert.ok(performance.now() - started < 20_000, "the run did not wait for the late clips");
     assert.equal(report.status, "awaiting-approval");
     assert.ok(asked.length >= 2, `asked for ${asked.length} shots`);
     assert.equal(peak, asked.length, "every request was in flight together");

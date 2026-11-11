@@ -1782,6 +1782,18 @@ async function planDraft(ctx, planOptions, { media, shots, assets }) {
     if (direction.status !== "applied") ctx.say(`draft: the direction call was ${direction.status}${direction.reason ? ` (${direction.reason})` : ""}; the rule-made storyboard stands`);
   }
   let plan = directed ?? await ruled;
+  // A look whose captions stack a word a line stands too tall to clear a character card, so tooling hides them and the
+  // captions gate fails the plan. A draft then takes one-line captions and keeps the rest of the look.
+  const captionsOnly = (result) => result.status !== "passed" && (result.errors ?? []).length > 0 && result.errors.every((line) => /^captions: /.test(String(line)));
+  const oneLine = (storyboard) => ({ ...storyboard, overlays: (storyboard.overlays ?? []).map((overlay) => (overlay?.type === "captions" ? { ...overlay, preset: "word-highlight" } : overlay)) });
+  if (captionsOnly(plan)) {
+    const again = await planWith(oneLine(made.storyboard), made.fallbacks, { cast: made.cast, roles });
+    if (again.status === "passed") {
+      report.warnings.push("draft: the look's stacked captions would be hidden under the character cards; the draft uses one-line captions (word-highlight)");
+      plan = again;
+      ctx.draftCaptions = "word-highlight"; // finalizeStory keeps it over the seeded look's preset
+    }
+  }
   // A rule-made plan that fails its checks is planned again plain (a character beside each line's words, no shots, media or
   // diagrams): a draft does not fail on a clip or a layout slip.
   if (plan.status !== "passed") {
@@ -1859,6 +1871,8 @@ export function finalizeStory(storyboard, ctx) {
     delete story.grammar;
   }
   if (ctx.generatedStyle) adoptStyleLook(story, ctx.generatedStyle);
+  // A draft that had to take one-line captions (planDraft) keeps them over the look's preset.
+  if (ctx.draftCaptions) for (const overlay of story.overlays ?? []) if (overlay?.type === "captions" && overlay.preset !== "none" && overlay.style !== "none") overlay.preset = ctx.draftCaptions;
   const world = worldLook(story, ctx.text);
   if (world.length) ctx.report.notices.push(`world look: ${world.join("; ")}`);
   story.meta = { ...(story.meta ?? {}), made_by: "launchclip make", prompt: ctx.text };
