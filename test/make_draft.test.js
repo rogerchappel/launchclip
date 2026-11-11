@@ -17,7 +17,8 @@ import { readWav } from "../src/voice/words.js";
 import { DRAFT_DIRECTION, DRAFT_NARRATION, DRAFT_SENTENCES, draftRun } from "./helpers/draft_fakes.js";
 import { recordedRun } from "./helpers/make_recorded_run.js";
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms).unref());
+// Only a long wait (a call the draft stops waiting for) is unref'd; see helpers/draft_fakes.js.
+const wait = (ms) => new Promise((resolve) => { const timer = setTimeout(resolve, ms); if (ms >= 1000) timer.unref(); });
 
 test("--speed draft: one streamed script call, a take per sentence, a rule-made plan with one direction call, and a stop at the plan", async () => {
   const draft = await draftRun();
