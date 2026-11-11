@@ -8,8 +8,8 @@
 // a small player around it: the page's one paused timeline is driven by the
 // clock of the mix, so what plays is the picture the render draws, live.
 //
-// The result is a folder of static files (index.html is the player,
-// composition.html the video). --export writes it and stops, for a host that
+// The result is a folder of static files (index.html is the player, one document:
+// the video with its controls; composition.html the video alone). --export writes it and stops, for a host that
 // serves it itself; without it the folder is served on localhost.
 import { createHash } from "node:crypto";
 import { createReadStream, existsSync } from "node:fs";
@@ -82,7 +82,7 @@ export async function buildPreview(projectPath, options = {}, adapters = {}) {
     offline
   };
   await writeFile(path.join(dir, "preview.json"), `${JSON.stringify(info, null, 2)}\n`);
-  await writeFile(path.join(dir, "index.html"), playerPage(info));
+  await writeFile(path.join(dir, "index.html"), playerPage(info, html));
   return { ...info, dir, index: path.join(dir, "index.html"), warnings: compiled.warnings ?? [] };
 }
 
@@ -183,55 +183,76 @@ async function openBrowser(url) {
 
 const escapeHtml = (value) => String(value).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-// The player: the composition in a frame scaled to fit, and a clock. While it
-// plays, the mix is the clock (the picture follows the sound, as in the
-// render); the timeline and every clip on the page are set from it each frame.
-// A host page can drive it too: postMessage {type: "launchclip:play" | "launchclip:pause" | "launchclip:seek", time},
-// and it posts {type: "launchclip:ready" | "launchclip:time" | "launchclip:ended"} to its parent.
-export function playerPage(info) {
+// The player: the composition itself, scaled to fit, with a clock and a bar
+// of controls added to it. While it plays, the mix is the clock (the picture
+// follows the sound, as in the render); the timeline and every clip on the
+// page are set from it each frame.
+//
+// It is one document. A host that embeds a preview as untrusted content gives
+// it a sandbox with no origin of its own; a page there can neither read into
+// a frame nested inside it nor, under a frame-ancestors policy, load one. So
+// nothing is nested: the composition's markup is in the player page.
+//
+// A host page drives it by postMessage {type: "launchclip:play" |
+// "launchclip:pause" | "launchclip:seek", time}, and it posts {type:
+// "launchclip:ready" | "launchclip:time" | "launchclip:ended"} to its parent.
+// composition: the compiled page's HTML (composition.html).
+export function playerPage(info, composition) {
   const { width, height, duration } = info.format;
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
+  const html = String(composition ?? "");
+  const open = html.match(/<body\b[^>]*>/i);
+  const close = html.toLowerCase().lastIndexOf("</body>");
+  const headEnd = html.toLowerCase().indexOf("</head>");
+  if (!open || close < 0 || headEnd < 0) throw new Error("the compiled page has no <head> and <body> to build the player in");
+  const bodyStart = open.index + open[0].length;
+  // The video's own background, which the compiled page puts on html and body.
+  const ground = html.slice(0, bodyStart).match(/html\s*,\s*body\s*\{[^}]*?background(?:-color)?\s*:\s*([^;}]+)/i)?.[1]?.trim() ?? "#000";
+  const head = `<title>${escapeHtml(info.title)}: preview</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(info.title)}: preview</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #0b0b0c; color: #e8e8ea; font: 13px/1.4 system-ui, sans-serif; overflow: hidden; }
-  #stage { position: absolute; inset: 0 0 52px 0; display: grid; place-items: center; overflow: hidden; }
-  #fit { position: relative; flex: none; }
-  #frame { position: absolute; left: 0; top: 0; width: ${width}px; height: ${height}px; border: 0; transform-origin: 0 0; background: #000; }
-  #bar { position: absolute; left: 0; right: 0; bottom: 0; height: 52px; display: flex; align-items: center; gap: 12px; padding: 0 14px; box-sizing: border-box; background: #151517; }
-  button { width: 36px; height: 32px; border: 0; border-radius: 6px; background: #2a2a2e; color: inherit; font: inherit; cursor: pointer; }
-  button:hover { background: #38383d; }
-  #seek { flex: 1; min-width: 0; accent-color: #e8e8ea; }
-  #time { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  #badge { padding: 2px 8px; border-radius: 999px; background: #2a2a2e; white-space: nowrap; }
-  body.bare #bar { display: none; } body.bare #stage { inset: 0; }
+  html, body { margin: 0 !important; width: 100% !important; height: 100% !important; background: #0b0b0c !important; color: #e8e8ea; font: 13px/1.4 system-ui, sans-serif; overflow: hidden !important; }
+  #lc-preview-stage { position: absolute; inset: 0 0 52px 0; display: grid; place-items: center; overflow: hidden; }
+  #lc-preview-fit { position: relative; flex: none; overflow: hidden; }
+  #lc-preview-canvas { position: absolute; left: 0; top: 0; width: ${width}px; height: ${height}px; overflow: hidden; transform-origin: 0 0; background: ${ground.replace(/[<>"]/g, "")}; }
+  #lc-preview-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 52px; display: flex; align-items: center; gap: 12px; padding: 0 14px; box-sizing: border-box; background: #151517; z-index: 2147483000; }
+  #lc-preview-bar button { width: 36px; height: 32px; border: 0; border-radius: 6px; background: #2a2a2e; color: inherit; font: inherit; cursor: pointer; }
+  #lc-preview-bar button:hover { background: #38383d; }
+  #lc-preview-seek { flex: 1; min-width: 0; accent-color: #e8e8ea; }
+  #lc-preview-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #lc-preview-badge { padding: 2px 8px; border-radius: 999px; background: #2a2a2e; white-space: nowrap; }
+  body.lc-preview-bare #lc-preview-bar { display: none; } body.lc-preview-bare #lc-preview-stage { inset: 0; }
 </style>
-</head>
-<body>
-<div id="stage"><div id="fit"><iframe id="frame" src="${escapeHtml(info.composition)}" title="video preview"></iframe></div></div>
-<div id="bar">
-  <button id="play" aria-label="Play">&#9654;</button>
-  <input id="seek" type="range" min="0" max="${duration}" step="0.01" value="0" aria-label="Position">
-  <span id="time">0:00.0 / 0:00.0</span>
-  <button id="mute" aria-label="Mute">&#128266;</button>
-  <span id="badge">${info.plan === "draft" ? "Draft preview" : "Preview"} &middot; not rendered</span>
+`;
+  const before = '<div id="lc-preview-stage"><div id="lc-preview-fit"><div id="lc-preview-canvas">';
+  const after = `</div></div></div>
+<div id="lc-preview-bar">
+  <button id="lc-preview-play" aria-label="Play">&#9654;</button>
+  <input id="lc-preview-seek" type="range" min="0" max="${duration}" step="0.01" value="0" aria-label="Position">
+  <span id="lc-preview-time">0:00.0 / 0:00.0</span>
+  <button id="lc-preview-mute" aria-label="Mute">&#128266;</button>
+  <span id="lc-preview-badge">${info.plan === "draft" ? "Draft preview" : "Preview"} &middot; not rendered</span>
 </div>
 <script>
-(() => {
+${playerScript(info)}
+</script>
+`;
+  return `${html.slice(0, headEnd)}${head}${html.slice(headEnd, bodyStart)}${before}${html.slice(bodyStart, close)}${after}${html.slice(close)}`;
+}
+
+function playerScript(info) {
+  const { width, height, duration } = info.format;
+  return `(() => {
   const W = ${width}, H = ${height}, D = ${duration}, ID = ${JSON.stringify(info.composition_id)};
   const query = new URLSearchParams(location.search);
-  if (query.has("bare")) document.body.classList.add("bare");
-  const frame = document.getElementById("frame"), fit = document.getElementById("fit"), stage = document.getElementById("stage");
-  const playButton = document.getElementById("play"), seek = document.getElementById("seek"), time = document.getElementById("time"), muteButton = document.getElementById("mute");
+  if (query.has("bare")) document.body.classList.add("lc-preview-bare");
+  const canvas = document.getElementById("lc-preview-canvas"), fit = document.getElementById("lc-preview-fit"), stage = document.getElementById("lc-preview-stage");
+  const playButton = document.getElementById("lc-preview-play"), seek = document.getElementById("lc-preview-seek"), time = document.getElementById("lc-preview-time"), muteButton = document.getElementById("lc-preview-mute");
   let tl = null, clips = [], master = null, playing = false, t = 0, last = 0, muted = false;
 
   function layout() {
     const scale = Math.min(stage.clientWidth / W, stage.clientHeight / H);
     fit.style.width = W * scale + "px"; fit.style.height = H * scale + "px";
-    frame.style.transform = "scale(" + scale + ")";
+    canvas.style.transform = "scale(" + scale + ")";
   }
   addEventListener("resize", layout); layout();
 
@@ -280,9 +301,9 @@ export function playerPage(info) {
     if (m.type === "launchclip:play") play(); else if (m.type === "launchclip:pause") pause(); else if (m.type === "launchclip:seek") seekTo(m.time);
   });
 
-  frame.addEventListener("load", function ready() {
-    const win = frame.contentWindow, doc = frame.contentDocument;
-    const found = win && win.__timelines && win.__timelines[ID];
+  (function ready() {
+    const doc = document;
+    const found = window.__timelines && window.__timelines[ID];
     if (!found) { setTimeout(ready, 50); return; }
     tl = found;
     clips = Array.from(doc.querySelectorAll("audio.clip, video.clip, audio[data-start], video[data-start]")).filter((el, i, all) => all.indexOf(el) === i).map((el) => ({
@@ -294,11 +315,7 @@ export function playerPage(info) {
     const fonts = doc.fonts && doc.fonts.ready ? doc.fonts.ready : Promise.resolve();
     fonts.then(() => { seekTo(Number(query.get("t")) || 0); post("launchclip:ready"); if (query.has("autoplay")) play(); });
     window.__launchclipPreview = { play: play, pause: pause, seek: seekTo, get time() { return t; }, get playing() { return playing; }, duration: D };
-  });
+  })();
   requestAnimationFrame(tick);
-})();
-</script>
-</body>
-</html>
-`;
+})();`;
 }
