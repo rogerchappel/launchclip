@@ -369,6 +369,10 @@ pixels, so a host can show a problem before anyone pays for a render:
 make stage, as in `timings`) and `steps` (the plan stage's own: `voice`,
 `validate`, `captions`, `sound`, `plan`). The progress lines name the stage
 and its steps: `launchclip:progress {"stage":"plan","step":"sound"}`.
+`launchclip finish` prints the same lines under the stage `finish`, with the
+render's frames as they finish on the Remotion renderer
+(`{"stage":"finish","step":"render","done":450,"total":980,"unit":"frames"}`)
+and a last line with the status and the seconds it took.
 
 A character story (`--animation`) can stop here too. Its show bible is
 still drawn with a browser (the reference sheets), and its animatic is made
