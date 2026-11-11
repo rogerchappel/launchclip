@@ -119,6 +119,11 @@
 
 ### Fixed
 
+- A fast draft (`--speed draft`) no longer fails when its seeded look has
+  stacked captions (`kinetic-stack`). Those stand too tall to clear a
+  character card, so tooling hid them and the captions gate failed the plan,
+  on about one seed in ten. The draft now takes one-line captions
+  (`word-highlight`), keeps the rest of the look and says so in a warning.
 - Two plans that failed on arithmetic a model could not fix now pass.
   A zoom with under 1.2 s to hold after its move (squeezed against the
   shot's end, the next zoom or its own `until`) is taken out by the plan's
