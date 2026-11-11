@@ -84,6 +84,32 @@ test("a model that takes no temperature is asked again without it, and not sent 
   assert.deepEqual(bodies.map((body) => "temperature" in body), [true, false, false]);
 });
 
+test("a host that refuses array bounds in a schema is sent it without them, and the bounds stay off for that model", async () => {
+  const bodies = [];
+  const bounded = (schema) => JSON.stringify(schema).includes("minItems") || JSON.stringify(schema).includes("maxItems");
+  const refuse = (sent) => "temperature" in sent
+    ? new Response(JSON.stringify({ error: { message: "No endpoints found that can handle the requested parameters." } }), { status: 404 })
+    : bounded(sent.response_format.json_schema.schema) ? new Response(JSON.stringify({ error: { message: "Provider returned error", code: 400 } }), { status: 400 }) : null;
+  const client = createStructuredClient({ provider: "openrouter", model: "example/strict-host", reasoning: "none", apiKey: "router-test" }, {
+    fetch: async (_url, init) => {
+      const body = JSON.parse(init.body);
+      bodies.push(body);
+      return refuse(body) ?? new Response(JSON.stringify({ choices: [{ message: { content: "{\"items\":[\"a\"]}" } }] }), { status: 200 });
+    }
+  });
+  const schema = { type: "object", required: ["items"], additionalProperties: false, properties: { items: { type: "array", minItems: 1, maxItems: 5, items: { type: "string", minLength: 1 } } } };
+  const first = await client.runStructured({ schema, schemaName: "result", input: "go" });
+  assert.deepEqual(first.value, { items: ["a"] });
+  await client.runStructured({ schema, schemaName: "result", input: "again" });
+  // Refused for the temperature, then for the bounds, then answered; the second call is sent right the first time.
+  assert.deepEqual(bodies.map((body) => ["temperature" in body, bounded(body.response_format.json_schema.schema)]), [[true, true], [false, true], [false, false], [false, false]]);
+  assert.deepEqual(bodies.at(-1).response_format.json_schema.schema.properties.items, { type: "array", items: { type: "string", minLength: 1 } }, "only the array bounds are taken out");
+  assert.equal(schema.properties.items.minItems, 1, "the caller's schema is not changed");
+  // A 400 on a schema with no bounds to take out is the caller's error.
+  const plain = createStructuredClient({ provider: "openrouter", model: "example/other", reasoning: "none", apiKey: "router-test" }, { maxRetries: 0, fetch: async () => new Response(JSON.stringify({ error: { message: "Provider returned error" } }), { status: 400 }) });
+  await assert.rejects(plain.runStructured({ schema: { type: "object" }, schemaName: "result", input: "go", temperature: 0 }), /\(400\): Provider returned error/);
+});
+
 test("a model that spends its output limit on reasoning is asked again with a small budget, and keeps it", async () => {
   const bodies = [];
   const client = createStructuredClient({ provider: "openrouter", model: "example/thinker", reasoning: "none", apiKey: "router-test" }, {
