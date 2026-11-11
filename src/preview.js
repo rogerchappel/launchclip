@@ -130,7 +130,7 @@ async function pruneAssets(dir, html) {
   return kept;
 }
 
-function gsapFile() {
+export function gsapFile() {
   try { return createRequire(import.meta.url).resolve("gsap/dist/gsap.min.js"); } catch { return null; }
 }
 
