@@ -21,7 +21,7 @@
    "start": 0,
    "end": 73.327,
    "plate": {
-    "kind": "hex-shell",
+    "kind": "smoke",
     "params": {
      "tint": "neutral"
     }
@@ -963,7 +963,7 @@
    "start": 159.059,
    "end": 242.999,
    "plate": {
-    "kind": "strands",
+    "kind": "veil",
     "params": {
      "tint": "accent"
     }
@@ -2588,7 +2588,7 @@
    "start": 408.665,
    "end": 490.818,
    "plate": {
-    "kind": "hex-shell",
+    "kind": "facets",
     "params": {
      "tint": "accent"
     }
@@ -3019,7 +3019,7 @@
    "start": 490.818,
    "end": 570.872,
    "plate": {
-    "kind": "strands",
+    "kind": "blooms",
     "params": {
      "tint": "primary"
     }
@@ -3479,7 +3479,7 @@
    "start": 570.872,
    "end": 654.3,
    "plate": {
-    "kind": "bokeh",
+    "kind": "flow-lines",
     "params": {
      "tint": "accent"
     }
@@ -3949,7 +3949,7 @@
    "start": 654.3,
    "end": 736.36,
    "plate": {
-    "kind": "hex-shell",
+    "kind": "smoke",
     "params": {
      "tint": "neutral"
     }
@@ -4966,7 +4966,7 @@
    "start": 814.355,
    "end": 896.088,
    "plate": {
-    "kind": "strands",
+    "kind": "veil",
     "params": {
      "tint": "accent"
     }
@@ -5843,7 +5843,7 @@
    ],
    "start": 0.3,
    "end": 71.663,
-   "key": "a3fd0238b6e4a4e2",
+   "key": "e9ca20614d9fd6d3",
    "shots": [
     "the-launch-nobody-saw-coming-1-sh1",
     "the-launch-nobody-saw-coming-1-sh2",
@@ -5871,7 +5871,7 @@
     },
     "plates": [
      {
-      "kind": "hex-shell",
+      "kind": "smoke",
       "tint": "neutral",
       "background": "mesh"
      }
@@ -5892,7 +5892,7 @@
    ],
    "start": 73.327,
    "end": 157.404,
-   "key": "fee7d3dee3404160",
+   "key": "96ac678dcb32d46f",
    "shots": [
     "a-short-history-of-halcyon-1-sh1",
     "a-short-history-of-halcyon-1-sh2",
@@ -5924,7 +5924,7 @@
     },
     "plates": [
      {
-      "kind": "hex-shell",
+      "kind": "smoke",
       "tint": "neutral",
       "background": "mesh"
      },
@@ -5952,7 +5952,7 @@
    ],
    "start": 159.059,
    "end": 241.355,
-   "key": "cc616f31330606b3",
+   "key": "003213c1b30c0e4b",
    "shots": [
     "inside-the-training-run-1-sh1",
     "inside-the-training-run-1-sh2",
@@ -5989,7 +5989,7 @@
     },
     "plates": [
      {
-      "kind": "hex-shell",
+      "kind": "smoke",
       "tint": "neutral",
       "background": "mesh"
      },
@@ -5999,7 +5999,7 @@
       "background": "light-rays"
      },
      {
-      "kind": "strands",
+      "kind": "veil",
       "tint": "accent",
       "background": "topographic"
      }
@@ -6022,7 +6022,7 @@
    ],
    "start": 242.999,
    "end": 321.23,
-   "key": "4bc7d55ab691bc98",
+   "key": "3908acf2de1249b8",
    "shots": [
     "what-northlight-actually-announced-1-sh1",
     "what-northlight-actually-announced-1-sh2",
@@ -6060,7 +6060,7 @@
     },
     "plates": [
      {
-      "kind": "hex-shell",
+      "kind": "smoke",
       "tint": "neutral",
       "background": "mesh"
      },
@@ -6070,7 +6070,7 @@
       "background": "light-rays"
      },
      {
-      "kind": "strands",
+      "kind": "veil",
       "tint": "accent",
       "background": "topographic"
      },
@@ -6099,7 +6099,7 @@
    ],
    "start": 322.888,
    "end": 407.015,
-   "key": "2f7ffa982f8dd8b6",
+   "key": "900d1d3244b16ff0",
    "shots": [
     "why-speed-changed-everything-1-sh1",
     "why-speed-changed-everything-1-sh2",
@@ -6139,7 +6139,7 @@
     },
     "plates": [
      {
-      "kind": "hex-shell",
+      "kind": "smoke",
       "tint": "neutral",
       "background": "mesh"
      },
@@ -6149,7 +6149,7 @@
       "background": "light-rays"
      },
      {
-      "kind": "strands",
+      "kind": "veil",
       "tint": "accent",
       "background": "topographic"
      },
@@ -6183,7 +6183,7 @@
    ],
    "start": 408.665,
    "end": 489.154,
-   "key": "8ac34d52d83c4184",
+   "key": "2985e65869e9fe76",
    "shots": [
     "the-context-window-doubled-1-sh1",
     "the-context-window-doubled-1-sh2",
@@ -6224,7 +6224,7 @@
     },
     "plates": [
      {
-      "kind": "hex-shell",
+      "kind": "smoke",
       "tint": "neutral",
       "background": "mesh"
      },
@@ -6234,7 +6234,7 @@
       "background": "light-rays"
      },
      {
-      "kind": "strands",
+      "kind": "veil",
       "tint": "accent",
       "background": "topographic"
      },
@@ -6249,7 +6249,7 @@
       "background": "gradient"
      },
      {
-      "kind": "hex-shell",
+      "kind": "facets",
       "tint": "accent",
       "background": "dot-grid"
      }
@@ -6273,7 +6273,7 @@
    ],
    "start": 490.818,
    "end": 569.226,
-   "key": "0a0c24350264817f",
+   "key": "2126b59ee5401ce0",
    "shots": [
     "the-price-cut-and-who-pays-for-it-1-sh1",
     "the-price-cut-and-who-pays-for-it-1-sh2",
@@ -6314,7 +6314,7 @@
     },
     "plates": [
      {
-      "kind": "hex-shell",
+      "kind": "smoke",
       "tint": "neutral",
       "background": "mesh"
      },
@@ -6324,7 +6324,7 @@
       "background": "light-rays"
      },
      {
-      "kind": "strands",
+      "kind": "veil",
       "tint": "accent",
       "background": "topographic"
      },
@@ -6339,12 +6339,12 @@
       "background": "gradient"
      },
      {
-      "kind": "hex-shell",
+      "kind": "facets",
       "tint": "accent",
       "background": "dot-grid"
      },
      {
-      "kind": "strands",
+      "kind": "blooms",
       "tint": "primary",
       "background": "geometric"
      }
@@ -6368,7 +6368,7 @@
    ],
    "start": 570.872,
    "end": 652.654,
-   "key": "84baa8b1cbc19b1f",
+   "key": "3b1e1d9378e33835",
    "shots": [
     "reading-the-benchmarks-honestly-1-sh1",
     "reading-the-benchmarks-honestly-1-sh2",
@@ -6409,7 +6409,7 @@
     },
     "plates": [
      {
-      "kind": "hex-shell",
+      "kind": "smoke",
       "tint": "neutral",
       "background": "mesh"
      },
@@ -6419,7 +6419,7 @@
       "background": "light-rays"
      },
      {
-      "kind": "strands",
+      "kind": "veil",
       "tint": "accent",
       "background": "topographic"
      },
@@ -6434,17 +6434,17 @@
       "background": "gradient"
      },
      {
-      "kind": "hex-shell",
+      "kind": "facets",
       "tint": "accent",
       "background": "dot-grid"
      },
      {
-      "kind": "strands",
+      "kind": "blooms",
       "tint": "primary",
       "background": "geometric"
      },
      {
-      "kind": "bokeh",
+      "kind": "flow-lines",
       "tint": "accent",
       "background": "halftone"
      }
@@ -6468,7 +6468,7 @@
    ],
    "start": 654.3,
    "end": 734.708,
-   "key": "c9f22fac2421b9ce",
+   "key": "388624cd9879909b",
    "shots": [
     "what-developers-found-in-week-one-1-sh1",
     "what-developers-found-in-week-one-1-sh2",
@@ -6510,7 +6510,7 @@
     },
     "plates": [
      {
-      "kind": "hex-shell",
+      "kind": "smoke",
       "tint": "neutral",
       "background": "mesh"
      },
@@ -6520,7 +6520,7 @@
       "background": "light-rays"
      },
      {
-      "kind": "strands",
+      "kind": "veil",
       "tint": "accent",
       "background": "topographic"
      },
@@ -6535,22 +6535,22 @@
       "background": "gradient"
      },
      {
-      "kind": "hex-shell",
+      "kind": "facets",
       "tint": "accent",
       "background": "dot-grid"
      },
      {
-      "kind": "strands",
+      "kind": "blooms",
       "tint": "primary",
       "background": "geometric"
      },
      {
-      "kind": "bokeh",
+      "kind": "flow-lines",
       "tint": "accent",
       "background": "halftone"
      },
      {
-      "kind": "hex-shell",
+      "kind": "smoke",
       "tint": "neutral",
       "background": "mesh"
      }
@@ -6575,7 +6575,7 @@
    ],
    "start": 736.36,
    "end": 812.706,
-   "key": "33fe6b5e0881a9a8",
+   "key": "afe6062ba60ca159",
    "shots": [
     "the-failure-table-and-what-it-admits-1-sh1",
     "the-failure-table-and-what-it-admits-1-sh2",
@@ -6618,7 +6618,7 @@
     },
     "plates": [
      {
-      "kind": "hex-shell",
+      "kind": "smoke",
       "tint": "neutral",
       "background": "mesh"
      },
@@ -6628,7 +6628,7 @@
       "background": "light-rays"
      },
      {
-      "kind": "strands",
+      "kind": "veil",
       "tint": "accent",
       "background": "topographic"
      },
@@ -6643,22 +6643,22 @@
       "background": "gradient"
      },
      {
-      "kind": "hex-shell",
+      "kind": "facets",
       "tint": "accent",
       "background": "dot-grid"
      },
      {
-      "kind": "strands",
+      "kind": "blooms",
       "tint": "primary",
       "background": "geometric"
      },
      {
-      "kind": "bokeh",
+      "kind": "flow-lines",
       "tint": "accent",
       "background": "halftone"
      },
      {
-      "kind": "hex-shell",
+      "kind": "smoke",
       "tint": "neutral",
       "background": "mesh"
      },
@@ -6688,7 +6688,7 @@
    ],
    "start": 814.355,
    "end": 894.442,
-   "key": "b4e89df915dfc4eb",
+   "key": "ad821af77117d3f5",
    "shots": [
     "how-the-rivals-answered-1-sh1",
     "how-the-rivals-answered-1-sh2",
@@ -6732,7 +6732,7 @@
     },
     "plates": [
      {
-      "kind": "hex-shell",
+      "kind": "smoke",
       "tint": "neutral",
       "background": "mesh"
      },
@@ -6742,7 +6742,7 @@
       "background": "light-rays"
      },
      {
-      "kind": "strands",
+      "kind": "veil",
       "tint": "accent",
       "background": "topographic"
      },
@@ -6757,22 +6757,22 @@
       "background": "gradient"
      },
      {
-      "kind": "hex-shell",
+      "kind": "facets",
       "tint": "accent",
       "background": "dot-grid"
      },
      {
-      "kind": "strands",
+      "kind": "blooms",
       "tint": "primary",
       "background": "geometric"
      },
      {
-      "kind": "bokeh",
+      "kind": "flow-lines",
       "tint": "accent",
       "background": "halftone"
      },
      {
-      "kind": "hex-shell",
+      "kind": "smoke",
       "tint": "neutral",
       "background": "mesh"
      },
@@ -6782,7 +6782,7 @@
       "background": "light-rays"
      },
      {
-      "kind": "strands",
+      "kind": "veil",
       "tint": "accent",
       "background": "topographic"
      }
@@ -6807,7 +6807,7 @@
    ],
    "start": 896.088,
    "end": 975.877,
-   "key": "9a20b89a5e731424",
+   "key": "cf79468a9d2c26e8",
    "shots": [
     "what-this-means-for-the-next-year-1-sh1",
     "what-this-means-for-the-next-year-1-sh2",
@@ -6851,7 +6851,7 @@
     },
     "plates": [
      {
-      "kind": "hex-shell",
+      "kind": "smoke",
       "tint": "neutral",
       "background": "mesh"
      },
@@ -6861,7 +6861,7 @@
       "background": "light-rays"
      },
      {
-      "kind": "strands",
+      "kind": "veil",
       "tint": "accent",
       "background": "topographic"
      },
@@ -6876,22 +6876,22 @@
       "background": "gradient"
      },
      {
-      "kind": "hex-shell",
+      "kind": "facets",
       "tint": "accent",
       "background": "dot-grid"
      },
      {
-      "kind": "strands",
+      "kind": "blooms",
       "tint": "primary",
       "background": "geometric"
      },
      {
-      "kind": "bokeh",
+      "kind": "flow-lines",
       "tint": "accent",
       "background": "halftone"
      },
      {
-      "kind": "hex-shell",
+      "kind": "smoke",
       "tint": "neutral",
       "background": "mesh"
      },
@@ -6901,7 +6901,7 @@
       "background": "light-rays"
      },
      {
-      "kind": "strands",
+      "kind": "veil",
       "tint": "accent",
       "background": "topographic"
      },
