@@ -2103,20 +2103,48 @@ in Remotion). `plates.mjs` imports only `./ambient.mjs`, `./backgrounds.mjs`
 and `./panels.mjs`.
 
 ```json
-{ "plate": { "kind": "hex-shell", "cycle": true, "params": { "focus": 0.6, "intensity": 0.5, "tint": "neutral" } } }
+{ "plate": { "kind": "silk", "cycle": true, "params": { "focus": 0.6, "intensity": 0.5, "tint": "neutral" } } }
 ```
 
-| Kind | Subject | Default tint |
+| Kind | Look | Default tint |
 |---|---|---|
-| `hex-shell` | a sphere of hexagonal cells wrapped orthographically, each shaded by its normal against a light from the upper left, with a bright lip | neutral |
 | `silk` | folded ribbons between wandering curves, shaded dark → lit fold → dark, laid diagonally, over a softer far bank | neutral |
-| `strands` | double helices of glossy beads joined by rungs: one in focus, one faint far, one huge and soft near | primary |
-| `bokeh` | a starfield: pinpoints far, soft ringed discs mid and near | primary |
-| `starfield` | deep space: crisp dust and stars at two depths, a faint nebula of the tint and accent far behind, and a few bright stars with a halo and a thin cross flare; slow drift | neutral |
 | `smoke` | grey, low-saturation wisps: billows far, a bank of thin wisps in focus, a soft near bank (the tint pulled 80% to a grey of its lightness) | neutral |
+| `bokeh` | out-of-focus points of light spread evenly over the frame: pinpoints far, soft ringed discs mid and near | primary |
+| `veil` | tall, leaning curtains of soft light in the tint and the accent, fading out above and below; a broad far bank and a nearer one drift apart | primary |
+| `facets` | a jittered sheet of flat-shaded triangles, out of focus, over a larger, softer sheet | neutral |
+| `halftone` | a screen of dots whose size follows a slow field, so it swells and thins across the frame; a few huge soft dots near the lens | primary |
+| `grain` | two soft pools of light (the tint, the accent) drifting under a still sheet of fine film grain | primary |
+| `blooms` | large blurred pools of the tint and the accent at three depths, each on its own path | primary |
+| `light-leak` | light spilling in from one side (seeded), the accent inside the tint, with one long diagonal streak; it slides along its edge | accent |
+| `spotlight` | one soft pool of light with a long falloff inside a wide halo, breathing slowly | neutral |
+| `studio` | a seamless studio sweep: a low band of light where wall meets floor, the floor falling off toward the lens | neutral |
+| `beams` | broad shafts of light from above, widening and fading as they fall; two banks sway against each other | neutral |
+| `prism` | long diagonal streaks of light grading from the tint to the accent, at two depths | primary |
+| `bands` | broad, soft diagonal bands at uneven widths and strengths | primary |
+| `panes` | large frosted rounded rectangles overlapping at two depths, each a faint fill with a brighter lip | neutral |
+| `arcs` | thin segments of very large circles, out of focus, turning slowly | primary |
+| `ripples` | concentric rings from a point off-centre, each wider and fainter, over a larger soft set; the rings breathe | primary |
+| `flow-lines` | stacked fine lines that wander together, over a thicker, softer bank | primary |
+| `pinstripe` | fine diagonal lines under a slow diagonal sheen | neutral |
+| `dot-field` | a regular grid of fine dots at two depths, fading across the frame; the nearer grid travels further | neutral |
+| `linen` | a still weave of fine threads, uneven in strength, over two drifting pools of light | neutral |
+| `brush` | broad dry-brush strokes, each a bundle of uneven bristle lines, over a softer pair | primary |
 | `wash` | a bright, opaque full-frame gradient in the tint (light upper left, deeper lower right) with two drifting highlights and a slow sheen: a punctuation shot | primary |
 | `image` | a still from the project (`params.src`), cover-fit, blurred inside its SVG past every edge, under a `bg` dim, with a slow push and drift | neutral |
 | `video` | a clip from the project (`params.src`, playing from `params.start`), cover-fit and muted, under an overlay treatment (`dim`, `blur` or `tint`), with the image plate's push and drift | primary |
+
+**No plate depicts a thing.** A backdrop that shows a subject (a molecule, a
+globe, deep space) changes what the video seems to be about, so every dark
+kind is light, texture or soft geometry, lit in the brand's colours. The
+kinds that did depict one are retired (`RETIRED_PLATE_KINDS`): `hex-shell`
+draws as `smoke`, `strands` as `silk` and `starfield` as `bokeh`. A story,
+cycle list or style pack that still names one validates and builds
+(`plateErrors` accepts it, `resolvePlate` returns the neutral kind with the
+story's own params), and `validateStory` adds a warning at each place it is
+named. The names are no longer in `PLATE_KINDS` or `STORY_PLATE_KINDS`, so a
+host that exports those enums stops offering them. `PLATE_NOTES` is one line
+on each dark kind's look; the planning prompt lists the kinds from it.
 
 Params: `focus` 0–1 (how out of focus; 0.6), `intensity` 0–1 (0.5), `speed`
 0–2 (1), `depth` 0–1 (parallax spread; 0.5) and `tint` (`neutral` is paper,
@@ -2155,21 +2183,17 @@ with its `cycle`:
 
 | `cycle` | Effect |
 |---|---|
-| `true` | chapter j takes `CYCLE_KINDS[(k + j) % 4]` (the four original kinds; k the story kind's index) |
+| `true` | chapter j takes `CYCLE_KINDS[(k + j) % 4]` (`silk`, `veil`, `smoke`, `bokeh`; k the story kind's index, 0 when it is not one of them) |
 | `{every: n, plates?}` | every n shots (track-0 scenes, in start order) the next plate of `plates` (1–12 kinds or `{kind, params}`; default `ROTATION_KINDS`, every dark kind), starting from the story's plate when it is in the list, else after it. A kind name takes the story plate's focus, intensity, speed and depth with its own tint (or the story's tint when it names one) |
 
 ```json
-{ "plate": { "kind": "smoke", "cycle": { "every": 3, "plates": ["smoke", "starfield", { "kind": "wash", "params": { "intensity": 0.8 } }] } } }
+{ "plate": { "kind": "smoke", "cycle": { "every": 3, "plates": ["smoke", "veil", { "kind": "wash", "params": { "intensity": 0.8 } }] } } }
 ```
 
-**Fallback plates** (`fallbackPlates(story, text)`): what `launchclip make`
-rotates through on a Motion video whose plan chose no plate (`worldLook`). The
-motif kinds (`MOTIF_PLATE_KINDS`: `hex-shell`, `strands`, `bokeh`,
-`starfield`) carry a subject of their own (tech, science, space), so they come
-up only by explicit choice or when the brief is about one (`plateMotif`:
-whole words such as AI, software, DNA, biotech, NASA; "technical", "solar
-cells" or "stargazing" do not count). Every other brief gets
-`NEUTRAL_PLATES` (silk and smoke lit in the brand's primary, accent and
+**Fallback plates** (`fallbackPlates(story)`): what `launchclip make`
+rotates through on a Motion video whose plan chose no plate (`worldLook`),
+whatever the brief is about:
+`NEUTRAL_PLATES` (eight kinds lit in the brand's primary, accent and
 neutral), with the project's own footage between them when its shots have
 some: a shot's clip as a `video` plate (`treatment: "blur"`, from the shot's
 `sourceStart`) or its still as an `image` plate (blur 32, dim 0.62), up to
@@ -2187,8 +2211,8 @@ see [World backdrops](#world-backdrops-kitcoreworld-backdropsmjs).
 **Contrast.** Every colour a dark kind (`DARK_PLATE_KINDS`: all but `wash`
 and `image`) lays is clamped (`safeAlpha`) on every tone laid before it, so
 paper text keeps 4.5:1 anywhere on the plate, on dark and light palettes.
-Pinpoints finer than a letter's stroke (the bokeh's far stars, the
-starfield's dust and star cores) are clamped but add no tone. A `wash` is
+Marks finer than a letter's stroke (the bokeh's far points, a grain, a
+weave, a pinstripe, a dot grid) are clamped but add no tone. A `wash` is
 bright by design and an `image`'s pixels are unknown: their `tones` are what
 they lay (the wash's gradient; white and black under the image's dim), and
 finish's caption check backs captions where they need it. Put a card with its
@@ -2261,9 +2285,9 @@ export function worldBackdrops(story, plan, windows)
 `test/world_backdrops.test.js` checks the entry per move type, that the
 backdrops cover the screen on every frame (mid-move too), the parallax
 follow, chapters and `backdrop` in world mode, and that the GSAP calls seek
-to the ops' values. Parity: `plate-starfield`, `plate-smoke`, `plate-wash`,
+to the ops' values. Parity: a `plate-<kind>` fixture for every drawn kind,
 `plate-image` (fixture `files` may copy a binary with `{from}`) and
-`world-backdrops` (a starfield, then a pan's slide into a wash caught
+`world-backdrops` (a veil, then a pan's slide into a wash caught
 mid-move) in `test/fixtures/parity-backgrounds/`.
 
 ## Medium (`kit/core/medium.mjs`)

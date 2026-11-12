@@ -104,7 +104,7 @@ Each band also sets **words per event**: spoken words per visual event. Long for
   The best candidate whose params resolve wins (`resolveModule` on the map's canvas). A planned module that is not registered walks its fallback chain.
 - **Builds.** When the next clause is in the same family (numbers, time, evidence, ideas), the module on screen can take it. `capabilityAdditions` appends the clause's own entries: a bar, a step, an icon, a row. The result is a `build` state, at most two in a row. Any other state is a `swap`, a new card over the same plate. The first state of a shot is an `enter`.
 - **Shots.** States group into shots. A shot closes at four states, past 25 s, or once it has held 15 s and 2 states and the next clause is either a topic shift (a sentence end into another family) or past the 20 s midpoint.
-- **Plates.** Each chapter gets a backdrop plate in `kit/core/plates.mjs` terms (`hex-shell`, `silk`, `strands`, `bokeh`, each with a tint). The same plate is never used for two chapters in a row, nor reused among the last three. Each plate also names a `story.background` kind to use until plates are registered.
+- **Plates.** Each chapter gets a backdrop plate in `kit/core/plates.mjs` terms (`silk`, `smoke`, `veil`, `bokeh`, `facets`, `grain`, `halftone`, each with a tint; none depicts a subject). The same plate is never used for two chapters in a row, nor reused among the last three. Each plate also names a `story.background` kind to use until plates are registered.
 - **Never invented.** Number modules get params only from the clause's own numbers. A clause with no number never gets a stat card with a placeholder figure.
 
 ## Honesty
