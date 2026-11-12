@@ -1617,7 +1617,7 @@ function validateBackground(value, err, path = "background") {
 
 // The same rules as kit/core/plates.mjs plateErrors(), kept here so this
 // file stays import-free (kept in step by test/plates.test.js).
-export const STORY_PLATE_KINDS = Object.freeze(["hex-shell", "silk", "strands", "bokeh", "starfield", "smoke", "wash", "image", "video"]);
+export const STORY_PLATE_KINDS = Object.freeze(["hex-shell", "silk", "strands", "bokeh", "starfield", "smoke", "veil", "facets", "halftone", "grain", "wash", "image", "video"]);
 const PLATE_UNIT = { focus: [0, 1], intensity: [0, 1], speed: [0, 2], depth: [0, 1] };
 const PLATE_KIND_UNIT = { image: { blur: [0, 80], dim: [0, 1] }, video: { start: [0, 86400], blur: [0, 80], dim: [0, 1], peak: [0, 1] } };
 const PLATE_IMAGE_SRC = /^(?![a-zA-Z][a-zA-Z0-9+.-]*:)(?!\/)[^\s"'<>\\]+\.(png|jpe?g|webp|avif)$/i;

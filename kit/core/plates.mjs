@@ -71,9 +71,9 @@ import { AMBIENT_PRESETS, ambientSeed, fieldLevel, hashString, seededRandom } fr
 import { LOGO_SRC, safeAlpha, svgUrl } from './backgrounds.mjs';
 import { contrast, mix } from './panels.mjs';
 
-export const PLATE_KINDS = Object.freeze(['hex-shell', 'silk', 'strands', 'bokeh', 'starfield', 'smoke', 'wash', 'image', 'video']);
+export const PLATE_KINDS = Object.freeze(['hex-shell', 'silk', 'strands', 'bokeh', 'starfield', 'smoke', 'veil', 'facets', 'halftone', 'grain', 'wash', 'image', 'video']);
 // The kinds whose every tone keeps paper text at 4.5:1 (see the header).
-export const DARK_PLATE_KINDS = Object.freeze(['hex-shell', 'silk', 'strands', 'bokeh', 'starfield', 'smoke']);
+export const DARK_PLATE_KINDS = Object.freeze(['hex-shell', 'silk', 'strands', 'bokeh', 'starfield', 'smoke', 'veil', 'facets', 'halftone', 'grain']);
 // cycle: true walks the four original kinds, so the stories that use it keep their plates.
 export const CYCLE_KINDS = Object.freeze(['hex-shell', 'silk', 'strands', 'bokeh']);
 // cycle: {every} without its own plates walks every dark kind.
@@ -109,7 +109,7 @@ export const PLATE_KIND_PARAMS = Object.freeze({
 // Each kind's own tint when params.tint is absent: silk, hex, starfield,
 // smoke and image read as silver (paper), strands, bokeh and a wash as light
 // in the brand's primary.
-export const PLATE_DEFAULT_TINT = Object.freeze({ 'hex-shell': 'neutral', silk: 'neutral', strands: 'primary', bokeh: 'primary', starfield: 'neutral', smoke: 'neutral', wash: 'primary', image: 'neutral', video: 'primary' });
+export const PLATE_DEFAULT_TINT = Object.freeze({ 'hex-shell': 'neutral', silk: 'neutral', strands: 'primary', bokeh: 'primary', starfield: 'neutral', smoke: 'neutral', veil: 'primary', facets: 'neutral', halftone: 'primary', grain: 'primary', wash: 'primary', image: 'neutral', video: 'primary' });
 const LEVEL_SPEED = Object.freeze({ off: 0, subtle: 0.6, standard: 1, lively: 1.4 });
 const HEX = /^#[0-9a-fA-F]{6}$/;
 // A project-relative still: no scheme, no leading slash, no "..", an image extension.
@@ -477,7 +477,7 @@ function drawPlate(story, { kind, params }, { width: W, height: H, frame: F }) {
   else if (kind === 'video') video(ctx);
   else {
     // The atmosphere: a broad lift of the tint behind the subject, and a vignette.
-    const glowAt = { 'hex-shell': [0.62, 0.42], silk: [0.5, 0.45], strands: [0.55, 0.5], bokeh: [0.5, 0.55], starfield: [0.42, 0.4], smoke: [0.5, 0.5] }[kind];
+    const glowAt = { 'hex-shell': [0.62, 0.42], silk: [0.5, 0.45], strands: [0.55, 0.5], bokeh: [0.5, 0.55], starfield: [0.42, 0.4], smoke: [0.5, 0.5] }[kind] ?? [0.5, 0.5];
     const glow = lay(light, 0.06 + 0.1 * params.intensity);
     layers.push({ id: 'air', box: box(F.x, F.y, F.width, F.height), svg: null,
       style: { background: `radial-gradient(ellipse 75% 70% at ${glowAt[0] * 100}% ${glowAt[1] * 100}%, ${withA(light, glow)} 0%, ${withA(light, glow * 0.35)} 45%, ${withA(light, 0)} 80%)` }, axes: {} });
@@ -486,6 +486,7 @@ function drawPlate(story, { kind, params }, { width: W, height: H, frame: F }) {
     else if (kind === 'strands') strands(ctx);
     else if (kind === 'starfield') starfield(ctx);
     else if (kind === 'smoke') smoke(ctx);
+    else if (NEUTRAL_DRAW[kind]) NEUTRAL_DRAW[kind](ctx);
     else bokeh(ctx);
   }
 
@@ -716,6 +717,107 @@ function smoke({ u, add, lay, light, random, bright, blurAt, travel, period, are
   add('subject', margin, wisps(11, 0.36, blurAt(10), 's'), { x: wave(travel(40 * u), period(48), 1), y: wave(travel(18 * u), period(39), 0), rotation: wave(1.4, period(72), 1) });
   add('near', margin * 2, wisps(5, 0.18, blurAt(36), 'n'), { x: wave(travel(74 * u), period(41), 0), y: wave(travel(30 * u), period(34), 1) });
 }
+
+// Veil: tall, leaning curtains of soft light in the tint and the accent, each
+// fading out above and below; a broad far bank and a nearer one drift apart.
+function veil({ u, add, lay, light, colors, random, bright, blurAt, travel, period }) {
+  const margin = 160 * u;
+  const bank = (count, want, blur, seed) => {
+    const alpha = lay(light, want * bright);
+    const accent = lay(colors.accent, want * 0.8 * bright);
+    const folds = Array.from({ length: count }, (_, i) => [(i + 0.2 + random() * 0.6) / count, 0.05 + random() * 0.07, random() * 6.28, -0.3 + random() * 0.6, 0.25 + random() * 0.3, i % 3 === 1]);
+    return (bw, bh) => {
+      let defs = '', body = '';
+      const step = bh / 24;
+      folds.forEach(([x, w, p, lean, peak, isAccent], i) => {
+        const color = isAccent ? colors.accent : light;
+        const left = [], right = [];
+        for (let y = -step; y <= bh + step; y += step) {
+          const t = y / bh;
+          const cx = x * bw + (t - 0.5) * lean * bw * 0.4 + bw * 0.025 * Math.sin(t * 5 + p);
+          const half = w * bw * (0.65 + 0.35 * Math.sin(t * 3.4 + p * 1.7));
+          left.push([cx - half, y]);
+          right.push([cx + half, y]);
+        }
+        const id = `v${seed}${i}`;
+        defs += `<linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity="0"/><stop offset="${round(peak, 3)}" stop-color="${color}" stop-opacity="1"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient>`;
+        body += `<path d="M${left.map(([px, py]) => `${round(px, 1)} ${round(py, 1)}`).join('L')}L${right.reverse().map(([px, py]) => `${round(px, 1)} ${round(py, 1)}`).join('L')}Z" fill="url(#${id})" opacity="${round(isAccent ? Math.min(1, accent / Math.max(alpha, 1e-3)) : 1, 3)}"/>`;
+      });
+      return svgDoc(bw, bh, defs, body, blur, alpha);
+    };
+  };
+  add('far', margin, bank(4, 0.2, blurAt(64), 'f'), { x: wave(travel(24 * u), period(64), 0), y: wave(travel(10 * u), period(52), 1) });
+  add('subject', margin, bank(6, 0.3, blurAt(28), 's'), { x: wave(travel(52 * u), period(50), 1), y: wave(travel(16 * u), period(41), 0) });
+}
+
+// Facets: a jittered sheet of triangles, each a flat shade between bg and the
+// tint, out of focus; a larger, softer sheet far behind.
+function facets({ u, add, lay, light, colors, random, bright, blurAt, travel, period }) {
+  const margin = 130 * u;
+  const N = 24;
+  const sheet = (cell, want, blur) => {
+    const alpha = lay(light, want * bright);
+    const table = Array.from({ length: N * N }, () => [random() - 0.5, random() - 0.5, random(), random()]);
+    const at = (i, k) => table[(((i % N) + N) % N) * N + (((k % N) + N) % N)];
+    return (bw, bh) => {
+      const c = cell * u;
+      const point = (i, k) => { const [jx, jy] = at(i, k); return `${round((i + jx * 0.7) * c, 1)} ${round((k + jy * 0.7) * c, 1)}`; };
+      let body = '';
+      for (let k = -1; k <= Math.ceil(bh / c); k += 1) for (let i = -1; i <= Math.ceil(bw / c); i += 1) {
+        const [, , s1, s2] = at(i, k);
+        const shade = (s) => mix(colors.bg, light, 0.08 + 0.92 * s * s);
+        body += `<path d="M${point(i, k)}L${point(i + 1, k)}L${point(i, k + 1)}Z" fill="${shade(s1)}"/><path d="M${point(i + 1, k)}L${point(i + 1, k + 1)}L${point(i, k + 1)}Z" fill="${shade(s2)}"/>`;
+      }
+      return svgDoc(bw, bh, '', body, blur, alpha);
+    };
+  };
+  add('far', margin, sheet(520, 0.16, blurAt(40)), { x: wave(travel(18 * u), period(62), 0), y: wave(travel(10 * u), period(49), 1) });
+  add('subject', margin, sheet(250, 0.26, blurAt(8)), { x: wave(travel(40 * u), period(47), 1), y: wave(travel(20 * u), period(38), 0), rotation: wave(1.2, period(70), 1) });
+}
+
+// Halftone: a screen of dots whose size follows a slow, soft field, so the
+// screen swells and thins across the frame; a few huge soft dots near the lens.
+function halftone({ u, add, lay, light, random, bright, blurAt, travel, period }) {
+  const margin = 120 * u;
+  const screen = (pitch, want, blur) => {
+    const alpha = lay(light, want * bright);
+    const p1 = random() * 6.28, p2 = random() * 6.28;
+    return (bw, bh) => {
+      const step = pitch * u, rowStep = step * 0.866;
+      let body = '';
+      for (let row = 0; row * rowStep <= bh; row += 1) for (let col = 0; col * step <= bw + step; col += 1) {
+        const x = col * step + (row % 2 ? step / 2 : 0), y = row * rowStep;
+        const s = x / bw, t = y / bh;
+        const f = 0.5 + 0.5 * Math.sin(s * 3.1 + t * 2.3 + p1) * Math.cos(t * 2.7 - s * 1.3 + p2);
+        const r = step * 0.44 * f * f;
+        if (r >= 0.6 * u) body += `<circle cx="${round(x, 1)}" cy="${round(y, 1)}" r="${round(r, 1)}"/>`;
+      }
+      return svgDoc(bw, bh, '', `<g fill="${light}">${body}</g>`, blur, alpha);
+    };
+  };
+  add('subject', margin, screen(42, 0.3, blurAt(2.5)), { x: wave(travel(34 * u), period(48), 0), y: wave(travel(18 * u), period(39), 1), rotation: wave(1, period(72), 0) });
+  add('near', margin * 2, screen(260, 0.12, blurAt(34)), { x: wave(travel(70 * u), period(41), 1), y: wave(travel(30 * u), period(33), 0) });
+}
+
+// Grain: two soft pools of light (the tint, the accent) drifting under a
+// still sheet of fine film grain.
+function grain({ u, add, lay, light, colors, random, bright, travel, period, layers, over }) {
+  const alpha = lay(light, 0.24 * bright);
+  const accent = lay(colors.accent, 0.16 * bright);
+  const pools = [[0.22 + random() * 0.16, 0.26 + random() * 0.16, 0.56, 0.4, light, 1], [0.66 + random() * 0.14, 0.64 + random() * 0.14, 0.46, 0.34, colors.accent, Math.min(1, accent / Math.max(alpha, 1e-3))]];
+  add('glow', 180 * u, (bw, bh) => {
+    const S = Math.min(bw, bh);
+    return svgDoc(bw, bh, '', pools.map(([x, y, rx, ry, color, o]) => `<ellipse cx="${round(x * bw, 1)}" cy="${round(y * bh, 1)}" rx="${round(rx * S, 1)}" ry="${round(ry * S, 1)}" fill="${color}" opacity="${round(o, 3)}"/>`).join(''), 120 * u, alpha);
+  }, { x: wave(travel(60 * u), period(44), 0), y: wave(travel(34 * u), period(35), 1) });
+  // The grain is a mark (finer than a letter's stroke): clamped, but no tone.
+  const speck = lay(light, 0.2 * bright, { mark: true });
+  const [r, g, b] = [1, 3, 5].map((i) => round(parseInt(light.slice(i, i + 2), 16) / 255, 3));
+  const size = round(256 * u);
+  const tile = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><filter id="g" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="${round(0.85 / u, 3)}" numOctaves="2" seed="${Math.floor(random() * 1000)}" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 ${r} 0 0 0 0 ${g} 0 0 0 0 ${b} 2.4 0 0 0 -0.8"/></filter><rect width="100%" height="100%" filter="url(#g)"/></svg>`;
+  layers.push({ id: 'grain', box: over(0), svg: null, style: { backgroundImage: svgUrl(tile), backgroundSize: `${size}px ${size}px`, opacity: round(speck, 4) }, axes: {} });
+}
+
+const NEUTRAL_DRAW = { veil, facets, halftone, grain };
 
 // Wash: a bright, opaque gradient in the tint (light at the upper left, deeper
 // toward the lower right), two drifting soft highlights and a slow diagonal
