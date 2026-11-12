@@ -8,7 +8,7 @@
     "fonts": { "display": "plus-jakarta-sans", "body": "plus-jakarta-sans", "meta": "jetbrains-mono" }
   },
   "panel": { "treatment": "rim-glass", "radius": 22 },
-  "plate": { "kind": "strands", "params": { "focus": 0.6, "intensity": 0.55 } },
+  "plate": { "kind": "veil", "params": { "focus": 0.6, "intensity": 0.55 } },
   "ambient": "standard",
   "scenes": [
     {
