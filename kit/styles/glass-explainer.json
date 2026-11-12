@@ -80,7 +80,7 @@
     }
   },
   "plate": {
-    "kind": "hex-shell",
+    "kind": "silk",
     "cycle": true,
     "params": {
       "focus": 0.6,

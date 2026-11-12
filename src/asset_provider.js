@@ -56,7 +56,7 @@ import { copyFile, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { moduleTiming } from "@launchclip/core/modules.mjs";
-import { DARK_PLATE_KINDS } from "@launchclip/core/plates.mjs";
+import { DARK_PLATE_KINDS, RETIRED_PLATE_KINDS } from "@launchclip/core/plates.mjs";
 import { resolveStory } from "@launchclip/core/story.mjs";
 import { bestWindow, normalizeNotes } from "./inventory_notes.js";
 import { recordProvided } from "./provided_files.js";
@@ -258,7 +258,8 @@ export function backdropRequests(storyboard) {
 // {kind: "bokeh"} and the like): with footage backdrops on, a card trades it
 // for footage. A wash (a deliberate bright beat), "none", an image or a
 // video the plan named stay.
-const isStockPlate = (value) => Boolean(value) && typeof value === "object" && DARK_PLATE_KINDS.includes(value.kind);
+// A drawn plate (a retired kind counts as the neutral kind drawn for it).
+const isStockPlate = (value) => Boolean(value) && typeof value === "object" && (DARK_PLATE_KINDS.includes(value.kind) || Object.hasOwn(RETIRED_PLATE_KINDS, value.kind));
 
 function isCardScene(story, scene) {
   if ((scene?.track ?? 0) !== 0 || SHOT_MODULES.includes(scene?.module) || scene?.module === "world") return false;

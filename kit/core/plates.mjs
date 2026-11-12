@@ -15,12 +15,28 @@
 // parallax.
 //
 // Kinds:
-//   hex-shell  a sphere of hexagonal cells, lit from the upper left
-//   silk       folded ribbons of silk flowing across the frame
-//   strands    molecular double-helix strands of glossy beads
-//   bokeh      a starfield: pinpoints far, soft discs near
-//   starfield  deep space: fine dots at three depths and a few bright stars
-//   smoke      grey, low-saturation wisps (smoky silk)
+//   silk        folded ribbons of silk flowing across the frame
+//   smoke       grey, low-saturation wisps (smoky silk)
+//   bokeh       out-of-focus points of light: pinpoints far, soft discs near
+//   veil        tall, leaning curtains of soft light in the tint and the accent
+//   facets      an out-of-focus sheet of flat-shaded triangles
+//   halftone    a dot screen that swells and thins across the frame
+//   grain       two pools of light under still film grain
+//   blooms      large blurred pools of the tint and the accent
+//   light-leak  light spilling in from one side, with one long streak
+//   spotlight   one soft pool of light with a long falloff
+//   studio      a seamless studio sweep: a low band of light, a falling floor
+//   beams       broad shafts of light from above
+//   prism       diagonal streaks grading from the tint to the accent
+//   bands       broad, soft diagonal bands
+//   panes       large frosted rounded rectangles, overlapping
+//   arcs        thin segments of very large circles
+//   ripples     concentric rings from a point off-centre
+//   flow-lines  stacked fine lines that wander together
+//   pinstripe   fine diagonal lines under a slow sheen
+//   dot-field   a regular grid of fine dots at two depths
+//   linen       a still weave of fine threads over a soft glow
+//   brush       broad dry-brush strokes
 //   wash       a bright full-frame gradient in the tint, for punctuation shots
 //   image      a local still (params.src), full-bleed, blurred, dimmed, drifting
 //   video      a local clip (params.src from params.start s), full-bleed, under
@@ -45,12 +61,16 @@
 //   scenes[i].backdrop  a plate, or "none" for the story's background
 //   scenes[i].plate     the same (the older name)
 //   chapters[j].plate   the chapter the scene starts in
-//   story.plate.cycle   true: chapter j takes CYCLE_KINDS[(k + j) % 4], k the story kind's index;
+//   story.plate.cycle   true: chapter j takes CYCLE_KINDS[(k + j) % 4], k the story kind's index (0 when it is not one of them);
 //                       {every: n, plates?}: every n shots (track-0 scenes) the next of
 //                       `plates` (default ROTATION_KINDS), from the story's own plate
 //   story.plate         {kind, params?, cycle?} or a kind name
 // make's Motion videos rotate fallbackPlates when the plan chose none: neutral,
-// brand-lit plates and the project's footage, motif kinds only on a motif brief.
+// brand-lit plates and the project's footage.
+// No kind depicts a thing: a backdrop that shows a subject (a molecule, a
+// globe, deep space) changes what the video seems to be about. The kinds that
+// did are retired (RETIRED_PLATE_KINDS): a story that names one still builds,
+// on the neutral kind listed for it, and validation warns.
 // A plate replaces story.background on the scenes it covers. Absent
 // everywhere, nothing changes. In world mode the same per-scene plates are
 // the camera's backdrops (kit/core/world-backdrops.mjs).
@@ -71,11 +91,38 @@ import { AMBIENT_PRESETS, ambientSeed, fieldLevel, hashString, seededRandom } fr
 import { LOGO_SRC, safeAlpha, svgUrl } from './backgrounds.mjs';
 import { contrast, mix } from './panels.mjs';
 
-export const PLATE_KINDS = Object.freeze(['hex-shell', 'silk', 'strands', 'bokeh', 'starfield', 'smoke', 'veil', 'facets', 'halftone', 'grain', 'wash', 'image', 'video']);
+export const PLATE_KINDS = Object.freeze(['silk', 'smoke', 'bokeh', 'veil', 'facets', 'halftone', 'grain', 'blooms', 'light-leak', 'spotlight', 'studio', 'beams', 'prism', 'bands', 'panes', 'arcs', 'ripples', 'flow-lines', 'pinstripe', 'dot-field', 'linen', 'brush', 'wash', 'image', 'video']);
 // The kinds whose every tone keeps paper text at 4.5:1 (see the header).
-export const DARK_PLATE_KINDS = Object.freeze(['hex-shell', 'silk', 'strands', 'bokeh', 'starfield', 'smoke', 'veil', 'facets', 'halftone', 'grain']);
-// cycle: true walks the four original kinds, so the stories that use it keep their plates.
-export const CYCLE_KINDS = Object.freeze(['hex-shell', 'silk', 'strands', 'bokeh']);
+export const DARK_PLATE_KINDS = Object.freeze(['silk', 'smoke', 'bokeh', 'veil', 'facets', 'halftone', 'grain', 'blooms', 'light-leak', 'spotlight', 'studio', 'beams', 'prism', 'bands', 'panes', 'arcs', 'ripples', 'flow-lines', 'pinstripe', 'dot-field', 'linen', 'brush']);
+// cycle: true walks these four.
+export const CYCLE_KINDS = Object.freeze(['silk', 'veil', 'smoke', 'bokeh']);
+// One line on each dark kind's look, for whoever picks one (the planning prompt, docs).
+export const PLATE_NOTES = Object.freeze({
+  silk: 'folded ribbons of silk',
+  smoke: 'grey wisps',
+  bokeh: 'out-of-focus points of light',
+  veil: 'tall curtains of soft light',
+  facets: 'soft flat-shaded triangles',
+  halftone: 'a dot screen that swells and thins',
+  grain: 'pools of light under film grain',
+  blooms: 'large blurred pools of colour',
+  'light-leak': 'light spilling in from one side',
+  spotlight: 'one soft pool of light',
+  studio: 'a seamless studio sweep',
+  beams: 'broad shafts of light from above',
+  prism: 'diagonal streaks grading from the primary to the accent',
+  bands: 'broad soft diagonal bands',
+  panes: 'overlapping frosted panes',
+  arcs: 'thin segments of very large circles',
+  ripples: 'soft concentric rings',
+  'flow-lines': 'stacked fine wavy lines',
+  pinstripe: 'fine diagonal lines under a slow sheen',
+  'dot-field': 'a regular grid of fine dots',
+  linen: 'a fine weave under a soft glow',
+  brush: 'broad dry-brush strokes'
+});
+// Kinds that depicted a subject, and the neutral kind drawn for a story that still names one.
+export const RETIRED_PLATE_KINDS = Object.freeze({ 'hex-shell': 'smoke', strands: 'silk', starfield: 'bokeh' });
 // cycle: {every} without its own plates walks every dark kind.
 export const ROTATION_KINDS = DARK_PLATE_KINDS;
 export const CYCLE_MAX_PLATES = 12;
@@ -106,10 +153,9 @@ export const PLATE_KIND_PARAMS = Object.freeze({
   image: Object.freeze({ src: Object.freeze({ path: 'image' }), blur: range(0, 80, 24), dim: range(0, 1, 0.55) }),
   video: Object.freeze({ src: Object.freeze({ path: 'video' }), start: range(0, 86400, 0), treatment: Object.freeze({ values: Object.keys(VIDEO_TREATMENTS), default: 'dim' }), blur: range(0, 80, null), dim: range(0, 1, null), peak: range(0, 1, 1) })
 });
-// Each kind's own tint when params.tint is absent: silk, hex, starfield,
-// smoke and image read as silver (paper), strands, bokeh and a wash as light
-// in the brand's primary.
-export const PLATE_DEFAULT_TINT = Object.freeze({ 'hex-shell': 'neutral', silk: 'neutral', strands: 'primary', bokeh: 'primary', starfield: 'neutral', smoke: 'neutral', veil: 'primary', facets: 'neutral', halftone: 'primary', grain: 'primary', wash: 'primary', image: 'neutral', video: 'primary' });
+// Each kind's own tint when params.tint is absent: neutral reads as silver
+// (paper), the others as light in the brand's primary.
+export const PLATE_DEFAULT_TINT = Object.freeze({ silk: 'neutral', bokeh: 'primary', smoke: 'neutral', veil: 'primary', facets: 'neutral', halftone: 'primary', grain: 'primary', blooms: 'primary', 'light-leak': 'accent', spotlight: 'neutral', studio: 'neutral', beams: 'neutral', prism: 'primary', bands: 'primary', panes: 'neutral', arcs: 'primary', ripples: 'primary', 'flow-lines': 'primary', pinstripe: 'neutral', 'dot-field': 'neutral', linen: 'neutral', brush: 'primary', wash: 'primary', image: 'neutral', video: 'primary' });
 const LEVEL_SPEED = Object.freeze({ off: 0, subtle: 0.6, standard: 1, lively: 1.4 });
 const HEX = /^#[0-9a-fA-F]{6}$/;
 // A project-relative still: no scheme, no leading slash, no "..", an image extension.
@@ -119,6 +165,9 @@ const VIDEO_SRC = /^(?![a-zA-Z][a-zA-Z0-9+.-]*:)(?!\/)[^\s"'<>\\]+\.(mp4|webm|mo
 const FILE_PLATE = Object.freeze({ image: 'a still under the project, e.g. assets/backdrop.jpg', video: 'a clip under the project, e.g. assets/broll.mp4' });
 
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const retired = (kind) => (typeof kind === 'string' && Object.hasOwn(RETIRED_PLATE_KINDS, kind) ? RETIRED_PLATE_KINDS[kind] : null);
+// A plate value with a retired kind swapped for its neutral one.
+const current = (value) => (retired(value) ?? (isObject(value) && retired(value.kind) ? { ...value, kind: retired(value.kind) } : value));
 const round = (value, digits = 2) => { const f = 10 ** digits; return Math.round(value * f) / f + 0; };
 
 // ---------------------------------------------------------------------------
@@ -135,7 +184,8 @@ export function plateVideoSrc(value) {
 }
 
 /** Validation messages for one plate value: a kind name, {kind, params?, cycle?}, or "none" where allowNone. */
-export function plateErrors(value, path = 'plate', { allowNone = false, allowCycle = false } = {}) {
+export function plateErrors(plate, path = 'plate', { allowNone = false, allowCycle = false } = {}) {
+  const value = current(plate);
   if (value === undefined || value === null) return [];
   if (typeof value === 'string') {
     if (allowNone && value === 'none') return [];
@@ -192,8 +242,9 @@ export function storyPlateErrors(story) {
 }
 
 /** A plate value with every param filled → {kind, params}, "none", or null when absent or invalid. */
-export function resolvePlate(value) {
-  if (value === 'none') return 'none';
+export function resolvePlate(plate) {
+  if (plate === 'none') return 'none';
+  const value = current(plate);
   const spec = typeof value === 'string' ? { kind: value } : value;
   if (!isObject(spec) || !PLATE_KINDS.includes(spec.kind) || plateErrors(spec, 'plate', { allowCycle: true }).length) return null;
   const params = {};
@@ -251,7 +302,7 @@ export function scenePlateSpec(story, scene) {
   const storyPlate = resolvePlate(story?.plate);
   if (!storyPlate || storyPlate === 'none') return null;
   const cycle = story.plate?.cycle;
-  if (cycle === true && j > 0) return rotated(storyPlate, story, CYCLE_KINDS[(CYCLE_KINDS.indexOf(storyPlate.kind) + j) % CYCLE_KINDS.length] ?? storyPlate.kind);
+  if (cycle === true && j > 0) return rotated(storyPlate, story, CYCLE_KINDS[(Math.max(0, CYCLE_KINDS.indexOf(storyPlate.kind)) + j) % CYCLE_KINDS.length]);
   if (isObject(cycle) && Number.isInteger(cycle.every) && cycle.every >= 1) {
     const step = Math.floor(Math.max(0, shotIndex(story, scene)) / cycle.every);
     if (step === 0) return storyPlate;
@@ -268,49 +319,27 @@ export function scenePlateSpec(story, scene) {
 
 // ---------------------------------------------------------------------------
 // Fallback plates: what a generated video (make) puts behind its full-screen
-// cards when nothing else chose a plate. hex-shell, strands, bokeh and
-// starfield read as a motif (tech, science, space), so they only come up when
-// the brief is about one (plateMotif); everything else gets neutral plates lit
-// in the brand's own colours, and the project's own footage, blurred and
-// dimmed, when it has some. All of them are dark over bg (no wash), so the
-// brand frame and logo keep the backdrop they are drawn against.
+// cards when nothing else chose a plate: neutral plates lit in the brand's own
+// colours, and the project's own footage, blurred and dimmed, when it has
+// some. All of them are dark over bg (no wash), so the brand frame and logo
+// keep the backdrop they are drawn against.
 
-// The kinds that carry a subject of their own; kept for an explicit choice or a motif.
-export const MOTIF_PLATE_KINDS = Object.freeze(['hex-shell', 'strands', 'bokeh', 'starfield']);
 const plate = (kind, tint, extra = {}) => Object.freeze({ kind, params: Object.freeze({ tint, ...extra }) });
 // Neutral plates for any brand, in rotation order: no two neighbours share a kind.
 export const NEUTRAL_PLATES = Object.freeze([
   plate('silk', 'primary'),
   plate('smoke', 'neutral'),
-  plate('silk', 'accent'),
-  plate('smoke', 'primary')
+  plate('veil', 'accent'),
+  plate('blooms', 'primary'),
+  plate('facets', 'neutral'),
+  plate('light-leak', 'accent'),
+  plate('flow-lines', 'primary'),
+  plate('grain', 'neutral')
 ]);
-// A brief about one of these takes its plates instead (whole words only, so
-// "technical", "solar cells" or "stargazing" at a campsite do not count).
-export const PLATE_MOTIFS = Object.freeze({
-  tech: Object.freeze({
-    pattern: /\b(ai|a\.i\.|artificial intelligence|machine learning|llms?|software|saas|cloud computing|cyber ?security|crypto(currency)?|blockchain|semiconductors?|data cent(er|re)s?|robotics|start-?ups?|developers?|programming|tech (news|startups?|compan(y|ies)|industry))\b/i,
-    plates: Object.freeze([plate('hex-shell', 'neutral'), plate('silk', 'primary'), plate('hex-shell', 'accent'), plate('bokeh', 'primary')])
-  }),
-  science: Object.freeze({
-    pattern: /\b(dna|genetics?|genom(e|es|ics)|biotech(nology)?|molecul(e|es|ar)|biochemistry|laborator(y|ies)|pharma(ceuticals?)?|clinical trials?)\b/i,
-    plates: Object.freeze([plate('strands', 'primary'), plate('silk', 'neutral'), plate('strands', 'accent'), plate('smoke', 'primary')])
-  }),
-  space: Object.freeze({
-    pattern: /\b(outer space|space ?(x|flight|station|travel)|astronom(y|er|ers)|astrophysics|galax(y|ies)|nasa|rocket launch(es)?|cosmos)\b/i,
-    plates: Object.freeze([plate('starfield', 'neutral'), plate('bokeh', 'primary'), plate('starfield', 'accent'), plate('smoke', 'neutral')])
-  })
-});
 // Footage behind a card: blurred well out of focus, under the treatment's dim
 // (raised to the contrast floor; see videoPlateFloor).
 const FOOTAGE_PLATES = 4;
 const FOOTAGE_IMAGE = Object.freeze({ blur: 32, dim: 0.62 });
-
-/** The motif a brief is about (a PLATE_MOTIFS key), or null for most briefs. */
-export function plateMotif(text) {
-  const said = String(text ?? '');
-  return Object.keys(PLATE_MOTIFS).find((name) => PLATE_MOTIFS[name].pattern.test(said)) ?? null;
-}
 
 // The project's own footage on a story's shots → up to FOOTAGE_PLATES plates
 // (video: blur treatment from where the shot plays; image: blurred and dimmed).
@@ -333,13 +362,11 @@ function footagePlates(story) {
 
 /**
  * The plates a story with none of its own rotates through → [{kind, params}]:
- * the brief's motif plates (plateMotif), else NEUTRAL_PLATES, with the
- * project's own footage between them when its shots have some. Neighbours
- * never repeat a plate.
+ * NEUTRAL_PLATES, with the project's own footage between them when its shots
+ * have some. Neighbours never repeat a plate.
  */
-export function fallbackPlates(story, text = '') {
-  const motif = plateMotif(text);
-  const drawn = (motif ? PLATE_MOTIFS[motif].plates : NEUTRAL_PLATES).map((entry) => ({ kind: entry.kind, params: { ...entry.params } }));
+export function fallbackPlates(story) {
+  const drawn = NEUTRAL_PLATES.map((entry) => ({ kind: entry.kind, params: { ...entry.params } }));
   const footage = footagePlates(story);
   if (!footage.length) return drawn;
   const out = [];
@@ -477,17 +504,11 @@ function drawPlate(story, { kind, params }, { width: W, height: H, frame: F }) {
   else if (kind === 'video') video(ctx);
   else {
     // The atmosphere: a broad lift of the tint behind the subject, and a vignette.
-    const glowAt = { 'hex-shell': [0.62, 0.42], silk: [0.5, 0.45], strands: [0.55, 0.5], bokeh: [0.5, 0.55], starfield: [0.42, 0.4], smoke: [0.5, 0.5] }[kind] ?? [0.5, 0.5];
+    const glowAt = GLOW_AT[kind] ?? [0.5, 0.5];
     const glow = lay(light, 0.06 + 0.1 * params.intensity);
     layers.push({ id: 'air', box: box(F.x, F.y, F.width, F.height), svg: null,
       style: { background: `radial-gradient(ellipse 75% 70% at ${glowAt[0] * 100}% ${glowAt[1] * 100}%, ${withA(light, glow)} 0%, ${withA(light, glow * 0.35)} 45%, ${withA(light, 0)} 80%)` }, axes: {} });
-    if (kind === 'hex-shell') hexShell(ctx);
-    else if (kind === 'silk') silk(ctx);
-    else if (kind === 'strands') strands(ctx);
-    else if (kind === 'starfield') starfield(ctx);
-    else if (kind === 'smoke') smoke(ctx);
-    else if (NEUTRAL_DRAW[kind]) NEUTRAL_DRAW[kind](ctx);
-    else bokeh(ctx);
+    DRAW[kind](ctx);
   }
 
   // Vignette: the edges sink toward black, which only deepens a dark plate
@@ -497,60 +518,6 @@ function drawPlate(story, { kind, params }, { width: W, height: H, frame: F }) {
 }
 
 const withA = (hex, alpha) => `${hex}${Math.max(0, Math.min(255, Math.round(alpha * 255))).toString(16).padStart(2, '0')}`;
-
-// A sphere of hex cells (orthographic): a flat hex grid wrapped onto the
-// sphere by d → R·sin(d/R), so cells crowd toward the limb; each cell shaded
-// by its normal against a light from the upper left, with a bright lip.
-function hexShell({ W, H, u, add, lay, light, colors, random, bright, blurAt, travel, period }) {
-  const S = Math.min(W, H);
-  const R = S * 0.62;
-  const margin = 90 * u;
-  const alpha = lay(light, 0.42 * bright);
-  const L = normalize([-0.55, -0.6, 0.6]);
-  const subject = (bw, bh) => {
-    const cx = bw * 0.64, cy = bh * 0.46;
-    const cell = S * 0.082;
-    const w = Math.sqrt(3) * cell;
-    let body = '';
-    const reach = (R * Math.PI) / 2;
-    for (let row = -Math.ceil(reach / (cell * 1.5)); row <= Math.ceil(reach / (cell * 1.5)); row += 1) {
-      for (let col = -Math.ceil(reach / w) - 1; col <= Math.ceil(reach / w) + 1; col += 1) {
-        const hx = col * w + (row % 2 ? w / 2 : 0), hy = row * cell * 1.5;
-        const d = Math.hypot(hx, hy);
-        if (d > reach * 0.985) continue;
-        const wrap = (x, y) => { const r = Math.hypot(x, y); const k = r > 1e-6 ? (R * Math.sin(Math.min(r, reach) / R)) / r : 1; return [cx + x * k, cy + y * k]; };
-        const [px, py] = wrap(hx, hy);
-        const nx = (px - cx) / R, ny = (py - cy) / R, nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
-        const lit = Math.max(0, nx * L[0] + ny * L[1] + nz * L[2]);
-        const rim = Math.pow(1 - nz, 3);
-        const k = 0.12 + 0.6 * lit + 0.5 * rim;
-        const pts = [];
-        for (let i = 0; i < 6; i += 1) {
-          const a = Math.PI / 6 + (i * Math.PI) / 3;
-          pts.push(wrap(hx + Math.cos(a) * cell * 0.84, hy + Math.sin(a) * cell * 0.84));
-        }
-        const d2 = `M${pts.map(([x, y]) => `${round(x, 1)} ${round(y, 1)}`).join('L')}Z`;
-        body += `<path d="${d2}" fill="${mix(colors.bg, light, Math.min(1, k * 0.42))}" stroke="${mix(colors.bg, light, Math.min(1, k * 1.1 + 0.2))}" stroke-width="${round(4.5 * u, 2)}" stroke-linejoin="round"/>`;
-      }
-    }
-    // The shell's dark core so the cells read as a surface, not a decal.
-    const defs = `<radialGradient id="core" cx="0.42" cy="0.38" r="0.7"><stop offset="0" stop-color="${mix(colors.bg, light, 0.22)}"/><stop offset="1" stop-color="${colors.bg}"/></radialGradient>`;
-    return svgDoc(bw, bh, defs, `<circle cx="${round(cx)}" cy="${round(cy)}" r="${round(R)}" fill="url(#core)"/>${body}`, blurAt(7), alpha);
-  };
-  add('subject', margin, subject, { x: wave(travel(26 * u), period(48), 0), y: wave(travel(18 * u), period(37), 1.3), rotation: wave(2.4, period(64), 0.4) });
-  // Near: two out-of-focus cell fragments sliding past the lens.
-  const nearAlpha = lay(light, 0.16 * bright);
-  const near = (bw, bh) => {
-    let body = '';
-    for (let i = 0; i < 2; i += 1) {
-      const x = bw * (i ? 0.1 : 0.92), y = bh * (i ? 0.85 : 0.12 + random() * 0.1), r = S * (0.16 + random() * 0.06);
-      const pts = Array.from({ length: 6 }, (_, k) => { const a = Math.PI / 6 + (k * Math.PI) / 3; return `${round(x + Math.cos(a) * r, 1)} ${round(y + Math.sin(a) * r, 1)}`; });
-      body += `<path d="M${pts.join('L')}Z" fill="none" stroke="${light}" stroke-width="${round(10 * u, 2)}"/>`;
-    }
-    return svgDoc(bw, bh, '', body, blurAt(38), nearAlpha);
-  };
-  add('near', margin * 2, near, { x: wave(travel(60 * u), period(41), 2.1), y: wave(travel(34 * u), period(33), 0.7) });
-}
 
 // Silk: ribbons between two wandering curves, shaded across their width
 // (dark, a lit fold, dark), laid diagonally; a far, softer bank behind.
@@ -586,42 +553,8 @@ function silk({ u, add, lay, light, colors, random, bright, blurAt, travel, peri
   add('subject', margin, bank(9, 0.85, blurAt(12), 0.3, 's'), { x: wave(travel(42 * u), period(46), 1.1), y: wave(travel(20 * u), period(38), 0), rotation: wave(1.6, period(70), 2) });
 }
 
-// Strands: double helices of beads (radial-lit spheres) joined by rungs; one
-// strand in focus across the middle, a big soft one near the lens, a faint
-// one far behind.
-function strands({ u, add, lay, light, colors, random, bright, blurAt, travel, period }) {
-  const margin = 120 * u;
-  const helix = (want, scale, blur, y0, tilt, seed) => {
-    // The bead's specular point is the brightest colour laid.
-    const alpha = lay(mix(light, '#ffffff', 0.35), want * bright);
-    const phase = random() * 6.28;
-    return (bw, bh) => {
-      const defs = `<radialGradient id="bead${seed}" cx="0.35" cy="0.32" r="0.7"><stop offset="0" stop-color="${mix(light, '#ffffff', 0.35)}"/><stop offset="0.35" stop-color="${light}"/><stop offset="1" stop-color="${mix(colors.bg, light, 0.15)}"/></radialGradient>`;
-      const S = Math.min(bw, bh) * scale;
-      const n = 30, amp = S * 0.15, bead = S * 0.026;
-      let rungs = '', beads = '';
-      for (let i = 0; i < n; i += 1) {
-        const s = i / (n - 1);
-        const x = -bw * 0.05 + s * bw * 1.1;
-        const cy = bh * y0 + (s - 0.5) * bh * tilt;
-        const a = s * Math.PI * 4 + phase;
-        const ends = [0, Math.PI].map((off) => ({ y: cy + Math.sin(a + off) * amp, z: Math.cos(a + off) }));
-        rungs += `<line x1="${round(x, 1)}" y1="${round(ends[0].y, 1)}" x2="${round(x, 1)}" y2="${round(ends[1].y, 1)}" stroke="${mix(colors.bg, light, 0.45)}" stroke-width="${round(bead * 0.35, 2)}"/>`;
-        for (const end of ends) {
-          const r = bead * (0.7 + 0.45 * (end.z + 1) / 2);
-          beads += `<circle cx="${round(x, 1)}" cy="${round(end.y, 1)}" r="${round(r, 1)}" fill="url(#bead${seed})" opacity="${round(0.45 + 0.55 * (end.z + 1) / 2, 3)}"/>`;
-        }
-      }
-      return svgDoc(bw, bh, defs, rungs + beads, blur, alpha);
-    };
-  };
-  add('far', margin, helix(0.16, 0.7, blurAt(26), 0.28, 0.3, 'f'), { x: wave(travel(16 * u), period(60), 0.5), y: wave(travel(10 * u), period(47), 2.2) });
-  add('subject', margin, helix(0.36, 1.1, blurAt(9), 0.56, -0.25, 's'), { x: wave(travel(36 * u), period(44), 1.2), y: wave(travel(16 * u), period(35), 0.2), rotation: wave(1.2, period(66), 0.9) });
-  add('near', margin * 2, helix(0.14, 2.2, blurAt(40), 0.9, 0.4, 'n'), { x: wave(travel(80 * u), period(39), 2.6), y: wave(travel(30 * u), period(31), 1) });
-}
-
-// Bokeh: a starfield of pinpoints, mid discs and big soft near discs with a
-// brighter edge (a lens's out-of-focus highlight).
+// Bokeh: pinpoints, mid discs and big soft near discs with a brighter edge
+// (a lens's out-of-focus highlight), spread evenly over the frame.
 function bokeh({ u, add, lay, light, random, bright, blurAt, travel, period, area }) {
   const margin = 110 * u;
   const field = (count, rMin, rMax, want, blur, ringed, seed) => {
@@ -629,10 +562,8 @@ function bokeh({ u, add, lay, light, random, bright, blurAt, travel, period, are
     const dots = Array.from({ length: Math.round(count * area) }, () => [random(), random(), rMin + random() * (rMax - rMin), 0.35 + random() * 0.65]);
     return (bw, bh) => {
       const defs = ringed ? `<radialGradient id="d${seed}"><stop offset="0" stop-color="${light}" stop-opacity="0.45"/><stop offset="0.78" stop-color="${light}" stop-opacity="0.7"/><stop offset="0.92" stop-color="${mix(light, '#ffffff', 0.3)}" stop-opacity="1"/><stop offset="1" stop-color="${light}" stop-opacity="0"/></radialGradient>` : '';
-      // Denser toward a diagonal band, like a galaxy's lane.
       const body = dots.map(([x, y, r, o]) => {
-        const lane = 0.5 + (x - 0.5) * 0.5;
-        const py = (lane + (y - 0.5) * 0.7) * bh;
+        const py = y * bh;
         return `<circle cx="${round(x * bw, 1)}" cy="${round(py, 1)}" r="${round(r * u, 2)}" fill="${ringed ? `url(#d${seed})` : light}" opacity="${round(o, 3)}"/>`;
       }).join('');
       return svgDoc(bw, bh, defs, body, blur, alpha);
@@ -641,40 +572,6 @@ function bokeh({ u, add, lay, light, random, bright, blurAt, travel, period, are
   add('far', margin, field(320, 1.2, 3.4, 0.7, blurAt(1.2), false, 'f'), { x: wave(travel(10 * u), period(62), 0), y: wave(travel(8 * u), period(51), 1.4) });
   add('subject', margin, field(54, 10, 28, 0.45, blurAt(6), true, 's'), { x: wave(travel(30 * u), period(47), 0.8), y: wave(travel(16 * u), period(39), 2.3) });
   add('near', margin * 2, field(10, 70, 160, 0.26, blurAt(20), true, 'n'), { x: wave(travel(70 * u), period(40), 2.2), y: wave(travel(34 * u), period(33), 0.4) });
-}
-
-// Starfield: deep space. Far dust and mid stars are crisp pinpoints (marks),
-// a faint nebula of the tint and the accent sits far behind, and a few bright
-// stars carry a soft halo and a thin cross flare. Every depth drifts slowly,
-// the bright stars most.
-function starfield({ u, add, lay, light, colors, random, bright, blurAt, travel, period, area }) {
-  const margin = 120 * u;
-  const nebulaAlpha = lay(light, 0.14 * bright);
-  const accentAlpha = lay(colors.accent, 0.1 * bright);
-  const clouds = Array.from({ length: Math.max(2, Math.round(3 * area)) }, (_, i) => [random(), random(), 0.3 + random() * 0.25, 0.12 + random() * 0.12, i % 2]);
-  add('nebula', margin, (bw, bh) => {
-    const S = Math.min(bw, bh);
-    const body = clouds.map(([x, y, rx, ry, k]) => `<ellipse cx="${round(x * bw, 1)}" cy="${round(y * bh, 1)}" rx="${round(rx * S * 1.6, 1)}" ry="${round(ry * S * 1.6, 1)}" fill="${k ? colors.accent : light}" opacity="${round(k ? accentAlpha / nebulaAlpha : 1, 3)}" transform="rotate(${round(-24 + 48 * x, 1)} ${round(x * bw, 1)} ${round(y * bh, 1)})"/>`).join('');
-    return svgDoc(bw, bh, '', body, blurAt(70), nebulaAlpha);
-  }, { x: wave(travel(10 * u), period(80), 0), y: wave(travel(6 * u), period(64), 1) });
-  const dots = (count, rMin, rMax, want) => {
-    const alpha = lay(light, want * bright, { mark: true });
-    const list = Array.from({ length: Math.round(count * area) }, () => [random(), random(), rMin + random() * (rMax - rMin), 0.3 + random() * 0.7]);
-    return (bw, bh) => svgDoc(bw, bh, '', list.map(([x, y, r, o]) => `<circle cx="${round(x * bw, 1)}" cy="${round(y * bh, 1)}" r="${round(r * u, 2)}" fill="${light}" opacity="${round(o, 3)}"/>`).join(''), 0, alpha);
-  };
-  add('far', margin, dots(760, 0.6, 1.4, 0.75), { x: wave(travel(8 * u), period(76), 0), y: wave(travel(5 * u), period(58), 1) });
-  add('mid', margin, dots(200, 1.2, 2.4, 0.9), { x: wave(travel(20 * u), period(62), 1), y: wave(travel(12 * u), period(49), 0) });
-  // Bright stars: the halo is a surface (a tone); the core and flare are marks.
-  const haloAlpha = lay(light, 0.32 * bright);
-  const stars = Array.from({ length: Math.max(4, Math.round(7 * area)) }, () => [0.06 + random() * 0.88, 0.08 + random() * 0.84, 0.7 + random() * 0.6]);
-  add('bright', margin * 1.5, (bw, bh) => {
-    const defs = `<radialGradient id="h"><stop offset="0" stop-color="${mix(light, '#ffffff', 0.5)}" stop-opacity="1"/><stop offset="0.25" stop-color="${light}" stop-opacity="0.45"/><stop offset="1" stop-color="${light}" stop-opacity="0"/></radialGradient>`;
-    const body = stars.map(([x, y, k]) => {
-      const cx = round(x * bw, 1), cy = round(y * bh, 1), halo = round(30 * u * k, 1), flare = round(46 * u * k, 1), core = round(2.6 * u * k, 2);
-      return `<circle cx="${cx}" cy="${cy}" r="${halo}" fill="url(#h)"/><path d="M${round(cx - flare, 1)} ${cy}H${round(cx + flare, 1)}M${cx} ${round(cy - flare, 1)}V${round(cy + flare, 1)}" stroke="${light}" stroke-width="${round(1.1 * u, 2)}" stroke-opacity="0.55" stroke-linecap="round"/><circle cx="${cx}" cy="${cy}" r="${core}" fill="#ffffff"/>`;
-    }).join('');
-    return svgDoc(bw, bh, defs, body, 0, haloAlpha);
-  }, { x: wave(travel(34 * u), period(54), 0), y: wave(travel(18 * u), period(43), 1) });
 }
 
 // Smoke: grey, low-saturation wisps. The tint is pulled most of the way to a
@@ -817,7 +714,302 @@ function grain({ u, add, lay, light, colors, random, bright, travel, period, lay
   layers.push({ id: 'grain', box: over(0), svg: null, style: { backgroundImage: svgUrl(tile), backgroundSize: `${size}px ${size}px`, opacity: round(speck, 4) }, axes: {} });
 }
 
-const NEUTRAL_DRAW = { veil, facets, halftone, grain };
+// Where each kind's atmosphere glows (fractions of the frame; the centre otherwise).
+const GLOW_AT = { silk: [0.5, 0.45], bokeh: [0.5, 0.55] };
+const DRAW = { silk, smoke, bokeh, veil, facets, halftone, grain, blooms, 'light-leak': lightLeak, spotlight, studio, beams, prism, bands, panes, arcs, ripples, 'flow-lines': flowLines, pinstripe, 'dot-field': dotField, linen, brush };
+
+// ---------------------------------------------------------------------------
+// More neutral kinds. Shared pieces first.
+
+const pt = (x, y) => `${round(x, 1)} ${round(y, 1)}`;
+const oval = (cx, cy, rx, ry, fill, opacity = 1, extra = '') => `<ellipse cx="${round(cx, 1)}" cy="${round(cy, 1)}" rx="${round(rx, 1)}" ry="${round(ry, 1)}" fill="${fill}"${opacity < 1 ? ` opacity="${round(opacity, 3)}"` : ''}${extra}/>`;
+// A second colour's clamped alpha as an opacity inside a group drawn at the first's.
+const ratio = (alpha, group) => Math.min(1, alpha / Math.max(group, 1e-3));
+// The usual slow drift: d px of travel across, half that down, out of step.
+const drift = ({ u, travel, period }, d, p, flip = 0) => ({ x: wave(travel(d * u), period(p), flip), y: wave(travel(d * 0.5 * u), period(p * 0.8), 1 - flip) });
+// A slow swell in size (still when the plate is).
+const breathe = ({ period }, p, amp = 0.03) => (period(p) < Infinity ? { kind: 'wave', center: 1 + amp, amp, period: round(period(p), 4), phase: 0 } : undefined);
+
+// Blooms: large blurred pools of the tint and the accent at three depths,
+// each wandering on its own path.
+function blooms(ctx) {
+  const { u, add, lay, light, colors, random, bright } = ctx;
+  const pool = (id, color, want, count, d, p) => {
+    const alpha = lay(color, want * bright);
+    const spots = Array.from({ length: count }, () => [0.1 + random() * 0.8, 0.1 + random() * 0.8, 0.3 + random() * 0.2, 0.2 + random() * 0.16]);
+    add(id, 200 * u, (bw, bh) => {
+      const S = Math.min(bw, bh);
+      return svgDoc(bw, bh, '', spots.map(([x, y, rx, ry]) => oval(x * bw, y * bh, rx * S, ry * S, color)).join(''), 110 * u, alpha);
+    }, drift(ctx, d, p, count % 2));
+  };
+  pool('far', light, 0.22, 2, 40, 58);
+  pool('mid', colors.accent, 0.18, 2, 70, 47);
+  pool('near', light, 0.14, 1, 100, 39);
+}
+
+// Light leak: light spilling in from one side (seeded), the tint with the
+// accent inside it and one long diagonal streak; it slides along its edge.
+function lightLeak(ctx) {
+  const { u, add, lay, light, colors, random, bright, travel, period } = ctx;
+  const right = random() < 0.5;
+  const alpha = lay(light, 0.34 * bright);
+  const accent = lay(colors.accent, 0.24 * bright);
+  add('leak', 220 * u, (bw, bh) => {
+    const S = Math.min(bw, bh);
+    const x = right ? bw : 0, dir = right ? -1 : 1;
+    const sx = x + dir * S * 0.4, sy = bh * 0.3;
+    const body = oval(x, bh * 0.34, S * 0.36, S * 0.72, light) + oval(x + dir * S * 0.16, bh * 0.62, S * 0.26, S * 0.5, colors.accent, ratio(accent, alpha))
+      + oval(sx, sy, S * 0.75, S * 0.045, light, 0.7, ` transform="rotate(${dir * -26} ${round(sx, 1)} ${round(sy, 1)})"`);
+    return svgDoc(bw, bh, '', body, 90 * u, alpha);
+  }, { x: wave(travel(40 * u), period(44), 0), y: wave(travel(70 * u), period(52), 1) });
+  // Far: the same light, faint, reaching the opposite side low down.
+  const far = lay(light, 0.1 * bright);
+  add('far', 220 * u, (bw, bh) => svgDoc(bw, bh, '', oval(right ? 0 : bw, bh * 0.8, Math.min(bw, bh) * 0.5, Math.min(bw, bh) * 0.3, light), 120 * u, far), drift(ctx, 20, 60, 1));
+}
+
+// Spotlight: one soft pool of light with a long falloff, breathing slowly,
+// inside a wide, faint halo.
+function spotlight(ctx) {
+  const { u, add, lay, light, random, bright } = ctx;
+  const x = 0.36 + random() * 0.28, y = 0.36 + random() * 0.14;
+  const halo = lay(light, 0.1 * bright);
+  add('far', 200 * u, (bw, bh) => svgDoc(bw, bh, '', oval(x * bw, y * bh, bw * 0.6, bh * 0.5, light), 130 * u, halo), drift(ctx, 24, 62, 1));
+  const alpha = lay(light, 0.34 * bright);
+  add('pool', 200 * u, (bw, bh) => {
+    const S = Math.min(bw, bh);
+    const defs = `<radialGradient id="p"><stop offset="0" stop-color="${light}" stop-opacity="1"/><stop offset="0.35" stop-color="${light}" stop-opacity="0.5"/><stop offset="1" stop-color="${light}" stop-opacity="0"/></radialGradient>`;
+    return svgDoc(bw, bh, defs, oval(x * bw, y * bh, S * 0.8, S * 0.62, 'url(#p)'), 0, alpha);
+  }, { ...drift(ctx, 60, 50), scale: breathe(ctx, 38) });
+}
+
+// Studio: a seamless studio sweep. A low band of light where the wall turns
+// into the floor, the floor falling off toward the lens.
+function studio(ctx) {
+  const { u, add, lay, light, bright, travel, period } = ctx;
+  const alpha = lay(light, 0.3 * bright);
+  add('sweep', 170 * u, (bw, bh) => {
+    const h = bh * 0.64;
+    const defs = `<linearGradient id="f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${light}" stop-opacity="0.55"/><stop offset="1" stop-color="${light}" stop-opacity="0"/></linearGradient>`;
+    return svgDoc(bw, bh, defs, `${oval(bw / 2, h, bw * 0.6, bh * 0.2, light)}<rect x="0" y="${round(h, 1)}" width="${round(bw)}" height="${round(bh - h, 1)}" fill="url(#f)"/>`, 70 * u, alpha);
+  }, { x: wave(travel(56 * u), period(56), 0) });
+  const seam = lay(light, 0.16 * bright);
+  add('seam', 170 * u, (bw, bh) => svgDoc(bw, bh, '', oval(bw / 2, bh * 0.64, bw * 0.46, 3 * u, light), 6 * u, seam), { x: wave(travel(24 * u), period(56), 0) });
+}
+
+// Beams: broad shafts of light falling from above, widening and fading as
+// they fall; two banks sway against each other.
+function beams(ctx) {
+  const { u, add, lay, light, random, bright, blurAt, travel, period } = ctx;
+  const bank = (id, count, want, blur, d, p, flip) => {
+    const alpha = lay(light, want * bright);
+    const shafts = Array.from({ length: count }, (_, i) => [(i + 0.15 + random() * 0.7) / count, 0.015 + random() * 0.03, 0.07 + random() * 0.1, -0.25 + random() * 0.5, 0.5 + random() * 0.5]);
+    add(id, 170 * u, (bw, bh) => {
+      const defs = `<linearGradient id="s${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${light}" stop-opacity="1"/><stop offset="1" stop-color="${light}" stop-opacity="0"/></linearGradient>`;
+      const body = shafts.map(([x, top, bottom, lean, o]) => {
+        const x0 = x * bw, x1 = x0 + lean * bh;
+        return `<path d="M${pt(x0 - top * bw, 0)}L${pt(x0 + top * bw, 0)}L${pt(x1 + bottom * bw, bh)}L${pt(x1 - bottom * bw, bh)}Z" fill="url(#s${id})" opacity="${round(o, 3)}"/>`;
+      }).join('');
+      return svgDoc(bw, bh, defs, body, blur, alpha);
+    }, { x: wave(travel(d * u), period(p), flip), rotation: wave(1.4, period(p * 1.4), 1 - flip) });
+  };
+  bank('far', 4, 0.14, blurAt(50), 20, 60, 0);
+  bank('subject', 5, 0.24, blurAt(22), 44, 48, 1);
+}
+
+// Prism: long diagonal streaks of light that grade from the tint to the accent.
+function prism(ctx) {
+  const { u, add, lay, light, colors, random, bright, blurAt } = ctx;
+  const bank = (id, count, want, blur, d, p, flip) => {
+    const alpha = lay(light, want * bright);
+    const accent = ratio(lay(colors.accent, want * bright), alpha);
+    const streaks = Array.from({ length: count }, (_, i) => [random(), random(), 0.5 + random() * 0.7, 0.012 + random() * 0.03, i / Math.max(1, count - 1)]);
+    add(id, 180 * u, (bw, bh) => {
+      const S = Math.min(bw, bh);
+      const body = streaks.map(([x, y, len, thick, k]) => oval(x * bw, y * bh, len * S, thick * S, mix(light, colors.accent, k), 1 - k * (1 - accent), ` transform="rotate(-32 ${round(x * bw, 1)} ${round(y * bh, 1)})"`)).join('');
+      return svgDoc(bw, bh, '', body, blur, alpha);
+    }, drift(ctx, d, p, flip));
+  };
+  bank('far', 5, 0.16, blurAt(44), 24, 60, 0);
+  bank('subject', 8, 0.3, blurAt(16), 56, 46, 1);
+}
+
+// Bands: broad, soft diagonal bands of the tint at uneven widths and strengths.
+function bands(ctx) {
+  const { u, add, lay, light, random, bright, blurAt } = ctx;
+  const bank = (id, count, want, blur, d, p, flip) => {
+    const alpha = lay(light, want * bright);
+    const strips = Array.from({ length: count }, (_, i) => [(i + random() * 0.6) / count, (0.3 + random() * 0.5) / count, 0.3 + random() * 0.7]);
+    add(id, 170 * u, (bw, bh) => {
+      const span = bw * 1.5;
+      const body = strips.map(([x, w, o]) => `<rect x="${round(-bw * 0.25 + x * span, 1)}" y="${round(-bh, 1)}" width="${round(w * span, 1)}" height="${round(bh * 3, 1)}" fill="${light}" opacity="${round(o, 3)}"/>`).join('');
+      return svgDoc(bw, bh, '', `<g transform="rotate(-28 ${round(bw / 2, 1)} ${round(bh / 2, 1)})">${body}</g>`, blur, alpha);
+    }, drift(ctx, d, p, flip));
+  };
+  bank('far', 4, 0.14, blurAt(48), 22, 62, 0);
+  bank('subject', 7, 0.22, blurAt(18), 50, 47, 1);
+}
+
+// Panes: large frosted rounded rectangles overlapping at two depths, each a
+// faint fill with a brighter lip.
+function panes(ctx) {
+  const { u, add, lay, light, random, bright, blurAt } = ctx;
+  const bank = (id, count, want, blur, d, p, flip) => {
+    const alpha = lay(light, want * bright);
+    const rects = Array.from({ length: count }, () => [random() * 0.8, random() * 0.75, 0.22 + random() * 0.3, 0.25 + random() * 0.35, 0.4 + random() * 0.6]);
+    add(id, 160 * u, (bw, bh) => {
+      const body = rects.map(([x, y, w, h, o]) => `<rect x="${round(x * bw, 1)}" y="${round(y * bh, 1)}" width="${round(w * bw, 1)}" height="${round(h * bh, 1)}" rx="${round(30 * u, 1)}" fill="${light}" fill-opacity="${round(0.3 * o, 3)}" stroke="${light}" stroke-opacity="${round(o, 3)}" stroke-width="${round(3 * u, 2)}"/>`).join('');
+      return svgDoc(bw, bh, '', body, blur, alpha);
+    }, drift(ctx, d, p, flip));
+  };
+  bank('far', 3, 0.18, blurAt(34), 22, 60, 0);
+  bank('subject', 4, 0.3, blurAt(7), 48, 46, 1);
+}
+
+// Arcs: thin segments of very large circles, out of focus, turning slowly.
+function arcs(ctx) {
+  const { u, add, lay, light, random, bright, blurAt, period } = ctx;
+  const bank = (id, count, want, blur, d, p, flip) => {
+    const alpha = lay(light, want * bright);
+    const list = Array.from({ length: count }, () => [random(), random(), 0.25 + random() * 0.6, 2 + random() * 10, random() * 6.28, 1 + random() * 2.4, 0.4 + random() * 0.6]);
+    add(id, 170 * u, (bw, bh) => {
+      const S = Math.min(bw, bh);
+      const body = list.map(([x, y, r, width, from, sweep, o]) => {
+        const cx = x * bw, cy = y * bh, R = r * S;
+        return `<path d="M${pt(cx + Math.cos(from) * R, cy + Math.sin(from) * R)}A${round(R, 1)} ${round(R, 1)} 0 ${sweep > Math.PI ? 1 : 0} 1 ${pt(cx + Math.cos(from + sweep) * R, cy + Math.sin(from + sweep) * R)}" fill="none" stroke="${light}" stroke-width="${round(width * u, 2)}" stroke-linecap="round" opacity="${round(o, 3)}"/>`;
+      }).join('');
+      return svgDoc(bw, bh, '', body, blur, alpha);
+    }, { ...drift(ctx, d, p, flip), rotation: wave(2.2, period(p * 1.5), flip) });
+  };
+  bank('far', 4, 0.18, blurAt(30), 20, 60, 0);
+  bank('subject', 6, 0.34, blurAt(6), 44, 47, 1);
+}
+
+// Ripples: concentric rings spreading from a point off-centre, each wider
+// and fainter than the last; the set breathes.
+function ripples(ctx) {
+  const { u, add, lay, light, random, bright, blurAt } = ctx;
+  const x = 0.64 + random() * 0.12, y = 0.3 + random() * 0.12;
+  // Far: a second, larger set from the opposite corner, well out of focus.
+  const far = lay(light, 0.14 * bright);
+  add('far', 180 * u, (bw, bh) => {
+    const S = Math.min(bw, bh);
+    let body = '';
+    for (let i = 0; i < 6; i += 1) body += `<circle cx="${round((1 - x) * bw, 1)}" cy="${round((1 - y) * bh, 1)}" r="${round(S * 0.16 * 1.4 ** i, 1)}" fill="none" stroke="${light}" stroke-width="${round((8 + i * 4) * u, 2)}" opacity="${round(1 - i / 7, 3)}"/>`;
+    return svgDoc(bw, bh, '', body, blurAt(30), far);
+  }, drift(ctx, 16, 62, 1));
+  const alpha = lay(light, 0.3 * bright);
+  add('subject', 180 * u, (bw, bh) => {
+    const S = Math.min(bw, bh);
+    let body = '';
+    for (let i = 0; i < 11; i += 1) body += `<circle cx="${round(x * bw, 1)}" cy="${round(y * bh, 1)}" r="${round(S * 0.07 * 1.34 ** i, 1)}" fill="none" stroke="${light}" stroke-width="${round((1.5 + i * 1.2) * u, 2)}" opacity="${round(1 - i / 12, 3)}"/>`;
+    return svgDoc(bw, bh, '', body, blurAt(3), alpha);
+  }, { ...drift(ctx, 30, 50), scale: breathe(ctx, 36, 0.04) });
+}
+
+// Flow lines: stacked fine lines that wander together; a thicker, softer
+// bank far behind.
+function flowLines(ctx) {
+  const { u, add, lay, light, random, bright, blurAt } = ctx;
+  const bank = (id, count, want, blur, width, d, p, flip) => {
+    const alpha = lay(light, want * bright);
+    const p1 = random() * 6.28, p2 = random() * 6.28;
+    const lines = Array.from({ length: count }, () => [random() * 0.5, 0.35 + random() * 0.65]);
+    add(id, 150 * u, (bw, bh) => {
+      const step = bw / 60;
+      const body = lines.map(([jitter, o], i) => {
+        const base = bh * (0.04 + (i / Math.max(1, count - 1)) * 0.92);
+        const points = [];
+        for (let x = -step; x <= bw + step; x += step) {
+          const s = x / bw;
+          points.push(pt(x, base + bh * 0.09 * Math.sin(s * 4.4 + p1 + i * 0.16) + bh * 0.035 * Math.sin(s * 9.5 + p2 + jitter) - (s - 0.5) * bh * 0.18));
+        }
+        return `<path d="M${points.join('L')}" opacity="${round(o, 3)}"/>`;
+      }).join('');
+      return svgDoc(bw, bh, '', `<g fill="none" stroke="${light}" stroke-width="${round(width * u, 2)}" stroke-linejoin="round">${body}</g>`, blur, alpha);
+    }, drift(ctx, d, p, flip));
+  };
+  bank('far', 8, 0.16, blurAt(18), 6, 22, 60, 0);
+  bank('subject', 20, 0.34, blurAt(1.5), 2.2, 46, 47, 1);
+}
+
+// Pinstripe: fine diagonal lines under a slow diagonal sheen.
+function pinstripe(ctx) {
+  const { u, add, lay, light, bright, travel, period } = ctx;
+  const line = lay(light, 0.3 * bright, { mark: true });
+  const gap = round(22 * u, 2);
+  add('lines', 140 * u, (bw, bh) => svgDoc(bw, bh, `<pattern id="p" width="${gap}" height="${gap}" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><rect width="${round(1.6 * u, 2)}" height="${gap}" fill="${light}"/></pattern>`, `<rect width="${round(bw)}" height="${round(bh)}" fill="url(#p)"/>`, 0, line), drift(ctx, 18, 60));
+  const sheen = lay(light, 0.16 * bright);
+  add('sheen', 240 * u, (bw, bh) => {
+    const defs = `<linearGradient id="s" x1="0" y1="0" x2="1" y2="1"><stop offset="0.34" stop-color="${light}" stop-opacity="0"/><stop offset="0.5" stop-color="${light}" stop-opacity="1"/><stop offset="0.66" stop-color="${light}" stop-opacity="0"/></linearGradient>`;
+    return svgDoc(bw, bh, defs, `<rect width="${round(bw)}" height="${round(bh)}" fill="url(#s)"/>`, 40 * u, sheen);
+  }, { x: wave(travel(150 * u), period(34), 0) });
+}
+
+// Dot field: a regular grid of fine dots at two depths, fading across the
+// frame; the nearer grid travels further.
+function dotField(ctx) {
+  const { u, add, lay, light, bright, blurAt } = ctx;
+  const field = (id, pitch, r, want, blur, d, p, flip) => {
+    const alpha = lay(light, want * bright, { mark: true });
+    const cell = round(pitch * u, 2);
+    add(id, 130 * u, (bw, bh) => {
+      const defs = `<pattern id="d" width="${cell}" height="${cell}" patternUnits="userSpaceOnUse"><circle cx="${round(cell / 2, 2)}" cy="${round(cell / 2, 2)}" r="${round(r * u, 2)}" fill="${light}"/></pattern>`
+        + `<linearGradient id="g" x1="${flip}" y1="0" x2="${1 - flip}" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0.12"/></linearGradient><mask id="m"><rect width="${round(bw)}" height="${round(bh)}" fill="url(#g)"/></mask>`;
+      return svgDoc(bw, bh, defs, `<rect width="${round(bw)}" height="${round(bh)}" fill="url(#d)" mask="url(#m)"/>`, blur, alpha);
+    }, drift(ctx, d, p, flip));
+  };
+  field('far', 30, 1.5, 0.5, 0, 12, 62, 0);
+  field('subject', 64, 3.2, 0.55, blurAt(1.5), 44, 46, 1);
+}
+
+// Linen: a still weave of fine threads, uneven in strength, over two soft
+// pools of light that drift.
+function linen(ctx) {
+  const { u, add, lay, light, random, bright, layers, over } = ctx;
+  const alpha = lay(light, 0.2 * bright);
+  const pools = [[0.24 + random() * 0.16, 0.3 + random() * 0.14, 0.6, 0.42], [0.7 + random() * 0.12, 0.66 + random() * 0.12, 0.46, 0.34]];
+  add('glow', 180 * u, (bw, bh) => {
+    const S = Math.min(bw, bh);
+    return svgDoc(bw, bh, '', pools.map(([x, y, rx, ry], i) => oval(x * bw, y * bh, rx * S, ry * S, light, i ? 0.6 : 1)).join(''), 120 * u, alpha);
+  }, drift(ctx, 56, 46));
+  // The threads are marks (finer than a letter's stroke): clamped, but no tone.
+  const weave = lay(light, 0.24 * bright, { mark: true });
+  const n = 16, gap = round(5 * u, 2), size = round(n * gap, 2), thread = round(1.3 * u, 2);
+  let body = '';
+  for (let i = 0; i < n; i += 1) {
+    body += `<rect x="0" y="${round(i * gap, 2)}" width="${size}" height="${thread}" opacity="${round(0.25 + random() * 0.75, 3)}"/><rect x="${round(i * gap, 2)}" y="0" width="${thread}" height="${size}" opacity="${round(0.25 + random() * 0.75, 3)}"/>`;
+  }
+  const tile = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><g fill="${light}">${body}</g></svg>`;
+  layers.push({ id: 'weave', box: over(0), svg: null, style: { backgroundImage: svgUrl(tile), backgroundSize: `${size}px ${size}px`, opacity: round(weave, 4) }, axes: {} });
+}
+
+// Brush: broad dry-brush strokes, each a bundle of uneven bristle lines
+// along one sweep; a softer pair far behind.
+function brush(ctx) {
+  const { u, add, lay, light, random, bright, blurAt } = ctx;
+  const bank = (id, count, want, blur, d, p, flip) => {
+    const alpha = lay(light, want * bright);
+    const strokes = Array.from({ length: count }, (_, i) => ({
+      x: -0.05 + random() * 0.3, y: (i + 0.2 + random() * 0.6) / count, length: 0.6 + random() * 0.45, angle: -14 + random() * 10, phase: random() * 6.28,
+      bristles: Array.from({ length: 18 }, () => [random() * 0.18, 1 - random() * 0.25, 0.25 + random() * 0.75])
+    }));
+    add(id, 160 * u, (bw, bh) => {
+      const gap = bh * 0.011;
+      const body = strokes.map(({ x, y, length, angle, phase, bristles }) => {
+        const x0 = x * bw, y0 = y * bh, L = length * bw;
+        const lines = bristles.map(([from, to, o], j) => {
+          const points = [];
+          for (let k = 0; k <= 16; k += 1) { const s = from + ((to - from) * k) / 16; points.push(pt(x0 + s * L, y0 + (j - bristles.length / 2) * gap + bh * 0.03 * Math.sin(s * 3 + phase))); }
+          return `<path d="M${points.join('L')}" opacity="${round(o, 3)}"/>`;
+        }).join('');
+        return `<g transform="rotate(${round(angle, 1)} ${round(x0, 1)} ${round(y0, 1)})">${lines}</g>`;
+      }).join('');
+      return svgDoc(bw, bh, '', `<g fill="none" stroke="${light}" stroke-width="${round(gap * 0.9, 2)}" stroke-linecap="round">${body}</g>`, blur, alpha);
+    }, drift(ctx, d, p, flip));
+  };
+  bank('far', 2, 0.14, blurAt(34), 22, 60, 0);
+  bank('subject', 3, 0.26, blurAt(3), 46, 47, 1);
+}
 
 // Wash: a bright, opaque gradient in the tint (light at the upper left, deeper
 // toward the lower right), two drifting soft highlights and a slow diagonal
@@ -926,9 +1118,4 @@ function greyOf(hex) {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   const v = Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b).toString(16).padStart(2, '0');
   return `#${v}${v}${v}`;
-}
-
-function normalize(v) {
-  const n = Math.hypot(...v);
-  return v.map((x) => x / n);
 }

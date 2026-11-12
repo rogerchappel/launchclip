@@ -588,15 +588,16 @@ test("end to end: make renders a real Remotion draft with a fake model, the test
 test("worldLook: motion videos travel on the world camera over changing backdrops", () => {
   const scenes = (n) => Array.from({ length: n }, (_, i) => ({ id: `s${i + 1}`, module: "stat-card", start: i * 3, end: i * 3 + 3 }));
   const story = { lane: "motion", format: { duration: 30 }, scenes: scenes(10) };
-  assert.deepEqual(worldLook(story, "Crazy AI news in October 2026"), ["camera.mode world", "plate cycle every 3 shots (tech plates)"]);
+  // Whatever the brief is about, the plates carry no subject of their own.
+  assert.deepEqual(worldLook(story, "Crazy AI news in October 2026"), ["camera.mode world", "plate cycle every 3 shots (neutral plates)"]);
   assert.deepEqual(story.camera, { mode: "world", layout: "auto" });
-  assert.equal(story.plate.kind, "hex-shell");
-  assert.deepEqual(story.plate.cycle.plates.map((plate) => plate.kind), ["hex-shell", "silk", "hex-shell", "bokeh"]);
+  assert.equal(story.plate.kind, "silk");
+  assert.deepEqual(story.plate.cycle.plates.map((plate) => plate.kind), ["silk", "smoke", "veil", "blooms", "facets", "light-leak", "flow-lines", "grain"]);
 
   // A trades brief gets neutral, brand-lit plates; its shots' footage joins them.
   const deck = { lane: "motion", format: { duration: 30 }, scenes: scenes(10).map((scene, i) => (i % 3 === 0 ? { ...scene, module: "clip", params: { media: { kind: "video", src: `assets/shots/c${i}.mp4`, sourceStart: 2 } } } : scene)) };
   assert.deepEqual(worldLook(deck, "Choosing deck materials: hardwood vs composite, the technical trade-offs"), ["camera.mode world", "plate cycle every 3 shots (neutral plates and project footage)"]);
-  assert.deepEqual(deck.plate.cycle.plates.map((plate) => plate.kind), ["silk", "video", "smoke", "video", "silk", "video", "smoke", "video"]);
+  assert.deepEqual(deck.plate.cycle.plates.map((plate) => plate.kind), ["silk", "video", "smoke", "video", "veil", "video", "blooms", "video", "facets", "light-leak", "flow-lines", "grain"]);
   assert.deepEqual(deck.plate.cycle.plates[1].params, { src: "assets/shots/c6.mp4", start: 2, treatment: "blur" });
 
   // The plan's own choices stand: cuts, its own plates, a drawn world.

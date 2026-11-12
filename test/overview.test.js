@@ -25,7 +25,7 @@ function overviewStory({ camera = { mode: "world" }, overview = { type: "overvie
     brand: { colors: { bg: "#0b1020", primary: "#ff7a59", accent: "#7ce7ff", ink: "#0b1020", paper: "#f5f1ea" }, fonts: { display: "anton", body: "inter", meta: "jetbrains-mono" } },
     motion: { grammar: "playful" }, camera,
     chapters: [{ id: "c1", title: "Setup", start: 0 }, { id: "c2", title: "Payoff", start: 16 }],
-    plate: { kind: "starfield", cycle: { every: 2 } },
+    plate: { kind: "veil", cycle: { every: 2 } },
     scenes: [
       { id: "s1", module: "hook-title", start: 0, end: 4, params: headline(1) },
       { id: "s2", module: "hook-title", start: 4, end: 8, in: { type: "pan", dur: 0.8, direction: "right" }, params: headline(2) },
@@ -95,7 +95,7 @@ test("framing: the camera pulls out to the span plus the incoming shot, holds, p
   const near = overviewFrame(row.slice(4, 7), row[7], SIZE);
   assert.equal(near.framed, 3);
   assert.ok(near.ratio < OVERVIEW.cap);
-  // The backdrop (a starfield cycle) changes with a crossfade during the pull-out, never a slide.
+  // The backdrop (a veil cycle) changes with a crossfade during the pull-out, never a slide.
   const backdrops = worldBackdrops(story, plan, sceneWindows(story));
   const into = backdrops.segments.find((segment) => segment.shot === "s5");
   assert.equal(into.entry.type, "fade");

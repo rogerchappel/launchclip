@@ -197,7 +197,7 @@ test("cards on a plate the plan picked trade it for footage; a wash and a named 
   assert.deepEqual(bokeh.added, ["s2", "s3"]);
   assert.equal(bokeh.storyboard.scenes[1].backdrop.kind, "shot");
   const plated = story();
-  plated.scenes[1] = { ...plated.scenes[1], plate: { kind: "strands" } };
+  plated.scenes[1] = { ...plated.scenes[1], plate: { kind: "strands" } }; // a retired kind is still a drawn plate
   const swapped = cardBackdrops(plated, { words: WORDS });
   assert.equal(swapped.storyboard.scenes[1].plate, undefined);
   assert.equal(swapped.storyboard.scenes[1].backdrop.kind, "shot");

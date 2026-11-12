@@ -1,5 +1,5 @@
 {
-  "describe": "backdrop plate starfield on the minimal story (dark palette, rim-glass panels)",
+  "describe": "backdrop plate facets on the minimal story (dark palette, rim-glass panels)",
   "project": "examples/story/minimal",
   "times": [
     1.2,
@@ -7,7 +7,7 @@
   ],
   "patch": {
     "plate": {
-      "kind": "starfield"
+      "kind": "facets"
     },
     "panel": {
       "treatment": "rim-glass"

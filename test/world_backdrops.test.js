@@ -19,7 +19,7 @@ const COLORS = Object.freeze({ bg: "#05070c", paper: "#f4f7fb", ink: "#05070c", 
 // One shot every 5 s: a pan right, a push, a pan down, a cut, a whip-pan left.
 const INS = [null, { type: "pan", dur: 0.8 }, { type: "push", dur: 0.9 }, { type: "pan", dur: 0.8, direction: "down" }, null, { type: "whip-pan", dur: 0.4, direction: "left" }];
 
-function story({ plate = { kind: "smoke", cycle: { every: 1, plates: ["smoke", "starfield", "wash", "silk", "bokeh", "hex-shell"] } }, ins = INS, extra = {} } = {}) {
+function story({ plate = { kind: "smoke", cycle: { every: 1, plates: ["smoke", "veil", "wash", "silk", "bokeh", "facets"] } }, ins = INS, extra = {} } = {}) {
   return {
     schema: "launchclip.story.v1", lane: "motion", title: "World backdrops",
     format: { width: 1920, height: 1080, fps: 30, duration: ins.length * 5 },
@@ -62,11 +62,11 @@ test("world mode: each camera move into a new plate changes the backdrop its own
   const summary = backdrops.segments.map((segment) => [segment.kind, segment.entry.type, segment.entry.side ?? null]);
   assert.deepEqual(summary, [
     ["smoke", "first", null],
-    ["starfield", "slide", "right"], // the camera pans right: the new world slides in from the right
+    ["veil", "slide", "right"], // the camera pans right: the new world slides in from the right
     ["wash", "fade", null], // a push crossfades over the move
     ["silk", "slide", "bottom"], // panning down: from below
     ["bokeh", "cut", null], // no camera move: it changes on the cut
-    ["hex-shell", "slide", "left"] // a whip-pan left: from the left
+    ["facets", "slide", "left"] // a whip-pan left: from the left
   ]);
   const slide = backdrops.segments[1];
   assert.equal(slide.entry.start, 5);
@@ -96,7 +96,7 @@ test("the backdrops cover the screen on every frame, mid-move included", () => {
 
 test("a backdrop travels with the depth layer between changes (parallax)", () => {
   // Every 2 shots: the pan into s1 stays on smoke, so smoke follows it.
-  const { plan, backdrops } = build(story({ plate: { kind: "smoke", cycle: { every: 2, plates: ["smoke", "starfield", "wash"] } } }));
+  const { plan, backdrops } = build(story({ plate: { kind: "smoke", cycle: { every: 2, plates: ["smoke", "veil", "wash"] } } }));
   const first = backdrops.segments[0];
   assert.equal(first.kind, "smoke");
   const key = plan.background.keys[0];
@@ -110,12 +110,12 @@ test("a backdrop travels with the depth layer between changes (parallax)", () =>
 });
 
 test("chapters[j].plate and scenes[i].backdrop apply in world mode; none shows the story background", () => {
-  const raw = story({ plate: "smoke", extra: { chapters: [{ id: "a", title: "A", start: 0 }, { id: "b", title: "B", start: 10, plate: "starfield" }] } });
+  const raw = story({ plate: "smoke", extra: { chapters: [{ id: "a", title: "A", start: 0 }, { id: "b", title: "B", start: 10, plate: "veil" }] } });
   raw.scenes[4].backdrop = { kind: "wash", params: { tint: "accent" } };
   raw.scenes[5].backdrop = "none";
   assert.deepEqual(validateStory(raw).errors, []);
   const { backdrops } = build(raw);
-  assert.deepEqual(backdrops.segments.map((segment) => segment.kind), ["smoke", "starfield", "wash", "none"]);
+  assert.deepEqual(backdrops.segments.map((segment) => segment.kind), ["smoke", "veil", "wash", "none"]);
   assert.equal(backdrops.segments.at(-1).plan, null);
   assert.equal(backdrops.segments[2].spec.params.tint, "accent");
 });
@@ -143,8 +143,8 @@ test("HyperFrames draws one segment per backdrop and its GSAP seeks match the op
     const s = resolveStory(raw);
     await compileStoryToHyperFrames(s, { projectDir: dir, sourceDir: dir });
     const html = await readFile(path.join(dir, "index.html"), "utf8");
-    assert.deepEqual([...html.matchAll(/class="lc-wb" data-launchclip-backdrop="([a-z-]+)"/g)].map((m) => m[1]), ["smoke", "starfield", "wash", "silk", "bokeh", "hex-shell"]);
-    assert.match(html, /<div id="lc-wb-1" class="lc-wb" data-launchclip-backdrop="starfield" style="opacity:0;visibility:hidden">/);
+    assert.deepEqual([...html.matchAll(/class="lc-wb" data-launchclip-backdrop="([a-z-]+)"/g)].map((m) => m[1]), ["smoke", "veil", "wash", "silk", "bokeh", "facets"]);
+    assert.match(html, /<div id="lc-wb-1" class="lc-wb" data-launchclip-backdrop="veil" style="opacity:0;visibility:hidden">/);
     assert.match(html, /mask-image:linear-gradient\(to right, #00000000 0px, #000000 288px\)/);
     assert.equal((html.match(/lc-wb-vignette/g) ?? []).length, 1, "one vignette over the stack");
     assert.doesNotMatch(html, /id="lc-bg-field-world"/, "the plates are not fixed to the screen any more");

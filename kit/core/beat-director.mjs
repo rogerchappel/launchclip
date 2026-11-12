@@ -44,14 +44,14 @@ export const STATE_CHANGES = Object.freeze(['enter', 'build', 'swap']);
 // Backdrop plates (kit/core/plates.mjs, when registered) and the story
 // background each falls back to.
 export const BACKDROP_PLATES = Object.freeze([
-  Object.freeze({ kind: 'hex-shell', tint: 'neutral', background: 'mesh' }),
+  Object.freeze({ kind: 'smoke', tint: 'neutral', background: 'mesh' }),
   Object.freeze({ kind: 'silk', tint: 'primary', background: 'light-rays' }),
-  Object.freeze({ kind: 'strands', tint: 'accent', background: 'topographic' }),
+  Object.freeze({ kind: 'veil', tint: 'accent', background: 'topographic' }),
   Object.freeze({ kind: 'bokeh', tint: 'primary', background: 'grain-gradient' }),
   Object.freeze({ kind: 'silk', tint: 'neutral', background: 'gradient' }),
-  Object.freeze({ kind: 'hex-shell', tint: 'accent', background: 'dot-grid' }),
-  Object.freeze({ kind: 'strands', tint: 'primary', background: 'geometric' }),
-  Object.freeze({ kind: 'bokeh', tint: 'accent', background: 'halftone' })
+  Object.freeze({ kind: 'facets', tint: 'accent', background: 'dot-grid' }),
+  Object.freeze({ kind: 'blooms', tint: 'primary', background: 'geometric' }),
+  Object.freeze({ kind: 'flow-lines', tint: 'accent', background: 'halftone' })
 ]);
 const MAX_ITEMS = { data: 5, items: 4, steps: 4, entries: 6, rows: 4 };
 const RECENT = 8;
