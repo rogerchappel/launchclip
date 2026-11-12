@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CYCLE_KINDS, DARK_PLATE_KINDS, MOTIF_PLATE_KINDS, NEUTRAL_PLATES, PLATE_MOTIFS, fallbackPlates, plateMotif, VIDEO_PLATE_CONTRAST, VIDEO_TREATMENTS, videoPlateFloor, PLATE_DEFAULT_TINT, PLATE_KINDS, PLATE_PARAMS, PLATE_TINTS, ROTATION_KINDS, plateErrors, platePlan, plateVignette, resolvePlate, scenePlatePlan, scenePlateSpec, storyHasPlate, storyPlateErrors, storyPlatePlan } from "@launchclip/core/plates.mjs";
+import { CYCLE_KINDS, DARK_PLATE_KINDS, NEUTRAL_PLATES, RETIRED_PLATE_KINDS, PLATE_NOTES, fallbackPlates, VIDEO_PLATE_CONTRAST, VIDEO_TREATMENTS, videoPlateFloor, PLATE_DEFAULT_TINT, PLATE_KINDS, PLATE_PARAMS, PLATE_TINTS, ROTATION_KINDS, plateErrors, platePlan, plateVignette, resolvePlate, scenePlatePlan, scenePlateSpec, storyHasPlate, storyPlateErrors, storyPlatePlan } from "@launchclip/core/plates.mjs";
 import { layerStateAt, layerTweens } from "@launchclip/core/backgrounds.mjs";
 import { contrast, mix } from "@launchclip/core/panels.mjs";
-import { STORY_PLATE_KINDS, resolveStory, validateStory } from "@launchclip/core/story.mjs";
+import { STORY_PLATE_KINDS, STORY_RETIRED_PLATE_KINDS, resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { applyStyle, validateStylePack } from "@launchclip/core/style.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -48,12 +48,12 @@ test("plateErrors accepts kinds, objects and every param at its bounds", () => {
   assert.match(plateErrors("image")[0], /needs its file/);
   assert.match(plateErrors({ kind: "image", params: { dim: 0.2 } })[0], /src is required/);
   assert.match(plateErrors({ kind: "silk", params: { src: "assets/a.jpg" } })[0], /src is not supported/);
-  assert.match(plateErrors("mesh")[0], /must be one of hex-shell/);
+  assert.match(plateErrors("mesh")[0], /must be one of silk/);
   assert.match(plateErrors({ kind: "silk", params: { focus: 2 } })[0], /focus must be a number from 0 to 1/);
   assert.match(plateErrors({ kind: "silk", params: { glow: 1 } })[0], /glow is not supported/);
   assert.match(plateErrors({ kind: "silk", cycle: true })[0], /cycle is not supported/);
   assert.deepEqual(plateErrors({ kind: "silk", cycle: true }, "plate", { allowCycle: true }), []);
-  assert.deepEqual(plateErrors({ kind: "silk", cycle: { every: 3, plates: ["starfield", { kind: "wash", params: { intensity: 1 } }] } }, "plate", { allowCycle: true }), []);
+  assert.deepEqual(plateErrors({ kind: "silk", cycle: { every: 3, plates: ["veil", { kind: "wash", params: { intensity: 1 } }] } }, "plate", { allowCycle: true }), []);
   assert.match(plateErrors({ kind: "silk", cycle: { every: 0 } }, "plate", { allowCycle: true })[0], /every must be a whole number/);
   assert.match(plateErrors({ kind: "silk", cycle: { every: 2, plates: [] } }, "plate", { allowCycle: true })[0], /plates must be a list/);
   assert.match(plateErrors({ kind: "silk", cycle: { every: 2, plates: ["none"] } }, "plate", { allowCycle: true })[0], /plates\[0\] must be one of/);
@@ -72,7 +72,7 @@ test("validateStory reports the same plate errors as plates.mjs", () => {
   const expected = storyPlateErrors(bad);
   assert.equal(expected.length, 5);
   for (const message of expected) assert.ok(errors.includes(message), `${message} in ${errors.join("; ")}`);
-  const good = story({ plate: { kind: "hex-shell", cycle: true } });
+  const good = story({ plate: { kind: "facets", cycle: true } });
   good.chapters[2].plate = "none";
   good.scenes[1].plate = "silk";
   good.scenes[2].backdrop = "none";
@@ -97,17 +97,17 @@ test("a plate holds within a chapter and changes at the next", () => {
   const s = resolveStory(story({ plate: { kind: "silk", cycle: true } }));
   const kinds = s.scenes.map((scene) => scenePlateSpec(s, scene).kind);
   // s1 and s2 share chapter a; b and c take the next kinds round the list.
-  assert.deepEqual(kinds, ["silk", "silk", "strands", "bokeh"]);
+  assert.deepEqual(kinds, ["silk", "silk", "veil", "smoke"]);
   assert.equal(scenePlatePlan(s, s.scenes[0]), scenePlatePlan(s, s.scenes[1]), "one plan per plate, so the drift is continuous across the cut");
 });
 
 test("scene beats chapter beats story; none falls back to the background", () => {
-  const raw = story({ plate: "hex-shell" });
+  const raw = story({ plate: "facets" });
   raw.chapters[1].plate = { kind: "bokeh", params: { tint: "accent" } };
   raw.scenes[1].plate = "silk";
   raw.scenes[3].plate = "none";
   const s = resolveStory(raw);
-  assert.deepEqual(s.scenes.map((scene) => scenePlateSpec(s, scene)?.kind ?? null), ["hex-shell", "silk", "bokeh", null]);
+  assert.deepEqual(s.scenes.map((scene) => scenePlateSpec(s, scene)?.kind ?? null), ["facets", "silk", "bokeh", null]);
   assert.equal(scenePlateSpec(s, s.scenes[2]).params.tint, "accent");
 });
 
@@ -201,13 +201,14 @@ test("plate layers are procedural, blurred SVG with no external files", () => {
     assert.equal(plan.plate, true);
     const images = plan.layers.map((layer) => layer.style.backgroundImage).filter(Boolean);
     assert.ok(images.length >= 2, `${kind} has depth layers`);
+    assert.ok(Object.hasOwn(PLATE_NOTES, kind) || kind === "wash", `${kind} has a note for whoever picks it`);
     for (const image of images) {
       assert.match(image, /^url\('data:image\/svg\+xml,/);
       assert.equal(image.split("'").length, 3, "the only single quotes wrap the URI, so it sits in a style attribute");
       assert.doesNotMatch(decodeURIComponent(image), /<image\b|href=/, "no external files");
     }
-    // Starfield dust stays crisp; every other depth is out of focus.
-    assert.ok(images.filter((image) => /feGaussianBlur/.test(decodeURIComponent(image))).length >= (kind === "starfield" ? 1 : images.length), `${kind} blurs its depths`);
+    // Fine marks (a grain, a weave, a pinstripe, a dot grid) stay crisp; some depth is always out of focus.
+    assert.ok(images.some((image) => /feGaussianBlur/.test(decodeURIComponent(image))), `${kind} blurs a depth`);
     assert.equal(plan.layers.at(-1).id, "vignette");
     assert.equal(plan.layers.at(-1).fixed, true);
     // Every layer box covers the canvas, so drift never shows an edge.
@@ -216,7 +217,7 @@ test("plate layers are procedural, blurred SVG with no external files", () => {
 });
 
 test("drift is seek-safe and parallax: near layers travel further than far ones", () => {
-  const plan = platePlan(story(), resolvePlate("strands"));
+  const plan = platePlan(story(), resolvePlate("smoke"));
   const reach = (layer) => Math.abs(layer.axes.x?.amp ?? 0);
   const byId = Object.fromEntries(plan.layers.map((layer) => [layer.id, layer]));
   assert.ok(reach(byId.near) > reach(byId.subject) && reach(byId.subject) > reach(byId.far));
@@ -224,7 +225,7 @@ test("drift is seek-safe and parallax: near layers travel further than far ones"
     for (const t of [0, 3.3, 17.25]) assert.deepEqual(layerStateAt(layer, t), layerStateAt(layer, t));
     if (Object.keys(layer.axes).length) assert.ok(layerTweens(layer, 2, 14).length > 0, `${layer.id} drifts`);
   }
-  const still = platePlan(story({ ambient: "off" }), resolvePlate("strands"));
+  const still = platePlan(story({ ambient: "off" }), resolvePlate("smoke"));
   for (const layer of still.layers) assert.deepEqual(layerTweens(layer, 0, 10), []);
 });
 
@@ -245,7 +246,7 @@ test("HyperFrames draws each scene's plate and the chapter change", async () => 
     await compileStoryToHyperFrames(s, { projectDir: dir, sourceDir: dir });
     const html = await readFile(path.join(dir, "index.html"), "utf8");
     const kinds = [...html.matchAll(/data-launchclip-background="([a-z-]+)"/g)].map((m) => m[1]);
-    assert.deepEqual(kinds, ["silk", "silk", "strands", "bokeh"]);
+    assert.deepEqual(kinds, ["silk", "silk", "veil", "smoke"]);
     assert.match(html, /lc-bg-s1-subject/);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -281,19 +282,21 @@ test("the GSAP tweens of every plate axis reproduce the cosine Remotion draws", 
 test("scenes[i].backdrop beats scenes[i].plate, and storyHasPlate sees it", () => {
   const raw = story();
   raw.scenes[0].plate = "silk";
-  raw.scenes[0].backdrop = "starfield";
+  raw.scenes[0].backdrop = "veil";
   raw.scenes[1].plate = "silk";
   raw.scenes[1].backdrop = "none";
   const s = resolveStory(raw);
-  assert.equal(scenePlateSpec(s, s.scenes[0]).kind, "starfield");
+  assert.equal(scenePlateSpec(s, s.scenes[0]).kind, "veil");
   assert.equal(scenePlateSpec(s, s.scenes[1]), null);
   assert.equal(storyHasPlate(resolveStory({ ...story(), scenes: story().scenes.map((scene, i) => (i === 2 ? { ...scene, backdrop: "smoke" } : scene)) })), true);
 });
 
-test("cycle: true still walks the four original kinds", () => {
-  assert.deepEqual(CYCLE_KINDS, ["hex-shell", "silk", "strands", "bokeh"]);
+test("cycle: true walks four neutral kinds, from the first when the story's plate is not one of them", () => {
+  assert.deepEqual(CYCLE_KINDS, ["silk", "veil", "smoke", "bokeh"]);
   const s = resolveStory(story({ plate: { kind: "bokeh", cycle: true } }));
-  assert.deepEqual(s.scenes.map((scene) => scenePlateSpec(s, scene).kind), ["bokeh", "bokeh", "hex-shell", "silk"]);
+  assert.deepEqual(s.scenes.map((scene) => scenePlateSpec(s, scene).kind), ["bokeh", "bokeh", "silk", "veil"]);
+  const other = resolveStory(story({ plate: { kind: "grain", cycle: true } }));
+  assert.deepEqual(other.scenes.map((scene) => scenePlateSpec(other, scene).kind), ["grain", "grain", "veil", "smoke"]);
 });
 
 test("cycle: {every} rotates the plate every n shots, from the story's own plate", () => {
@@ -301,10 +304,10 @@ test("cycle: {every} rotates the plate every n shots, from the story's own plate
   const base = { chapters: undefined, scenes: shots(9) };
   const kinds = (plate, extra = {}) => { const s = resolveStory(story({ ...base, ...extra, plate })); return s.scenes.map((scene) => scenePlateSpec(s, scene)?.kind ?? null); };
   assert.deepEqual(ROTATION_KINDS, DARK_PLATE_KINDS);
-  assert.deepEqual(kinds({ kind: "silk", cycle: { every: 2 } }), ["silk", "silk", "strands", "strands", "bokeh", "bokeh", "starfield", "starfield", "smoke"]);
-  assert.deepEqual(kinds({ kind: "smoke", cycle: { every: 3, plates: ["starfield", "wash", "smoke"] } }), ["smoke", "smoke", "smoke", "starfield", "starfield", "starfield", "wash", "wash", "wash"]);
+  assert.deepEqual(kinds({ kind: "silk", cycle: { every: 2 } }), ["silk", "silk", "smoke", "smoke", "bokeh", "bokeh", "veil", "veil", "facets"]);
+  assert.deepEqual(kinds({ kind: "smoke", cycle: { every: 3, plates: ["veil", "wash", "smoke"] } }), ["smoke", "smoke", "smoke", "veil", "veil", "veil", "wash", "wash", "wash"]);
   // A story plate outside the list goes first, then the list.
-  assert.deepEqual(kinds({ kind: "hex-shell", cycle: { every: 4, plates: ["wash"] } }), ["hex-shell", "hex-shell", "hex-shell", "hex-shell", "wash", "wash", "wash", "wash", "hex-shell"]);
+  assert.deepEqual(kinds({ kind: "facets", cycle: { every: 4, plates: ["wash"] } }), ["facets", "facets", "facets", "facets", "wash", "wash", "wash", "wash", "facets"]);
   // Kind names take the story's params (with their own tint); objects keep theirs.
   const s = resolveStory(story({ ...base, plate: { kind: "silk", params: { intensity: 0.9 }, cycle: { every: 1, plates: ["silk", "bokeh", { kind: "image", params: { src: "assets/a.jpg", dim: 0.3 } }] } } }));
   const specs = s.scenes.slice(0, 3).map((scene) => scenePlateSpec(s, scene));
@@ -314,60 +317,66 @@ test("cycle: {every} rotates the plate every n shots, from the story's own plate
   // Scene and chapter plates still win; overlays (track 1) do not count as shots.
   const mixed = kinds({ kind: "silk", cycle: { every: 1 } }, { scenes: [...shots(4).map((scene, i) => (i === 1 ? { ...scene, backdrop: "wash" } : scene)), { id: "o", module: "motion-title", track: 1, start: 1, end: 3, params: { text: "o" } }] });
   // (resolved scenes sort by start: the overlay is second and takes the first plate.)
-  assert.deepEqual(mixed, ["silk", "silk", "wash", "bokeh", "starfield"]);
+  assert.deepEqual(mixed, ["silk", "silk", "wash", "bokeh", "veil"]);
 });
 
 test("a frame widens the plate with the same density per screen, and the default frame is the canvas", () => {
   const s = story();
-  const spec = resolvePlate("starfield");
+  const spec = resolvePlate("bokeh");
   const plain = platePlan(s, spec);
   assert.deepEqual(plain.frame, { x: 0, y: 0, width: 1920, height: 1080 });
   assert.equal(platePlan(s, spec, { frame: { x: 0, y: 0, width: 1920, height: 1080 } }), plain, "memoised on the frame");
   const wide = platePlan(s, spec, { frame: { x: -1200, y: 0, width: 3120, height: 1080 } });
   const dots = (plan) => (decodeURIComponent(plan.layers.find((layer) => layer.id === "far").style.backgroundImage).match(/<circle/g) ?? []).length;
-  assert.equal(dots(wide), Math.round(760 * 3120 / 1920));
-  assert.equal(dots(plain), 760);
+  assert.equal(dots(wide), Math.round(320 * 3120 / 1920));
+  assert.equal(dots(plain), 320);
   for (const layer of wide.layers.filter((entry) => !entry.fixed)) assert.ok(layer.box.x <= -1200 && layer.box.x + layer.box.width >= 1920, layer.id);
   assert.deepEqual(wide.layers.at(-1).box, { x: 0, y: 0, width: 1920, height: 1080 }, "the vignette stays on the canvas");
   assert.deepEqual(plateVignette(s, 0.4).fixed, true);
 });
 
-test("fallback plates: neutral and brand-lit for any brief, motif plates only when the brief is about one", () => {
-  const kinds = (plates) => plates.map((plate) => plate.kind);
-  // Trades, home and outdoors briefs never get a helix, a hex shell or a starfield.
-  for (const brief of [
-    "Choosing deck materials: hardwood vs composite, the technical trade-offs",
-    "Slide-on camper payload explained: solar cells, lithium batteries and a technical walk-through",
-    "Kitchen renovation: what a builder checks before the cabinets go in",
-    "Stargazing from the campsite: a weekend on the beach",
-    "Plumbing tips from a licensed trade: hot water systems",
-    "Our team's tech tips for cleaning a timber deck"
-  ]) {
-    assert.equal(plateMotif(brief), null, brief);
-    const plates = fallbackPlates({ scenes: [] }, brief);
-    assert.deepEqual(plates, NEUTRAL_PLATES.map((plate) => ({ kind: plate.kind, params: { ...plate.params } })));
-    assert.ok(plates.every((plate) => !MOTIF_PLATE_KINDS.includes(plate.kind) && plate.kind !== "wash"), brief);
+test("no plate depicts a subject: the kinds that did are retired, and a story that names one still builds on a neutral kind", () => {
+  assert.deepEqual(RETIRED_PLATE_KINDS, { "hex-shell": "smoke", strands: "silk", starfield: "bokeh" });
+  assert.deepEqual(STORY_RETIRED_PLATE_KINDS, RETIRED_PLATE_KINDS);
+  for (const [old, now] of Object.entries(RETIRED_PLATE_KINDS)) {
+    assert.ok(!PLATE_KINDS.includes(old) && DARK_PLATE_KINDS.includes(now), old);
+    assert.deepEqual(plateErrors(old), []);
+    assert.equal(resolvePlate(old).kind, now);
+    assert.deepEqual(resolvePlate({ kind: old, params: { tint: "accent", focus: 0.3 } }), { kind: now, params: { ...resolvePlate(now).params, tint: "accent", focus: 0.3 } });
+    // A stored plan: the story plate, a cycle list, a chapter and a scene all name it.
+    const old_ = story({ plate: { kind: old, cycle: { every: 1, plates: [old, "wash"] } } });
+    old_.chapters[1].plate = old;
+    old_.scenes[2].backdrop = { kind: old };
+    const { ok, errors, warnings } = validateStory(old_);
+    assert.ok(ok, errors.join("; "));
+    const said = warnings.filter((warning) => warning.includes(`the ${old} plate was removed`));
+    assert.deepEqual(said.map((warning) => warning.split(":")[0]), ["plate", "plate.cycle.plates[0]", "chapters[1].plate", "scenes[2].backdrop"]);
+    assert.ok(said.every((warning) => warning.endsWith(`${now} is drawn instead`)));
+    const s = resolveStory(old_);
+    for (const scene of s.scenes) assert.ok(PLATE_KINDS.includes(scenePlateSpec(s, scene).kind));
+    assert.equal(platePlan(s, scenePlateSpec(s, s.scenes[2])).kind, now);
   }
-  assert.equal(plateMotif("Crazy AI news in October 2026"), "tech");
-  assert.equal(plateMotif("How our SaaS startup ships software"), "tech");
-  assert.equal(plateMotif("What DNA sequencing tells a biotech lab"), "science");
-  assert.equal(plateMotif("NASA's next rocket launch"), "space");
-  assert.deepEqual(kinds(fallbackPlates({}, "AI agents for developers")), kinds(PLATE_MOTIFS.tech.plates));
-  assert.ok(kinds(PLATE_MOTIFS.science.plates).includes("strands"));
-  assert.ok(kinds(PLATE_MOTIFS.space.plates).includes("starfield"));
+  assert.equal(resolvePlate("constructor"), null);
+  assert.deepEqual(validateStory(story({ plate: "silk" })).warnings.filter((warning) => /plate was removed/.test(warning)), []);
+});
+
+test("fallback plates are neutral and brand-lit whatever the brief is about", () => {
+  const plates = fallbackPlates({ scenes: [] });
+  assert.deepEqual(plates, NEUTRAL_PLATES.map((plate) => ({ kind: plate.kind, params: { ...plate.params } })));
+  assert.ok(plates.every((plate) => DARK_PLATE_KINDS.includes(plate.kind)));
   // Every list is valid as a cycle, and no two neighbours (wrapping) share a kind.
   const footage = { scenes: ["a", "b", "c"].map((id, i) => ({ id, params: { media: i === 1 ? { kind: "image", src: "assets/shots/b.jpg" } : { kind: "video", src: `assets/shots/${id}.mp4`, sourceStart: i } } })) };
-  for (const plates of [NEUTRAL_PLATES, ...Object.values(PLATE_MOTIFS).map((motif) => motif.plates), fallbackPlates(footage, "deck"), fallbackPlates(footage, "AI")]) {
-    assert.deepEqual(plateErrors({ kind: plates[0].kind, cycle: { every: 1, plates } }, "plate", { allowCycle: true }), []);
-    plates.forEach((plate, i) => { const next = plates[(i + 1) % plates.length]; assert.ok(plate.kind !== next.kind || plate.params.src !== next.params.src, `${plate.kind} twice in a row`); });
+  for (const list of [NEUTRAL_PLATES, fallbackPlates(footage)]) {
+    assert.deepEqual(plateErrors({ kind: list[0].kind, cycle: { every: 1, plates: list } }, "plate", { allowCycle: true }), []);
+    list.forEach((plate, i) => { const next = list[(i + 1) % list.length]; assert.ok(plate.kind !== next.kind || plate.params.src !== next.params.src, `${plate.kind} twice in a row`); });
   }
 });
 
 test("fallback plates take the project's own footage, blurred and dimmed, between the drawn plates", () => {
   const scenes = ["a", "b", "c", "d", "e"].map((id, i) => ({ id, module: "clip", params: { media: { kind: "video", src: `assets/shots/${id}.mp4`, sourceStart: i * 1.5 } } }));
   scenes.push({ id: "f", module: "photo-scene", params: { media: { kind: "image", src: "assets/shots/f.jpg" } } }, { id: "g", module: "clip", params: { media: { kind: "video", src: "assets/shots/a.mp4" } } });
-  const plates = fallbackPlates({ scenes }, "");
-  assert.deepEqual(plates.map((plate) => plate.params.src ?? plate.kind), ["silk", "assets/shots/d.mp4", "smoke", "assets/shots/e.mp4", "silk", "assets/shots/f.jpg", "smoke", "assets/shots/a.mp4"]);
+  const plates = fallbackPlates({ scenes });
+  assert.deepEqual(plates.map((plate) => plate.params.src ?? plate.kind), ["silk", "assets/shots/d.mp4", "smoke", "assets/shots/e.mp4", "veil", "assets/shots/f.jpg", "blooms", "assets/shots/a.mp4", "facets", "light-leak", "flow-lines", "grain"]);
   assert.deepEqual(plates[1].params, { src: "assets/shots/d.mp4", start: 4.5, treatment: "blur" });
   assert.deepEqual(plates[5].params, { src: "assets/shots/f.jpg", blur: 32, dim: 0.62 });
   // A footage plate keeps paper text readable: its dim is raised to the floor.
@@ -376,5 +385,5 @@ test("fallback plates take the project's own footage, blurred and dimmed, betwee
   assert.equal(spec.kind, "video");
   assert.ok(platePlan(s, spec).contrast.ok);
   // No footage on the shots: the drawn plates alone.
-  assert.equal(fallbackPlates({ scenes: [{ id: "x", module: "stat-card" }] }, "").length, NEUTRAL_PLATES.length);
+  assert.equal(fallbackPlates({ scenes: [{ id: "x", module: "stat-card" }] }).length, NEUTRAL_PLATES.length);
 });

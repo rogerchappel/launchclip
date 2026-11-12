@@ -27,7 +27,7 @@ function zoomStory({ mode = "world", grammar = "playful", mutate = (story) => st
     format: { width: W, height: H, fps: 30, duration: 24 },
     brand: { colors: { bg: "#0b1020", primary: "#ff7a59", accent: "#7ce7ff", ink: "#0b1020", paper: "#f5f1ea" }, fonts: { display: "anton", body: "inter", meta: "jetbrains-mono" } },
     motion: { grammar }, camera: { mode },
-    plate: { kind: "starfield" },
+    plate: { kind: "veil" },
     scenes: [
       { id: "s1", module: "hook-title", start: 0, end: 6, params: { headline: "Which model wins on cost?" }, zooms: [{ at: 1.5, box: { ...BOX }, until: 4 }] },
       { id: "s2", module: "bar-chart", start: 6, end: 15, in: { type: "pan", dur: 0.8 }, params: { title: "Score", data: [{ label: "Astra", value: 57.6 }, { label: "Bolt", value: 42 }, { label: "Comet", value: 31 }] },

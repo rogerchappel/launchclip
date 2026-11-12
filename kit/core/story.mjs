@@ -556,13 +556,13 @@ export function validateStory(story, { modules, moduleParams } = {}) {
   validateBackground(story.background, err);
   validatePanel(story.panel, err);
   // plate: the blurred backdrop plate, per story, chapter or scene (kit/core/plates.mjs).
-  validatePlate(story.plate, err, "plate", { cycle: true });
-  if (Array.isArray(story.chapters)) story.chapters.forEach((chapter, j) => { if (isObject(chapter)) validatePlate(chapter.plate, err, `chapters[${j}].plate`, { none: true }); });
+  validatePlate(story.plate, err, "plate", { cycle: true, warn });
+  if (Array.isArray(story.chapters)) story.chapters.forEach((chapter, j) => { if (isObject(chapter)) validatePlate(chapter.plate, err, `chapters[${j}].plate`, { none: true, warn }); });
   if (Array.isArray(story.scenes)) story.scenes.forEach((scene, i) => {
     if (!isObject(scene)) return;
-    validatePlate(scene.plate, err, `scenes[${i}].plate`, { none: true });
+    validatePlate(scene.plate, err, `scenes[${i}].plate`, { none: true, warn });
     // backdrop: the same value under the name world-mode stories use.
-    validatePlate(scene.backdrop, err, `scenes[${i}].backdrop`, { none: true });
+    validatePlate(scene.backdrop, err, `scenes[${i}].backdrop`, { none: true, warn });
   });
   // medium: the whole-frame finishing pass (kit/core/medium.mjs).
   validateMedium(story.medium, err);
@@ -1617,15 +1617,22 @@ function validateBackground(value, err, path = "background") {
 
 // The same rules as kit/core/plates.mjs plateErrors(), kept here so this
 // file stays import-free (kept in step by test/plates.test.js).
-export const STORY_PLATE_KINDS = Object.freeze(["hex-shell", "silk", "strands", "bokeh", "starfield", "smoke", "wash", "image", "video"]);
+export const STORY_PLATE_KINDS = Object.freeze(["silk", "smoke", "bokeh", "veil", "facets", "halftone", "grain", "blooms", "light-leak", "spotlight", "studio", "beams", "prism", "bands", "panes", "arcs", "ripples", "flow-lines", "pinstripe", "dot-field", "linen", "brush", "wash", "image", "video"]);
+// Kinds that depicted a subject → the neutral kind drawn instead (plates.mjs RETIRED_PLATE_KINDS).
+export const STORY_RETIRED_PLATE_KINDS = Object.freeze({ "hex-shell": "smoke", strands: "silk", starfield: "bokeh" });
 const PLATE_UNIT = { focus: [0, 1], intensity: [0, 1], speed: [0, 2], depth: [0, 1] };
 const PLATE_KIND_UNIT = { image: { blur: [0, 80], dim: [0, 1] }, video: { start: [0, 86400], blur: [0, 80], dim: [0, 1], peak: [0, 1] } };
 const PLATE_IMAGE_SRC = /^(?![a-zA-Z][a-zA-Z0-9+.-]*:)(?!\/)[^\s"'<>\\]+\.(png|jpe?g|webp|avif)$/i;
 const PLATE_VIDEO_SRC = /^(?![a-zA-Z][a-zA-Z0-9+.-]*:)(?!\/)[^\s"'<>\\]+\.(mp4|webm|mov)$/i;
 const PLATE_FILE = { image: ["an", "a still under the project, e.g. assets/backdrop.jpg"], video: ["a", "a clip under the project, e.g. assets/broll.mp4"] };
 const PLATE_VIDEO_TREATMENTS = ["dim", "blur", "tint"];
-function validatePlate(value, err, path, { none = false, cycle = false } = {}) {
-  if (value === undefined || value === null) return;
+function validatePlate(plate, err, path, { none = false, cycle = false, warn = null } = {}) {
+  if (plate === undefined || plate === null) return;
+  // A retired kind still builds, on its neutral kind; say so once per place.
+  const named = typeof plate === "string" ? plate : isObject(plate) ? plate.kind : null;
+  const swap = typeof named === "string" && Object.hasOwn(STORY_RETIRED_PLATE_KINDS, named) ? STORY_RETIRED_PLATE_KINDS[named] : null;
+  if (swap) warn?.(`${path}: the ${named} plate was removed (a backdrop that depicts a subject changes what the video seems to be about); ${swap} is drawn instead`);
+  const value = !swap ? plate : typeof plate === "string" ? swap : { ...plate, kind: swap };
   if (typeof value === "string") {
     if (PLATE_FILE[value]) { err(`${path}: ${PLATE_FILE[value][0]} ${value} plate needs its file: {kind: "${value}", params: {src: "assets/…"}}`); return; }
     if (!(STORY_PLATE_KINDS.includes(value) || (none && value === "none"))) err(`${path} must be one of ${STORY_PLATE_KINDS.join(", ")}${none ? ", none" : ""} (or {kind, params?})`);
@@ -1635,7 +1642,7 @@ function validatePlate(value, err, path, { none = false, cycle = false } = {}) {
   const keys = ["kind", "params", ...(cycle ? ["cycle"] : [])];
   for (const key of Object.keys(value)) if (!keys.includes(key)) err(`${path}.${key} is not supported (allowed: ${keys.join(", ")})`);
   if (!STORY_PLATE_KINDS.includes(value.kind)) { err(`${path}.kind must be one of ${STORY_PLATE_KINDS.join(", ")}`); return; }
-  if (value.cycle !== undefined) validatePlateCycle(value.cycle, err, `${path}.cycle`);
+  if (value.cycle !== undefined) validatePlateCycle(value.cycle, err, `${path}.cycle`, warn);
   const own = PLATE_KIND_UNIT[value.kind] ?? {};
   const file = PLATE_FILE[value.kind];
   const srcRequired = file ? `${path}.params.src is required for ${file[0]} ${value.kind} plate (${file[1]})` : "";
@@ -1660,14 +1667,14 @@ function validatePlate(value, err, path, { none = false, cycle = false } = {}) {
     if (!(typeof given === "number" && given >= min && given <= max)) err(`${path}.params.${key} must be a number from ${min} to ${max}`);
   }
 }
-function validatePlateCycle(cycle, err, path) {
+function validatePlateCycle(cycle, err, path, warn = null) {
   if (typeof cycle === "boolean") return;
   if (!isObject(cycle)) { err(`${path} must be true, false or {every, plates?}`); return; }
   for (const key of Object.keys(cycle)) if (!["every", "plates"].includes(key)) err(`${path}.${key} is not supported (allowed: every, plates)`);
   if (!(Number.isInteger(cycle.every) && cycle.every >= 1 && cycle.every <= 50)) err(`${path}.every must be a whole number of shots from 1 to 50`);
   if (cycle.plates === undefined) return;
   if (!Array.isArray(cycle.plates) || !cycle.plates.length || cycle.plates.length > 12) { err(`${path}.plates must be a list of 1 to 12 plates`); return; }
-  cycle.plates.forEach((plate, i) => validatePlate(plate, err, `${path}.plates[${i}]`));
+  cycle.plates.forEach((plate, i) => validatePlate(plate, err, `${path}.plates[${i}]`, { warn }));
 }
 
 // The same rules as kit/core/lighting.mjs lightErrors(), kept here so this

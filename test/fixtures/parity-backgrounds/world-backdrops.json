@@ -1,5 +1,5 @@
 {
-  "describe": "world camera backdrops on the minimal story: starfield, then a pan right slides a wash in (at rest, mid-slide, at rest after the loop pan)",
+  "describe": "world camera backdrops on the minimal story: veil, then a pan right slides a wash in (at rest, mid-slide, at rest after the loop pan)",
   "project": "examples/story/minimal",
   "times": [
     1.2,
@@ -11,11 +11,11 @@
       "mode": "world"
     },
     "plate": {
-      "kind": "starfield",
+      "kind": "veil",
       "cycle": {
         "every": 1,
         "plates": [
-          "starfield",
+          "veil",
           "wash"
         ]
       }

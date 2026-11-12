@@ -36,11 +36,11 @@
       "every": 1,
       "plates": [
         "smoke",
-        "starfield",
+        "veil",
         "bokeh",
         "silk",
-        "strands",
-        "hex-shell"
+        "facets",
+        "halftone"
       ]
     }
   },

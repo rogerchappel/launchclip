@@ -50,7 +50,7 @@ import { dialogueDocument, dialogueGaps, dialogueRequests, synthesizeDialogue } 
 import { LONG_FORM_VERSION, LONG_FORM_VOICE, chapterId, chapterNeedsResize, chapterWords, joinTakes, joinVoice, narrationTail, scriptMarkdown, shareSpare, wordCount, writeChapter, writeOutline } from "./long_form.js";
 import { beatMapReportText, beatMapToDirection, beatMapToStory, directLongForm } from "@launchclip/core/beat-director.mjs";
 import { applyStyle } from "@launchclip/core/style.mjs";
-import { fallbackPlates, plateMotif } from "@launchclip/core/plates.mjs";
+import { fallbackPlates } from "@launchclip/core/plates.mjs";
 import { rewriteLongFormCopy } from "./long_form_copy.js";
 import { captureFiles, readCaptureRequests, recordCaptures } from "./captures.js";
 import { evidenceClipParams } from "@launchclip/core/catalog-d-evidence-clip.mjs";
@@ -1906,13 +1906,10 @@ export function worldLook(story, prompt = "") {
   if (!drawn && !ownPlates && base.length > 1) {
     const duration = Number(story.format?.duration) || base.reduce((end, scene) => Math.max(end, Number(scene.end) || 0), 0);
     const every = Math.max(1, Math.min(50, Math.round(PLATE_SECONDS / Math.max(1, duration / base.length))));
-    // Neutral, brand-lit plates and the project's own footage; a motif
-    // (hex-shell, strands, starfield) only when the brief is about one.
-    const topic = [prompt, story.title].filter(Boolean).join("\n");
-    const plates = fallbackPlates(story, topic);
+    // Neutral, brand-lit plates and the project's own footage.
+    const plates = fallbackPlates(story);
     story.plate = { ...plates[0], cycle: { every, plates } };
-    const motif = plateMotif(topic);
-    added.push(`plate cycle every ${every} shot${every === 1 ? "" : "s"} (${motif ? `${motif} plates` : "neutral plates"}${plates.some((entry) => entry.kind === "video" || entry.kind === "image") ? " and project footage" : ""})`);
+    added.push(`plate cycle every ${every} shot${every === 1 ? "" : "s"} (neutral plates${plates.some((entry) => entry.kind === "video" || entry.kind === "image") ? " and project footage" : ""})`);
   }
   return added;
 }

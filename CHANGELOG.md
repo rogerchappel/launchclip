@@ -4,6 +4,13 @@
 
 ### Added
 
+- Nineteen backdrop plates that carry no subject of their own, drawn in code
+  and lit in the brand's colours: `veil`, `facets`, `halftone`, `grain`,
+  `blooms`, `light-leak`, `spotlight`, `studio`, `beams`, `prism`, `bands`,
+  `panes`, `arcs`, `ripples`, `flow-lines`, `pinstripe`, `dot-field`, `linen`
+  and `brush`. Each keeps paper text at 4.5:1, drifts as a function of
+  absolute time and draws the same in HyperFrames and Remotion. The planning
+  prompt lists them with a line on each look (`PLATE_NOTES`).
 - The preview player can start silent and be unmuted by its host:
   `?muted` (with `?autoplay`, a player in a feed starts by itself), the
   `launchclip:mute` and `launchclip:unmute` messages, and a
@@ -99,6 +106,23 @@
 
 ### Changed
 
+- **Breaking for stored plans and exported schemas:** the backdrop plates
+  that depicted a subject are removed: `strands` (a DNA helix), `hex-shell`
+  (a globe of hex cells) and `starfield` (deep space). A picture behind a
+  video changes what the video seems to be about. `PLATE_KINDS` and
+  `STORY_PLATE_KINDS` no longer list them, so a host that exports those
+  enums stops offering them on its next pin. A storyboard, cycle list or
+  style pack that still names one validates and builds: `strands` draws as
+  `silk`, `hex-shell` as `smoke`, `starfield` as `bokeh`
+  (`RETIRED_PLATE_KINDS`), and `validateStory` warns at each place.
+- `bokeh` spreads its points evenly instead of along a diagonal lane.
+- `launchclip make` no longer picks plates by the brief's topic:
+  `PLATE_MOTIFS`, `MOTIF_PLATE_KINDS` and `plateMotif` are gone,
+  `fallbackPlates(story)` takes no text, and every brief rotates the same
+  eight neutral, brand-lit plates. `plate.cycle: true` walks `silk`, `veil`,
+  `smoke`, `bokeh`. The beat director, the seeded looks and the
+  `glass-explainer` pack draw from the neutral kinds, so a given style seed
+  now gives different plates.
 - A visual explainer fills the frame. The picture now runs edge to edge and
   to the bottom, where every scene had stopped above the captions and left
   the lower 40% of a 9:16 frame empty. Captions sit on top of the picture,
