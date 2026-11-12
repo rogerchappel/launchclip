@@ -161,7 +161,14 @@ test("a poster is written beside the player when a browser can draw it, and name
   assert.equal(named.poster, "poster.jpg");
   assert.equal(JSON.parse(await readFile(path.join(named.dir, "preview.json"), "utf8")).poster, "poster.jpg");
   assert.equal((await buildPreview(project, { poster: false }, { compile, gsapFile: null, poster: async () => { throw new Error("asked for a poster"); } })).poster, null);
-  assert.equal((await buildPreview(project, {}, { compile, gsapFile: null, poster: async () => { throw new Error("the browser crashed"); } })).poster, null, "a poster that cannot be drawn does not fail the preview");
+  const crashed = await buildPreview(project, {}, { compile, gsapFile: null, poster: async () => { throw new Error("the browser crashed"); } });
+  assert.equal(crashed.poster, null, "a poster that cannot be drawn does not fail the preview");
+  // Why there is no still is kept, for the host that expected one.
+  assert.equal(JSON.parse(await readFile(path.join(crashed.dir, "preview.json"), "utf8")).poster_error, "the browser crashed");
+  assert.ok(crashed.warnings.some((line) => /^poster: no still was made \(the browser crashed\)/.test(line)));
+  const none = await buildPreview(project, {}, { compile, gsapFile: null, poster: async ({ why }) => { why("no browser was found; looked for a system Chrome"); return null; } });
+  assert.match(none.poster_error, /^no browser was found/);
+  assert.equal("poster_error" in named, false);
   // For real: the composition at a point early in the video, half size.
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-poster-"));
   await writeFile(path.join(dir, "composition.html"), PAGE);

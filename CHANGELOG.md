@@ -4,6 +4,12 @@
 
 ### Added
 
+- The preview player can start silent and be unmuted by its host:
+  `?muted` (with `?autoplay`, a player in a feed starts by itself), the
+  `launchclip:mute` and `launchclip:unmute` messages, and a
+  `launchclip:muted` answer.
+- `preview.json` says why no poster was made (`poster_error`), and the
+  export prints it as a warning.
 - `LAUNCHCLIP_OPENROUTER_PRIORITY_MODELS` lists OpenRouter model ids whose
   calls ask the host for its priority tier (`service_tier: "priority"`).
   A standard-tier call can wait a minute or more before the host starts
@@ -119,6 +125,15 @@
 
 ### Fixed
 
+- The preview player no longer jerks a clip whose file ends before its scene
+  does. The player asked the ended clip to play again, which started it
+  over, then pulled it back to its end, on every frame. The clip now holds
+  its last frame.
+- While the preview waits for a clip to buffer, every clip on screen waits
+  with it. A clip left running was ahead of the clock when it resumed and
+  jumped back.
+- A clip that is still to come waits at its first frame, so a cut to a clip
+  that starts part-way into its file no longer begins with a seek.
 - A fast draft (`--speed draft`) no longer fails when its seeded look has
   stacked captions (`kinetic-stack`). Those stand too tall to clear a
   character card, so tooling hid them and the captions gate failed the plan,

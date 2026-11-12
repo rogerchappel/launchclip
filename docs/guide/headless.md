@@ -247,6 +247,15 @@ messages from its parent and posts `launchclip:ready`, `launchclip:time` and
 `launchclip:ended` back. It has to come from a web server: a browser will
 not play it from `file://`.
 
+For a feed of players that start by themselves, load the page with
+`?autoplay&muted`: a browser lets a silent player start without a click.
+`launchclip:unmute` and `launchclip:mute` switch the sound (after the
+viewer's click, which is what a browser needs before it plays sound), and
+the page answers `launchclip:muted` (`{muted}`).
+
+When no still could be made, `preview.json` has `poster: null` and says why
+under `poster_error`.
+
 An exported folder's media is made light for streaming: each clip becomes a
 small H.264 proxy (fitted in 960 pixels a side, a keyframe every half second
 so a seek lands at once) and a WAV soundtrack becomes AAC. `preview.json`

@@ -94,10 +94,16 @@ export async function buildPreview(projectPath, options = {}, adapters = {}) {
     media: lightened ? { quality: "light", files: lightened.files, saved_bytes: lightened.saved, ...(lightened.skipped.length ? { kept_original: lightened.skipped } : {}) } : { quality: "original" }
   };
   // A still of the video for a host to show before the player is loaded. It needs a browser; without one there is none.
-  info.poster = options.poster === false ? null : await Promise.race([(adapters.poster ?? posterImage)({ dir, format: manifest.format }), new Promise((resolve) => setTimeout(() => resolve(null), POSTER_TIMEOUT_MS).unref())]).catch(() => null);
+  // Why there is none is kept (preview.json poster_error, and a warning): a host that expected a still can see the reason.
+  let posterError = null;
+  info.poster = options.poster === false ? null : await Promise.race([
+    (adapters.poster ?? posterImage)({ dir, format: manifest.format, why: (reason) => { posterError = reason; } }),
+    new Promise((resolve) => setTimeout(() => { posterError = `it was not drawn within ${POSTER_TIMEOUT_MS / 1000} s`; resolve(null); }, POSTER_TIMEOUT_MS).unref())
+  ]).catch((error) => { posterError = String(error?.message ?? error).split("\n")[0].slice(0, 300); return null; });
+  if (!info.poster && options.poster !== false) info.poster_error = posterError ?? "no browser was found to draw it";
   await writeFile(path.join(dir, "preview.json"), `${JSON.stringify(info, null, 2)}\n`);
   await writeFile(path.join(dir, "index.html"), playerPage(info, html));
-  return { ...info, dir, index: path.join(dir, "index.html"), warnings: compiled.warnings ?? [] };
+  return { ...info, dir, index: path.join(dir, "index.html"), warnings: [...(compiled.warnings ?? []), ...(info.poster_error ? [`poster: no still was made (${info.poster_error})`] : [])] };
 }
 
 export const PREVIEW_MEDIA = Object.freeze(["light", "original"]);
@@ -171,14 +177,14 @@ const POSTER_TIMEOUT_MS = 45_000;
  * video, half size. → "poster.jpg", or null when there is no browser to draw
  * it (Playwright's Chromium, a system Chrome or a renderer's browser).
  */
-export async function posterImage({ dir, format }) {
+export async function posterImage({ dir, format, why = () => {} }) {
   const { chromiumSearch, loadPlaywright } = await import("./demo/record.js");
   const chromium = await loadPlaywright();
-  if (!chromium) return null;
+  if (!chromium) { why("the optional dependency playwright is not installed"); return null; }
   let pinned = null;
   try { pinned = chromium.executablePath(); } catch { pinned = null; }
   const found = await chromiumSearch({ playwrightPath: pinned });
-  if (!found.path) return null;
+  if (!found.path) { why(`no browser was found; looked for ${found.looked.join(", ")}`.slice(0, 600)); return null; }
   const browser = await chromium.launch({ executablePath: found.path });
   try {
     const { width, height, duration } = format;
@@ -302,6 +308,8 @@ const escapeHtml = (value) => String(value).replace(/[&<>"]/g, (c) => ({ "&": "&
 // a frame nested inside it nor, under a frame-ancestors policy, load one. So
 // nothing is nested: the composition's markup is in the player page.
 //
+// ?muted starts it silent (a browser lets a silent player start by itself, so ?autoplay&muted plays in a feed);
+// "launchclip:mute" / "launchclip:unmute" switch the sound, and it answers "launchclip:muted" {muted}.
 // A host page drives it by postMessage {type: "launchclip:play" |
 // "launchclip:pause" | "launchclip:seek", time}, and it posts {type:
 // "launchclip:ready" | "launchclip:time" | "launchclip:ended"} to its parent,
@@ -377,12 +385,24 @@ function playerScript(info) {
       const el = clip.el;
       // A clip is on the page for its own stretch only (the renderer's runtime does the same).
       if (el.tagName === "VIDEO") el.style.visibility = on ? "" : "hidden";
-      if (!on) { if (!el.paused) el.pause(); continue; }
-      const want = clip.mediaStart + local;
-      if (el !== master || !playing) { if (Math.abs(el.currentTime - want) > (playing ? 0.3 : 0.03)) { try { el.currentTime = want; } catch (e) {} } }
+      if (!on) {
+        if (!el.paused) el.pause();
+        // A clip that is still to come waits at its first frame, so the browser buffers there and the cut does not start with a seek.
+        if (local < 0 && el.tagName === "VIDEO" && el.readyState >= 1 && !el.seeking && Math.abs(el.currentTime - clip.mediaStart) > 0.03) { try { el.currentTime = clip.mediaStart; } catch (e) {} }
+        continue;
+      }
+      // A file that runs out before its scene does holds its last frame: asked to play again it would start over, and
+      // be pulled back to its end, on every frame.
+      const end = el.duration > 0.1 ? el.duration - 0.05 : Infinity;
+      const done = clip.mediaStart + local >= end;
+      const want = Math.min(clip.mediaStart + local, end);
+      // The mix is the clock while it runs, so it is not corrected then. A mix the browser has not let start (a player
+      // that began by itself) is kept at the clock, so the video carries on from where it is when the sound comes in.
+      if (el !== master || !playing || el.paused) { if (Math.abs(el.currentTime - want) > (playing ? 0.3 : 0.03)) { try { el.currentTime = want; } catch (e) {} } }
       el.muted = muted; el.volume = Math.max(0, Math.min(1, clip.volume));
-      // While the picture waits for a clip, the sound waits too; the clip itself keeps loading.
-      const run = playing && !(waiting && el === master);
+      // While the picture waits for a clip, everything on screen waits with it: a clip left running would be ahead of
+      // the clock when it resumes and be pulled back. A paused clip keeps loading.
+      const run = playing && !waiting && !done;
       if (run && el.paused) { const p = el.play(); if (p && p.catch) p.catch(() => {}); }
       if (!run && !el.paused) el.pause();
     }
@@ -425,12 +445,14 @@ function playerScript(info) {
   function seekTo(value) { t = Math.max(0, Math.min(D, Number(value) || 0)); if (master) { try { master.currentTime = t; } catch (e) {} } draw(); post("launchclip:time"); }
 
   playButton.onclick = () => (playing ? pause() : play());
-  muteButton.onclick = () => { muted = !muted; muteButton.innerHTML = muted ? "&#128263;" : "&#128266;"; draw(); };
+  function setMuted(value) { muted = Boolean(value); muteButton.innerHTML = muted ? "&#128263;" : "&#128266;"; draw(); post("launchclip:muted", { muted: muted }); }
+  muteButton.onclick = () => setMuted(!muted);
   seek.oninput = () => seekTo(seek.value);
   addEventListener("keydown", (event) => { if (event.code === "Space") { event.preventDefault(); playButton.click(); } });
   addEventListener("message", (event) => {
     const m = event.data || {};
     if (m.type === "launchclip:play") play(); else if (m.type === "launchclip:pause") pause(); else if (m.type === "launchclip:seek") seekTo(m.time);
+    else if (m.type === "launchclip:mute") setMuted(true); else if (m.type === "launchclip:unmute") setMuted(false);
   });
 
   (function ready() {
@@ -448,7 +470,7 @@ function playerScript(info) {
     // Ready once the fonts are in and the sound and the first clips can play (or four seconds have passed).
     const first = clips.filter((clip) => clip.start < 6).map((clip) => clip.el).concat(master ? [master] : []).filter((el, i, all) => all.indexOf(el) === i);
     const buffered = Promise.all(first.map((el) => el.readyState >= 3 ? null : new Promise((resolve) => { el.addEventListener("canplay", resolve, { once: true }); el.addEventListener("error", resolve, { once: true }); })));
-    Promise.all([fonts, Promise.race([buffered, new Promise((resolve) => setTimeout(resolve, 4000))])]).then(() => { seekTo(Number(query.get("t")) || 0); post("launchclip:ready"); if (query.has("autoplay")) play(); });
+    Promise.all([fonts, Promise.race([buffered, new Promise((resolve) => setTimeout(resolve, 4000))])]).then(() => { seekTo(Number(query.get("t")) || 0); post("launchclip:ready"); if (query.has("muted")) setMuted(true); if (query.has("autoplay")) play(); });
     window.__launchclipPreview = { play: play, pause: pause, seek: seekTo, get time() { return t; }, get playing() { return playing; }, duration: D };
   })();
   requestAnimationFrame(tick);
