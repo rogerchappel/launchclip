@@ -397,6 +397,14 @@ test("a video shot in a card's image slot lands as a still frame of it", async (
   assert.equal(byUrl.storyboard.scenes[0].params.device, "phone");
 });
 
+test("over a recording, a scene whose shot the app lacks is left out, not a failed plan", async () => {
+  const board = story(REQUEST);
+  const found = await resolveShots(board, { assets: { findShot: async () => null }, words: WORDS, drop: true });
+  assert.deepEqual(found.errors, []);
+  assert.deepEqual(found.storyboard.scenes.map((scene) => scene.id), board.scenes.slice(1).map((scene) => scene.id));
+  assert.match(found.warnings[0], /has no shot that shows "a barista pouring latte art, close up"; the scene is left out$/);
+});
+
 test("an image request in a card slot takes a video answer as a still; a miss leaves the card's placeholder", async (t) => {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-card-miss-"));
   t.after(() => rm(project, { recursive: true, force: true }));
