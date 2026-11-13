@@ -331,8 +331,10 @@ const extensionOf = (value) => {
  * errors: ["scene <id>: …"]}. cache: a Map reused across repair attempts, so
  * the same request is asked once. A provider with concurrency > 1 is asked
  * for every shot at once; otherwise one at a time, in scene order.
+ * drop: a scene whose shot the app lacks is left out (a warning), for a plan
+ * over a recording, which plays on in its place.
  */
-export async function resolveShots(storyboard, { assets, words = [], brief = "", format = null, project = null, cache = new Map(), signal, stillFrame = ffmpegStill, measure = measureFootage, fallback = null } = {}) {
+export async function resolveShots(storyboard, { assets, words = [], brief = "", format = null, project = null, cache = new Map(), signal, stillFrame = ffmpegStill, measure = measureFootage, fallback = null, drop = false } = {}) {
   const requests = shotRequests(storyboard);
   const backdrops = backdropRequests(storyboard);
   if (!requests.length && !backdrops.length) return { storyboard, shots: [], media: [], errors: [] };
@@ -344,6 +346,7 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
   const described = [];
   const errors = [];
   const warnings = [];
+  const dropped = new Set();
   // A card's image slot is optional: a shot that can't fill it leaves the
   // card with its own placeholder (a warning), not a failed plan.
   // fallback {scene id: scene}: the drawn scene a plan keeps for a shot the app
@@ -355,6 +358,8 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
       warnings.push(`${line.replace(/; design this scene without one$/, "")}; the scene is drawn instead (${drawn.module})`);
       return;
     }
+    // drop (a plan over a recording): the scene is left out and the recording plays on, so a shot the app lacks is not a failed plan (a story needs one scene, so the last is not dropped).
+    if (!still && drop && story.scenes.length - dropped.size > 1) { dropped.add(index); warnings.push(`${line.replace(/; design this scene without one$/, "")}; the scene is left out`); return; }
     if (!still) { errors.push(line); return; }
     const current = story.scenes[index];
     story.scenes[index] = { ...current, params: withoutPath(current.params, slot) };
@@ -449,6 +454,7 @@ export async function resolveShots(storyboard, { assets, words = [], brief = "",
   const missed = [];
   for (const { index, scene } of backdrops) await resolveBackdrop({ ...context, missed }, index, scene);
   borrowBackdrops(context, missed);
+  if (dropped.size) story.scenes = story.scenes.filter((_, index) => !dropped.has(index));
   return { storyboard: story, shots, media: described, errors, warnings };
 }
 

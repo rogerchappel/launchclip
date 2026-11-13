@@ -340,7 +340,7 @@ export async function planStoryboard(options = {}) {
       if (assets) {
         const requested = shotRequests(pinned.storyboard).length;
         if (footageBackdrops) pinned.storyboard = cardBackdrops(pinned.storyboard, { words: wordList, brief }).storyboard;
-        const found = await resolveShots(pinned.storyboard, { assets, words: wordList, brief, format: fixed.format, project, cache: shotCache, fallback: options.shotFallback ?? null });
+        const found = await resolveShots(pinned.storyboard, { assets, words: wordList, brief, format: fixed.format, project, cache: shotCache, fallback: options.shotFallback ?? null, drop: lane === "footage-led" });
         const kept = restoreMisses(found.storyboard, found.errors, varied.originals);
         pinned.storyboard = kept.storyboard;
         shots = found.shots;
