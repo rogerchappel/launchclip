@@ -56,8 +56,26 @@ export function isLongForm(routing) {
   return routing?.lane === "motion" && Number(routing?.format?.duration) > SHORT_MAX_SECONDS;
 }
 
+// --base-edited / --base-transcript: the app says the assets hold its edited
+// recording. The speech test wants a pause, and a short take with its pauses
+// cut out has none, so without this the recording became plain footage under
+// a written script. (A supplied voiceover is already found by its file name.)
+function withSuppliedRecording(entries, options) {
+  if (!options.suppliedRecording) return entries;
+  const usable = (entry) => entry.kind === "video" && entry.notes?.role !== "b-roll";
+  if (entries.some((entry) => (usable(entry) && entry.speech?.present) || (entry.kind === "audio" && entry.role === "voiceover"))) return entries;
+  // shortcut: the longest video with sound is taken as the recording; name it in an option if an app ever supplies others with sound.
+  const [recording] = entries.filter((entry) => usable(entry) && entry.media?.has_audio && entry.media?.mountable !== false)
+    .sort((a, b) => (b.media?.duration ?? 0) - (a.media?.duration ?? 0) || a.path.localeCompare(b.path));
+  if (!recording) return entries;
+  return entries.map((entry) => entry === recording
+    ? { ...entry, role: "talking-head", speech: { ...entry.speech, present: true }, signals: [...(entry.signals ?? []), "supplied"] }
+    : entry);
+}
+
 /**
- * Route an inventory. options: {aspect, duration (seconds), prompt, animation (--animation)}.
+ * Route an inventory. options: {aspect, duration (seconds), prompt, animation (--animation),
+ * suppliedRecording (--base-edited or --base-transcript)}.
  * → {schema_version, lane, kind? ("animation"), reasons: [..], base, voiceover, media: [..], logos,
  *    music, brand, style, notes, ignored: [{path, reason}], provided?: [paths the asset provider fetched
  *    for an earlier plan; not routed], format, duration_source}
@@ -68,7 +86,7 @@ export function routeLane(inventory, options = {}) {
   // (src/provided_files.js) are not the user's media: they are never the
   // base, a voiceover or footage to place, so a rerun routes as the first run did.
   const provided = listed.filter((entry) => entry?.provided);
-  const entries = listed.filter((entry) => !entry?.provided);
+  const entries = withSuppliedRecording(listed.filter((entry) => !entry?.provided), options);
   const reasons = [];
   const ignored = [];
   const byRole = (kind, role) => entries.filter((entry) => entry.kind === kind && (!role || entry.role === role));

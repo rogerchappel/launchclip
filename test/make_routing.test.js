@@ -131,3 +131,18 @@ test("--animation refuses assets that already carry the voice, and long form", (
   assert.throws(() => route([head("me.mp4")], { animation: true }), /me\.mp4 already carries the voice \(footage-led\)/);
   assert.throws(() => route([], { animation: true, duration: 300 }), /--animation makes videos of 180 seconds or less; got 300/);
 });
+
+test("a supplied recording is the base even when the speech test missed it", () => {
+  const take = entry("talking-head.mp4", "video", "b-roll", { media: { kind: "video", duration: 9, orientation: "portrait", width: 720, height: 1280, has_audio: true, mountable: true }, speech: { present: false, voiced_ratio: 1, pauses: 0 } });
+  assert.equal(route([take, shot("home.png")]).lane, "motion");
+  const result = route([take, shot("home.png")], { suppliedRecording: true, duration: 15 });
+  assert.equal(result.lane, "footage-led");
+  assert.equal(result.base.path, "talking-head.mp4");
+  assert.deepEqual(result.media.map((item) => item.path), ["home.png"]);
+  // A silent clip, or one the app's notes call b-roll, is still not the recording.
+  const silent = { ...take, media: { ...take.media, has_audio: false } };
+  assert.equal(route([silent], { suppliedRecording: true }).lane, "motion");
+  assert.equal(route([{ ...take, notes: { role: "b-roll" } }], { suppliedRecording: true }).lane, "motion");
+  // A supplied voiceover keeps its lane.
+  assert.equal(route([voiceover("voiceover.wav"), demo("demo.mp4")], { suppliedRecording: true }).lane, "voiceover-motion");
+});

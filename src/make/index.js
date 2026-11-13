@@ -511,7 +511,7 @@ async function brandEntries(ctx, dir) {
 
 async function stageRoute(ctx) {
   const { report, options, text } = ctx;
-  const routing = routeLane(ctx.inventory, { aspect: options.aspect, duration: options.duration, prompt: text, animation: options.animation === true });
+  const routing = routeLane(ctx.inventory, { aspect: options.aspect, duration: options.duration, prompt: text, animation: options.animation === true, suppliedRecording: Boolean(options.baseEdited || options.baseTranscript) });
   ctx.routing = routing;
   report.routing = routing;
   for (const entry of routing.ignored) report.warnings.push(`${entry.path}: ${entry.reason}`);
