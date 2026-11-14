@@ -599,3 +599,15 @@ test("checkStoryboard: a param the module does not take, or a value it does not 
   // What the module needs is still an error.
   assert.equal(checkStoryboard(story({ data: [] }), {}).ok, false);
 });
+
+test("checkStoryboard: over a recording, a scene that cannot be drawn is left out and the recording plays on", () => {
+  const brand = { colors: { bg: "#0b1020", primary: "#ff7a59", accent: "#7ce7ff", ink: "#0b1020", paper: "#f5f1ea" }, fonts: { display: "inter", body: "inter", meta: "jetbrains-mono" } };
+  const story = { schema: "launchclip.story.v1", lane: "footage-led", format: { width: 1080, height: 1920, fps: 30, duration: 20 }, brand, base: { src: "assets/recording.mp4" }, scenes: [
+    { id: "ok", module: "punch-in", track: 2, start: 1, end: 4, energy: 1, params: {} },
+    { id: "bad", module: "punch-in", track: 2, start: 6, end: 9, energy: 1, params: { steps: [{ at: 0.2, scale: 1.1 }, { at: 0.3, scale: 1.2 }] } }
+  ] };
+  const checked = checkStoryboard(story, { tier: "tooling" });
+  assert.equal(checked.ok, true, checked.errors.join("\n"));
+  assert.deepEqual(checked.storyboard.scenes.map((scene) => scene.id), ["ok"]);
+  assert.ok(checked.warnings.some((line) => line.startsWith("params: tooling left bad (punch-in) out")), checked.warnings.join("\n"));
+});

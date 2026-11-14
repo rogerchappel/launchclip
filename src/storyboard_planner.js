@@ -630,6 +630,9 @@ export async function planStoryboard(options = {}) {
     }
   }
 
+  // The map names only the scenes the plan kept (tooling may have left one out).
+  if (lane === "footage-led" && direction && last?.storyboard) direction = mapWithoutDropped(direction, last.storyboard);
+
   const allAttempts = [...directionPlan.attempts, ...attempts];
   const totals = allAttempts.reduce((sum, entry) => ({
     input_tokens: sum.input_tokens + entry.usage.input_tokens,
@@ -819,6 +822,7 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   }
 
   const models = new Map();
+  const undrawn = new Set();
   for (const scene of resolved.scenes) {
     if (scene.module === "custom") { warnings.push(`${scene.id} is a custom module; its params and layout are not checked here`); continue; }
     // A param the module does not take, or with a value it does not take ("motion.enter must be left, right, …",
@@ -828,11 +832,24 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
     for (let tries = 0; ; tries += 1) {
       try { models.set(scene.id, resolveModule(scene, resolved, { end: sceneRenderEnd(resolved, scene) })); break; }
       catch (error) {
-        const path = tries < 4 ? /(?:params: |params\.)([A-Za-z0-9_.[\]]+) (?:must be |is not supported)/.exec(message(error))?.[1]?.replace(/^params\./, "") : null;
-        if (!path || !dropParam(scene.params, path) || !dropParam(planned?.params, path)) { errors.push(`params: ${message(error)}`); break; }
-        warnings.push(`params: tooling took ${path} off ${scene.id} (${message(error).split(" params: ").at(-1)}); the module's default is used`);
+        const path = tries < 4 ? /(?:params: |params\.)([A-Za-z0-9_.[\]]+) (?:must be |is not supported|leaves no room)/.exec(message(error))?.[1]?.replace(/^params\./, "") : null;
+        if (path && dropParam(scene.params, path) && dropParam(planned?.params, path)) {
+          warnings.push(`params: tooling took ${path} off ${scene.id} (${message(error).split(" params: ").at(-1)}); the module's default is used`);
+          continue;
+        }
+        // Over a recording a scene that cannot be drawn is left out and the recording plays on (a story keeps one scene):
+        // a repair that fails on the same scene every time otherwise fails the whole video.
+        if (resolved.lane === "footage-led" && resolved.scenes.length - undrawn.size > 1) {
+          undrawn.add(scene.id);
+          warnings.push(`params: tooling left ${scene.id} (${scene.module}) out: ${message(error).split(" params: ").at(-1)}; the recording plays on`);
+        } else errors.push(`params: ${message(error)}`);
+        break;
       }
     }
+  }
+  if (undrawn.size) {
+    resolved.scenes = resolved.scenes.filter((scene) => !undrawn.has(scene.id));
+    storyboard.scenes = storyboard.scenes.filter((scene) => !undrawn.has(scene?.id));
   }
   // The layout check needs every module resolved, and nothing else: a plan
   // outside a cadence band (or short of footage, or with a cast finding) is
