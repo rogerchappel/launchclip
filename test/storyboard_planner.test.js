@@ -585,3 +585,17 @@ test("caption band: the planner is told where this story's captions sit, not the
     assert.match(placed.calls[0].instructions, new RegExp(`caption band x 65–918, ${y.source} \\(this story's captions: position "${position}"\\)`));
   }
 });
+
+test("checkStoryboard: a param the module does not take, or a value it does not take, falls back to the default", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const base = JSON.parse(await readFile(new URL("../examples/story/zoom-cuts-9x16/storyboard.json", import.meta.url), "utf8"));
+  const story = (extra) => ({ ...base, format: { ...base.format, duration: 9 }, scenes: [{ id: "s2", module: "bar-chart", start: 0, end: 9, energy: 2, params: { ...base.scenes[1].params, ...extra } }] });
+  for (const extra of [{ stagger: 99 }, { highlight: "the best one" }]) {
+    const checked = checkStoryboard(story(extra), {});
+    assert.equal(checked.ok, true, checked.errors.join("\n"));
+    assert.deepEqual(Object.keys(checked.storyboard.scenes[0].params), ["title", "data"]);
+    assert.ok(checked.warnings.some((line) => line.startsWith(`params: tooling took ${Object.keys(extra)[0]} off s2`)), checked.warnings.join("\n"));
+  }
+  // What the module needs is still an error.
+  assert.equal(checkStoryboard(story({ data: [] }), {}).ok, false);
+});

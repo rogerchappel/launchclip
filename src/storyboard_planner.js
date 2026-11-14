@@ -482,6 +482,7 @@ export async function planStoryboard(options = {}) {
         const cleared = clearFace(pinned.storyboard, checked, { words: wordList, beats, track: subjectTrack, checkOptions: { ...checkOptions, direction } });
         pinned.storyboard = cleared.storyboard;
         checked = cleared.checked;
+        if (cleared.direction) direction = cleared.direction;
         pinned.warnings = [...pinned.warnings, ...cleared.warnings];
       }
       if (shotErrors.length) { checked.errors = [...shotErrors, ...checked.errors]; checked.ok = false; }
@@ -703,7 +704,7 @@ function keepRepairScope(extracted, previous, { direction, words, beats }) {
 // off the face, the caption band settled for any card moved over it,
 // and the result kept only when the checks are no worse for it; else the
 // moves alone; else nothing. → {storyboard, checked, warnings}
-function clearFace(storyboard, checked, { words, beats, track, checkOptions }) {
+function clearFace(storyboard, checked, { words, beats, track, checkOptions: base }) {
   const warnings = [];
   let kept = [];
   for (const drop of [true, false]) {
@@ -711,6 +712,9 @@ function clearFace(storyboard, checked, { words, beats, track, checkOptions }) {
     kept = cleared.kept;
     if (!cleared.moved.length && !cleared.dropped.length) break;
     let candidate = cleared.storyboard;
+    // A dropped card leaves the map too, or its line fails the plan for naming a scene that is gone.
+    const direction = cleared.dropped.length ? mapWithoutDropped(base.direction, candidate) : base.direction;
+    const checkOptions = direction === base.direction ? base : { ...base, direction };
     let rechecked = checkStoryboard(candidate, checkOptions);
     const banded = settleCaptionBand(candidate, rechecked, (story) => checkStoryboard(story, checkOptions), { resolve: (story) => resolveChecked(story, checkOptions) });
     candidate = banded.storyboard;
@@ -722,9 +726,9 @@ function clearFace(storyboard, checked, { words, beats, track, checkOptions }) {
     if (cleared.moved.length) warnings.push(`face: tooling ${cleared.moved.join("; ")}`);
     if (cleared.dropped.length) warnings.push(...cleared.dropped.map((entry) => `face: tooling ${entry}`));
     warnings.push(...captionBandWarnings(banded));
-    return { storyboard: candidate, checked: rechecked, warnings: [...warnings, ...kept.map((entry) => `face: ${entry}`)] };
+    return { storyboard: candidate, checked: rechecked, direction, warnings: [...warnings, ...kept.map((entry) => `face: ${entry}`)] };
   }
-  return { storyboard, checked, warnings: [...warnings, ...kept.map((entry) => `face: ${entry}`)] };
+  return { storyboard, checked, direction: base.direction, warnings: [...warnings, ...kept.map((entry) => `face: ${entry}`)] };
 }
 
 /**
@@ -817,8 +821,18 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   const models = new Map();
   for (const scene of resolved.scenes) {
     if (scene.module === "custom") { warnings.push(`${scene.id} is a custom module; its params and layout are not checked here`); continue; }
-    try { models.set(scene.id, resolveModule(scene, resolved, { end: sceneRenderEnd(resolved, scene) })); }
-    catch (error) { errors.push(`params: ${message(error)}`); }
+    // A param the module does not take, or with a value it does not take ("motion.enter must be left, right, …",
+    // "scale must be between 0.92 and 1"), is taken off, so the module's default stands: a repair that fixes one such value
+    // tends to break the next. A param the module needs then fails as "required", which stays an error.
+    const planned = storyboard.scenes.find((entry) => entry?.id === scene.id);
+    for (let tries = 0; ; tries += 1) {
+      try { models.set(scene.id, resolveModule(scene, resolved, { end: sceneRenderEnd(resolved, scene) })); break; }
+      catch (error) {
+        const path = tries < 4 ? /(?:params: |params\.)([A-Za-z0-9_.[\]]+) (?:must be |is not supported)/.exec(message(error))?.[1]?.replace(/^params\./, "") : null;
+        if (!path || !dropParam(scene.params, path) || !dropParam(planned?.params, path)) { errors.push(`params: ${message(error)}`); break; }
+        warnings.push(`params: tooling took ${path} off ${scene.id} (${message(error).split(" params: ").at(-1)}); the module's default is used`);
+      }
+    }
   }
   // The layout check needs every module resolved, and nothing else: a plan
   // outside a cadence band (or short of footage, or with a cast finding) is
@@ -870,6 +884,35 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   // minHold: a short video's shots hold at least this long (src/duration_fit.js paceErrors).
   if (minHold > 0) errors.push(...paceErrors(resolved, { hold: minHold }));
   return { ok: errors.length === 0, errors, warnings, storyboard, layout, cadence, clip_share: clipShareValue };
+}
+
+// Delete params[path] ("motion.enter", "steps[1].at"). → whether there was a value to delete
+function dropParam(params, path) {
+  const keys = path.split(/[.[\]]+/).filter(Boolean);
+  let at = params;
+  for (const key of keys.slice(0, -1)) { if (at === null || typeof at !== "object") return false; at = at[key]; }
+  const last = keys.at(-1);
+  if (at === null || typeof at !== "object" || at[last] === undefined) return false;
+  if (Array.isArray(at)) at.splice(Number(last), 1); else delete at[last];
+  return true;
+}
+
+// The map without the scenes a storyboard no longer has (tooling dropped a card that covered the presenter's
+// face): a line left with no scene holds on the presenter. → the map itself when nothing changes
+function mapWithoutDropped(direction, storyboard) {
+  if (!Array.isArray(direction?.sections) || !Array.isArray(storyboard?.scenes)) return direction;
+  const ids = new Set(storyboard.scenes.map((scene) => scene?.id));
+  const map = structuredClone(direction);
+  let changed = false;
+  for (const section of map.sections) for (const line of section?.lines ?? []) {
+    if (!Array.isArray(line?.scenes)) continue;
+    const kept = line.scenes.filter((id) => ids.has(id));
+    if (kept.length === line.scenes.length) continue;
+    changed = true;
+    if (kept.length) line.scenes = kept;
+    else { delete line.scenes; line.treatment = "face"; line.why = line.why ?? "the plain take: the card planned here did not fit beside the presenter"; }
+  }
+  return changed ? map : direction;
 }
 
 /** The resolved story checkStoryboard lays out: the style merged, the anchors resolved. Throws when the anchors do not resolve. */
