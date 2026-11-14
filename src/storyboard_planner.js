@@ -616,23 +616,26 @@ export async function planStoryboard(options = {}) {
     }
   }
 
+  // The map names only the scenes the plan kept (tooling may have left one out).
+  if (lane === "footage-led" && direction && last?.storyboard) direction = mapWithoutDropped(direction, last.storyboard, (last.warnings ?? []).map((entry) => /^params: tooling left (\S+) /.exec(entry)?.[1]).filter(Boolean));
+
   // Take moves (src/take_moves.js): punch-ins where the recording would sit
-  // still, placed on the passing plan; kept only when it still passes.
+  // still, placed on the passing plan; kept only when they add no finding to
+  // what the same check says of the plan without them.
   if (last?.ok && last.storyboard && options.takeMoves && lane === "footage-led") {
     try {
       const moved = addTakeMoves(last.storyboard, { words: wordList, beats, pace: options.takeMoves.pace });
       if (moved.added.length) {
-        const checked = checkStoryboard(moved.storyboard, { words: wordList, beats, tier, style, direction, profile, bandErrors: false, ...(subjectTrack ? { track: subjectTrack } : {}) });
-        if (checked.ok) last = { ...last, ...checked, warnings: [...last.warnings, `take: tooling added ${moved.added.length} punch-in${moved.added.length === 1 ? "" : "s"} where the recording sat still`, ...checked.warnings.filter((entry) => !last.warnings.includes(entry))] };
+        const recheck = { words: wordList, beats, tier, style, direction, profile, bandErrors: false, ...(subjectTrack ? { track: subjectTrack } : {}) };
+        const before = checkStoryboard(last.storyboard, recheck).errors;
+        const checked = checkStoryboard(moved.storyboard, recheck);
+        if (checked.errors.every((entry) => before.includes(entry))) last = { ...last, storyboard: checked.storyboard, layout: checked.layout, warnings: [...last.warnings, `take: tooling added ${moved.added.length} punch-in${moved.added.length === 1 ? "" : "s"} where the recording sat still`, ...checked.warnings.filter((entry) => !last.warnings.includes(entry))] };
         else last.warnings = [...last.warnings, `take: punch-ins on the recording were left out (${checked.errors.slice(0, 2).join("; ")})`];
       }
     } catch (error) {
       last.warnings = [...last.warnings, `take: ${message(error)}`];
     }
   }
-
-  // The map names only the scenes the plan kept (tooling may have left one out).
-  if (lane === "footage-led" && direction && last?.storyboard) direction = mapWithoutDropped(direction, last.storyboard, (last.warnings ?? []).map((entry) => /^params: tooling left (\S+) /.exec(entry)?.[1]).filter(Boolean));
 
   const allAttempts = [...directionPlan.attempts, ...attempts];
   const totals = allAttempts.reduce((sum, entry) => ({
