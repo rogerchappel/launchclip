@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateStory } from "@launchclip/core/story.mjs";
+import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
+import { bindCues } from "../src/finish.js";
 import { TAKE_MOVES, addTakeMoves } from "../src/take_moves.js";
 
 const words = Array.from({ length: 40 }, (_, index) => ({ text: index % 8 === 7 ? "done." : "word", start: index * 0.5, end: index * 0.5 + 0.4 }));
@@ -21,6 +22,10 @@ test("a still take gets punch-ins on phrase starts, alternating scales, with pla
     if (index) assert.ok(move.start - moves[index - 1].end >= TAKE_MOVES.plain - TAKE_MOVES.snap - 1e-6, "plain take between two moves");
   }
   assert.deepEqual(validateStory(storyboard).errors, []);
+  // The moves are silent: no whoosh is bound to any of them (a planner's own punch-in still gets one).
+  const loud = { id: "planned", module: "punch-in", track: 5, start: 0.2, end: 1.8, energy: 1, params: {} };
+  const { cues } = bindCues(resolveStory({ ...storyboard, scenes: [...storyboard.scenes, loud] }, { words }));
+  assert.deepEqual(cues.map((cue) => cue.shot), ["planned"]);
   // A calm pace leaves longer holds.
   assert.ok(addTakeMoves(talkingHead(), { words, pace: "calm" }).added.length < moves.length);
 });
@@ -34,4 +39,15 @@ test("no move where the presenter is off screen, where the camera already moves,
   const moves = addTakeMoves(talkingHead([insert]), { words }).storyboard.scenes.filter((scene) => scene.id.startsWith("take-move"));
   assert.ok(moves.length && moves.every((move) => move.start >= 9 + TAKE_MOVES.margin && move.track === 1));
   assert.deepEqual(addTakeMoves({ ...talkingHead(), lane: "motion", base: undefined }, { words }).added, []);
+});
+
+test("tightlyFramed: a tracked head that fills a portrait frame's width, and nothing without a track", async () => {
+  const { tightlyFramed } = await import("../src/presenter_box.js");
+  const story = talkingHead();
+  const track = (w) => ({ source: { width: 1280, height: 720 }, fps: 10, frames: Array.from({ length: 20 }, (_, index) => ({ t: index / 10, head: { x: 0.5, y: 0.38, w, h: w * 1.9 }, body: { x: 0.5, y: 0.6, w: w * 2.2, h: 0.8 } })) });
+  const inputs = { format: story.format, base: story.base, brand: story.brand };
+  assert.equal(tightlyFramed(inputs, track(0.26)), true);
+  assert.equal(tightlyFramed(inputs, track(0.08)), false);
+  assert.equal(tightlyFramed(inputs, null), false);
+  assert.equal(tightlyFramed({ ...inputs, format: { ...story.format, width: 1920, height: 1080 } }, track(0.26)), false);
 });

@@ -2694,9 +2694,13 @@ export function assetManifestLines(ctx) {
   }
   out.push(...(ctx.researchMedia ?? []));
   // The named companies' logos (research/logos.json), ready params per module; a logo-row shows 2–6 of them together.
-  for (const logo of ctx.researchLogos ?? []) {
-    const uses = Object.entries(logo.params ?? {}).map(([module, params]) => `${module} ${JSON.stringify(params)}`).join("; ");
-    out.push({ src: logo.asset, kind: "image", line: `${logo.asset} — logo of ${logo.name}${logo.domain ? ` (${logo.domain})` : ""}, ${logo.format ?? "image"}${logo.monochrome ? ", monochrome (set brand-lockup markTint)" : ""}. Use when the narration names ${logo.name}: a logo-row with the other companies named alongside it (2–6 logos), or a brand-lockup for ${logo.name} alone. Params per module: ${uses}.` });
+  // Over a recording a brand-lockup is a whole title card that covers the presenter, so tooling drops it: there the
+  // logos are offered for a logo-row only, which needs two of them.
+  const overTake = routing.lane === "footage-led";
+  const logos = overTake && (ctx.researchLogos ?? []).length < 2 ? [] : ctx.researchLogos ?? [];
+  for (const logo of logos) {
+    const uses = Object.entries(logo.params ?? {}).filter(([module]) => !overTake || module === "logo-row").map(([module, params]) => `${module} ${JSON.stringify(params)}`).join("; ");
+    out.push({ src: logo.asset, kind: "image", line: `${logo.asset} — logo of ${logo.name}${logo.domain ? ` (${logo.domain})` : ""}, ${logo.format ?? "image"}${logo.monochrome ? ", monochrome (set brand-lockup markTint)" : ""}. Use when the narration names ${logo.name}: a logo-row with the other companies named alongside it (2–6 logos)${overTake ? "" : `, or a brand-lockup for ${logo.name} alone`}. Params per module: ${uses}.` });
   }
   for (const item of routing.logos) {
     const src = `assets/${item.path}`;

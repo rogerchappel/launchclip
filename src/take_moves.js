@@ -101,7 +101,8 @@ export function addTakeMoves(storyboard, { words = [], beats = null, duration = 
       // Toward the presenter's head where it is measured, so a move never crops the face.
       const head = presenterHead(resolved, start, end);
       const focus = head ? { x: round3((head.x + head.width / 2) / canvas.width), y: round3((head.y + head.height / 2) / canvas.height) } : null;
-      copy.scenes.push({ id, module: "punch-in", start, end, energy: 1, track, params: { scale: TAKE_MOVES.scales[turn % TAKE_MOVES.scales.length], at: 0, release: TAKE_MOVES.release, ...(focus ? { focus } : {}) } });
+      // Silent (cue "none" on its punch): these keep the picture alive, they are not emphasis, and a whoosh every few seconds drowns the voice.
+      copy.scenes.push({ id, module: "punch-in", start, end, energy: 1, track, params: { scale: TAKE_MOVES.scales[turn % TAKE_MOVES.scales.length], at: 0, release: TAKE_MOVES.release, ...(focus ? { focus } : {}) }, hits: [{ at: start, event: "punch", cue: "none" }] });
       added.push(id);
       turn += 1;
       at = end + plain;

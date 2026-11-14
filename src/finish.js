@@ -553,9 +553,12 @@ export function soundSettings(pack, story) {
   const palette = known(sound.palette, SOUND_PALETTES, "palette");
   const genre = known(sound.music.genre, MUSIC_GENRES, "music.genre");
   const world = Object.keys(object(story?.world)).length ? story.world : Object.keys(object(pack?.world)).length ? pack.world : null;
+  // Over a recording the room is already in the take: a style's ambience (a café, a street, for a drawn world)
+  // would run under the presenter's voice for the whole video. Only the story's own audio.sound.ambience asks for one there.
+  const wanted = story?.lane === "footage-led" ? fromStory.ambience : sound.ambience;
   let ambience = null;
-  if (sound.ambience === "auto") ambience = ambienceForWorld(world);
-  else if (sound.ambience !== undefined && sound.ambience !== "none") ambience = known(sound.ambience, AMBIENCE_BEDS, "ambience");
+  if (wanted === "auto") ambience = ambienceForWorld(world);
+  else if (wanted !== undefined && wanted !== "none") ambience = known(wanted, AMBIENCE_BEDS, "ambience");
   return {
     ...(sound.score === true ? { score: true } : {}),
     active: Boolean(palette || genre || ambience),

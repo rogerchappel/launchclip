@@ -201,3 +201,19 @@ test("an insert section written for a card is dropped: the card shows in the pan
   assert.deepEqual(storyboard.scenes.map((entry) => [entry.id, entry.insert, entry.track]), [["list", undefined, 1], ["bars", true, undefined]]);
   assert.match(changed.join("\n"), /insert sec-list dropped: list \(checklist\) shows in the panel/);
 });
+
+test("a close-up the planner put over a panel scene is dropped, so the card keeps its panel", () => {
+  const card = { id: "claim", module: "stat-card", track: 1, start: 0.5, end: 4, params: { value: "87%", label: "of runs", source: "Example" } };
+  const { storyboard, changed } = applyStackedLayout(talkingHead({ scenes: [card], sections: [{ id: "hook", start: 0, end: 4, layout: "full" }, { id: "later", start: 10, end: 13, layout: "full" }] }));
+  assert.deepEqual(storyboard.sections.map((section) => [section.id, section.layout]), [["stack-1", "stacked"], ["take-1", "full"], ["later", "full"], ["take-2", "full"]]);
+  assert.match(changed.join("\n"), /close-up hook dropped: a panel scene plays over it/);
+});
+
+test("a generated style keeps a layout's own captions and replaces any other", async () => {
+  const { adoptStyleLook } = await import("../src/style_seed_store.js");
+  const pack = { name: "seed-1", captions: { preset: "quiet-accent" }, motion: { grammar: "smooth" } };
+  const laid = adoptStyleLook(talkingHead({ overlays: [{ type: "captions", position: "seam", preset: "seam-word", max_words: 1 }] }), pack);
+  assert.deepEqual(laid.overlays[0], { type: "captions", position: "seam", preset: "seam-word", max_words: 1 });
+  const plain = adoptStyleLook(talkingHead({ overlays: [{ type: "captions", preset: "word-highlight" }] }), pack);
+  assert.equal(plain.overlays[0].preset, "quiet-accent");
+});

@@ -284,3 +284,14 @@ test("rendered: a palette slice, a genre bed and an ambience loop pass the liste
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("a style's ambience does not play under a recording unless the story asks for it", async () => {
+  const { soundSettings } = await import("../src/finish.js");
+  const pack = { name: "p", sound: { palette: "analog", ambience: "auto" }, world: { kind: "city-street", time: "day" } };
+  assert.equal(soundSettings(pack, { lane: "motion" }).ambience, "street-day");
+  assert.equal(soundSettings(pack, { lane: "footage-led" }).ambience, null);
+  assert.equal(soundSettings({ ...pack, sound: { ambience: "cafe" } }, { lane: "footage-led" }).ambience, null);
+  assert.equal(soundSettings(pack, { lane: "footage-led", audio: { sound: { ambience: "auto" } } }).ambience, "street-day");
+  // The palette still applies: only the bed is left out.
+  assert.equal(soundSettings(pack, { lane: "footage-led" }).palette, "analog");
+});
