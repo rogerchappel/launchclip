@@ -26,6 +26,8 @@ import { LOGOS_SCHEMA, RESEARCH_PATHS } from "./schema.js";
 
 const USER_AGENT = "launchclip-research/1 (+https://github.com/rogerchappel/launchclip)";
 const SIMPLE_ICONS = "https://cdn.simpleicons.org";
+// The library's list of brands (title, slug, colour); the major version keeps the file's path and shape.
+const SIMPLE_ICONS_INDEX = "https://cdn.jsdelivr.net/npm/simple-icons@16/data/simple-icons.json";
 const ORG_DESCRIPTION = /\b(?:company|corporation|business|enterprise|firm|startup|start-up|conglomerate|manufacturer|maker|developer|publisher|laborator(?:y|ies)|lab|organi[sz]ation|non-?profit|foundation|institute|agency|brand|subsidiary|website|platform|service|provider|retailer|bank|network|studio|group)\b/i;
 const PATH_DATA = /^[MmLlHhVvCcSsQqTtAaZz0-9eE.,\s+-]+$/;
 
@@ -273,6 +275,24 @@ export function simpleIconsSlug(name) {
     .replace(/\+/g, "plus").replace(/\./g, "dot").replace(/&/g, "and")
     .normalize("NFD").replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * The names Simple Icons has a mark for, as slugs: its public data file, read
+ * once per process. A caller that checks a name here first never sends a
+ * name the library does not hold (a person's, say) to the CDN.
+ * → Set of slugs, or null when the file cannot be read.
+ */
+let simpleIconsSlugs = null;
+export async function simpleIconsIndex(get) {
+  if (simpleIconsSlugs) return simpleIconsSlugs;
+  try {
+    const file = await get(SIMPLE_ICONS_INDEX, 2 * 1024 * 1024);
+    const list = JSON.parse(file.bytes.toString("utf8"));
+    const slugs = new Set((Array.isArray(list) ? list : list.icons ?? []).map((icon) => icon.slug ?? simpleIconsSlug(icon.title)).filter(Boolean));
+    if (slugs.size) simpleIconsSlugs = slugs;
+    return simpleIconsSlugs;
+  } catch { return null; }
 }
 
 /** The Simple Icons CDN by slug (from the name, then the domain) → a found logo or null. */

@@ -56,7 +56,7 @@ import { captureFiles, readCaptureRequests, recordCaptures } from "./captures.js
 import { evidenceClipParams } from "@launchclip/core/catalog-d-evidence-clip.mjs";
 import { RESEARCH_PATHS } from "../research/schema.js";
 import { entityIndex, extractClaims } from "../research/claims.js";
-import { findLogos, logoManifest, writeLogos } from "../research/logos.js";
+import { findLogos, logoManifest, publicFetch, simpleIconsIndex, simpleIconsSlug, writeLogos } from "../research/logos.js";
 import { directLongFormVisuals, revertCards, typographyShare, unresolvedScenes } from "./long_form_direct.js";
 import { checkModelAccess, createMakeClient, scriptModelSpec, selectMakeModel } from "./models.js";
 import { alternativeTransition, candidatesMode, comparisonEntry, designOpening, judgeCandidates, meanScore, openingScene, renderCandidate, rendererStill, riskyBoundary, sceneResolves, sceneTimes, selectCandidate, storyWith, transitionTimes, writeReceipt } from "./candidates.js";
@@ -2602,16 +2602,21 @@ async function settleCaptures(ctx) {
 
 /**
  * --logos icons, with no research logos: the Simple Icons mark of each brand
- * the narration names, written as research/logos.json. One public CDN is
- * asked by name; no company page is visited and no domain is looked up.
+ * the narration names, written as research/logos.json. The library's public
+ * list of brands is read first and only a name on it is asked for; no
+ * company page is visited and no domain is looked up.
  * → the manifest, or null.
  */
 async function namedBrandIcons(ctx, dir) {
   if (ctx.options.logos !== "icons" || !ctx.narrationText) return null;
   try {
-    // Any capitalised name may be a brand: the CDN has a mark for it or it does not.
-    const entities = entityIndex(extractClaims(ctx.narrationText)).map((entity) => ({ ...entity, kind: "org" }));
-    const result = await findLogos(entities, { max: 6 }, { ...(ctx.adapters.fetch ? { fetch: ctx.adapters.fetch } : {}), http: { json: async () => null } });
+    // Any capitalised name may be a brand, but only one the library lists is asked for, so no other name leaves the machine.
+    const fetcher = ctx.adapters.fetch ?? globalThis.fetch;
+    const known = await simpleIconsIndex((url, maxBytes) => publicFetch(url, { fetch: fetcher, maxBytes }));
+    if (!known) return null;
+    const entities = entityIndex(extractClaims(ctx.narrationText)).filter((entity) => known.has(simpleIconsSlug(entity.name))).map((entity) => ({ ...entity, kind: "org" }));
+    if (!entities.length) return null;
+    const result = await findLogos(entities, { max: 6 }, { fetch: fetcher, http: { json: async () => null } });
     if (!result.logos.length) return null;
     const manifest = logoManifest(result);
     await writeLogos(dir, result, manifest);

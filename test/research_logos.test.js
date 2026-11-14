@@ -164,3 +164,14 @@ test("runResearch writes research/logos/ and logos.json, returns them, and the l
   assert.deepEqual(off.logos, []);
   assert.ok(!existsSync(path.join(out, "logos")));
 });
+
+test("simpleIconsIndex: the library's brand list as slugs, read once", async () => {
+  const { simpleIconsIndex } = await import("../src/research/logos.js");
+  let calls = 0;
+  const get = async () => { calls += 1; return { bytes: Buffer.from(JSON.stringify([{ title: "Stripe" }, { title: "Dev.to" }, { title: "Mac OS", slug: "macos" }])) }; };
+  const slugs = await simpleIconsIndex(get);
+  assert.deepEqual([...slugs].sort(), ["devdotto", "macos", "stripe"]);
+  assert.equal(slugs.has("johnsmith"), false);
+  await simpleIconsIndex(get);
+  assert.equal(calls, 1);
+});
