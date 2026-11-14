@@ -155,8 +155,9 @@ function panelSpans(story, { words, beats, total }) {
 }
 
 // The planner's close-ups and inserts, resolved to seconds, clamped and in order.
+// Tooling's own plain takes (zoom 1) from an earlier pass are not the planner's: they are rebuilt.
 function plannedMoments(story, { words, beats, total }, changed) {
-  const planned = (Array.isArray(story.sections) ? story.sections : []).filter((section) => section && (section.layout === "full" || section.layout === "insert"));
+  const planned = (Array.isArray(story.sections) ? story.sections : []).filter((section) => section && ((section.layout === "full" && section.zoom !== 1) || section.layout === "insert"));
   if (!planned.length) return [];
   let resolved = null;
   try { resolved = resolveStory(structuredClone({ ...story, sections: planned }), { words, beats }); } catch { resolved = null; }

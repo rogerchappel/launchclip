@@ -181,3 +181,10 @@ test("the panel is up only while a panel scene is on; the presenter takes the wh
   // No panel scene at all: one full take.
   assert.deepEqual(applyStackedLayout(talkingHead({ scenes: [] })).storyboard.sections.map((section) => [section.layout, section.start, section.end]), [["full", 0, 30]]);
 });
+
+test("laying a stacked plan out again gives the same sections (a repair round sees tooling's takes)", () => {
+  const card = { id: "a", module: "stat-card", track: 1, start: 5, end: 9, params: { value: "87%", label: "of runs", source: "Example" } };
+  const once = applyStackedLayout(talkingHead({ scenes: [card] })).storyboard;
+  assert.deepEqual(applyStackedLayout(once).storyboard.sections, once.sections);
+  assert.deepEqual(once.sections.map((section) => section.id), ["take-1", "stack-1", "take-2"]);
+});
