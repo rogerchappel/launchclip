@@ -26,6 +26,7 @@
 // rewrites the storyboard (and the map's scene names) the planner returned.
 
 import { CAMERA_ONLY_MODULES } from "@launchclip/core/cadence.mjs";
+import { SHOT_LAYOUT_SLOTS, SHOT_MODULES } from "./asset_provider.js";
 import { moduleTiming } from "@launchclip/core/modules.mjs";
 import { CUE_SNAP, STORY_ZOOM, castRefId, resolveStory, storyCastIds } from "@launchclip/core/story.mjs";
 import { offScreenSpeech, sceneCharacters } from "@launchclip/core/direction.mjs";
@@ -73,6 +74,18 @@ export function normalisePlan(storyboard, { words = [], beats = null, direction 
   return { storyboard: state.story, direction: state.map ?? direction, changed: state.changed };
 }
 
+// What earns the whole frame over a recording: footage, a picture, a screen, a
+// demo, a chart, a drawn scene, or a title set as the frame (a hook, kinetic
+// words, a lockup). A card (a checklist, a comparison, a stat, a callout)
+// reads beside the presenter; alone on the frame it leaves most of it empty
+// with the presenter gone.
+const WHOLE_FRAME = new Set([
+  ...SHOT_MODULES, ...Object.keys(SHOT_LAYOUT_SLOTS),
+  "product-demo", "evidence-clip", "app-stage", "phone-stage", "ui-scene", "device-frame", "window-chrome", "cast-scene", "world", "heatmap", "map-highlight",
+  "hook-title", "kinetic-words", "motion-title", "section-card", "brand-lockup", "cta"
+]);
+export const wholeFrame = (scene) => WHOLE_FRAME.has(scene?.module) || /-chart$/.test(String(scene?.module ?? ""));
+
 // Over a recording, track 0 is the recording and its full-frame inserts, and
 // everything else sits above it. `insert` says which a scene is, so the track
 // follows it: an insert goes to track 0, any other scene left on track 0 goes
@@ -82,6 +95,13 @@ function fitLayers({ story, changed }) {
   story.scenes.forEach((scene, index) => {
     if (!isObject(scene) || scene.layer !== undefined) return;
     const label = scene.id ?? `scenes[${index}]`;
+    // A card is not an insert: it goes over the recording, where the presenter stays on screen.
+    if (scene.insert === true && !wholeFrame(scene)) {
+      delete scene.insert;
+      scene.track = 1;
+      changed.push(`${label}: shown over the recording, not as an insert (a ${scene.module} alone on the frame leaves it empty)`);
+      return;
+    }
     const track = Number(scene.track ?? 0);
     if (scene.insert === true && track !== 0) {
       delete scene.track;

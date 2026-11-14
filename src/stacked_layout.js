@@ -20,7 +20,7 @@ import { CAMERA_ONLY_MODULES } from "@launchclip/core/cadence.mjs";
 import { layoutPlan, layoutStateAt } from "@launchclip/core/footage-layout.mjs";
 import { resolveStory } from "@launchclip/core/story.mjs";
 import { cameraPoint, presenterHead } from "./presenter_box.js";
-import { SHOT_LAYOUT_SLOTS, SHOT_MODULES } from "./asset_provider.js";
+import { wholeFrame } from "./plan_normalise.js";
 
 // Where a stacked story's captions go: one word at a time, on the seam.
 export const STACKED_CAPTIONS = Object.freeze({ position: "seam", preset: "seam-word", max_words: 1 });
@@ -135,13 +135,7 @@ export function applyStackedLayout(storyboard, { words = [], beats = null, durat
   return { storyboard: copy, changed, skipped: null };
 }
 
-// What earns the whole frame: footage, a picture, a screen, a demo, a chart or
-// a drawn scene. A card (a checklist, a title, a stat) reads in the panel, and
-// alone on the frame it leaves most of it empty with the presenter gone.
-const WHOLE_FRAME = new Set([...SHOT_MODULES, ...Object.keys(SHOT_LAYOUT_SLOTS), "product-demo", "evidence-clip", "app-stage", "phone-stage", "ui-scene", "device-frame", "window-chrome", "cast-scene", "world", "heatmap", "map-highlight"]);
-const wholeFrame = (scene) => WHOLE_FRAME.has(scene.module) || /-chart$/.test(scene.module);
-
-// An insert section the planner wrote for a card is dropped, so the card shows in the panel over the presenter.
+// An insert section the planner wrote for a card (plan_normalise.js wholeFrame) is dropped, so the card shows in the panel over the presenter.
 function dropCardInserts(story, { words, beats }, changed) {
   const planned = (Array.isArray(story.sections) ? story.sections : []).filter((section) => section?.layout === "insert");
   if (!planned.length) return;
