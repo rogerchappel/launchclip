@@ -35,6 +35,7 @@ import { estimateModelUsageCost } from "./cost_tracker.js";
 import { backdropPrompt, cardBackdrops, minShotsError, resolveShots, shotPrompt, shotRequestLimit, shotRequests } from "./asset_provider.js";
 import { restoreMisses, varyInserts } from "./insert_variety.js";
 import { fitTimings } from "./timing_fit.js";
+import { addTakeMoves } from "./take_moves.js";
 import { fitDirectionCast, normalizeCastCues, plannedCast } from "./cast_fit.js";
 import { bibleCast, bibleRef, directionWithBible } from "@launchclip/core/bible.mjs";
 import { castGate } from "./cast.js";
@@ -610,6 +611,21 @@ export async function planStoryboard(options = {}) {
       }
     } catch (error) {
       last.warnings = [...last.warnings, `long form: ${message(error)}`];
+    }
+  }
+
+  // Take moves (src/take_moves.js): punch-ins where the recording would sit
+  // still, placed on the passing plan; kept only when it still passes.
+  if (last?.ok && last.storyboard && options.takeMoves && lane === "footage-led") {
+    try {
+      const moved = addTakeMoves(last.storyboard, { words: wordList, beats, pace: options.takeMoves.pace });
+      if (moved.added.length) {
+        const checked = checkStoryboard(moved.storyboard, { words: wordList, beats, tier, style, direction, profile, bandErrors: false });
+        if (checked.ok) last = { ...last, ...checked, warnings: [...last.warnings, `take: tooling added ${moved.added.length} punch-in${moved.added.length === 1 ? "" : "s"} where the recording sat still`, ...checked.warnings.filter((entry) => !last.warnings.includes(entry))] };
+        else last.warnings = [...last.warnings, `take: punch-ins on the recording were left out (${checked.errors.slice(0, 2).join("; ")})`];
+      }
+    } catch (error) {
+      last.warnings = [...last.warnings, `take: ${message(error)}`];
     }
   }
 

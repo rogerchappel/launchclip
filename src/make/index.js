@@ -1633,6 +1633,8 @@ async function planStage(ctx) {
     ...(media.length ? { media } : {}),
     ...(featured.length ? { featured } : {}),
     ...(laidOut ? { layout: laidOut } : {}),
+    // The recording keeps moving: punch-ins where the take would sit still (the overlay layout's take is calmer).
+    ...(lane === "footage-led" ? { takeMoves: { pace: laidOut === "overlay" ? "calm" : "standard" } } : {}),
     ...(subjectTrack ? { subjectTrack } : {}),
     ...(pinned ?? {}),
     ...(explainer ? { explainer: true } : {}),
