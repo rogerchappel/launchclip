@@ -265,3 +265,17 @@ test("zooms: one with no time to hold after its move is taken out; the shot keep
   delete fine.scenes[1].zooms;
   assert.deepEqual(normalisePlan(fine, { words: [] }).changed, []);
 });
+
+test("over a recording, a scene on the wrong track for what it is moves to the right one", () => {
+  const story = { schema: "launchclip.story.v1", lane: "footage-led", format: { width: 1080, height: 1920, fps: 30, duration: 20 }, base: { src: "assets/recording.mp4" }, scenes: [
+    { id: "card", module: "stat-card", start: 1, end: 4, params: {} },
+    { id: "punch", module: "punch-in", start: 2, end: 5, params: { blur: 10 } },
+    { id: "full", module: "ui-scene", insert: true, track: 1, start: 6, end: 9, params: {} },
+    { id: "fine", module: "checklist", track: 1, start: 10, end: 13, params: {} }
+  ] };
+  const { storyboard, changed } = normalisePlan(story);
+  assert.deepEqual(storyboard.scenes.map((scene) => [scene.id, scene.track]), [["card", 1], ["punch", 2], ["full", undefined], ["fine", 1]]);
+  assert.equal(changed.length, 3);
+  // Other lanes keep track 0 for their scenes.
+  assert.deepEqual(normalisePlan({ ...story, lane: "motion", base: undefined }).changed.filter((entry) => entry.includes("moved to track")), []);
+});
