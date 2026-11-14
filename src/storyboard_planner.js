@@ -27,7 +27,7 @@ import { captionBandAt, checkLayout, elementsFromEditorialLayout, elementsFromSt
 import { captionsOverlayOf } from "@launchclip/core/captions.mjs";
 import { layoutCaptionZones } from "@launchclip/core/cast-captions.mjs";
 import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, directionPrompt, planningPrompt, suggestModules } from "@launchclip/core/planning-prompt.mjs";
-import { applyStyle } from "@launchclip/core/style.mjs";
+import { applyStyle, packCaptionsForStory } from "@launchclip/core/style.mjs";
 import { clipLedFindings, clipLedPlan } from "@launchclip/core/clip-led.mjs";
 import { validateCastCues } from "@launchclip/core/characters/cues.mjs";
 import { createStructuredClient, parseModelRoute } from "./model_provider.js";
@@ -35,6 +35,7 @@ import { estimateModelUsageCost } from "./cost_tracker.js";
 import { backdropPrompt, cardBackdrops, minShotsError, resolveShots, shotPrompt, shotRequestLimit, shotRequests } from "./asset_provider.js";
 import { restoreMisses, varyInserts } from "./insert_variety.js";
 import { fitTimings } from "./timing_fit.js";
+import { addTakeMoves } from "./take_moves.js";
 import { fitDirectionCast, normalizeCastCues, plannedCast } from "./cast_fit.js";
 import { bibleCast, bibleRef, directionWithBible } from "@launchclip/core/bible.mjs";
 import { castGate } from "./cast.js";
@@ -305,6 +306,7 @@ export async function planStoryboard(options = {}) {
       // A repair redoes the scenes its findings reach; the rest keep the params they had (src/repair_scope.js).
       const keptScenes = kind === "repair" ? keepRepairScope(extracted, previous, { direction, words: wordList, beats }) : [];
       const pinned = pinInputs(extracted.storyboard, fixed);
+      if (options.pinCaptions) pinCaptions(pinned, style);
       if (keptScenes.length) pinned.warnings = [...pinned.warnings, `repair: tooling kept the params of ${keptScenes.length} scene${keptScenes.length === 1 ? "" : "s"} the findings did not reach (${keptScenes.join(", ")})`];
       // A repair may return a corrected map with the storyboard.
       const repairedMap = kind === "repair" && direction ? extractDirection(result) : null;
@@ -383,7 +385,7 @@ export async function planStoryboard(options = {}) {
       }
       // Slips with one obvious correction (a lone character on a side, scenes overlapping on a track, a cue just outside its
       // scene, a cut one word late for its speaker) are tooling's, before the checks see them (src/plan_normalise.js).
-      direction = tidyPlan(pinned, direction, { words: wordList, beats, script });
+      direction = tidyPlan(pinned, direction, { words: wordList, beats, script, cards: options.cardsOverTake === true });
       // A character story: a map action whose character is in the shot without the cue is tooling's to add (src/acting_place.js).
       if (bible && direction) {
         const placed = placeActions(pinned.storyboard, { direction, words: wordList });
@@ -392,7 +394,7 @@ export async function planStoryboard(options = {}) {
           pinned.warnings = [...pinned.warnings, ...placed.changed.map((entry) => `acting: tooling ${entry}`)];
         }
       }
-      const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints, minHold: SHORT_FORM_HOLD, ...(script ? { script } : {}), ...(bible || explainer ? { castGate: true } : {}) };
+      const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints, minHold: SHORT_FORM_HOLD, ...(script ? { script } : {}), ...(bible || explainer ? { castGate: true } : {}), ...(subjectTrack ? { track: subjectTrack } : {}) };
       checked = checkStoryboard(pinned.storyboard, checkOptions);
       // A scene shorter than its module allows, or an event time just outside
       // its module's window, is tooling's to fix, not a repair call's; a fix
@@ -420,7 +422,7 @@ export async function planStoryboard(options = {}) {
       // their shot or leave a cue past its scene's end: the same corrections again, on what the fits left.
       if (!checked.ok) {
         const fitted = pinned.storyboard;
-        direction = tidyPlan(pinned, direction, { words: wordList, beats, script });
+        direction = tidyPlan(pinned, direction, { words: wordList, beats, script, cards: options.cardsOverTake === true });
         // A short shot merged into its neighbour took its action cue with it: the map's action is placed again, in the shot that now plays the line.
         if (bible && direction) {
           const placed = placeActions(pinned.storyboard, { direction, words: wordList });
@@ -481,6 +483,7 @@ export async function planStoryboard(options = {}) {
         const cleared = clearFace(pinned.storyboard, checked, { words: wordList, beats, track: subjectTrack, checkOptions: { ...checkOptions, direction } });
         pinned.storyboard = cleared.storyboard;
         checked = cleared.checked;
+        if (cleared.direction) direction = cleared.direction;
         pinned.warnings = [...pinned.warnings, ...cleared.warnings];
       }
       if (shotErrors.length) { checked.errors = [...shotErrors, ...checked.errors]; checked.ok = false; }
@@ -613,6 +616,27 @@ export async function planStoryboard(options = {}) {
     }
   }
 
+  // The map names only the scenes the plan kept (tooling may have left one out).
+  if (lane === "footage-led" && direction && last?.storyboard) direction = mapWithoutDropped(direction, last.storyboard, (last.warnings ?? []).map((entry) => /^params: tooling left (\S+) /.exec(entry)?.[1]).filter(Boolean));
+
+  // Take moves (src/take_moves.js): punch-ins where the recording would sit
+  // still, placed on the passing plan; kept only when they add no finding to
+  // what the same check says of the plan without them.
+  if (last?.ok && last.storyboard && options.takeMoves && lane === "footage-led") {
+    try {
+      const moved = addTakeMoves(last.storyboard, { words: wordList, beats, pace: options.takeMoves.pace });
+      if (moved.added.length) {
+        const recheck = { words: wordList, beats, tier, style, direction, profile, bandErrors: false, ...(subjectTrack ? { track: subjectTrack } : {}) };
+        const before = checkStoryboard(last.storyboard, recheck).errors;
+        const checked = checkStoryboard(moved.storyboard, recheck);
+        if (checked.errors.every((entry) => before.includes(entry))) last = { ...last, storyboard: checked.storyboard, layout: checked.layout, warnings: [...last.warnings, `take: tooling added ${moved.added.length} punch-in${moved.added.length === 1 ? "" : "s"} where the recording sat still`, ...checked.warnings.filter((entry) => !last.warnings.includes(entry))] };
+        else last.warnings = [...last.warnings, `take: punch-ins on the recording were left out (${checked.errors.slice(0, 2).join("; ")})`];
+      }
+    } catch (error) {
+      last.warnings = [...last.warnings, `take: ${message(error)}`];
+    }
+  }
+
   const allAttempts = [...directionPlan.attempts, ...attempts];
   const totals = allAttempts.reduce((sum, entry) => ({
     input_tokens: sum.input_tokens + entry.usage.input_tokens,
@@ -666,8 +690,8 @@ export async function planStoryboard(options = {}) {
 
 // normalisePlan in the planner: the corrected storyboard replaces the pinned one, each correction becomes a
 // "normalise:" warning, and the map (whose lines may name other scenes now) is returned.
-function tidyPlan(pinned, direction, { words, beats, script }) {
-  const tidied = normalisePlan(pinned.storyboard, { words, beats, direction, script });
+function tidyPlan(pinned, direction, { words, beats, script, cards = false }) {
+  const tidied = normalisePlan(pinned.storyboard, { words, beats, direction, script, cards });
   if (!tidied.changed.length) return direction;
   pinned.storyboard = tidied.storyboard;
   pinned.warnings = [...pinned.warnings, ...tidied.changed.map((entry) => `normalise: ${entry}`).filter((entry) => !pinned.warnings.includes(entry))];
@@ -687,7 +711,7 @@ function keepRepairScope(extracted, previous, { direction, words, beats }) {
 // off the face, the caption band settled for any card moved over it,
 // and the result kept only when the checks are no worse for it; else the
 // moves alone; else nothing. → {storyboard, checked, warnings}
-function clearFace(storyboard, checked, { words, beats, track, checkOptions }) {
+function clearFace(storyboard, checked, { words, beats, track, checkOptions: base }) {
   const warnings = [];
   let kept = [];
   for (const drop of [true, false]) {
@@ -695,20 +719,28 @@ function clearFace(storyboard, checked, { words, beats, track, checkOptions }) {
     kept = cleared.kept;
     if (!cleared.moved.length && !cleared.dropped.length) break;
     let candidate = cleared.storyboard;
+    // A dropped card leaves the map too, or its line fails the plan for naming a scene that is gone.
+    // Only with a measured face (a track or a matte): the default head is a guess, and a card dropped on a guess keeps its line's error.
+    const measured = cleared.source === "track" || cleared.source === "matte";
+    const direction = cleared.dropped.length && measured ? mapWithoutDropped(base.direction, candidate, cleared.dropped.map((entry) => entry.split(" ")[0])) : base.direction;
+    const checkOptions = direction === base.direction ? base : { ...base, direction };
     let rechecked = checkStoryboard(candidate, checkOptions);
     const banded = settleCaptionBand(candidate, rechecked, (story) => checkStoryboard(story, checkOptions), { resolve: (story) => resolveChecked(story, checkOptions) });
     candidate = banded.storyboard;
     rechecked = banded.checked;
-    if (rechecked.errors.length > checked.errors.length) {
+    // A card on the presenter's measured face is worse than a thinner plan: only an error a repair must fix
+    // (not a near miss such as cadence or coverage) keeps the card where it was.
+    const hard = (list) => (measured ? list.filter((entry) => !NEAR_MISS.some((prefix) => entry.startsWith(prefix))) : list).length;
+    if (hard(rechecked.errors) > hard(checked.errors)) {
       if (!drop) warnings.push(`face: tooling could not move ${cleared.moved.map((entry) => entry.split(" ")[0]).join(", ")} off the presenter's face without breaking other checks`);
       continue;
     }
     if (cleared.moved.length) warnings.push(`face: tooling ${cleared.moved.join("; ")}`);
     if (cleared.dropped.length) warnings.push(...cleared.dropped.map((entry) => `face: tooling ${entry}`));
     warnings.push(...captionBandWarnings(banded));
-    return { storyboard: candidate, checked: rechecked, warnings: [...warnings, ...kept.map((entry) => `face: ${entry}`)] };
+    return { storyboard: candidate, checked: rechecked, direction, warnings: [...warnings, ...kept.map((entry) => `face: ${entry}`)] };
   }
-  return { storyboard, checked, warnings: [...warnings, ...kept.map((entry) => `face: ${entry}`)] };
+  return { storyboard, checked, direction: base.direction, warnings: [...warnings, ...kept.map((entry) => `face: ${entry}`)] };
 }
 
 /**
@@ -717,7 +749,7 @@ function clearFace(storyboard, checked, { words, beats, track, checkOptions }) {
  * {errors, warnings, findings}}. Error strings are prefixed by stage:
  * "validation:", "tier:", "anchors:", "params:", "layout:".
  */
-export function checkStoryboard(raw, { words = [], beats = null, tier = "structured", style = null, direction = null, profile = null, bandErrors = true, clipLed = null, constraints = null, minHold = 0, script = null, castGate: gated = false } = {}) {
+export function checkStoryboard(raw, { words = [], beats = null, track = null, tier = "structured", style = null, direction = null, profile = null, bandErrors = true, clipLed = null, constraints = null, minHold = 0, script = null, castGate: gated = false } = {}) {
   const errors = [];
   const warnings = [];
   const layout = emptyLayout();
@@ -732,7 +764,8 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   const storyboard = JSON.parse(JSON.stringify(input));
   let resolved;
   try {
-    resolved = resolveStory(storyboard, { words, beats });
+    // track: the presenter's whole-video head track, so a card is measured against the head finish will measure it against.
+    resolved = resolveStory(storyboard, { words, beats, ...(track ? { track } : {}) });
   } catch (error) {
     errors.push(`anchors: ${message(error)}`);
     return { ok: false, errors, warnings, storyboard, layout };
@@ -799,10 +832,34 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   }
 
   const models = new Map();
+  const undrawn = new Set();
   for (const scene of resolved.scenes) {
     if (scene.module === "custom") { warnings.push(`${scene.id} is a custom module; its params and layout are not checked here`); continue; }
-    try { models.set(scene.id, resolveModule(scene, resolved, { end: sceneRenderEnd(resolved, scene) })); }
-    catch (error) { errors.push(`params: ${message(error)}`); }
+    // A param the module does not take, or with a value it does not take ("motion.enter must be left, right, …",
+    // "scale must be between 0.92 and 1"), is taken off, so the module's default stands: a repair that fixes one such value
+    // tends to break the next. A param the module needs then fails as "required", which stays an error.
+    const planned = storyboard.scenes.find((entry) => entry?.id === scene.id);
+    for (let tries = 0; ; tries += 1) {
+      try { models.set(scene.id, resolveModule(scene, resolved, { end: sceneRenderEnd(resolved, scene) })); break; }
+      catch (error) {
+        const path = tries < 4 ? /(?:params: |params\.)([A-Za-z0-9_.[\]]+) (?:must be |is not supported|leaves no room)/.exec(message(error))?.[1]?.replace(/^params\./, "") : null;
+        if (path && dropParam(scene.params, path) && dropParam(planned?.params, path)) {
+          warnings.push(`params: tooling took ${path} off ${scene.id} (${message(error).split(" params: ").at(-1)}); the module's default is used`);
+          continue;
+        }
+        // Over a recording a scene that cannot be drawn is left out and the recording plays on (a story keeps one scene):
+        // a repair that fails on the same scene every time otherwise fails the whole video.
+        if (resolved.lane === "footage-led" && resolved.scenes.length - undrawn.size > 1) {
+          undrawn.add(scene.id);
+          warnings.push(`params: tooling left ${scene.id} (${scene.module}) out: ${message(error).split(" params: ").at(-1)}; the recording plays on`);
+        } else errors.push(`params: ${message(error)}`);
+        break;
+      }
+    }
+  }
+  if (undrawn.size) {
+    resolved.scenes = resolved.scenes.filter((scene) => !undrawn.has(scene.id));
+    storyboard.scenes = storyboard.scenes.filter((scene) => !undrawn.has(scene?.id));
   }
   // The layout check needs every module resolved, and nothing else: a plan
   // outside a cadence band (or short of footage, or with a cast finding) is
@@ -854,6 +911,37 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   // minHold: a short video's shots hold at least this long (src/duration_fit.js paceErrors).
   if (minHold > 0) errors.push(...paceErrors(resolved, { hold: minHold }));
   return { ok: errors.length === 0, errors, warnings, storyboard, layout, cadence, clip_share: clipShareValue };
+}
+
+// Delete params[path] ("motion.enter", "steps[1].at"). → whether there was a value to delete
+function dropParam(params, path) {
+  const keys = path.split(/[.[\]]+/).filter(Boolean);
+  let at = params;
+  for (const key of keys.slice(0, -1)) { if (at === null || typeof at !== "object") return false; at = at[key]; }
+  const last = keys.at(-1);
+  if (at === null || typeof at !== "object" || at[last] === undefined) return false;
+  if (Array.isArray(at)) at.splice(Number(last), 1); else delete at[last];
+  return true;
+}
+
+// The map without the scenes a storyboard no longer has (tooling dropped a card that covered the presenter's
+// face): a line left with no scene holds on the presenter. → the map itself when nothing changes
+function mapWithoutDropped(direction, storyboard, dropped) {
+  if (!Array.isArray(direction?.sections) || !Array.isArray(storyboard?.scenes) || !dropped?.length) return direction;
+  // Only the scenes tooling left out: a line may name a scene tooling adds later (a hidden range, a must-use file).
+  const gone = new Set(dropped), has = new Set(storyboard.scenes.map((scene) => scene?.id));
+  const ids = { has: (id) => !gone.has(id) || has.has(id) };
+  const map = structuredClone(direction);
+  let changed = false;
+  for (const section of map.sections) for (const line of section?.lines ?? []) {
+    if (!Array.isArray(line?.scenes)) continue;
+    const kept = line.scenes.filter((id) => ids.has(id));
+    if (kept.length === line.scenes.length) continue;
+    changed = true;
+    if (kept.length) line.scenes = kept;
+    else { delete line.scenes; line.treatment = "face"; line.why = line.why ?? "the plain take: the card planned here did not fit beside the presenter"; }
+  }
+  return changed ? map : direction;
 }
 
 /** The resolved story checkStoryboard lays out: the style merged, the anchors resolved. Throws when the anchors do not resolve. */
@@ -978,6 +1066,21 @@ export function fixedInputs({ lane, format, brand = DEFAULT_BRAND, audio = null,
     fixed.base = base;
   }
   return fixed;
+}
+
+/**
+ * The style's captions are the brand's choice, not the planner's: a plan that
+ * names its own preset, position or size is reset, so the pack's fill in
+ * (applyStyle). Captions the plan turned off stay off.
+ */
+export function pinCaptions(pinned, style) {
+  const pack = packCaptionsForStory(style, pinned.storyboard);
+  const overlay = (Array.isArray(pinned.storyboard?.overlays) ? pinned.storyboard.overlays : []).find((entry) => entry?.type === "captions");
+  if (!pack?.preset || pack.preset === "none" || !overlay || overlay.preset === "none" || overlay.style === "none") return;
+  const reset = ["style", "preset", "position", "size"].filter((key) => overlay[key] !== undefined && (key === "style" || overlay[key] !== pack[key]));
+  if (!reset.length) return;
+  for (const key of ["style", "preset", "position", "size"]) delete overlay[key];
+  pinned.warnings.push(`captions: the planner's ${reset.join(", ")} reset to the style's captions (${pack.preset})`);
 }
 
 export function pinInputs(story, fixed) {

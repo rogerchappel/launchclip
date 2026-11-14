@@ -2,8 +2,10 @@
 // where the presenter stays on screen the whole way through, in the lower part
 // of the frame, under a graphics panel that changes with every sentence.
 //
-//   stacked     the default: graphics panel on top, presenter below
-//               (STACKED.share of the height), one colour world
+//   stacked     while a panel scene is on: graphics panel on top, presenter
+//               below (STACKED.share of the height), one colour world
+//   take        with no panel scene on: the presenter full frame, so the
+//               panel is never up with nothing in it
 //   close-up    a `full` section with a zoom: the presenter fills the frame
 //               on a personal line, held STACKED.face seconds, cut in and out
 //   insert      the panel takes the frame for a big visual, the voice goes on
@@ -14,9 +16,11 @@
 // the seam, one word at a time. stackedLayoutErrors and stackedFaceWarnings
 // check the result. The geometry is kit/core/footage-layout.mjs.
 
+import { CAMERA_ONLY_MODULES } from "@launchclip/core/cadence.mjs";
 import { layoutPlan, layoutStateAt } from "@launchclip/core/footage-layout.mjs";
 import { resolveStory } from "@launchclip/core/story.mjs";
 import { cameraPoint, presenterHead } from "./presenter_box.js";
+import { wholeFrame } from "./plan_normalise.js";
 
 // Where a stacked story's captions go: one word at a time, on the seam.
 export const STACKED_CAPTIONS = Object.freeze({ position: "seam", preset: "seam-word", max_words: 1 });
@@ -31,7 +35,10 @@ export const STACKED = Object.freeze({
   // The panel taking the whole frame (an insert) holds at most this long.
   insertMax: 5,
   // A gap shorter than this between two moments is absorbed, not a stacked flash.
-  minStacked: 1.2
+  minStacked: 1.2,
+  // The panel stays up across a gap between two panel scenes shorter than this, and how long it takes to slide in or away.
+  panelGap: 1.5,
+  shift: 0.4
 });
 
 const EPS = 1e-6;
@@ -42,9 +49,9 @@ export function stackedPrompt() {
   return [
     "## Stacked talking head (this run)",
     "",
-    `The presenter stays on screen for the whole video in the bottom ${Math.round(STACKED.share * 100)}% of the frame; the top is a graphics panel. Tooling builds the layout: write sections ONLY for the moments that leave it, and leave every other second to tooling.`,
+    `The presenter stays on screen for the whole video. While a panel scene is on they sit in the bottom ${Math.round(STACKED.share * 100)}% of the frame under a graphics panel; with none on they take the whole frame. Tooling builds the layout from your scenes: write sections ONLY for the moments below, and leave every other second to tooling.`,
     `- Close-up: \`{id, start, end, layout: "full"}\` on a personal, emotional or turning-point line (a confession, a result, "here's the thing"), ${STACKED.face.min}–${STACKED.face.max} s. Aim for one every 10–15 s; never two back to back.`,
-    `- Big visual: \`{id, start, end, layout: "insert"}\` when one visual needs the whole frame (a demo, a full chart), at most ${STACKED.insertMax} s.`,
+    `- Big visual: \`{id, start, end, layout: "insert"}\` only for footage, a screen, a demo or a full chart that needs the whole frame, at most ${STACKED.insertMax} s. Never for a card, a title, a list or a number: those show in the panel (tooling drops such an insert).`,
     "- Every other scene renders in the panel as an overlay (track 1, never insert: true, which would cover the presenter): give each sentence its own visual there (a shot, a screen, a prop, a number), changing on the sentence's first word. No stretch of more than one sentence with the same panel.",
     "- A numbered framework or list (\"3 things\", \"step 2\") gets one recurring motif in the panel that builds as each item lands (the same diagram gaining its next part, a counter), not a new unrelated card per item.",
     "- Keep one colour world: every panel scene on the same background family (the brand's bg, or paper, or ink), no plate changes between sentences.",
@@ -66,6 +73,7 @@ export function applyStackedLayout(storyboard, { words = [], beats = null, durat
   if (!(total > 0)) return { storyboard, changed: [], skipped: "the story has no duration" };
   const copy = structuredClone(storyboard);
   const changed = [];
+  dropCardInserts(copy, { words, beats }, changed);
   const moments = plannedMoments(copy, { words, beats, total }, changed);
   // A panel scene is an overlay: an insert's own background would cover the presenter's window, leaving it empty under the card.
   // Only a scene inside an insert section keeps the whole frame.
@@ -81,12 +89,31 @@ export function applyStackedLayout(storyboard, { words = [], beats = null, durat
     changed.push(`insert ${scene.id} became a panel scene (the presenter stays under it)`);
   }
   const panel = (Array.isArray(storyboard.sections) ? storyboard.sections : []).find((section) => section?.layout === "stacked" && section.panel)?.panel;
+  // The panel is up only while it has something to show: with no panel scene on, the presenter takes the whole frame.
+  const shown = panelSpans(copy, { words, beats, total });
   const sections = [];
   let clock = 0;
-  let n = 0;
-  const stacked = (start, end) => {
+  let n = 0, takes = 0;
+  // A change between the panel and the full take slides (layout-shift); the video's first section and a planned moment cut.
+  const shift = () => (sections.length && !["insert"].includes(sections.at(-1).layout) && !(sections.at(-1).zoom > 1) ? { type: "layout-shift", dur: STACKED.shift } : { type: "cut" });
+  const stackedSection = (start, end) => {
     n += 1;
-    sections.push({ id: `stack-${n}`, start: round3(start), end: round3(end), layout: "stacked", side: "bottom", share: STACKED.share, ...(panel ? { panel } : {}), transition: { type: "cut" } });
+    sections.push({ id: `stack-${n}`, start: round3(start), end: round3(end), layout: "stacked", side: "bottom", share: STACKED.share, ...(panel ? { panel } : {}), transition: shift() });
+  };
+  const stacked = (from, to) => {
+    if (!shown) { stackedSection(from, to); return; }
+    let at = from;
+    for (const [start, end] of shown) {
+      const a = Math.max(from, start), b = Math.min(to, end);
+      if (b - a < STACKED.minStacked - EPS) continue;
+      // A sliver of plain take before the panel is not worth a move: the panel comes up early instead.
+      const begin = a - at < STACKED.minStacked - EPS ? at : a;
+      if (begin > at + EPS) { takes += 1; sections.push({ id: `take-${takes}`, start: round3(at), end: round3(begin), layout: "full", zoom: 1, transition: shift() }); }
+      stackedSection(begin, b);
+      at = b;
+    }
+    if (to - at < STACKED.minStacked - EPS && sections.length && sections.at(-1).layout === "stacked" && Math.abs(sections.at(-1).end - round3(at)) < EPS) sections.at(-1).end = round3(to);
+    else if (to > at + EPS) { takes += 1; sections.push({ id: `take-${takes}`, start: round3(at), end: round3(to), layout: "full", zoom: 1, transition: shift() }); }
   };
   for (const moment of moments) {
     if (moment.start - clock >= STACKED.minStacked - EPS) stacked(clock, moment.start);
@@ -108,9 +135,48 @@ export function applyStackedLayout(storyboard, { words = [], beats = null, durat
   return { storyboard: copy, changed, skipped: null };
 }
 
+// An insert section the planner wrote for a card (plan_normalise.js wholeFrame) is dropped, so the card shows in the panel over the presenter.
+function dropCardInserts(story, { words, beats }, changed) {
+  const planned = (Array.isArray(story.sections) ? story.sections : []).filter((section) => section?.layout === "insert");
+  if (!planned.length) return;
+  let resolved = null;
+  try { resolved = resolveStory(structuredClone({ ...story, sections: planned }), { words, beats }); } catch { return; }
+  const times = new Map(resolved.sections.map((section) => [section.id, section]));
+  const dropped = new Set();
+  for (const section of planned) {
+    const time = times.get(section.id);
+    if (!time) continue;
+    const inside = resolved.scenes.filter((scene) => Math.min(Number(scene.end), Number(time.end)) - Math.max(Number(scene.start), Number(time.start)) > (Number(scene.end) - Number(scene.start)) / 2);
+    if (inside.length && !inside.some(wholeFrame)) { dropped.add(section.id); changed.push(`insert ${section.id} dropped: ${inside.map((scene) => `${scene.id} (${scene.module})`).join(", ")} shows in the panel, with the presenter under it`); }
+  }
+  if (dropped.size) story.sections = story.sections.filter((section) => !dropped.has(section?.id));
+}
+
+// When the panel has something to show: the panel scenes' times (every scene
+// above the recording that is not a camera move), joined across gaps too
+// short to drop the panel for. → [[start, end]] in order, or null when the
+// scene times do not resolve (the panel then stays up, as before).
+function panelSpans(story, { words, beats, total }) {
+  let resolved = null;
+  try { resolved = resolveStory(structuredClone(story), { words, beats }); } catch { return null; }
+  const spans = resolved.scenes
+    .filter((scene) => Number(scene.track ?? 0) >= 1 && scene.insert !== true && !CAMERA_ONLY_MODULES.includes(scene.module))
+    .map((scene) => [Math.max(0, Number(scene.start)), Math.min(total, Number(scene.end))])
+    .filter(([start, end]) => Number.isFinite(start) && end > start)
+    .sort((a, b) => a[0] - b[0]);
+  const joined = [];
+  for (const [start, end] of spans) {
+    const last = joined.at(-1);
+    if (last && start - last[1] < STACKED.panelGap - EPS) last[1] = Math.max(last[1], end);
+    else joined.push([start, end]);
+  }
+  return joined;
+}
+
 // The planner's close-ups and inserts, resolved to seconds, clamped and in order.
+// Tooling's own plain takes (zoom 1) from an earlier pass are not the planner's: they are rebuilt.
 function plannedMoments(story, { words, beats, total }, changed) {
-  const planned = (Array.isArray(story.sections) ? story.sections : []).filter((section) => section && (section.layout === "full" || section.layout === "insert"));
+  const planned = (Array.isArray(story.sections) ? story.sections : []).filter((section) => section && ((section.layout === "full" && section.zoom !== 1) || section.layout === "insert"));
   if (!planned.length) return [];
   let resolved = null;
   try { resolved = resolveStory(structuredClone({ ...story, sections: planned }), { words, beats }); } catch { resolved = null; }
@@ -151,7 +217,7 @@ export function stackedLayoutErrors(storyboard, { seconds = Number(storyboard?.f
   if (!sections.length) { errors.push("stacked: the story has no sections; the stacked layout needs them over the whole video"); return { errors, warnings }; }
   for (const section of sections) {
     const hold = section.end - section.start;
-    if (section.layout === "full" && hold > STACKED.face.max + 0.05) errors.push(`stacked: close-up ${section.id} holds ${round3(hold)} s; keep a close-up to ${STACKED.face.max} s`);
+    if (section.layout === "full" && section.zoom !== 1 && hold > STACKED.face.max + 0.05) errors.push(`stacked: close-up ${section.id} holds ${round3(hold)} s; keep a close-up to ${STACKED.face.max} s`);
     if (section.layout === "insert" && hold > STACKED.insertMax + 0.05) errors.push(`stacked: insert ${section.id} holds ${round3(hold)} s; the presenter leaves the frame for at most ${STACKED.insertMax} s`);
   }
   const captions = (storyboard.overlays ?? []).find((overlay) => overlay?.type === "captions");

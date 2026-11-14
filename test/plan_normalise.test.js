@@ -265,3 +265,22 @@ test("zooms: one with no time to hold after its move is taken out; the shot keep
   delete fine.scenes[1].zooms;
   assert.deepEqual(normalisePlan(fine, { words: [] }).changed, []);
 });
+
+test("over a recording, a scene on the wrong track for what it is moves to the right one", () => {
+  const story = { schema: "launchclip.story.v1", lane: "footage-led", format: { width: 1080, height: 1920, fps: 30, duration: 20 }, base: { src: "assets/recording.mp4" }, scenes: [
+    { id: "card", module: "stat-card", start: 1, end: 4, params: {} },
+    { id: "punch", module: "punch-in", start: 2, end: 5, params: { blur: 10 } },
+    { id: "full", module: "ui-scene", insert: true, track: 1, start: 6, end: 9, params: {} },
+    { id: "fine", module: "checklist", track: 1, start: 10, end: 13, params: {} },
+    { id: "alone", module: "compare", insert: true, start: 14, end: 17, params: {} },
+    { id: "title", module: "kinetic-words", insert: true, start: 18, end: 20, params: {} }
+  ] };
+  const { storyboard, changed } = normalisePlan(story, { cards: true });
+  // A card planned as an insert goes over the recording; a screen or a title keeps the frame.
+  assert.deepEqual(storyboard.scenes.map((scene) => [scene.id, scene.insert, scene.track]), [["card", undefined, 1], ["punch", undefined, 2], ["full", true, undefined], ["fine", undefined, 1], ["alone", undefined, 1], ["title", true, undefined]]);
+  assert.equal(changed.length, 4);
+  // Without the option a card planned as an insert stays one.
+  assert.equal(normalisePlan(story).storyboard.scenes.find((scene) => scene.id === "alone").insert, true);
+  // Other lanes keep track 0 for their scenes.
+  assert.deepEqual(normalisePlan({ ...story, lane: "motion", base: undefined }).changed.filter((entry) => entry.includes("moved to track")), []);
+});

@@ -423,10 +423,13 @@ function laneRules(lane, profile = null) {
   const rules = {
     motion: 'motion: no voice. Full-frame modules cover the whole duration back to back on track 0 (no gaps). Time scenes in seconds or beat anchors. finish snaps second-timed cuts to the nearest downbeat (within 0.25 s), so plan cuts on bar lines where you can.',
     'voiceover-motion': 'voiceover-motion: audio.voice and audio.words are fixed inputs; copy them unchanged. Full-frame modules cover the whole duration on track 0. Start scenes and place hits on word anchors from the narration so visuals land on the spoken word. Add a captions overlay.',
-    'footage-led': `footage-led: base (the edited recording under assets/) plays underneath and is a fixed input; copy it unchanged. Scenes are overlays beside the presenter and full-frame inserts (insert: true), placed where the direction map says: every dress or insert line gets its scenes, and face lines keep the recording on purpose. ${coverageRule(profile)}${faceTimeRule(profile)} Add a captions overlay.`
+    'footage-led': `footage-led: base (the edited recording under assets/) plays underneath and is a fixed input; copy it unchanged. Scenes are overlays beside the presenter and full-frame inserts (insert: true), placed where the direction map says: every dress or insert line gets its scenes, and face lines keep the recording on purpose. ${coverageRule(profile)}${faceTimeRule(profile)} ${FREE_TYPE} Add a captions overlay.`
   };
   return lane && rules[lane] ? [rules[lane]] : STORY_LANES.map((name) => rules[name]);
 }
+
+// Over a presenter, type set straight on the footage and real pictures read as edited; a run of boxed cards reads as a slideshow.
+const FREE_TYPE = 'Over the presenter prefer free type and pictures to boxed cards: an emphasis-caption, kinetic-words or a motion-title for the words that matter, set straight on the footage with no panel behind them, and a full-frame shot or screen for a thing the viewer could see. A boxed card (checklist, compare, stat-card, callout, concept-card) is for a real list or comparison: at most one in any 15 s, and no module twice in a row.';
 
 // The footage-led coverage rule: the cadence profile's band (RFC §5.5), not a fixed cap.
 function coverageRule(profile) {

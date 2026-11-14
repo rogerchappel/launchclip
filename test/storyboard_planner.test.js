@@ -585,3 +585,46 @@ test("caption band: the planner is told where this story's captions sit, not the
     assert.match(placed.calls[0].instructions, new RegExp(`caption band x 65–918, ${y.source} \\(this story's captions: position "${position}"\\)`));
   }
 });
+
+test("checkStoryboard: a param the module does not take, or a value it does not take, falls back to the default", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const base = JSON.parse(await readFile(new URL("../examples/story/zoom-cuts-9x16/storyboard.json", import.meta.url), "utf8"));
+  const story = (extra) => ({ ...base, format: { ...base.format, duration: 9 }, scenes: [{ id: "s2", module: "bar-chart", start: 0, end: 9, energy: 2, params: { ...base.scenes[1].params, ...extra } }] });
+  for (const extra of [{ stagger: 99 }, { highlight: "the best one" }]) {
+    const checked = checkStoryboard(story(extra), {});
+    assert.equal(checked.ok, true, checked.errors.join("\n"));
+    assert.deepEqual(Object.keys(checked.storyboard.scenes[0].params), ["title", "data"]);
+    assert.ok(checked.warnings.some((line) => line.startsWith(`params: tooling took ${Object.keys(extra)[0]} off s2`)), checked.warnings.join("\n"));
+  }
+  // What the module needs is still an error.
+  assert.equal(checkStoryboard(story({ data: [] }), {}).ok, false);
+});
+
+test("checkStoryboard: over a recording, a scene that cannot be drawn is left out and the recording plays on", () => {
+  const brand = { colors: { bg: "#0b1020", primary: "#ff7a59", accent: "#7ce7ff", ink: "#0b1020", paper: "#f5f1ea" }, fonts: { display: "inter", body: "inter", meta: "jetbrains-mono" } };
+  const story = { schema: "launchclip.story.v1", lane: "footage-led", format: { width: 1080, height: 1920, fps: 30, duration: 20 }, brand, base: { src: "assets/recording.mp4" }, scenes: [
+    { id: "ok", module: "punch-in", track: 2, start: 1, end: 4, energy: 1, params: {} },
+    { id: "bad", module: "punch-in", track: 2, start: 6, end: 9, energy: 1, params: { steps: [{ at: 0.2, scale: 1.1 }, { at: 0.3, scale: 1.2 }] } }
+  ] };
+  const checked = checkStoryboard(story, { tier: "tooling" });
+  assert.equal(checked.ok, true, checked.errors.join("\n"));
+  assert.deepEqual(checked.storyboard.scenes.map((scene) => scene.id), ["ok"]);
+  assert.ok(checked.warnings.some((line) => line.startsWith("params: tooling left bad (punch-in) out")), checked.warnings.join("\n"));
+});
+
+test("pinCaptions: a style's caption preset, position and size are not the planner's to change", async () => {
+  const { pinCaptions } = await import("../src/storyboard_planner.js");
+  const style = { captions: { preset: "serif-accent", position: "top", size: 1.25, lanes: { "footage-led": { preset: "serif-accent", position: "top", size: 1.25 } } } };
+  const pinned = { storyboard: { lane: "footage-led", overlays: [{ type: "captions", preset: "soft-card", position: "bottom", size: 1.25, hide: [[1, 2]] }] }, warnings: [] };
+  pinCaptions(pinned, style);
+  assert.deepEqual(pinned.storyboard.overlays, [{ type: "captions", hide: [[1, 2]] }]);
+  assert.match(pinned.warnings[0], /captions: the planner's preset, position reset to the style's captions \(serif-accent\)/);
+  // No style captions, or captions turned off: left alone.
+  const own = { storyboard: { lane: "footage-led", overlays: [{ type: "captions", preset: "soft-card" }] }, warnings: [] };
+  pinCaptions(own, { captions: {} });
+  pinCaptions(own, null);
+  assert.equal(own.storyboard.overlays[0].preset, "soft-card");
+  const off = { storyboard: { lane: "footage-led", overlays: [{ type: "captions", preset: "none" }] }, warnings: [] };
+  pinCaptions(off, style);
+  assert.equal(off.storyboard.overlays[0].preset, "none");
+});

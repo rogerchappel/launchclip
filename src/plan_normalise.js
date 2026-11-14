@@ -17,11 +17,16 @@
 // 6. a direction line naming a scene that is not on its words names the one
 //    character scene that is.
 //
+// 7. over a recording, a scene on the wrong track for what it is (an insert
+//    off track 0, an overlay or a camera move on it) moves to the right one.
+//
 // What has no single correction stays an error for the repair: a speaker
 // absent for most of a line, a cue far outside its scene, scenes that cannot
 // both keep their minimum. The modules and the checks stay strict; this only
 // rewrites the storyboard (and the map's scene names) the planner returned.
 
+import { CAMERA_ONLY_MODULES } from "@launchclip/core/cadence.mjs";
+import { SHOT_LAYOUT_SLOTS, SHOT_MODULES } from "./asset_provider.js";
 import { moduleTiming } from "@launchclip/core/modules.mjs";
 import { CUE_SNAP, STORY_ZOOM, castRefId, resolveStory, storyCastIds } from "@launchclip/core/story.mjs";
 import { offScreenSpeech, sceneCharacters } from "@launchclip/core/direction.mjs";
@@ -53,9 +58,10 @@ const label = (scene, index) => scene?.id ?? `scenes[${index}]`;
  * story has one (who speaks each line).
  * → {storyboard, direction (copies when anything changed), changed: [what was corrected]}
  */
-export function normalisePlan(storyboard, { words = [], beats = null, direction = null, script = null } = {}) {
+export function normalisePlan(storyboard, { words = [], beats = null, direction = null, script = null, cards = false } = {}) {
   if (!isObject(storyboard) || !Array.isArray(storyboard.scenes)) return { storyboard, direction, changed: [] };
-  const state = { story: structuredClone(storyboard), map: direction ? structuredClone(direction) : null, changed: [], words: Array.isArray(words) ? words : Array.isArray(words?.words) ? words.words : [], beats, script };
+  const state = { story: structuredClone(storyboard), map: direction ? structuredClone(direction) : null, changed: [], words: Array.isArray(words) ? words : Array.isArray(words?.words) ? words.words : [], beats, script, cards };
+  fitLayers(state);
   fitTargets(state);
   fitHandleParts(state);
   fitPositions(state);
@@ -66,6 +72,45 @@ export function normalisePlan(storyboard, { words = [], beats = null, direction 
   fitZoomHolds(state);
   if (!state.changed.length) return { storyboard, direction, changed: [] };
   return { storyboard: state.story, direction: state.map ?? direction, changed: state.changed };
+}
+
+// What earns the whole frame over a recording: footage, a picture, a screen, a
+// demo, a chart, a drawn scene, or a title set as the frame (a hook, kinetic
+// words). A card (a checklist, a comparison, a stat, a callout)
+// reads beside the presenter; alone on the frame it leaves most of it empty
+// with the presenter gone.
+const WHOLE_FRAME = new Set([
+  ...SHOT_MODULES, ...Object.keys(SHOT_LAYOUT_SLOTS),
+  "product-demo", "evidence-clip", "app-stage", "phone-stage", "ui-scene", "device-frame", "window-chrome", "cast-scene", "world", "heatmap", "map-highlight",
+  "hook-title", "kinetic-words", "motion-title", "section-card", "cta"
+]);
+export const wholeFrame = (scene) => WHOLE_FRAME.has(scene?.module) || /-chart$/.test(String(scene?.module ?? ""));
+
+// Over a recording, track 0 is the recording and its full-frame inserts, and
+// everything else sits above it. `insert` says which a scene is, so the track
+// follows it: an insert goes to track 0, any other scene left on track 0 goes
+// above the recording (a camera move on its own track, so it can run under a card).
+function fitLayers({ story, changed, cards }) {
+  if (story.lane !== "footage-led") return;
+  story.scenes.forEach((scene, index) => {
+    if (!isObject(scene) || scene.layer !== undefined) return;
+    const label = scene.id ?? `scenes[${index}]`;
+    // cards (the caller's choice): a card is not an insert, it goes over the recording, where the presenter stays on screen.
+    if (cards && scene.insert === true && !wholeFrame(scene)) {
+      delete scene.insert;
+      scene.track = 1;
+      changed.push(`${label}: shown over the recording, not as an insert (a ${scene.module} alone on the frame leaves it empty)`);
+      return;
+    }
+    const track = Number(scene.track ?? 0);
+    if (scene.insert === true && track !== 0) {
+      delete scene.track;
+      changed.push(`${label}: moved to track 0 (an insert covers the recording)`);
+    } else if (scene.insert !== true && track === 0) {
+      scene.track = CAMERA_ONLY_MODULES.includes(scene.module) ? 2 : 1;
+      changed.push(`${label}: moved to track ${scene.track} (track 0 is the recording; a scene over it is an overlay)`);
+    }
+  });
 }
 
 // A call to action's icon and follow button sit in or beside the handle pill.

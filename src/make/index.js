@@ -55,6 +55,8 @@ import { rewriteLongFormCopy } from "./long_form_copy.js";
 import { captureFiles, readCaptureRequests, recordCaptures } from "./captures.js";
 import { evidenceClipParams } from "@launchclip/core/catalog-d-evidence-clip.mjs";
 import { RESEARCH_PATHS } from "../research/schema.js";
+import { entityIndex, extractClaims } from "../research/claims.js";
+import { findLogos, logoManifest, publicFetch, simpleIconsIndex, simpleIconsSlug, writeLogos } from "../research/logos.js";
 import { directLongFormVisuals, revertCards, typographyShare, unresolvedScenes } from "./long_form_direct.js";
 import { checkModelAccess, createMakeClient, scriptModelSpec, selectMakeModel } from "./models.js";
 import { alternativeTransition, candidatesMode, comparisonEntry, designOpening, judgeCandidates, meanScore, openingScene, renderCandidate, rendererStill, riskyBoundary, sceneResolves, sceneTimes, selectCandidate, storyWith, transitionTimes, writeReceipt } from "./candidates.js";
@@ -1633,6 +1635,11 @@ async function planStage(ctx) {
     ...(media.length ? { media } : {}),
     ...(featured.length ? { featured } : {}),
     ...(laidOut ? { layout: laidOut } : {}),
+    // The recording keeps moving: punch-ins where the take would sit still (the overlay layout's take is calmer).
+    // …and a card shows over it, never alone on the frame (src/plan_normalise.js).
+    ...(lane === "footage-led" ? { takeMoves: { pace: laidOut === "overlay" ? "calm" : "standard" }, cardsOverTake: true } : {}),
+    // The style's captions stand, except in a draft, whose tooling picks captions that pass with no repair.
+    ...(drafting ? {} : { pinCaptions: true }),
     ...(subjectTrack ? { subjectTrack } : {}),
     ...(pinned ?? {}),
     ...(explainer ? { explainer: true } : {}),
@@ -2596,6 +2603,34 @@ async function settleCaptures(ctx) {
   if (ctx.longForm) ctx.longForm.assets = assetManifestLines(ctx).map((item) => ({ src: item.src, line: item.line }));
 }
 
+/**
+ * --logos icons, with no research logos: the Simple Icons mark of each brand
+ * the narration names, written as research/logos.json. The library's public
+ * list of brands is read first and only a name on it is asked for; no
+ * company page is visited and no domain is looked up.
+ * → the manifest, or null.
+ */
+async function namedBrandIcons(ctx, dir) {
+  if (ctx.options.logos !== "icons" || !ctx.narrationText) return null;
+  try {
+    // Any capitalised name may be a brand, but only one the library lists is asked for, so no other name leaves the machine.
+    const fetcher = ctx.adapters.fetch ?? globalThis.fetch;
+    const known = await simpleIconsIndex((url, maxBytes) => publicFetch(url, { fetch: fetcher, maxBytes }));
+    if (!known) return null;
+    const entities = entityIndex(extractClaims(ctx.narrationText)).filter((entity) => known.has(simpleIconsSlug(entity.name))).map((entity) => ({ ...entity, kind: "org" }));
+    if (!entities.length) return null;
+    const result = await findLogos(entities, { max: 6 }, { fetch: fetcher, http: { json: async () => null } });
+    if (!result.logos.length) return null;
+    const manifest = logoManifest(result);
+    await writeLogos(dir, result, manifest);
+    ctx.say(`logos: Simple Icons marks for ${result.logos.map((logo) => logo.name).join(", ")}`);
+    return manifest;
+  } catch (error) {
+    ctx.report.warnings.push(`logos: the named brands' marks were not fetched (${String(error?.message ?? error).split("\n")[0]})`);
+    return null;
+  }
+}
+
 /** Research's official posts and logos; each logo file is copied to the assets/ path its entry names, where modules can load it. */
 async function readResearchExtras(ctx) {
   ctx.posts = await readPosts(ctx.project);
@@ -2604,7 +2639,8 @@ async function readResearchExtras(ctx) {
   ctx.researchLogos = [];
   const dir = path.join(ctx.project, RESEARCH_PATHS.dir);
   let manifest;
-  try { manifest = JSON.parse(await readFile(path.join(dir, RESEARCH_PATHS.logos), "utf8")); } catch { return; }
+  try { manifest = JSON.parse(await readFile(path.join(dir, RESEARCH_PATHS.logos), "utf8")); } catch { manifest = await namedBrandIcons(ctx, dir); }
+  if (!manifest) return;
   for (const logo of manifest.logos ?? []) {
     if (!logo?.file || !logo?.asset?.startsWith("assets/")) continue;
     try {
@@ -2664,7 +2700,7 @@ export function assetManifestLines(ctx) {
   }
   for (const item of routing.logos) {
     const src = `assets/${item.path}`;
-    out.push({ src, kind: "image", line: `${src} — image, logo, ${item.width ?? "?"}×${item.height ?? "?"}: ${item.description}. No catalogue module shows a single logo on its own (logo-row needs 2–6 logos); use it in a media-window only if a product shot is missing, otherwise leave it out.` });
+    out.push({ src, kind: "image", line: `${src} — image, logo, ${item.width ?? "?"}×${item.height ?? "?"}: ${item.description}. A logo-row needs 2–6 logos and a brand-lockup is a whole title card; use it in a media-window only if a product shot is missing, otherwise leave it out.` });
   }
   return out;
 }
