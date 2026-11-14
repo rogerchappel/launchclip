@@ -596,8 +596,8 @@ export function captionOptions(given = {}, { brand, format, fonts, story } = {})
     plate: p.plate,
     punctuation: p.punctuation ?? true,
     // How a line that does not read on what is behind it is helped: a solid
-    // box (the default) or a soft scrim that keeps a box-less look (the default over a recording).
-    plateStyle: CAPTION_PLATE_STYLES.includes(overlay?.plate_style) ? overlay.plate_style : p.plateStyle ?? (story?.lane === 'footage-led' ? 'scrim' : 'box'),
+    // box (the default) or a soft scrim that keeps a box-less look.
+    plateStyle: CAPTION_PLATE_STYLES.includes(overlay?.plate_style) ? overlay.plate_style : p.plateStyle ?? 'box',
     emphasis,
     accents: p.accents ?? null,
     entrance: Object.hasOwn(CAPTION_ENTRANCES, overlay?.entrance) ? overlay.entrance : p.entrance,
