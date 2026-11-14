@@ -45,7 +45,7 @@ export function stackedPrompt() {
     `The presenter stays on screen for the whole video in the bottom ${Math.round(STACKED.share * 100)}% of the frame; the top is a graphics panel. Tooling builds the layout: write sections ONLY for the moments that leave it, and leave every other second to tooling.`,
     `- Close-up: \`{id, start, end, layout: "full"}\` on a personal, emotional or turning-point line (a confession, a result, "here's the thing"), ${STACKED.face.min}–${STACKED.face.max} s. Aim for one every 10–15 s; never two back to back.`,
     `- Big visual: \`{id, start, end, layout: "insert"}\` when one visual needs the whole frame (a demo, a full chart), at most ${STACKED.insertMax} s.`,
-    "- Every other scene renders in the panel: give each sentence its own visual there (a shot, a screen, a prop, a number), changing on the sentence's first word. No stretch of more than one sentence with the same panel.",
+    "- Every other scene renders in the panel as an overlay (track 1, never insert: true, which would cover the presenter): give each sentence its own visual there (a shot, a screen, a prop, a number), changing on the sentence's first word. No stretch of more than one sentence with the same panel.",
     "- A numbered framework or list (\"3 things\", \"step 2\") gets one recurring motif in the panel that builds as each item lands (the same diagram gaining its next part, a counter), not a new unrelated card per item.",
     "- Keep one colour world: every panel scene on the same background family (the brand's bg, or paper, or ink), no plate changes between sentences.",
     "- Panel titles are short (≤ 7 words) with one accent word; the captions are one word at a time on the seam between the panel and the presenter, so keep panel content clear of the panel's bottom edge."
@@ -67,6 +67,19 @@ export function applyStackedLayout(storyboard, { words = [], beats = null, durat
   const copy = structuredClone(storyboard);
   const changed = [];
   const moments = plannedMoments(copy, { words, beats, total }, changed);
+  // A panel scene is an overlay: an insert's own background would cover the presenter's window, leaving it empty under the card.
+  // Only a scene inside an insert section keeps the whole frame.
+  const inserts = moments.filter((moment) => moment.layout === "insert");
+  let times = new Map();
+  if (inserts.length) try { times = new Map(resolveStory(structuredClone(copy), { words, beats }).scenes.map((scene) => [scene.id, scene])); } catch { times = null; }
+  for (const scene of times ? copy.scenes ?? [] : []) {
+    if (scene?.insert !== true) continue;
+    const at = times.get(scene.id), middle = at ? (Number(at.start) + Number(at.end)) / 2 : null;
+    if (inserts.length && (middle === null || inserts.some((moment) => middle >= moment.start - EPS && middle < moment.end))) continue;
+    delete scene.insert;
+    scene.track = 1;
+    changed.push(`insert ${scene.id} became a panel scene (the presenter stays under it)`);
+  }
   const panel = (Array.isArray(storyboard.sections) ? storyboard.sections : []).find((section) => section?.layout === "stacked" && section.panel)?.panel;
   const sections = [];
   let clock = 0;
