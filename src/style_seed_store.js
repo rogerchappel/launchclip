@@ -117,6 +117,9 @@ export function promptConstraints(text, constraints = {}) {
  * values always win in applyStyle), so they are set from the pack here.
  * Captions turned off stay off. Mutates and returns the story.
  */
+// The caption preset the stacked and overlay layouts set (src/stacked_layout.js, src/overlay_layout.js).
+const LAYOUT_CAPTION_PRESET = "seam-word";
+
 export function adoptStyleLook(story, pack) {
   if (pack.brand) story.brand = JSON.parse(JSON.stringify(pack.brand));
   const grammar = pack.motion?.grammar;
@@ -125,6 +128,9 @@ export function adoptStyleLook(story, pack) {
   const preset = packCaptionsForStory(pack, story)?.preset;
   for (const overlay of Array.isArray(story.overlays) ? story.overlays : []) {
     if (overlay?.type !== "captions" || overlay.style === "none" || overlay.preset === "none") continue;
+    // A talking-head layout set these captions (one outlined word at a time, on the seam or the chest): the pack's
+    // preset there would set a fading sentence style one word at a time, on a plate its accent colour cannot be read on.
+    if (overlay.preset === LAYOUT_CAPTION_PRESET) continue;
     // A character story's captions are the kit's character-story treatment: a preset the model wrote is dropped too.
     if (!preset && !isCharacterStory(story)) continue;
     delete overlay.style;
