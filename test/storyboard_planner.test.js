@@ -611,3 +611,20 @@ test("checkStoryboard: over a recording, a scene that cannot be drawn is left ou
   assert.deepEqual(checked.storyboard.scenes.map((scene) => scene.id), ["ok"]);
   assert.ok(checked.warnings.some((line) => line.startsWith("params: tooling left bad (punch-in) out")), checked.warnings.join("\n"));
 });
+
+test("pinCaptions: a style's caption preset, position and size are not the planner's to change", async () => {
+  const { pinCaptions } = await import("../src/storyboard_planner.js");
+  const style = { captions: { preset: "serif-accent", position: "top", size: 1.25, lanes: { "footage-led": { preset: "serif-accent", position: "top", size: 1.25 } } } };
+  const pinned = { storyboard: { lane: "footage-led", overlays: [{ type: "captions", preset: "soft-card", position: "bottom", size: 1.25, hide: [[1, 2]] }] }, warnings: [] };
+  pinCaptions(pinned, style);
+  assert.deepEqual(pinned.storyboard.overlays, [{ type: "captions", hide: [[1, 2]] }]);
+  assert.match(pinned.warnings[0], /captions: the planner's preset, position reset to the style's captions \(serif-accent\)/);
+  // No style captions, or captions turned off: left alone.
+  const own = { storyboard: { lane: "footage-led", overlays: [{ type: "captions", preset: "soft-card" }] }, warnings: [] };
+  pinCaptions(own, { captions: {} });
+  pinCaptions(own, null);
+  assert.equal(own.storyboard.overlays[0].preset, "soft-card");
+  const off = { storyboard: { lane: "footage-led", overlays: [{ type: "captions", preset: "none" }] }, warnings: [] };
+  pinCaptions(off, style);
+  assert.equal(off.storyboard.overlays[0].preset, "none");
+});

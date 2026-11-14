@@ -27,7 +27,7 @@ import { captionBandAt, checkLayout, elementsFromEditorialLayout, elementsFromSt
 import { captionsOverlayOf } from "@launchclip/core/captions.mjs";
 import { layoutCaptionZones } from "@launchclip/core/cast-captions.mjs";
 import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, directionPrompt, planningPrompt, suggestModules } from "@launchclip/core/planning-prompt.mjs";
-import { applyStyle } from "@launchclip/core/style.mjs";
+import { applyStyle, packCaptionsForStory } from "@launchclip/core/style.mjs";
 import { clipLedFindings, clipLedPlan } from "@launchclip/core/clip-led.mjs";
 import { validateCastCues } from "@launchclip/core/characters/cues.mjs";
 import { createStructuredClient, parseModelRoute } from "./model_provider.js";
@@ -306,6 +306,7 @@ export async function planStoryboard(options = {}) {
       // A repair redoes the scenes its findings reach; the rest keep the params they had (src/repair_scope.js).
       const keptScenes = kind === "repair" ? keepRepairScope(extracted, previous, { direction, words: wordList, beats }) : [];
       const pinned = pinInputs(extracted.storyboard, fixed);
+      pinCaptions(pinned, style);
       if (keptScenes.length) pinned.warnings = [...pinned.warnings, `repair: tooling kept the params of ${keptScenes.length} scene${keptScenes.length === 1 ? "" : "s"} the findings did not reach (${keptScenes.join(", ")})`];
       // A repair may return a corrected map with the storyboard.
       const repairedMap = kind === "repair" && direction ? extractDirection(result) : null;
@@ -1054,6 +1055,21 @@ export function fixedInputs({ lane, format, brand = DEFAULT_BRAND, audio = null,
     fixed.base = base;
   }
   return fixed;
+}
+
+/**
+ * The style's captions are the brand's choice, not the planner's: a plan that
+ * names its own preset, position or size is reset, so the pack's fill in
+ * (applyStyle). Captions the plan turned off stay off.
+ */
+export function pinCaptions(pinned, style) {
+  const pack = packCaptionsForStory(style, pinned.storyboard);
+  const overlay = (Array.isArray(pinned.storyboard?.overlays) ? pinned.storyboard.overlays : []).find((entry) => entry?.type === "captions");
+  if (!pack?.preset || pack.preset === "none" || !overlay || overlay.preset === "none" || overlay.style === "none") return;
+  const reset = ["style", "preset", "position", "size"].filter((key) => overlay[key] !== undefined && (key === "style" || overlay[key] !== pack[key]));
+  if (!reset.length) return;
+  for (const key of ["style", "preset", "position", "size"]) delete overlay[key];
+  pinned.warnings.push(`captions: the planner's ${reset.join(", ")} reset to the style's captions (${pack.preset})`);
 }
 
 export function pinInputs(story, fixed) {

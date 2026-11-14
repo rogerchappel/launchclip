@@ -76,13 +76,13 @@ export function normalisePlan(storyboard, { words = [], beats = null, direction 
 
 // What earns the whole frame over a recording: footage, a picture, a screen, a
 // demo, a chart, a drawn scene, or a title set as the frame (a hook, kinetic
-// words, a lockup). A card (a checklist, a comparison, a stat, a callout)
+// words). A card (a checklist, a comparison, a stat, a callout)
 // reads beside the presenter; alone on the frame it leaves most of it empty
 // with the presenter gone.
 const WHOLE_FRAME = new Set([
   ...SHOT_MODULES, ...Object.keys(SHOT_LAYOUT_SLOTS),
   "product-demo", "evidence-clip", "app-stage", "phone-stage", "ui-scene", "device-frame", "window-chrome", "cast-scene", "world", "heatmap", "map-highlight",
-  "hook-title", "kinetic-words", "motion-title", "section-card", "brand-lockup", "cta"
+  "hook-title", "kinetic-words", "motion-title", "section-card", "cta"
 ]);
 export const wholeFrame = (scene) => WHOLE_FRAME.has(scene?.module) || /-chart$/.test(String(scene?.module ?? ""));
 
