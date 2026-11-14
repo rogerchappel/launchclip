@@ -306,7 +306,7 @@ export async function planStoryboard(options = {}) {
       // A repair redoes the scenes its findings reach; the rest keep the params they had (src/repair_scope.js).
       const keptScenes = kind === "repair" ? keepRepairScope(extracted, previous, { direction, words: wordList, beats }) : [];
       const pinned = pinInputs(extracted.storyboard, fixed);
-      pinCaptions(pinned, style);
+      if (options.pinCaptions) pinCaptions(pinned, style);
       if (keptScenes.length) pinned.warnings = [...pinned.warnings, `repair: tooling kept the params of ${keptScenes.length} scene${keptScenes.length === 1 ? "" : "s"} the findings did not reach (${keptScenes.join(", ")})`];
       // A repair may return a corrected map with the storyboard.
       const repairedMap = kind === "repair" && direction ? extractDirection(result) : null;
@@ -385,7 +385,7 @@ export async function planStoryboard(options = {}) {
       }
       // Slips with one obvious correction (a lone character on a side, scenes overlapping on a track, a cue just outside its
       // scene, a cut one word late for its speaker) are tooling's, before the checks see them (src/plan_normalise.js).
-      direction = tidyPlan(pinned, direction, { words: wordList, beats, script });
+      direction = tidyPlan(pinned, direction, { words: wordList, beats, script, cards: options.cardsOverTake === true });
       // A character story: a map action whose character is in the shot without the cue is tooling's to add (src/acting_place.js).
       if (bible && direction) {
         const placed = placeActions(pinned.storyboard, { direction, words: wordList });
@@ -422,7 +422,7 @@ export async function planStoryboard(options = {}) {
       // their shot or leave a cue past its scene's end: the same corrections again, on what the fits left.
       if (!checked.ok) {
         const fitted = pinned.storyboard;
-        direction = tidyPlan(pinned, direction, { words: wordList, beats, script });
+        direction = tidyPlan(pinned, direction, { words: wordList, beats, script, cards: options.cardsOverTake === true });
         // A short shot merged into its neighbour took its action cue with it: the map's action is placed again, in the shot that now plays the line.
         if (bible && direction) {
           const placed = placeActions(pinned.storyboard, { direction, words: wordList });
@@ -632,7 +632,7 @@ export async function planStoryboard(options = {}) {
   }
 
   // The map names only the scenes the plan kept (tooling may have left one out).
-  if (lane === "footage-led" && direction && last?.storyboard) direction = mapWithoutDropped(direction, last.storyboard);
+  if (lane === "footage-led" && direction && last?.storyboard) direction = mapWithoutDropped(direction, last.storyboard, (last.warnings ?? []).map((entry) => /^params: tooling left (\S+) /.exec(entry)?.[1]).filter(Boolean));
 
   const allAttempts = [...directionPlan.attempts, ...attempts];
   const totals = allAttempts.reduce((sum, entry) => ({
@@ -687,8 +687,8 @@ export async function planStoryboard(options = {}) {
 
 // normalisePlan in the planner: the corrected storyboard replaces the pinned one, each correction becomes a
 // "normalise:" warning, and the map (whose lines may name other scenes now) is returned.
-function tidyPlan(pinned, direction, { words, beats, script }) {
-  const tidied = normalisePlan(pinned.storyboard, { words, beats, direction, script });
+function tidyPlan(pinned, direction, { words, beats, script, cards = false }) {
+  const tidied = normalisePlan(pinned.storyboard, { words, beats, direction, script, cards });
   if (!tidied.changed.length) return direction;
   pinned.storyboard = tidied.storyboard;
   pinned.warnings = [...pinned.warnings, ...tidied.changed.map((entry) => `normalise: ${entry}`).filter((entry) => !pinned.warnings.includes(entry))];
@@ -717,13 +717,18 @@ function clearFace(storyboard, checked, { words, beats, track, checkOptions: bas
     if (!cleared.moved.length && !cleared.dropped.length) break;
     let candidate = cleared.storyboard;
     // A dropped card leaves the map too, or its line fails the plan for naming a scene that is gone.
-    const direction = cleared.dropped.length ? mapWithoutDropped(base.direction, candidate) : base.direction;
+    // Only with a measured face (a track or a matte): the default head is a guess, and a card dropped on a guess keeps its line's error.
+    const measured = cleared.source === "track" || cleared.source === "matte";
+    const direction = cleared.dropped.length && measured ? mapWithoutDropped(base.direction, candidate, cleared.dropped.map((entry) => entry.split(" ")[0])) : base.direction;
     const checkOptions = direction === base.direction ? base : { ...base, direction };
     let rechecked = checkStoryboard(candidate, checkOptions);
     const banded = settleCaptionBand(candidate, rechecked, (story) => checkStoryboard(story, checkOptions), { resolve: (story) => resolveChecked(story, checkOptions) });
     candidate = banded.storyboard;
     rechecked = banded.checked;
-    if (rechecked.errors.length > checked.errors.length) {
+    // A card on the presenter's measured face is worse than a thinner plan: only an error a repair must fix
+    // (not a near miss such as cadence or coverage) keeps the card where it was.
+    const hard = (list) => (measured ? list.filter((entry) => !NEAR_MISS.some((prefix) => entry.startsWith(prefix))) : list).length;
+    if (hard(rechecked.errors) > hard(checked.errors)) {
       if (!drop) warnings.push(`face: tooling could not move ${cleared.moved.map((entry) => entry.split(" ")[0]).join(", ")} off the presenter's face without breaking other checks`);
       continue;
     }
@@ -917,9 +922,11 @@ function dropParam(params, path) {
 
 // The map without the scenes a storyboard no longer has (tooling dropped a card that covered the presenter's
 // face): a line left with no scene holds on the presenter. → the map itself when nothing changes
-function mapWithoutDropped(direction, storyboard) {
-  if (!Array.isArray(direction?.sections) || !Array.isArray(storyboard?.scenes)) return direction;
-  const ids = new Set(storyboard.scenes.map((scene) => scene?.id));
+function mapWithoutDropped(direction, storyboard, dropped) {
+  if (!Array.isArray(direction?.sections) || !Array.isArray(storyboard?.scenes) || !dropped?.length) return direction;
+  // Only the scenes tooling left out: a line may name a scene tooling adds later (a hidden range, a must-use file).
+  const gone = new Set(dropped), has = new Set(storyboard.scenes.map((scene) => scene?.id));
+  const ids = { has: (id) => !gone.has(id) || has.has(id) };
   const map = structuredClone(direction);
   let changed = false;
   for (const section of map.sections) for (const line of section?.lines ?? []) {

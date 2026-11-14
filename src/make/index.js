@@ -1636,7 +1636,10 @@ async function planStage(ctx) {
     ...(featured.length ? { featured } : {}),
     ...(laidOut ? { layout: laidOut } : {}),
     // The recording keeps moving: punch-ins where the take would sit still (the overlay layout's take is calmer).
-    ...(lane === "footage-led" ? { takeMoves: { pace: laidOut === "overlay" ? "calm" : "standard" } } : {}),
+    // …and a card shows over it, never alone on the frame (src/plan_normalise.js).
+    ...(lane === "footage-led" ? { takeMoves: { pace: laidOut === "overlay" ? "calm" : "standard" }, cardsOverTake: true } : {}),
+    // The style's captions stand, except in a draft, whose tooling picks captions that pass with no repair.
+    ...(drafting ? {} : { pinCaptions: true }),
     ...(subjectTrack ? { subjectTrack } : {}),
     ...(pinned ?? {}),
     ...(explainer ? { explainer: true } : {}),

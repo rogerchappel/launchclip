@@ -275,10 +275,12 @@ test("over a recording, a scene on the wrong track for what it is moves to the r
     { id: "alone", module: "compare", insert: true, start: 14, end: 17, params: {} },
     { id: "title", module: "kinetic-words", insert: true, start: 18, end: 20, params: {} }
   ] };
-  const { storyboard, changed } = normalisePlan(story);
+  const { storyboard, changed } = normalisePlan(story, { cards: true });
   // A card planned as an insert goes over the recording; a screen or a title keeps the frame.
   assert.deepEqual(storyboard.scenes.map((scene) => [scene.id, scene.insert, scene.track]), [["card", undefined, 1], ["punch", undefined, 2], ["full", true, undefined], ["fine", undefined, 1], ["alone", undefined, 1], ["title", true, undefined]]);
   assert.equal(changed.length, 4);
+  // Without the option a card planned as an insert stays one.
+  assert.equal(normalisePlan(story).storyboard.scenes.find((scene) => scene.id === "alone").insert, true);
   // Other lanes keep track 0 for their scenes.
   assert.deepEqual(normalisePlan({ ...story, lane: "motion", base: undefined }).changed.filter((entry) => entry.includes("moved to track")), []);
 });

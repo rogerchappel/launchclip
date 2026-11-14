@@ -58,9 +58,9 @@ const label = (scene, index) => scene?.id ?? `scenes[${index}]`;
  * story has one (who speaks each line).
  * → {storyboard, direction (copies when anything changed), changed: [what was corrected]}
  */
-export function normalisePlan(storyboard, { words = [], beats = null, direction = null, script = null } = {}) {
+export function normalisePlan(storyboard, { words = [], beats = null, direction = null, script = null, cards = false } = {}) {
   if (!isObject(storyboard) || !Array.isArray(storyboard.scenes)) return { storyboard, direction, changed: [] };
-  const state = { story: structuredClone(storyboard), map: direction ? structuredClone(direction) : null, changed: [], words: Array.isArray(words) ? words : Array.isArray(words?.words) ? words.words : [], beats, script };
+  const state = { story: structuredClone(storyboard), map: direction ? structuredClone(direction) : null, changed: [], words: Array.isArray(words) ? words : Array.isArray(words?.words) ? words.words : [], beats, script, cards };
   fitLayers(state);
   fitTargets(state);
   fitHandleParts(state);
@@ -90,13 +90,13 @@ export const wholeFrame = (scene) => WHOLE_FRAME.has(scene?.module) || /-chart$/
 // everything else sits above it. `insert` says which a scene is, so the track
 // follows it: an insert goes to track 0, any other scene left on track 0 goes
 // above the recording (a camera move on its own track, so it can run under a card).
-function fitLayers({ story, changed }) {
+function fitLayers({ story, changed, cards }) {
   if (story.lane !== "footage-led") return;
   story.scenes.forEach((scene, index) => {
     if (!isObject(scene) || scene.layer !== undefined) return;
     const label = scene.id ?? `scenes[${index}]`;
-    // A card is not an insert: it goes over the recording, where the presenter stays on screen.
-    if (scene.insert === true && !wholeFrame(scene)) {
+    // cards (the caller's choice): a card is not an insert, it goes over the recording, where the presenter stays on screen.
+    if (cards && scene.insert === true && !wholeFrame(scene)) {
       delete scene.insert;
       scene.track = 1;
       changed.push(`${label}: shown over the recording, not as an insert (a ${scene.module} alone on the frame leaves it empty)`);
