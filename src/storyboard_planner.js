@@ -36,6 +36,7 @@ import { backdropPrompt, cardBackdrops, minShotsError, resolveShots, shotPrompt,
 import { restoreMisses, varyInserts } from "./insert_variety.js";
 import { fitTimings } from "./timing_fit.js";
 import { addTakeMoves } from "./take_moves.js";
+import { tightlyFramed } from "./presenter_box.js";
 import { fitDirectionCast, normalizeCastCues, plannedCast } from "./cast_fit.js";
 import { bibleCast, bibleRef, directionWithBible } from "@launchclip/core/bible.mjs";
 import { castGate } from "./cast.js";
@@ -148,7 +149,10 @@ export async function planStoryboard(options = {}) {
   const fixed = fixedInputs({ lane, format, brand, audio, base });
   // A talking-head layout for the whole video (src/talking_head_layout.js):
   // options.layout full (default), stacked; footage-led only.
-  const layout = lane === "footage-led" ? layoutSpec(talkingHeadLayout(options.layout)) : null;
+  // With no layout chosen, a presenter framed too tightly for a card beside them takes the stacked layout:
+  // cards show in a panel above them, where the full layout could only drop them.
+  const tight = lane === "footage-led" && options.layout == null && tightlyFramed(fixed, options.subjectTrack ?? null);
+  const layout = lane === "footage-led" ? layoutSpec(tight ? "stacked" : talkingHeadLayout(options.layout)) : null;
   if (style?.name) fixed.style = style.name;
   // subject: the presenter probe summary ({usable, reasons, framing, headroom,
   // head}); subject modules are offered only when it is usable.
@@ -658,7 +662,7 @@ export async function planStoryboard(options = {}) {
     max_repairs: repairs,
     valid_first_attempt: Boolean(attempts[0]?.ok),
     errors: last?.errors ?? [],
-    warnings: [...directionPlan.warnings, ...constraintWarnings, ...shotWarnings, ...(last?.warnings ?? [])],
+    warnings: [...(tight ? ["layout: the presenter fills the frame, so cards show in a panel above them (the stacked layout); pass a layout to choose another"] : []), ...directionPlan.warnings, ...constraintWarnings, ...shotWarnings, ...(last?.warnings ?? [])],
     layout: last?.layout ?? emptyLayout(),
     direction,
     direction_source: directionSource,
