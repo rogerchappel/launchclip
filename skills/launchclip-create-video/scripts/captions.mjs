@@ -554,7 +554,14 @@ export function captionOptions(given = {}, { brand, format, fonts, story } = {})
   const brandColors = brand?.colors ?? {};
   const own = overlay?.colors && typeof overlay.colors === 'object' ? overlay.colors : {};
   const role = (key) => captionColor(own[key] ?? p.colors[key] ?? PRESET_COLORS[key], brandColors, captionColor(PRESET_COLORS[key] ?? 'paper', brandColors));
-  const idle = role('idle');
+  let idle = role('idle');
+  // Over a recording the type sits on footage, not on the brand's background: a light
+  // brand's dark text would not read there, and finish would put a box behind every line.
+  // Unless the overlay names its own colour, such a preset takes the brand's lightest text colour.
+  if (story?.lane === 'footage-led' && !own.idle && !p.plate && p.layout !== 'band' && captionContrast(idle, '#ffffff') > captionContrast(idle, CAPTION_SHADOW_BACKDROP)) {
+    const light = [brandColors.ink, brandColors.paper, brandColors.bg, '#ffffff'].filter((hex) => /^#[0-9a-f]{6}$/i.test(hex ?? ''));
+    idle = light.reduce((best, hex) => (captionContrast(hex, CAPTION_SHADOW_BACKDROP) > captionContrast(best, CAPTION_SHADOW_BACKDROP) ? hex : best), light[0]);
+  }
   const fontRole = CAPTION_FONT_ROLES.includes(overlay?.font) ? overlay.font : p.font;
   const stacks = { ...brandFontStacks(brand), ...(fonts ?? {}) };
   const scale = Number(overlay?.size) > 0 ? Number(overlay.size) : 1;
@@ -596,8 +603,8 @@ export function captionOptions(given = {}, { brand, format, fonts, story } = {})
     plate: p.plate,
     punctuation: p.punctuation ?? true,
     // How a line that does not read on what is behind it is helped: a solid
-    // box (the default) or a soft scrim that keeps a box-less look.
-    plateStyle: CAPTION_PLATE_STYLES.includes(overlay?.plate_style) ? overlay.plate_style : p.plateStyle ?? 'box',
+    // box (the default) or a soft scrim that keeps a box-less look (the default over a recording).
+    plateStyle: CAPTION_PLATE_STYLES.includes(overlay?.plate_style) ? overlay.plate_style : p.plateStyle ?? (story?.lane === 'footage-led' ? 'scrim' : 'box'),
     emphasis,
     accents: p.accents ?? null,
     entrance: Object.hasOwn(CAPTION_ENTRANCES, overlay?.entrance) ? overlay.entrance : p.entrance,
