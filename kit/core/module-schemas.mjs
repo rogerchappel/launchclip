@@ -235,6 +235,8 @@ function parseHead(text, ctx) {
   candidates.push(splitTop(joined, ', ')[0], splitTop(splitTop(joined, ', ')[0], ' (')[0]);
   for (const candidate of candidates) {
     const schema = parseExpression(candidate.trim(), ctx);
+    // "true (14 px at 1080) or 2–30 px" cut down to "true" is not the only value allowed.
+    if (schema && typeof schema.const === 'boolean' && candidate.trim() !== joined.trim()) continue;
     if (schema) return schema;
   }
   return null;
