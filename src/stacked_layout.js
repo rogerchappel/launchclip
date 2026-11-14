@@ -91,6 +91,14 @@ export function applyStackedLayout(storyboard, { words = [], beats = null, durat
   const panel = (Array.isArray(storyboard.sections) ? storyboard.sections : []).find((section) => section?.layout === "stacked" && section.panel)?.panel;
   // The panel is up only while it has something to show: with no panel scene on, the presenter takes the whole frame.
   const shown = panelSpans(copy, { words, beats, total });
+  // A close-up over most of a panel scene would take the panel away from it (the card then has no room beside
+  // a presenter who fills the frame): the card wins, and the close-up goes.
+  for (let index = moments.length - 1; index >= 0; index -= 1) {
+    const moment = moments[index];
+    if (moment.layout !== "full" || !(shown?.each ?? []).some(([start, end]) => Math.min(end, moment.end) - Math.max(start, moment.start) > (end - start) / 2)) continue;
+    changed.push(`close-up ${moment.id} dropped: a panel scene plays over it`);
+    moments.splice(index, 1);
+  }
   const sections = [];
   let clock = 0;
   let n = 0, takes = 0;
@@ -170,6 +178,8 @@ function panelSpans(story, { words, beats, total }) {
     if (last && start - last[1] < STACKED.panelGap - EPS) last[1] = Math.max(last[1], end);
     else joined.push([start, end]);
   }
+  // each: every panel scene's own time, before the joining.
+  joined.each = spans;
   return joined;
 }
 

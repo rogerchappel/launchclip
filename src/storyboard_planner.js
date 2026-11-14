@@ -623,6 +623,22 @@ export async function planStoryboard(options = {}) {
   // The map names only the scenes the plan kept (tooling may have left one out).
   if (lane === "footage-led" && direction && last?.storyboard) direction = mapWithoutDropped(direction, last.storyboard, (last.warnings ?? []).map((entry) => /^params: tooling left (\S+) /.exec(entry)?.[1]).filter(Boolean));
 
+  // The layout once more, on the plan as it ended: a scene tooling left out after the sections were built would
+  // otherwise leave its panel up with nothing in it. Kept only when it adds no finding.
+  if (last?.ok && last.storyboard && layout) {
+    try {
+      const laid = layout.apply(last.storyboard, { words: wordList, beats, duration: fixed.format?.duration });
+      if (!laid.skipped && JSON.stringify(laid.storyboard.sections) !== JSON.stringify(last.storyboard.sections)) {
+        const recheck = { words: wordList, beats, tier, style, direction, profile, bandErrors: false, ...(subjectTrack ? { track: subjectTrack } : {}) };
+        const before = checkStoryboard(last.storyboard, recheck).errors;
+        const checked = checkStoryboard(laid.storyboard, recheck);
+        if (checked.errors.every((entry) => before.includes(entry))) last = { ...last, storyboard: checked.storyboard, layout: checked.layout, warnings: [...last.warnings, "layout: tooling rebuilt the sections for the scenes the plan kept"] };
+      }
+    } catch (error) {
+      last.warnings = [...last.warnings, `layout: ${message(error)}`];
+    }
+  }
+
   // Take moves (src/take_moves.js): punch-ins where the recording would sit
   // still, placed on the passing plan; kept only when they add no finding to
   // what the same check says of the plan without them.
