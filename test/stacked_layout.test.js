@@ -161,7 +161,8 @@ test("applyStackedLayout turns an insert into a panel scene, so its background d
   assert.deepEqual(all.storyboard.scenes.map((scene) => [scene.insert, scene.track]), [[undefined, 1], [undefined, 1]]);
   assert.match(all.changed.join("\n"), /insert a became a panel scene/);
   // A scene inside an insert section keeps the whole frame.
-  const mixed = applyStackedLayout(talkingHead({ scenes: [card("a", 2, 6), card("b", 10, 14)], sections: [{ id: "big", start: 10, end: 14, layout: "insert" }] }));
+  const chart = { id: "b", module: "bar-chart", start: 10, end: 14, insert: true, track: 0, params: { title: "Score", data: [{ label: "A", value: 3 }, { label: "B", value: 2 }] } };
+  const mixed = applyStackedLayout(talkingHead({ scenes: [card("a", 2, 6), chart], sections: [{ id: "big", start: 10, end: 14, layout: "insert" }] }));
   assert.deepEqual(mixed.storyboard.scenes.map((scene) => [scene.id, scene.insert, scene.track]), [["a", undefined, 1], ["b", true, 0]]);
 });
 
@@ -187,4 +188,16 @@ test("laying a stacked plan out again gives the same sections (a repair round se
   const once = applyStackedLayout(talkingHead({ scenes: [card] })).storyboard;
   assert.deepEqual(applyStackedLayout(once).storyboard.sections, once.sections);
   assert.deepEqual(once.sections.map((section) => section.id), ["take-1", "stack-1", "take-2"]);
+});
+
+test("an insert section written for a card is dropped: the card shows in the panel; a chart keeps the frame", () => {
+  const scene = (id, module, start, end, params) => ({ id, module, insert: true, start, end, params });
+  const story = talkingHead({
+    scenes: [scene("list", "checklist", 4, 8, { title: "Steps", rows: [{ label: "One", status: "done", at: 0.3 }] }), scene("bars", "bar-chart", 12, 16, { title: "Score", data: [{ label: "A", value: 3 }, { label: "B", value: 2 }] })],
+    sections: [{ id: "sec-list", start: 4, end: 8, layout: "insert" }, { id: "sec-bars", start: 12, end: 16, layout: "insert" }]
+  });
+  const { storyboard, changed } = applyStackedLayout(story);
+  assert.deepEqual(storyboard.sections.map((section) => [section.id, section.layout]), [["take-1", "full"], ["stack-1", "stacked"], ["take-2", "full"], ["sec-bars", "insert"], ["take-3", "full"]]);
+  assert.deepEqual(storyboard.scenes.map((entry) => [entry.id, entry.insert, entry.track]), [["list", undefined, 1], ["bars", true, undefined]]);
+  assert.match(changed.join("\n"), /insert sec-list dropped: list \(checklist\) shows in the panel/);
 });
