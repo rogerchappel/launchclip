@@ -153,3 +153,13 @@ test("the planner lays a stacked talking head out after the model's plan and ask
   assert.deepEqual(sections.map((section) => section.layout), ["stacked", "full", "stacked"], JSON.stringify(report.errors));
   assert.equal(report.storyboard.overlays.find((overlay) => overlay.type === "captions").position, "seam");
 });
+
+test("applyStackedLayout turns an insert into a panel scene, so its background does not cover the presenter", () => {
+  const card = (id, start, end) => ({ id, module: "stat-card", start, end, insert: true, track: 0, params: { value: "87%", label: "of runs", source: "Example" } });
+  const all = applyStackedLayout(talkingHead({ scenes: [card("a", 2, 6), card("b", 8, 12)] }));
+  assert.deepEqual(all.storyboard.scenes.map((scene) => [scene.insert, scene.track]), [[undefined, 1], [undefined, 1]]);
+  assert.match(all.changed.join("\n"), /insert a became a panel scene/);
+  // A scene inside an insert section keeps the whole frame.
+  const mixed = applyStackedLayout(talkingHead({ scenes: [card("a", 2, 6), card("b", 10, 14)], sections: [{ id: "big", start: 10, end: 14, layout: "insert" }] }));
+  assert.deepEqual(mixed.storyboard.scenes.map((scene) => [scene.id, scene.insert, scene.track]), [["a", undefined, 1], ["b", true, 0]]);
+});
