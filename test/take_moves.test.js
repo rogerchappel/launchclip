@@ -40,3 +40,14 @@ test("no move where the presenter is off screen, where the camera already moves,
   assert.ok(moves.length && moves.every((move) => move.start >= 9 + TAKE_MOVES.margin && move.track === 1));
   assert.deepEqual(addTakeMoves({ ...talkingHead(), lane: "motion", base: undefined }, { words }).added, []);
 });
+
+test("tightlyFramed: a tracked head that fills a portrait frame's width, and nothing without a track", async () => {
+  const { tightlyFramed } = await import("../src/presenter_box.js");
+  const story = talkingHead();
+  const track = (w) => ({ source: { width: 1280, height: 720 }, fps: 10, frames: Array.from({ length: 20 }, (_, index) => ({ t: index / 10, head: { x: 0.5, y: 0.38, w, h: w * 1.9 }, body: { x: 0.5, y: 0.6, w: w * 2.2, h: 0.8 } })) });
+  const inputs = { format: story.format, base: story.base, brand: story.brand };
+  assert.equal(tightlyFramed(inputs, track(0.26)), true);
+  assert.equal(tightlyFramed(inputs, track(0.08)), false);
+  assert.equal(tightlyFramed(inputs, null), false);
+  assert.equal(tightlyFramed({ ...inputs, format: { ...story.format, width: 1920, height: 1080 } }, track(0.26)), false);
+});
