@@ -108,3 +108,11 @@ test("--animation is a switch a recipe may save, and a made animation saves it",
   assert.equal(settingsFromMakeReport({ routing: { kind: "animation", aspect: "9:16" } }).flags.animation, true);
   assert.ok(!("animation" in settingsFromMakeReport({ routing: { aspect: "9:16" } }).flags));
 });
+
+test("make: --logos is a setting flag a host can detect, off or icons", async () => {
+  const { MAKE_FLAGS, makeOptionsFromFlags, validateMakeOptions } = await import("../src/make/options.js");
+  assert.ok(MAKE_FLAGS.some(([flag, spec]) => flag === "logos" && spec.setting));
+  assert.equal(makeOptionsFromFlags({ logos: "icons" }).logos, "icons");
+  assert.doesNotThrow(() => validateMakeOptions({ logos: "icons" }));
+  assert.throws(() => validateMakeOptions({ logos: "everything" }), /--logos must be off or icons/);
+});

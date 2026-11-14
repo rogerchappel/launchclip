@@ -129,6 +129,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["asset-descriptions", {}],
   // A talking head's layout for the whole video (src/talking_head_layout.js): full (default) or stacked.
   ["layout", { setting: true }],
+  // Marks for the brands the narration names (src/research/logos.js): off (default) or icons (Simple Icons, one public CDN, no page visits).
+  ["logos", { setting: true }],
   // The app's evidence recorder (src/make/captures.js) for research's capture requests, and how many run at once.
   ["capture-cmd", {}],
   ["capture-concurrency", {}],
@@ -171,6 +173,7 @@ export function makeOptionsFromFlags(flags = {}) {
     cardBackdrops: flags["card-backdrops"],
     assetDescriptions: flags["asset-descriptions"],
     layout: flags.layout,
+    logos: flags.logos,
     captureCmd: flags["capture-cmd"],
     captureConcurrency: flags["capture-concurrency"],
     baseEdited: Boolean(flags["base-edited"]),
@@ -254,6 +257,7 @@ export function validateMakeOptions(options = {}) {
   if (options.maxRepairs !== undefined && !(Number.isInteger(options.maxRepairs) && options.maxRepairs >= 0)) throw new Error(`--max-repairs must be a whole number of 0 or more; got ${options.maxRepairs}`);
   if (options.minShots != null && !/^\d+$/.test(String(options.minShots).trim())) throw new Error(`--min-shots must be a whole number of 0 or more; got ${options.minShots}`);
   if (options.layout != null && talkingHeadLayoutError(options.layout)) throw new Error(talkingHeadLayoutError(options.layout));
+  if (options.logos != null && !["off", "icons"].includes(String(options.logos))) throw new Error(`--logos must be off or icons; got ${options.logos}`);
   if (options.cardBackdrops != null && !CARD_BACKDROPS.includes(String(options.cardBackdrops).toLowerCase())) throw new Error(`--card-backdrops must be ${CARD_BACKDROPS.join(" or ")}; got ${options.cardBackdrops}`);
   if (options.assetDescriptions != null && !DESCRIPTION_MODES.includes(String(options.assetDescriptions).toLowerCase())) throw new Error(`--asset-descriptions must be ${DESCRIPTION_MODES.join(", ")}; got ${options.assetDescriptions}`);
   if (options.longFormVisuals != null && !["model", "rules"].includes(String(options.longFormVisuals).toLowerCase())) throw new Error(`--long-form-visuals must be model or rules; got ${options.longFormVisuals}`);
@@ -301,6 +305,7 @@ export function settingsFromMakeReport(report) {
   set("music-duck", options.music_duck);
   set("music-prompt", options.music_prompt);
   if (options.layout && options.layout !== "full") set("layout", options.layout);
+  if (options.logos && options.logos !== "off") set("logos", options.logos);
   set("renderer", options.renderer);
   set("explainer", options.explainer);
   set("quality", options.quality);
