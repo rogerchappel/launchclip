@@ -394,7 +394,7 @@ export async function planStoryboard(options = {}) {
           pinned.warnings = [...pinned.warnings, ...placed.changed.map((entry) => `acting: tooling ${entry}`)];
         }
       }
-      const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints, minHold: SHORT_FORM_HOLD, ...(script ? { script } : {}), ...(bible || explainer ? { castGate: true } : {}) };
+      const checkOptions = { words: wordList, beats, tier, style, direction, profile, clipLed, bandErrors: directionSource === "model" || directionSource === "given", constraints, minHold: SHORT_FORM_HOLD, ...(script ? { script } : {}), ...(bible || explainer ? { castGate: true } : {}), ...(subjectTrack ? { track: subjectTrack } : {}) };
       checked = checkStoryboard(pinned.storyboard, checkOptions);
       // A scene shorter than its module allows, or an event time just outside
       // its module's window, is tooling's to fix, not a repair call's; a fix
@@ -622,7 +622,7 @@ export async function planStoryboard(options = {}) {
     try {
       const moved = addTakeMoves(last.storyboard, { words: wordList, beats, pace: options.takeMoves.pace });
       if (moved.added.length) {
-        const checked = checkStoryboard(moved.storyboard, { words: wordList, beats, tier, style, direction, profile, bandErrors: false });
+        const checked = checkStoryboard(moved.storyboard, { words: wordList, beats, tier, style, direction, profile, bandErrors: false, ...(subjectTrack ? { track: subjectTrack } : {}) });
         if (checked.ok) last = { ...last, ...checked, warnings: [...last.warnings, `take: tooling added ${moved.added.length} punch-in${moved.added.length === 1 ? "" : "s"} where the recording sat still`, ...checked.warnings.filter((entry) => !last.warnings.includes(entry))] };
         else last.warnings = [...last.warnings, `take: punch-ins on the recording were left out (${checked.errors.slice(0, 2).join("; ")})`];
       }
@@ -746,7 +746,7 @@ function clearFace(storyboard, checked, { words, beats, track, checkOptions: bas
  * {errors, warnings, findings}}. Error strings are prefixed by stage:
  * "validation:", "tier:", "anchors:", "params:", "layout:".
  */
-export function checkStoryboard(raw, { words = [], beats = null, tier = "structured", style = null, direction = null, profile = null, bandErrors = true, clipLed = null, constraints = null, minHold = 0, script = null, castGate: gated = false } = {}) {
+export function checkStoryboard(raw, { words = [], beats = null, track = null, tier = "structured", style = null, direction = null, profile = null, bandErrors = true, clipLed = null, constraints = null, minHold = 0, script = null, castGate: gated = false } = {}) {
   const errors = [];
   const warnings = [];
   const layout = emptyLayout();
@@ -761,7 +761,8 @@ export function checkStoryboard(raw, { words = [], beats = null, tier = "structu
   const storyboard = JSON.parse(JSON.stringify(input));
   let resolved;
   try {
-    resolved = resolveStory(storyboard, { words, beats });
+    // track: the presenter's whole-video head track, so a card is measured against the head finish will measure it against.
+    resolved = resolveStory(storyboard, { words, beats, ...(track ? { track } : {}) });
   } catch (error) {
     errors.push(`anchors: ${message(error)}`);
     return { ok: false, errors, warnings, storyboard, layout };
