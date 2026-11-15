@@ -1,6 +1,6 @@
 {
   "name": "@launchclip/engine",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "LaunchClip's Node engine for apps that embed it: the storyboard planner, finish (voice, music, SFX, mix, master), gates and critic, the segment renderer, NLE export and the footage-led lane, with every model and provider call through injected adapters.",
   "type": "module",
   "exports": {
@@ -46,7 +46,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@launchclip/core": "0.2.0",
+    "@launchclip/core": "0.3.0",
     "@anthropic-ai/sdk": "^0.104.1",
     "hyperframes": "0.7.58",
     "@fontsource-variable/big-shoulders-display": "5.3.0",
