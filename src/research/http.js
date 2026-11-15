@@ -28,6 +28,8 @@ export function createHttp(options = {}) {
   const memo = new Map();
   const robots = new Map();
   const lastCall = new Map();
+  // host → the time its allowance comes back.
+  const spent = new Map();
   const sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
 
   function headersFor(url, extra = {}) {
@@ -46,6 +48,11 @@ export function createHttp(options = {}) {
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const host = safeHost(url);
+        // A host that is out of allowance is not asked again until it said to come back, so the caller moves on to its other sources.
+        if ((spent.get(host) ?? 0) > Date.now()) {
+          calls.push({ url: redactUrl(url), status: "rate-limited" });
+          return { ok: false, status: 429, body: "", url };
+        }
         const wait = (lastCall.get(host) ?? 0) + (HOST_GAP_MS[host] ?? 0) - Date.now();
         if (wait > 0) await sleep(wait);
         lastCall.set(host, Date.now());
@@ -57,6 +64,9 @@ export function createHttp(options = {}) {
           lastCall.set(host, Date.now());
           response = await fetcher(url, { ...init, headers: headersFor(url, init.headers), signal: controller.signal, redirect: "follow" });
         }
+        // Out of allowance: a 429, or an x-ratelimit-available-* header at zero (Openverse sends one per window).
+        const left = typeof response.headers?.entries === "function" ? [...response.headers.entries()].filter(([name]) => /^x-ratelimit-available-/i.test(name)).map(([, value]) => Number(value)) : [];
+        if (response.status === 429 || left.some((count) => count <= 0)) spent.set(host, Date.now() + (Number(response.headers?.get?.("retry-after")) || 60) * 1000);
         const body = await response.text();
         calls.push({ url: redactUrl(url), status: response.status });
         if (!response.ok) {

@@ -46,7 +46,7 @@ test("media keeps only licence-clear assets with credit lines, footage first", a
     "https://www.loc.gov/photos/": { results: [{ title: "Telephone operators", url: "https://www.loc.gov/item/1/", image_url: ["https://tile.loc.gov/1.jpg"], rights_advisory: "No known restrictions on publication." }] }
   });
   const { assets, rejected, providers } = await findMedia(http, [{ query: "data center", beat: "Picture a warehouse of humming machines." }], { env: {}, perQuery: 4, now: "2026-10-27T00:00:00.000Z" });
-  assert.deepEqual(providers, ["wikimedia-commons", "nasa", "internet-archive", "library-of-congress"]);
+  assert.deepEqual(providers, ["wikimedia-commons", "openverse", "nasa", "internet-archive", "library-of-congress"]);
   assert.equal(assets.length, 4);
   assert.deepEqual(assets.slice(0, 2).map((asset) => asset.type), ["video", "video"]);
   const commons = assets.find((asset) => asset.provider === "wikimedia-commons");

@@ -9,6 +9,21 @@
   its axes, holds with its labels beside it and snaps back. Three built-in
   objects (`server`, `phone`, `battery`) or a parts list of boxes and
   cylinders; the paint order is checked back to front for every frame.
+- Research finds images on Openverse as well: openly licensed photographs
+  and illustrations from Flickr, museums and other collections, limited to
+  licences that allow commercial use and modification, each with the credit
+  line Openverse writes. It needs no key. When Openverse's anonymous
+  allowance (about 20 requests a minute, 200 a day) runs out, research
+  carries on with its other sources; `OPENVERSE_CLIENT_ID` and
+  `OPENVERSE_CLIENT_SECRET` raise the limits.
+- A motion check runs with the other finish gates, before the render
+  (`choreography` in `qa/finish/gates.json`, and with `--plan-only`). It
+  fails a plan whose entrances ease in, whose exits ease out, that moves
+  something on a linear ease, whose exits are slower than their entrances
+  or whose cascade runs over two seconds; it warns when most of a settled
+  scene moves at once or two states land with no still moment between
+  them. Each finding names the scene, the element and the fix
+  (`kit/core/motion-check.mjs`, docs/DIRECTION_GUARDRAILS.md §8).
 - Nineteen backdrop plates that carry no subject of their own, drawn in code
   and lit in the brand's colours: `veil`, `facets`, `halftone`, `grain`,
   `blooms`, `light-leak`, `spotlight`, `studio`, `beams`, `prism`, `bands`,

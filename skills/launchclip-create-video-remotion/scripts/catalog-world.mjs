@@ -248,13 +248,15 @@ function cameraOf(b) {
  * with x (px) and scale. A pan travels up to the overscan on the front
  * layer, so no edge ever shows.
  */
-export function worldCameraStates(camera, {overscan}) {
+export function worldCameraStates(camera, {overscan, grammar = null}) {
+  // The back and middle layers follow the motion grammar's parallax (editorial: WORLD_DEPTH).
+  const depths = {back: grammar?.parallax?.background ?? WORLD_DEPTH.back, mid: grammar?.parallax?.mid ?? WORLD_DEPTH.mid, front: WORLD_DEPTH.front};
   const reach = overscan * 0.9;
   const pan = camera.move === 'pan-left' ? -1 : camera.move === 'pan-right' ? 1 : camera.move === 'drift' ? DRIFT.pan : 0;
   const push = camera.move === 'push' ? 1 : camera.move === 'pull' ? -1 : camera.move === 'drift' ? DRIFT.push : 0;
   const out = {};
   for (const layer of ['back', 'mid', 'front']) {
-    const depth = WORLD_DEPTH[layer];
+    const depth = depths[layer];
     // Panning right moves the view right: the world slides left.
     const dx = reach * camera.amount * pan * depth;
     const near = r2(1 + PUSH_SCALE * camera.amount * Math.abs(push) * depth);
@@ -285,7 +287,7 @@ function resolveWorld(params, ctx) {
     // A plate (track 0) arrives and leaves by its scene transition alone (its
     // `in`, or a cut); a world on a higher track fades in place like a card.
     plate: (ctx.layer ?? 0) === 0,
-    camera, states: worldCameraStates(camera, {overscan: world.overscan}),
+    camera, states: worldCameraStates(camera, {overscan: world.overscan, grammar: ctx.grammar}),
     light: world.light, anchors: world.anchors, quiet: world.quiet,
     // The scrim a caller can lay over the quiet area; drawn when params.scrim asks.
     scrim: {...scrim, on: scrimSide !== 'none'},

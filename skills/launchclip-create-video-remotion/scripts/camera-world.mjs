@@ -48,7 +48,7 @@
 
 import { getEase, motionBlurPx } from './motion.mjs';
 import { OVERVIEW, isCameraTransition } from './transitions.mjs';
-import { resolveGrammar } from './grammar.mjs';
+import { grammarTravel, resolveGrammar } from './grammar.mjs';
 import { FIELD_PARALLAX, fieldTiles } from './ambient.mjs';
 import { characterCameraOn } from './character-camera.mjs';
 import { shotZooms } from './zooms.mjs';
@@ -481,7 +481,7 @@ export function cameraPlan(story, { windows, objects } = {}) {
       for (const key of keys) moves.push({ sceneId: entry.id, type: 'zoom', zoom: true, start: key.start, duration: key.duration, ease: key.ease, blur: blurFor('zoom'), from: at(key.from), to: at(key.to) });
     }
   }
-  const overviews = [];
+  const overviews = [], travelling = [];
   for (let i = 1; i < plates.length; i += 1) {
     const entry = plates[i];
     if (!entry.transitionIn?.camera) continue;
@@ -498,7 +498,16 @@ export function cameraPlan(story, { windows, objects } = {}) {
       continue;
     }
     moveFor(entry.id, entry.transitionIn, entry.start, from, to);
+    travelling.push(moves.at(-1));
   }
+  // Duration follows distance (grammar.travel): a move's duration is right
+  // for the story's typical hop between shots (the median), so a longer jump
+  // takes longer and a shorter one is quicker. Overviews, zooms and the loop
+  // keep their durations (their windows are timed against them).
+  const hop = (move) => Math.hypot(move.to.x - move.from.x, move.to.y - move.from.y);
+  const hops = travelling.map(hop).filter((distance) => distance > 0).sort((a, b) => a - b);
+  const typical = hops[Math.floor(hops.length / 2)];
+  for (const move of travelling) move.duration = round(grammarTravel(grammar, move.duration, hop(move), typical), 6);
   if (windows.loop?.transitionIn?.camera && layout.loop) {
     const last = plates.at(-1);
     const from = restState(layout.placements.get(last.id), size);
@@ -522,10 +531,11 @@ export function cameraPlan(story, { windows, objects } = {}) {
     placements: Object.fromEntries(layout.placements), loop: layout.loop, order: layout.order,
     home: restState(layout.placements.get(plates[0]?.id) ?? ORIGIN, size),
     moves, drift, warnings, overviews,
-    parallax: camera.parallax ? { background: PARALLAX.background, overlay: PARALLAX.overlay } : null,
+    // Depth rates and the overlays' lag behind the camera come from the grammar (editorial: PARALLAX, no lag).
+    parallax: camera.parallax ? { background: grammar.parallax.background, overlay: grammar.parallax.foreground, lag: grammar.followThrough } : null,
     // World plates are transparent, so world mode always has a background
     // layer: parallax false only makes it travel with the plates.
-    depth: camera.mode === 'world' ? (camera.parallax ? PARALLAX.background : PARALLAX.flat) : null
+    depth: camera.mode === 'world' ? (camera.parallax ? grammar.parallax.background : PARALLAX.flat) : null
   };
   plan.background = plan.depth ? backgroundKeys(plan) : null;
   plan.blurSamples = blurSamples(plan);
@@ -743,7 +753,7 @@ export function cameraOps(plan) {
  */
 export function overlayOps(plan, window, target = 'overlay') {
   if (!plan?.parallax) return [];
-  const k = plan.parallax.overlay - 1;
+  const k = plan.parallax.overlay - 1, lag = plan.parallax.lag ?? 0;
   const inside = plan.moves.filter((move) => move.start < window.end - EPS && move.start + move.duration > window.start + EPS);
   if (!inside.length) return [];
   const anchorTime = Math.min(window.end, window.start + Math.min(1, (window.end - window.start) / 2));
@@ -755,7 +765,8 @@ export function overlayOps(plan, window, target = 'overlay') {
     // per move (the move's end zoom) so the tween stays a plain fromTo.
     const zoom = move.to.zoom;
     const at = (s) => ({ x: round(-k * (s.x - anchor.x) * zoom, 4), y: round(-k * (s.y - anchor.y) * zoom, 4) });
-    ops.push({ type: 'tween', target, start: move.start, duration: move.duration, ease: move.ease, from: at(move.from), to: at(move.to) });
+    // Follow-through: the overlay trails the camera by the grammar's lag.
+    ops.push({ type: 'tween', target, start: round(move.start + lag, 6), duration: move.duration, ease: move.ease, from: at(move.from), to: at(move.to) });
   }
   return ops;
 }

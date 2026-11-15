@@ -8,6 +8,7 @@
   },
   "providers": [
     "wikimedia-commons",
+    "openverse",
     "nasa",
     "internet-archive",
     "library-of-congress"

@@ -101,7 +101,8 @@ test("world mode: zooms are camera moves inside the shot, eased in and out with 
   assert.deepEqual(plan.warnings, []);
   assert.deepEqual(plan.moves.map((move) => [move.sceneId, move.type, move.start, move.duration, move.ease]), [
     ["s1", "zoom", 1.5, 0.75, "back.inOut(1.6)"], ["s1", "zoom", 4, 0.75, "back.inOut(1.6)"],
-    ["s2", "pan", 6, 0.8, "back.inOut(1.6)"],
+    // Duration follows distance (playful travel 0.3): this sideways hop is shorter than the story's typical one (s3's).
+    ["s2", "pan", 6, 0.6732, "back.inOut(1.6)"],
     // bar 0, handed straight over to bar 2, out at until.
     ["s2", "zoom", 7.5, 0.75, "back.inOut(1.6)"], ["s2", "zoom", 10, 0.75, "back.inOut(1.6)"], ["s2", "zoom", 12.5, 0.75, "back.inOut(1.6)"],
     ["s3", "pan", 15, 0.8, "back.inOut(1.6)"],
