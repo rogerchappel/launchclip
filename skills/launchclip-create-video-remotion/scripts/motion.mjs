@@ -206,21 +206,28 @@ export function tweenScale(t, {from, to, start = 0, duration, ease: easeName = D
 // Straight steps a second along a wide scale change: fine enough that the
 // speed has no visible corner at a step, at 30 or 60 frames a second.
 const SCALE_STEPS = 240;
+// Where step i of `count` starts (a share of the move): the steps are
+// shortest at the two ends, where an ease turns hardest, so the scale leaves
+// and lands with the ease's own speed and not a step's average.
+const stepAt = (i, count) => (i <= 0 ? 0 : i >= count ? 1 : (1 - Math.cos((Math.PI * i) / count)) / 2);
 const wideScale = (a, b) => a > 0 && b > 0 && Math.max(a / b, b / a) >= WIDE_SCALE;
 const r6 = value => Math.round(value * 1e6) / 1e6;
 
 /**
  * The scale a camera draws at linear progress p of a move: scaleLerp, sampled
- * 240 times a second and joined by straight lines when the change is wide, so it is
+ * about 240 times a second (closer at the ends) and joined by straight lines when the change is wide, so it is
  * exactly what scaleTweenOps' linear tweens draw at any time.
  */
 export function scaleStepAt(p, {from, to, duration, ease: easeName = DEFAULT_EASE}, rate = SCALE_STEPS) {
   const eased = getEase(easeName);
   if (p >= 1) return to;
   if (!wideScale(from, to)) return scaleLerp(from, to, eased(p));
-  const count = Math.max(1, Math.ceil(duration * rate - 1e-6)), i = Math.min(count - 1, Math.floor(p * count));
-  const at = n => r6(n >= count ? to : n <= 0 ? from : scaleLerp(from, to, eased(n / count)));
-  return at(i) + (at(i + 1) - at(i)) * (p * count - i);
+  const count = Math.max(1, Math.ceil(duration * rate - 1e-6));
+  let i = Math.min(count - 1, Math.max(0, Math.floor((Math.acos(1 - 2 * clamp01(p)) / Math.PI) * count)));
+  while (i < count - 1 && stepAt(i + 1, count) <= p) i += 1;
+  while (i > 0 && stepAt(i, count) > p) i -= 1;
+  const at = n => r6(n >= count ? to : n <= 0 ? from : scaleLerp(from, to, eased(stepAt(n, count))));
+  return at(i) + (at(i + 1) - at(i)) * ((p - stepAt(i, count)) / (stepAt(i + 1, count) - stepAt(i, count)));
 }
 
 /**
@@ -234,8 +241,8 @@ export function scaleTweenOps(op, key = 'scale', rate = SCALE_STEPS) {
   const a = op.from[key], b = op.to[key];
   if (!wideScale(a, b)) return [op];
   const count = Math.max(1, Math.ceil(op.duration * rate - 1e-6)), eased = getEase(op.ease);
-  const at = i => r6(i >= count ? b : i <= 0 ? a : scaleLerp(a, b, eased(i / count)));
-  const time = i => r6(op.start + (op.duration * i) / count);
+  const at = i => r6(i >= count ? b : i <= 0 ? a : scaleLerp(a, b, eased(stepAt(i, count))));
+  const time = i => r6(op.start + op.duration * stepAt(i, count));
   const {[key]: _from, ...from} = op.from, {[key]: _to, ...to} = op.to;
   return [
     ...(Object.keys(to).length ? [{...op, from, to}] : []),

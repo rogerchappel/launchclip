@@ -459,7 +459,8 @@ eye reads the ratio between frames. `scaleLerp` interpolates in log space
 per cent. The camera uses it for a zoom inside a shot (`zooms.mjs`) and for a
 world camera move (`camera-world.mjs`). A GSAP `fromTo` can only tween
 linearly, so `scaleTweenOps` writes a wide scale tween as 240 short linear
-tweens a second along the curve (its other properties stay one tween), and
+tweens a second along the curve, shortest at the two ends where the ease
+turns hardest (its other properties stay one tween), and
 `scaleStepAt` is the frame-pure value of exactly those steps: both renderers
 and every frame-pure reader (`zoomStateAt`, `cameraStateAt`) agree.
 
