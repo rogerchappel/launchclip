@@ -4,6 +4,14 @@
 
 ### Added
 
+- A motion check runs with the other finish gates, before the render
+  (`choreography` in `qa/finish/gates.json`, and with `--plan-only`). It
+  fails a plan whose entrances ease in, whose exits ease out, that moves
+  something on a linear ease, whose exits are slower than their entrances
+  or whose cascade runs over two seconds; it warns when most of a settled
+  scene moves at once or two states land with no still moment between
+  them. Each finding names the scene, the element and the fix
+  (`kit/core/motion-check.mjs`, docs/DIRECTION_GUARDRAILS.md §8).
 - Nineteen backdrop plates that carry no subject of their own, drawn in code
   and lit in the brand's colours: `veil`, `facets`, `halftone`, `grain`,
   `blooms`, `light-leak`, `spotlight`, `studio`, `beams`, `prism`, `bands`,
