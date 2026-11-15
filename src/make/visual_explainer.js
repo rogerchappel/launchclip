@@ -34,7 +34,9 @@ import { lintCustomFragment } from "../../kit/hyperframes/custom-module.mjs";
 import { DIRECTION_SCHEMA, classifyIntent } from "@launchclip/core/direction.mjs";
 import { profileGeometry } from "@launchclip/core/layout-check.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
-import { REDRAW_FROM, faultLines, faultScore } from "./visual_layout.js";
+import { REDRAW_FROM, SAFE, faultLines, faultScore } from "./visual_layout.js";
+
+const safePx = (canvas, value) => Math.round((value * Math.min(canvas.width, canvas.height)) / 1080);
 
 export const VISUAL_DIR = "hyperframes/visual";
 export const EXPLAINER_MODES = Object.freeze(["visual", "characters"]);
@@ -161,7 +163,7 @@ Hard rules:
 - The brand's colours stay dominant: BG is the ground of every scene, and a topic's own colours are for the objects themselves, not for backdrops that fill the frame.
 - The scenes are cut together for you with a transition. Draw no wipe or transition effect of your own across the frame, and never leave the frame empty at a cut: a scene's main picture is there from its first frame, or lands within a quarter of a second.
 - The heading keeps its own clear band: no picture, and nothing that moves, passes over a heading.
-- Check that text fits: a display character is about 0.55 of its font-size wide, a mono capital about 0.62 plus its letter spacing. No text smaller than 30 px; labels and tags 36 px or more. A label on a plate is narrower than the plate.
+- Check that text fits: a display character is about 0.55 of its font-size wide, a mono capital about 0.62 plus its letter spacing. No text smaller than ${safePx(canvas, SAFE.text)} px, labels and tags included, and a headline is ${safePx(canvas, SAFE.heading)} px or more. Text keeps ${safePx(canvas, SAFE.side)} px from the sides of the frame and ${safePx(canvas, SAFE.end)} px from its top and bottom. A label on a plate is narrower than the plate.
 - No Math.random, no Date, no setTimeout or requestAnimationFrame, no CSS animations or transitions, no fetch, no external images or fonts. Do not redeclare the helpers.
 - An element that should appear later must be brought in with pop, slam or fly (they hide it until then).
 - Plain JavaScript only, and correct: an error means the scene is replaced by a plain card.`;
