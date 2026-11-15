@@ -11,7 +11,7 @@ Everything else (the renderer's browser, the offline voice model, fonts) downloa
 ## Install
 
 ```bash
-npm install --global github:rogerchappel/launchclip
+npm install --global launchclip
 launchclip doctor
 ```
 

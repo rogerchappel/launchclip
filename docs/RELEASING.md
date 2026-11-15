@@ -16,6 +16,7 @@ The packages pin each other exactly, so release them at the same version.
 1. Bump `version` in the four `package.json` files, and in the pinned sibling versions, to the same number. Add a `CHANGELOG.md` entry. Merge to `main`.
 2. Actions → **Release** → **Run workflow** on `main`, listing the packages to publish (for example `core remotion`).
 3. The workflow runs the tests, packs each package and scans the tarball, then publishes with an npm provenance statement. A version that's already on npm is skipped, so a failed run can simply be run again.
+4. Tag the commit that was published, not whatever `main` has become. Take the commit from the workflow run, then publish the GitHub release on it: `gh release edit v<version> --target <commit> --draft=false`.
 
 The scan (`scripts/release-check.mjs pack`) refuses a tarball that contains any of these:
 
@@ -44,14 +45,10 @@ You can run it locally with `node scripts/release-check.mjs pack`.
 
 `npm audit --omit=dev` is clean for `@launchclip/core` and `@launchclip/remotion`.
 
-`@launchclip/engine` and `launchclip` inherit advisories from their dependencies:
+`@launchclip/engine` and `launchclip` inherit one advisory from a dependency:
 
 | Advisory | Comes from | Fix |
 |---|---|---|
-| `adm-zip` | `hyperframes` 0.7.58 and `onnxruntime-node` 1.27 | `hyperframes` 0.7.111 or later and `onnxruntime-node` 1.31.1 |
-| `@hono/node-server` | `hyperframes` 0.7.58 | A newer `hyperframes` |
-| `sharp` | `kokoro-js` → `@huggingface/transformers`, and `hyperframes` | Not yet released upstream |
+| `sharp` | `kokoro-js` → `@huggingface/transformers` | Not yet released upstream |
 
-Checked on 2026-11-16 for 0.3.0 with `npm audit --omit=dev`.
-
-Upgrade those dependencies, with the media tests (`npm run test:media`), before publishing the engine and CLI.
+Checked on 2026-11-16 for 0.3.0 with `npm audit --omit=dev`, after moving `hyperframes` to 0.7.111 and `onnxruntime-node` to 1.31.1. Run the media tests (`npm run test:media`) whenever those dependencies move.

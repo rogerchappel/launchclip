@@ -668,6 +668,10 @@
 
 ### Changed
 
+- `hyperframes` moves to 0.7.111 (from 0.7.58) and `onnxruntime-node` to
+  1.31.1 (from 1.27.0), with compatible updates to the packages under them.
+  `npm audit --omit=dev` goes from fourteen advisories to one, `sharp`
+  through `kokoro-js`, which has no fix upstream.
 - Remotion is pinned at 4.0.543 (from 4.0.536), for every `remotion` and
   `@remotion/*` package, and the kit and engine peer ranges follow it. The
   release fixes renders that hung after a browser crash or a failed
@@ -824,6 +828,13 @@
 
 ### Fixed
 
+- A fast draft (`--speed draft`) keeps its direction call's plan when the
+  look's captions stack a word a line. The cards would hide those captions,
+  and the directed plan was dropped for it; it now takes one-line captions,
+  as the rule-made plan already did. About one generated look in fifteen was
+  affected.
+- Two renders started in sibling project folders at the same moment no
+  longer fail with `ENOENT` on the shared `.launchclip-tmp` folder.
 - `springValue` with `overshootClamping` and `from` above `to` no longer
   returns its end value from the first frame. It matches Remotion's
   `spring()` again.
