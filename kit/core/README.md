@@ -84,8 +84,8 @@ the root export when there is one.
 ## Versions
 
 `@launchclip/core` is released in lockstep with the `launchclip` CLI: the
-same version number, from the same commit, so `@launchclip/core@0.2.0` is
-exactly the engine inside `launchclip@0.2.0`. While the version is `0.x`, a
+same version number, from the same commit, so `@launchclip/core@0.3.0` is
+exactly the engine inside `launchclip@0.3.0`. While the version is `0.x`, a
 minor bump may break the API; pin an exact version (`--save-exact`). Stories
 are versioned separately (`schema` plus `engine.revision`), and
 `migrateStory` upgrades older ones. The full policy is in

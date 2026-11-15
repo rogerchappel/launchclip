@@ -48,9 +48,10 @@ You can run it locally with `node scripts/release-check.mjs pack`.
 
 | Advisory | Comes from | Fix |
 |---|---|---|
-| `adm-zip` | `hyperframes` 0.7 and `onnxruntime-node` 1.27 | `hyperframes` 0.8 and `onnxruntime-node` 1.31 |
-| `@hono/node-server` | `hyperframes` | `hyperframes` 0.8 |
-| `sharp` | `kokoro-js` → `@huggingface/transformers` | Not yet released upstream |
-| `zod` | Pinned by Remotion's studio packages, and the Anthropic SDK | Not yet released upstream |
+| `adm-zip` | `hyperframes` 0.7.58 and `onnxruntime-node` 1.27 | `hyperframes` 0.7.111 or later and `onnxruntime-node` 1.31.1 |
+| `@hono/node-server` | `hyperframes` 0.7.58 | A newer `hyperframes` |
+| `sharp` | `kokoro-js` → `@huggingface/transformers`, and `hyperframes` | Not yet released upstream |
+
+Checked on 2026-11-16 for 0.3.0 with `npm audit --omit=dev`.
 
 Upgrade those dependencies, with the media tests (`npm run test:media`), before publishing the engine and CLI.
