@@ -299,7 +299,7 @@ export function springValue(t, {start = 0, damping = 14, stiffness = 140, mass =
   for (let f = 0; f <= Math.floor(frame); f++) state = springStep(state, f / fps * 1000, damping, stiffness, mass);
   if (frame % 1 > 0) state = springStep(state, frame / fps * 1000, damping, stiffness, mass);
   let inner = state.current;
-  if (overshootClamping) inner = to >= from ? Math.min(inner, 1) : Math.max(inner, 1);
+  if (overshootClamping) inner = Math.min(inner, 1); // progress always runs 0 to 1, whichever way from and to point
   return from === 0 && to === 1 ? inner : from + (to - from) * inner;
 }
 

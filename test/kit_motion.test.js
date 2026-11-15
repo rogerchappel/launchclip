@@ -147,6 +147,7 @@ test('springValue matches Remotion spring() within 1e-3', () => {
   assert.equal(springValue(0, {start: 1}), 0);
   close(springValue(1 + 10 / 30, {start: 1, from: 100, to: 200}), spring({frame: 10, fps: 30, from: 100, to: 200, config: {damping: 14, stiffness: 140}}), 1e-3, 'from/to');
   assert.ok(springValue(1 + 10 / 30, {start: 1, damping: 6, overshootClamping: true}) <= 1);
+  for (const frame of [0, 5, 20]) close(springValue(frame / 30, {damping: 6, from: 300, to: 100, overshootClamping: true}), spring({frame, fps: 30, from: 300, to: 100, config: {damping: 6, stiffness: 140, overshootClamping: true}}), 1e-3, `clamped descending f${frame}`);
   assert.throws(() => springValue(1, {damping: 0}), /damping/);
 });
 
