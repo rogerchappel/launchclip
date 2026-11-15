@@ -661,6 +661,7 @@ export function guardrailLines() {
     'Text reads or is gone: cards fade in and out fast (0.5 s at most, whatever the grammar) and stay fully shown for their reading time (about 0.22 s a word, at least 1.2 s).',
     'Let shots breathe: in a video under 90 s every shot after the opening hook holds at least 2.5 s. A quick list ("hardwood, treated pine, composite") is one shot whose items build in on their words, not a 1.5 s card per item; tooling lengthens shorter shots from their neighbours.',
     'Captions must read on what is behind them: finish measures every line on the render and adds a backing plate where it does not; keep captions out of a character\'s face and off busy props where you can.',
+    'Motion reads: a custom motion.grammar keeps entrances on an out (or inOut) ease and exits on an in ease, sets no linear ease, and keeps duration.exit no longer than duration.enter; leave at least 1.2 s between two of a scene\'s states, and change one thing per state, not the whole scene at once.',
     ...compositionPromptLines()
   ];
 }
