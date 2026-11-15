@@ -45,10 +45,14 @@ You can run it locally with `node scripts/release-check.mjs pack`.
 
 `npm audit --omit=dev` is clean for `@launchclip/core` and `@launchclip/remotion`.
 
-`@launchclip/engine` and `launchclip` inherit one advisory from a dependency:
+`@launchclip/engine` and `launchclip` inherit advisories from their dependencies:
 
 | Advisory | Comes from | Fix |
 |---|---|---|
-| `sharp` | `kokoro-js` → `@huggingface/transformers` | Not yet released upstream |
+| `adm-zip` | `hyperframes` 0.7.58 | A newer `hyperframes`, once its audio matches (see below) |
+| `@hono/node-server` | `hyperframes` 0.7.58 | The same |
+| `sharp` | `kokoro-js` → `@huggingface/transformers`, and `hyperframes` | Not yet released upstream |
 
-Checked on 2026-11-16 for 0.3.0 with `npm audit --omit=dev`, after moving `hyperframes` to 0.7.111 and `onnxruntime-node` to 1.31.1. Run the media tests (`npm run test:media`) whenever those dependencies move.
+Checked on 2026-11-16 for 0.3.0 with `npm audit --omit=dev`, after moving `onnxruntime-node` to 1.31.1.
+
+`hyperframes` stays at 0.7.58. With 0.7.111 its render of `examples/story/minimal` is 3 LU and 3 dB away from Remotion's (`test/renderer_eval.test.js` fails on loudness, true peak and the audio residual), so the upgrade waits until that difference is understood. Run the media tests (`npm run test:media`) whenever these dependencies move.

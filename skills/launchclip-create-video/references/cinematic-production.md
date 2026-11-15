@@ -325,9 +325,9 @@ To render a candidate by hand instead, preserve either the encoded candidate
 clip or at least its entry, peak motion, and settled frames:
 
 ```bash
-npx --yes hyperframes@0.7.111 snapshot <candidate-project> \
+npx --yes hyperframes@0.7.58 snapshot <candidate-project> \
   --at <entry-seconds>,<peak-seconds>,<settle-seconds>
-npx --yes hyperframes@0.7.111 render <candidate-project> \
+npx --yes hyperframes@0.7.58 render <candidate-project> \
   --quality draft --strict \
   --output <project>/qa/rendered-candidates/<candidate-id>/candidate.mp4
 ```
@@ -366,7 +366,7 @@ snapshots, and human visual inspection first. Then render a local draft before
 opening Studio:
 
 ```bash
-npx --yes hyperframes@0.7.111 render <project> \
+npx --yes hyperframes@0.7.58 render <project> \
   --quality draft --strict --output <project>/renders/draft.mp4
 ```
 

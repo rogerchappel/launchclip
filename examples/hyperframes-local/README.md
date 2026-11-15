@@ -36,7 +36,7 @@ browser installer. Initial dependency/browser downloads need network access.
 `setup` only copies the installed GSAP bundle locally, retaining its notices.
 Do not commit generated assets, snapshots, or renders.
 
-HyperFrames **0.7.111** matches LaunchClip's pin; GSAP is **3.14.2**. Use this
+HyperFrames **0.7.58** matches LaunchClip's pin; GSAP is **3.14.2**. Use this
 example's own lockfile: `adm-zip` **0.6.1** and `sharp` **0.35.4** overrides fix
 known transitive advisories without upgrading HyperFrames. Installing the full
 LaunchClip dependency stack is unnecessary for this example.

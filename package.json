@@ -110,7 +110,7 @@
     "@remotion/motion-blur": "4.0.543",
     "@remotion/three": "4.0.543",
     "@remotion/transitions": "4.0.543",
-    "hyperframes": "0.7.111",
+    "hyperframes": "0.7.58",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "remotion": "4.0.543",

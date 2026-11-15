@@ -32,7 +32,7 @@ step comes up.
   local draft render. Recorded treatments use their own local direction gate.
   Both checks are deterministic and do not call a model API.
 - Do not require, install, or invoke the HyperFrames plugin or its skills. Use
-  this skill's bundled reference and `npx --yes hyperframes@0.7.111` directly.
+  this skill's bundled reference and `npx --yes hyperframes@0.7.58` directly.
 - Do not call paid model, image, voice, music, stock-media, or generation APIs
   unless the user explicitly opts into that provider and understands the cost.
 - Never treat a ChatGPT, Codex, or Claude login as an API credential. OAuth
