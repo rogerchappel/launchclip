@@ -18,6 +18,7 @@ kit/
     grammar.mjs         motion grammars (editorial, snappy, smooth, playful, documentary, cinematic)
     transitions.mjs     typed transitions and scene render windows
     transition-frames.mjs  what a transition's two plates put on screen per frame; the cover, stall and pop check
+    motion-check.mjs    rules of good motion from the grammar and timeline ops: eases, cascades, exits, crowding, rests
     camera-world.mjs    world layout, camera path, parallax and motion blur
     ambient.mjs         frame-pure ambient motion: background field, hold drift
     editorial-core.mjs  editorial module spec → resolved model (no HTML)
@@ -821,6 +822,12 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
 
 `holds` and `states` in `launchclip finish` (docs/DIRECTION_GUARDRAILS.md §7):
 nothing still for over 3 s, no shot over 10 s without a change.
+`choreography` (§8, `kit/core/motion-check.mjs`): `grammarMotionFindings(grammar)`
+and `sceneMotionFindings({id, motion, ops, states})` return
+`{rule, severity, at, ids, detail}` findings for an entrance that eases in, an
+exit that eases out, a linear move, an exit slower than its entrance, a
+cascade over its budget, a crowded move and states with no rest between them;
+the thresholds are `MOTION_CHECK`.
 
 ### State events (`eval/scorecard.mjs`, `scripts/state-events.mjs`)
 
