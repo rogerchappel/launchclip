@@ -24,7 +24,7 @@
   Both checks are deterministic and do not call a model API.
 <!-- renderer: hyperframes -->
 - Do not require, install, or invoke the HyperFrames plugin or its skills. Use
-  this skill's bundled reference and `npx --yes hyperframes@0.7.58` directly.
+  this skill's bundled reference and `npx --yes hyperframes@0.7.111` directly.
 <!-- /renderer -->
 <!-- renderer: remotion -->
 - Do not require, install, or invoke a Remotion or HyperFrames plugin or skill

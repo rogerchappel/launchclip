@@ -142,6 +142,11 @@
 
 ### Changed
 
+- HyperFrames moves from 0.7.58 to 0.7.111, which clears its `adm-zip` and
+  `@hono/node-server` advisories. That release copies a mono sound to both
+  sides at full level, 3 dB above what Remotion renders, so the HyperFrames
+  compiler now declares a mono mix, voice or base recording at 0.7071 of its
+  volume and the two renders sit at the same loudness again.
 - **Breaking for stored plans and exported schemas:** the backdrop plates
   that depicted a subject are removed: `strands` (a DNA helix), `hex-shell`
   (a globe of hex cells) and `starfield` (deep space). A picture behind a

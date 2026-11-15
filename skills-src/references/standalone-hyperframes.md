@@ -26,7 +26,7 @@ Check the host first:
 ```bash
 node --version
 ffmpeg -version
-npx --yes hyperframes@0.7.58 doctor --json
+npx --yes hyperframes@0.7.111 doctor --json
 ```
 
 `doctor --json` exits successfully even when the environment is unhealthy;
@@ -44,7 +44,7 @@ Map the chosen aspect to a resolution preset: `9:16` to `portrait`, `1:1` to
 `square`, and `16:9` to `landscape`.
 
 ```bash
-HYPERFRAMES_SKIP_SKILLS=1 npx --yes hyperframes@0.7.58 init <project> \
+HYPERFRAMES_SKIP_SKILLS=1 npx --yes hyperframes@0.7.111 init <project> \
   --non-interactive \
   --example blank \
   --resolution <portrait|square|landscape>
@@ -86,7 +86,7 @@ ffmpeg -ss <start-with-handle> -to <end-with-handle> -i <input> \
 For narration-led edits, transcribe on the host with a local ASR engine:
 
 ```bash
-npx --yes hyperframes@0.7.58 transcribe <project>/assets/source-trimmed.mp4 \
+npx --yes hyperframes@0.7.111 transcribe <project>/assets/source-trimmed.mp4 \
   --dir <project> --engine auto --model small.en --json
 ```
 
@@ -405,13 +405,13 @@ fail; do not delete them merely to make the gate green.
 Run fast static checks after the first authoring pass:
 
 ```bash
-npx --yes hyperframes@0.7.58 lint <project> --json
+npx --yes hyperframes@0.7.111 lint <project> --json
 ```
 
 Then run the browser, layout, motion, contrast, and snapshot gate:
 
 ```bash
-npx --yes hyperframes@0.7.58 check <project> --json --strict --snapshots --at-transitions
+npx --yes hyperframes@0.7.111 check <project> --json --strict --snapshots --at-transitions
 ```
 
 Inspect the resulting PNG overview and finding crops with the available image
@@ -435,13 +435,13 @@ For modular projects, snapshot the midpoint of every hosted scene as a separate
 visual smoke test:
 
 ```bash
-npx --yes hyperframes@0.7.58 snapshot <project> --at <comma-separated-midpoints>
+npx --yes hyperframes@0.7.111 snapshot <project> --at <comma-separated-midpoints>
 ```
 
 Also sample the hook densely and inspect both sides of high-energy transitions:
 
 ```bash
-npx --yes hyperframes@0.7.58 snapshot <project> \
+npx --yes hyperframes@0.7.111 snapshot <project> \
   --at 0,0.25,0.5,0.75,1,1.5,2,2.5,3,4,<transition-times>
 ```
 
@@ -469,7 +469,7 @@ draft for every required sample; the latter proves the delivered artifact
 rather than only the browser preview. Use this manifest shape:
 
 ```bash
-npx --yes hyperframes@0.7.58 snapshot <project> --at <comma-separated-schedule>
+npx --yes hyperframes@0.7.111 snapshot <project> --at <comma-separated-schedule>
 ffmpeg -hide_banner -loglevel error -i <project>/renders/draft.mp4 \
   -ss <at-seconds> -frames:v 1 -y \
   <project>/qa/temporal-evidence/<sample-id>-encoded-draft.png
@@ -532,7 +532,7 @@ critic did not list every evidence ID it reviewed.
 After all gates and snapshot inspection pass, open the editable Studio:
 
 ```bash
-npx --yes hyperframes@0.7.58 preview <project>
+npx --yes hyperframes@0.7.111 preview <project>
 ```
 
 Treat Studio as the review and editing surface. Its Export action creates an ad
@@ -597,7 +597,7 @@ below.
 Render from the CLI only after approval:
 
 ```bash
-npx --yes hyperframes@0.7.58 render <project> \
+npx --yes hyperframes@0.7.111 render <project> \
   --quality high \
   --strict \
   --output <project>/renders/final.mp4
