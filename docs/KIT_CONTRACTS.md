@@ -801,6 +801,9 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
   the plates crossfade over the middle 30 % (`power1.inOut`), the incoming
   one held hidden until then; in world mode the outgoing plate fades over
   the first half of that span and the incoming one over the second.
+
+  ![A light leak over 0.8 s, HyperFrames above and Remotion below](images/light-leak.jpg)
+
 - `push-blur` (`{type: "push-blur", dur, direction?}`, about 0.5 s; direction
   is where the content travels, `"up"` by default): the camera pushes into the
   outgoing plate (scale 1 → 1.15, travel 12 % of the frame along the
@@ -6772,6 +6775,8 @@ stretched to the words' real box; each path draws on with a dash offset
 `top-down-letters`, `mask-reveal-up`) clips its rows, so a `circle` or `box`
 there is an `underline`. Parity fixtures:
 `test/fixtures/parity/h-motion-title-mark-*-portrait.json`.
+
+![The five marks, HyperFrames above and Remotion below](images/title-marks.jpg)
 
 ### Channel furniture (`catalog-h-channel.mjs`)
 
