@@ -8,6 +8,7 @@ import {
   blurAt, cameraActive, cameraOps, cameraPlan, cameraStateAt, containerState, layoutDirection, objectRectFromModel, opsStateAt,
   overlayOps, PARALLAX, placementCentre, resolveCamera, restState, sceneObjectLookup, screenPoint, worldLayout, worldPoint
 } from "@launchclip/core/camera-world.mjs";
+import { resolveGrammar, TRAVEL_RANGE } from "@launchclip/core/grammar.mjs";
 import { resolveModule } from "@launchclip/core/modules.mjs";
 import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { sceneWindows, transitionTweens } from "@launchclip/core/transitions.mjs";
@@ -204,7 +205,7 @@ test("GSAP seeking the camera ops matches the frame-pure camera function, in any
   }
 });
 
-test("parallax: the background moves at 0.3×, plates at 1×, overlays at 1.15× the camera", () => {
+test("parallax: the background, plates (1×) and overlays move at the grammar's rates, overlays trailing by its follow-through", () => {
   const story = worldStory();
   const plan = planFor(story);
   const pan = plan.moves[0]; // s1 → s2, a pure horizontal pan
@@ -212,14 +213,37 @@ test("parallax: the background moves at 0.3×, plates at 1×, overlays at 1.15×
   const a = containerState(plan, pan.start), b = containerState(plan, mid);
   const plate = b.pan.x - a.pan.x;
   assert.ok(Math.abs(plate) > 100, "the plates moved");
-  assert.ok(Math.abs((b.background.x - a.background.x) / plate - PARALLAX.background) < 1e-9);
+  // The rates and the overlays' lag are the grammar's (editorial: PARALLAX, no lag).
+  const grammar = resolveGrammar(story), lag = grammar.followThrough;
+  assert.deepEqual(plan.parallax, { background: grammar.parallax.background, overlay: grammar.parallax.foreground, lag });
+  assert.ok(Math.abs((b.background.x - a.background.x) / plate - grammar.parallax.background) < 1e-9);
   assert.equal(PARALLAX.plate, 1);
   const overlay = sceneWindows(story).scenes.find((entry) => entry.id === "o1");
   const ops = overlayOps(plan, { start: overlay.start, end: overlay.renderEnd });
-  const extra = opsStateAt(ops, "overlay", mid).x - opsStateAt(ops, "overlay", pan.start).x;
-  assert.ok(Math.abs((plate + extra) / plate - PARALLAX.overlay) < 1e-6, `overlay ratio ${(plate + extra) / plate}`);
+  const extra = opsStateAt(ops, "overlay", mid + lag).x - opsStateAt(ops, "overlay", pan.start + lag).x;
+  assert.ok(Math.abs((plate + extra) / plate - grammar.parallax.foreground) < 1e-6, `overlay ratio ${(plate + extra) / plate}`);
+  const editorial = planFor(worldStory({ grammar: "editorial" }));
+  assert.deepEqual(editorial.parallax, { background: PARALLAX.background, overlay: PARALLAX.overlay, lag: 0 }, "editorial keeps 0.3× and 1.15× with no lag");
   assert.equal(planFor(worldStory({ camera: { mode: "world", parallax: false } })).parallax, null);
   assert.equal(planFor(worldStory({ camera: { mode: "cuts" } })).parallax, null, "cuts stories have no depth layer");
+});
+
+test("a camera move's duration follows how far it travels, by the grammar's travel power; editorial never rescales", () => {
+  // A portrait world that pans right and down: the downward hops are longer than the sideways ones.
+  const far = (grammar) => planFor(worldStory({ grammar }));
+  const flat = far({ base: "playful", travel: 0 }), scaled = far("playful"), power = resolveGrammar({ motion: { grammar: "playful" } }).travel;
+  const pans = (plan) => plan.moves.filter((move) => !move.zoom && !String(move.sceneId).endsWith("-loop"));
+  const hop = (move) => Math.hypot(move.to.x - move.from.x, move.to.y - move.from.y);
+  const hops = pans(flat).map(hop).sort((a, b) => a - b), typical = hops[Math.floor(hops.length / 2)];
+  assert.ok(hops.at(-1) > hops[0] * 1.2, `the hops differ: ${hops.map(Math.round)}`);
+  assert.ok(pans(scaled).some((move, i) => move.duration > pans(flat)[i].duration) || pans(scaled).some((move, i) => move.duration < pans(flat)[i].duration), "a duration changed");
+  pans(flat).forEach((move, i) => {
+    const factor = Math.min(TRAVEL_RANGE.max, Math.max(TRAVEL_RANGE.min, (hop(move) / typical) ** power));
+    assert.ok(Math.abs(pans(scaled)[i].duration - move.duration * factor) < 1e-3, `${move.sceneId}: ${pans(scaled)[i].duration} vs ${move.duration} × ${factor}`);
+  });
+  const editorial = far("editorial"), plain = far({ base: "editorial", travel: 0 });
+  assert.deepEqual(editorial.moves.map((move) => move.duration), plain.moves.map((move) => move.duration));
+  assert.equal(resolveGrammar({ motion: { grammar: "editorial" } }).travel, 0);
 });
 
 test("motion blur is velocity-shaped and exactly zero at rest", () => {
