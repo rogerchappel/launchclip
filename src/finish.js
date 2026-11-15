@@ -34,7 +34,7 @@ import { checkStorage, interruptedByStorage } from "./storage_check.js";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
 import { actingGate, densityGate, ghostingGate, physicsGate, varietyGate } from "./direction_guardrails.js";
-import { holdGate, stateGate } from "./movement_guardrails.js";
+import { choreographyGate, holdGate, stateGate } from "./movement_guardrails.js";
 import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, lipSyncGate, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
@@ -1975,6 +1975,12 @@ async function runGates(ctx, { pixels = true } = {}) {
     gates.states = stateGate(ctx.resolved);
   } catch (error) {
     gates.holds ??= { status: "failed", error: error.message };
+  }
+  // The motion check (docs/DIRECTION_GUARDRAILS.md §8): eases, cascades, exits, crowding, rests.
+  try {
+    gates.choreography = choreographyGate(ctx.resolved);
+  } catch (error) {
+    gates.choreography = { status: "failed", error: error.message };
   }
 
   // Captions that are on are seen: hidden under cards for at most a small share of the narration.
