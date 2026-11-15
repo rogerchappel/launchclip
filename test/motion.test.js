@@ -528,3 +528,40 @@ test("teleprompter renders segments with pacing estimates", () => {
   assert.ok(markdown.includes("Link in bio."));
   assert.ok(markdown.includes("HeyGen alternative"));
 });
+
+test("scale eases evenly to the eye: a wide change is interpolated in log space, a small one stays linear", async () => {
+  const { WIDE_SCALE, scaleLerp, scaleStepAt, scaleTweenOps, tweenScale } = await import("@launchclip/core/motion.mjs");
+  // Halfway through 1 → 4 is 2 (the same ratio either side), not 2.5.
+  assert.ok(Math.abs(scaleLerp(1, 4, 0.5) - 2) < 1e-12);
+  assert.ok(Math.abs(scaleLerp(4, 1, 0.5) - 2) < 1e-12);
+  assert.equal(scaleLerp(1, 4, 0), 1);
+  assert.ok(Math.abs(scaleLerp(1, 4, 1) - 4) < 1e-12);
+  // Equal steps of progress are equal ratios.
+  const steps = [0, 0.25, 0.5, 0.75, 1].map((k) => scaleLerp(0.5, 8, k));
+  for (let i = 2; i < steps.length; i += 1) assert.ok(Math.abs(steps[i] / steps[i - 1] - steps[1] / steps[0]) < 1e-9);
+  // Under WIDE_SCALE it is the plain lerp, and a zero or negative scale never reaches a logarithm.
+  assert.equal(WIDE_SCALE, 2);
+  assert.equal(scaleLerp(1, 1.6, 0.5), 1.3);
+  assert.equal(scaleLerp(0, 4, 0.5), 2);
+  assert.equal(tweenScale(0.5, { from: 1, to: 4, start: 0, duration: 1, ease: "none" }), 2);
+  assert.equal(tweenScale(-1, { from: 1, to: 4, duration: 1 }), 1);
+  assert.equal(tweenScale(2, { from: 1, to: 4, duration: 1 }), 4);
+  // As ops: a small change is the one tween; a wide one keeps its other properties in one tween and steps the scale.
+  const small = { type: "tween", target: "zoom", start: 1, duration: 0.5, ease: "power2.inOut", from: { scale: 1, rotation: 0 }, to: { scale: 1.5, rotation: 4 } };
+  assert.deepEqual(scaleTweenOps(small), [small]);
+  const wide = { ...small, to: { scale: 3, rotation: 4 } };
+  const ops = scaleTweenOps(wide);
+  assert.deepEqual(ops[0], { ...wide, from: { rotation: 0 }, to: { rotation: 4 } });
+  const scale = ops.slice(1);
+  assert.equal(scale.length, 120);
+  assert.ok(scale.every((op, i) => op.ease === "none" && Object.keys(op.to).join() === "scale" && (i === 0 || op.from.scale === scale[i - 1].to.scale)));
+  assert.equal(scale[0].from.scale, 1);
+  assert.equal(scale.at(-1).to.scale, 3);
+  assert.ok(Math.abs(scale.at(-1).start + scale.at(-1).duration - 1.5) < 1e-6);
+  // The frame-pure value is what those tweens draw, between steps too.
+  for (const p of [0, 0.013, 0.2, 0.5, 0.777, 1]) {
+    const t = 1 + 0.5 * p, op = scale.findLast((item) => item.start <= t + 1e-9);
+    const drawn = op.from.scale + (op.to.scale - op.from.scale) * Math.min(1, (t - op.start) / op.duration);
+    assert.ok(Math.abs(scaleStepAt(p, { from: 1, to: 3, duration: 0.5, ease: "power2.inOut" }) - drawn) < 1e-4, `p ${p}`);
+  }
+});

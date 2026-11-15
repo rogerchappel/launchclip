@@ -1,7 +1,7 @@
 // Zooms inside a shot: the camera dives into one bar, row, number or box of a
 // track-0 shot as the narration names it, holds, and eases back out. Shared by
 // the HyperFrames compiler and the Remotion StoryComposition. Plain ESM;
-// imports only grammar.mjs and character-camera.mjs. Contract: docs/KIT_CONTRACTS.md, "Zooms inside a
+// imports only grammar.mjs, motion.mjs and character-camera.mjs. Contract: docs/KIT_CONTRACTS.md, "Zooms inside a
 // shot".
 //
 //   scene.zooms = [{at, box | target | object, scale?, until?}]
@@ -32,6 +32,7 @@
 
 import { characterKeys } from './character-camera.mjs';
 import { resolveGrammar } from './grammar.mjs';
+import { scaleStepAt, scaleTweenOps } from './motion.mjs';
 
 export const ZOOM = Object.freeze({
   min: 1.15, max: 3,
@@ -140,7 +141,7 @@ export function zoomStateAt(keys, t, getEase, { width, height }) {
     if (t < key.start - EPS) break;
     const p = key.duration > 0 ? clamp((t - key.start) / key.duration, 0, 1) : 1;
     const k = p >= 1 ? 1 : getEase(key.ease)(p);
-    state = { x: key.from.x + (key.to.x - key.from.x) * k, y: key.from.y + (key.to.y - key.from.y) * k, s: key.from.s + (key.to.s - key.from.s) * k };
+    state = { x: key.from.x + (key.to.x - key.from.x) * k, y: key.from.y + (key.to.y - key.from.y) * k, s: scaleStepAt(p, { from: key.from.s, to: key.to.s, duration: key.duration, ease: getEase(key.ease) }) };
   }
   return state;
 }
@@ -162,7 +163,8 @@ export function zoomOps(keys, { width, height }) {
   for (const key of keys) {
     const timing = { start: key.start, duration: key.duration, ease: key.ease };
     ops.push({ type: 'tween', target: 'pan', ...timing, from: pan(key.from), to: pan(key.to) });
-    ops.push({ type: 'tween', target: 'zoom', ...timing, from: zoom(key.from), to: zoom(key.to) });
+    // A wide zoom eases evenly to the eye (motion.mjs scaleLerp).
+    ops.push(...scaleTweenOps({ type: 'tween', target: 'zoom', ...timing, from: zoom(key.from), to: zoom(key.to) }));
   }
   return ops;
 }
