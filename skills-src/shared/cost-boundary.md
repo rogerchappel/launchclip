@@ -29,7 +29,7 @@
 <!-- renderer: remotion -->
 - Do not require, install, or invoke a Remotion or HyperFrames plugin or skill
   pack. Use this skill's bundled reference, its `assets/remotion-kit`, and a
-  project-local `remotion@4.0.536` / `@remotion/cli@4.0.536` install run
+  project-local `remotion@4.0.543` / `@remotion/cli@4.0.543` install run
   through `npx remotion`.
 - Remotion is source-available under its own licence; a company above its
   team-size threshold needs a company licence. Note this in `BRIEF.md` when the

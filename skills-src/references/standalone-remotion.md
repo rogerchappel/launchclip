@@ -24,8 +24,8 @@ file, `storyboard.json`, through the bundled `LaunchclipStory` composition.
 
 - Node.js 22 or newer
 - FFmpeg and `ffprobe`
-- the pinned toolchain: `remotion@4.0.536`, `@remotion/cli@4.0.536`,
-  `@remotion/transitions@4.0.536`, `react@19.3.1` and `react-dom@19.3.1`
+- the pinned toolchain: `remotion@4.0.543`, `@remotion/cli@4.0.543`,
+  `@remotion/transitions@4.0.543`, `react@19.3.1` and `react-dom@19.3.1`
 - the bundled font packages (`@fontsource/*` and `@fontsource-variable/*`
   at `5.3.0`, listed in the install command below); the kit imports their
   files, so the bundle fails without them
@@ -41,7 +41,7 @@ npx remotion versions
 npx remotion browser ensure
 ```
 
-`npx remotion versions` must report `4.0.536` for every Remotion package. Any
+`npx remotion versions` must report `4.0.543` for every Remotion package. Any
 mismatch is a defect to fix before authoring; Remotion refuses or misbehaves
 with mixed versions. `browser ensure` downloads Chrome Headless Shell once.
 
@@ -88,8 +88,8 @@ cp -R <skill>/assets/remotion-kit <project>/kit/remotion
 cp -R <skill>/assets/core <project>/kit/core
 cd <project>/..
 test -f package.json || npm init -y >/dev/null
-npm install --save-exact remotion@4.0.536 @remotion/cli@4.0.536 \
-  @remotion/transitions@4.0.536 react@19.3.1 react-dom@19.3.1 \
+npm install --save-exact remotion@4.0.543 @remotion/cli@4.0.543 \
+  @remotion/transitions@4.0.543 react@19.3.1 react-dom@19.3.1 \
   @fontsource-variable/big-shoulders-display@5.3.0 \
   @fontsource-variable/bricolage-grotesque@5.3.0 \
   @fontsource-variable/dm-sans@5.3.0 @fontsource-variable/fira-code@5.3.0 \
@@ -821,7 +821,7 @@ output without a separate explicit request.
 | A "Missing module" box in a frame | The scene's module is unknown, its params are invalid (the box says why), or it has no Remotion component yet | Fix `module`/`params`, or use a catalogue module that has a component |
 | Changes in `storyboard.json` do not appear | Stale `.launchclip/story.resolved.json` | Re-run validation and the resolver before every still, preview, or render |
 | Captions drift or miss words | `captions.json` built from an old `NARRATION.json` | Regenerate captions with `word-captions.mjs` and re-resolve |
-| `Version mismatch` warning, or Studio crashes on start | Mixed Remotion package versions | Reinstall every Remotion package at exactly 4.0.536 |
+| `Version mismatch` warning, or Studio crashes on start | Mixed Remotion package versions | Reinstall every Remotion package at exactly 4.0.543 |
 | Chrome or browser launch errors | Chrome Headless Shell missing or blocked | Run `npx remotion browser ensure`; check sandbox permissions |
 | `layout-check` collision or safe-zone failure | A rectangle, scene time, or caption band overlaps | Change `params.rect` or the scene time; never relax the check |
 | Blur never resolves at settle | Constant `filter: blur()` | Drive blur from velocity with `motionBlurPx()` so it reaches zero |

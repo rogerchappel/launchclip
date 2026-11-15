@@ -15,7 +15,7 @@ registry, word captions, the brand frame and the bundled fonts.
 
 ```sh
 npm install --save-exact @launchclip/remotion @launchclip/core
-npm install remotion@^4.0.536 react@^19.3.0 react-dom@^19.3.0
+npm install remotion@^4.0.543 react@^19.3.0 react-dom@^19.3.0
 ```
 
 `@launchclip/remotion` and `@launchclip/core` are released together at the

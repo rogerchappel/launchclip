@@ -76,12 +76,12 @@
     "@fontsource/young-serif": "5.3.0"
   },
   "peerDependencies": {
-    "@remotion/bundler": "^4.0.536",
-    "@remotion/cli": "^4.0.536",
-    "@remotion/renderer": "^4.0.536",
+    "@remotion/bundler": "^4.0.543",
+    "@remotion/cli": "^4.0.543",
+    "@remotion/renderer": "^4.0.543",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "remotion": "^4.0.536"
+    "remotion": "^4.0.543"
   },
   "optionalDependencies": {
     "kokoro-js": "1.2.1",

@@ -6,12 +6,12 @@ not relicensed under LaunchClip's MIT License.
 
 ## Remotion
 
-LaunchClip depends on Remotion 4.0.536 packages for Remotion-based video
+LaunchClip depends on Remotion 4.0.543 packages for Remotion-based video
 rendering, including `remotion`, `@remotion/cli`,
 `@remotion/google-fonts`, `@remotion/motion-blur`, `@remotion/three`, and
 `@remotion/transitions`.
 
-Remotion 4.0.536 uses the Remotion License. Its installed licence text states
+Remotion 4.0.543 uses the Remotion License. Its installed licence text states
 that individuals, non-profit organisations, organisations evaluating Remotion,
 and for-profit organisations with up to three employees are eligible for the
 free licence; other for-profit organisations require a company licence. The
