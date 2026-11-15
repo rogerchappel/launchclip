@@ -92,7 +92,8 @@ check against a frozen page.
 Keys are optional. With none, current stories still come from the keyless
 news sources. `BRAVE_API_KEY`, `TAVILY_API_KEY` or `SERPER_API_KEY` add
 web search (secondary sources); `PEXELS_API_KEY` and `PIXABAY_API_KEY` add
-stock footage; `GITHUB_TOKEN` and `HF_TOKEN` raise rate limits.
+stock footage; `GITHUB_TOKEN` and `HF_TOKEN` raise rate limits, as do
+`OPENVERSE_CLIENT_ID` with `OPENVERSE_CLIENT_SECRET` for Openverse images.
 
 ## Read the result
 
@@ -142,7 +143,7 @@ ledger: each claim, its status and its source URL.
   those props and put the source in the frame's source note
   (`story.frame.sources`). Do not screenshot someone else's chart.
 - `research/assets.json`: licence-clear footage and stills (Wikimedia Commons,
-  NASA, Internet Archive public-domain and Prelinger items, the Library of
+  Openverse, NASA, Internet Archive public-domain and Prelinger items, the Library of
   Congress, Pexels and Pixabay), each with licence, author, `attribution` and
   `source_url`, plus `people` (role, affiliation, Wikidata id, and a Commons
   portrait only when its licence is clear). `launchclip research capture`

@@ -367,6 +367,65 @@ export function springValue(t, {start = 0, damping = 14, stiffness = 140, mass =
 }
 
 // ---------------------------------------------------------------------------
+// Springs by feel (visible duration and bounce ↔ damping, stiffness, mass)
+
+/** A spring has visibly arrived once it is within this fraction of its travel from the target. */
+export const SPRING_ARRIVAL = .01;
+
+// Time, in units of 1/ω0, at which a unit spring of damping ratio zeta first
+// comes within SPRING_ARRIVAL of its target. The distance left falls
+// monotonically until the first peak (t = π/ω1), so bisection finds it.
+function springArrival(zeta) {
+  const omega1 = Math.sqrt(1 - zeta ** 2);
+  const left = zeta < 1
+    ? (tau) => Math.exp(-zeta * tau) * (Math.cos(omega1 * tau) + zeta / omega1 * Math.sin(omega1 * tau))
+    : (tau) => Math.exp(-tau) * (1 + tau);
+  let lo = 0, hi = zeta < 1 ? Math.min(Math.PI / omega1, 60) : 60;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    if (left(mid) > SPRING_ARRIVAL) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/**
+ * A spring chosen by how it looks → the {damping, stiffness, mass} that
+ * `springValue` takes.
+ *
+ * `duration` is the visible duration in seconds: the time from the start
+ * until the value first comes within 1 % of its travel (SPRING_ARRIVAL) of
+ * the target. That is when the eye reads the move as landed; the bounce and
+ * the settle that follow run longer, so time neighbours off this number.
+ * `bounce` is the first overshoot as a fraction of the travel: 0 is a
+ * critically damped spring that never passes the target, 0.27 passes it by
+ * 27 %. Must be at least 0 and below 1.
+ *
+ * From the damped-spring solution: the first peak is exp(−πζ/√(1−ζ²)), which
+ * gives the damping ratio ζ for a bounce, and time scales as 1/ω0, which
+ * gives ω0 for a duration. Mass is always 1.
+ */
+export function springByFeel(duration, bounce = 0) {
+  if (!(duration > 0) || !Number.isFinite(duration)) throw new Error('spring duration must be greater than 0');
+  if (!(bounce >= 0 && bounce < 1)) throw new Error('spring bounce must be at least 0 and below 1');
+  const log = bounce > 0 ? -Math.log(bounce) : Infinity;
+  const zeta = bounce > 0 ? log / Math.hypot(Math.PI, log) : 1;
+  const omega0 = springArrival(zeta) / duration;
+  return {damping: 2 * zeta * omega0, stiffness: omega0 ** 2, mass: 1};
+}
+
+/**
+ * The visible duration, in seconds, of a spring given as {damping, stiffness,
+ * mass}: the inverse of `springByFeel`, with the same 1 % definition and
+ * `springValue`'s defaults. A follower that should start as the spring lands
+ * starts at `start + springVisibleDuration(config)`. `springValue` draws
+ * every spring with ζ ≥ 1 as critically damped, so this does too.
+ */
+export function springVisibleDuration({damping = 14, stiffness = 140, mass = 1} = {}) {
+  if (!(damping > 0 && stiffness > 0 && mass > 0)) throw new Error('spring damping, stiffness and mass must be greater than 0');
+  return springArrival(Math.min(1, damping / (2 * Math.sqrt(stiffness * mass)))) / Math.sqrt(stiffness / mass);
+}
+
+// ---------------------------------------------------------------------------
 // Spring ease (GSAP-native, parameterised by overshoot)
 
 /** The overshoot a kinetic feel springs with by default: 27 % of the travel. */

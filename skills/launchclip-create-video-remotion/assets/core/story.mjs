@@ -1242,7 +1242,10 @@ export function storyHits(story) {
 // The same rules as grammarErrors() and resolveCamera() there, kept here so
 // this file stays import-free.
 
-const GRAMMAR_KEYS = ["base", "ease", "duration", "overshoot", "stagger", "defaultTransition", "camera", "ambient"];
+const GRAMMAR_KEYS = ["base", "ease", "duration", "overshoot", "stagger", "defaultTransition", "camera", "ambient", "travel", "exitRatio", "followThrough", "parallax", "heroDim"];
+// Mirrors grammar.mjs TOKEN_RANGE and PARALLAX_RANGE.
+const GRAMMAR_TOKEN_RANGE = { travel: [0, 0.5], exitRatio: [0.4, 1], followThrough: [0, 0.3], heroDim: [0, 0.8] };
+const GRAMMAR_PARALLAX_RANGE = { foreground: [1, 1.5], mid: [0.3, 1], background: [0, 1] };
 const EASE_ROLES = ["enter", "exit", "move", "camera", "emphasis"];
 const DURATION_ROLES = ["enter", "exit", "transition", "camera"];
 const EASE_NAME = /^(none|linear|(power[0-4]|quad|cubic|quart|quint|strong|expo|circ|sine|bounce|back|elastic)(\.(in|out|inOut))?(\(\s*[\d.]+\s*(,\s*[\d.]+\s*)?\))?|steps\(\d+\))$/;
@@ -1278,6 +1281,16 @@ function validateMotion(motion, err) {
   }
   if (grammar.overshoot !== undefined && !(typeof grammar.overshoot === "number" && grammar.overshoot >= 0 && grammar.overshoot <= 0.5)) err("motion.grammar.overshoot must be between 0 and 0.5");
   if (grammar.stagger !== undefined && !(typeof grammar.stagger === "number" && grammar.stagger >= 0.25 && grammar.stagger <= 3)) err("motion.grammar.stagger must be a multiplier between 0.25 and 3");
+  const inRange = (value, [min, max]) => typeof value === "number" && value >= min && value <= max;
+  for (const [key, range] of Object.entries(GRAMMAR_TOKEN_RANGE)) if (grammar[key] !== undefined && !inRange(grammar[key], range)) err(`motion.grammar.${key} must be between ${range[0]} and ${range[1]}`);
+  if (grammar.parallax !== undefined) {
+    if (!isObject(grammar.parallax)) err("motion.grammar.parallax must be an object {foreground, mid, background}");
+    else for (const [depth, rate] of Object.entries(grammar.parallax)) {
+      const range = GRAMMAR_PARALLAX_RANGE[depth];
+      if (!range) err(`motion.grammar.parallax.${depth} is not a depth (allowed: foreground, mid, background)`);
+      else if (!inRange(rate, range)) err(`motion.grammar.parallax.${depth} must be between ${range[0]} and ${range[1]}`);
+    }
+  }
   if (grammar.ambient !== undefined && !["off", "subtle", "standard", "lively"].includes(grammar.ambient)) err("motion.grammar.ambient must be off, subtle, standard or lively");
   if (grammar.camera !== undefined && !isObject(grammar.camera)) err("motion.grammar.camera must be an object");
 }

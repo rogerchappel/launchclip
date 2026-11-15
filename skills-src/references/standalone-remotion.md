@@ -356,7 +356,9 @@ hidden state becomes a visible defect.
 
 - Derive all motion from `useCurrentFrame()` and `useVideoConfig().fps`
   through `kit/core/motion.mjs`: `tween`, `track`, `stagger`, `countUp`,
-  `springValue`, `splitWords`, `splitChars` and `motionBlurPx`. Its eases match
+  `springValue`, `splitWords`, `splitChars` and `motionBlurPx`. Choose a spring
+  by feel with `springByFeel(visibleSeconds, bounce)` and time followers off
+  `springVisibleDuration(config)`, not off the full settle. Its eases match
   GSAP's names (`power3.out`, `back.out(1.4)`, `steps(6)`) to within 1e-6, so
   a storyboard written in GSAP terms maps one-to-one. Remotion's own
   `interpolate()` and `spring()` are also frame-pure and allowed.

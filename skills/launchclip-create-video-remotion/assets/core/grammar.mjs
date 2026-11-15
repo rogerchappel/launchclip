@@ -20,6 +20,13 @@
 //     draws, fills, moves to a target) keep their designed ease, because some
 //     modules derive event times from them;
 //   - default staggers, via grammarStagger;
+//   - exits: duration.exit follows exitRatio, so every grammarDuration(…,
+//     "exit") caller gets it;
+//   - the world camera (camera-world.mjs): a move's duration follows how far
+//     it travels (grammarTravel), overlays trail the camera by followThrough,
+//     and the background and overlays move at parallax.background / foreground;
+//   - a world scene's middle layer (catalog-world.mjs: parallax.mid);
+//   - the focus ring's dim (shot-states.mjs: heroDim);
 //   - typed transitions (kit/core/transitions.mjs) and the world camera
 //     (kit/core/camera-world.mjs: grammar.ease.camera, grammar.camera).
 // Overshooting eases only ever drive transforms: opacity, blur, colour and
@@ -58,12 +65,29 @@ const freezeDeep = (value) => {
 // ambient level a scene gets when neither it nor the story sets one,
 // mediaPush: the slow push-in (fraction of scale over the scene) a recorded
 // product-demo video gets on top of its own zooms, so its rest frames move}.
+// travel: how duration grows with travel distance. A move's duration is
+// multiplied by (distance / reference) ** travel, clamped to TRAVEL_RANGE, so
+// a short move is quicker than a long one (0 = distance never matters).
+// exitRatio: an exit's duration as a fraction of its entrance; duration.exit
+// is duration.enter × exitRatio, and an override that sets only the entrance
+// gets its exit from this.
+// followThrough: seconds a child trails its parent (0 = they move as one).
+// parallax: how far each depth moves for one unit of camera travel: overlays
+// in front of the plates (foreground), a scene's middle layer (mid) and the
+// background layer; the plates themselves are 1.
+// heroDim: the opacity the rest of the frame falls to behind the hero (the
+// focused element); lower is darker.
+// The interface-scale source numbers (github.com/LottieFiles/motion-design-skill,
+// MIT: 50 px 0.8× to full screen 2×, exits 65–75 % of entrances, children
+// 50–100 ms behind, layers at 1 / 0.5 / 0.2, others dim to 80 %) are rescaled
+// for video and for each grammar's character.
 export const GRAMMARS = freezeDeep({
   editorial: {
     id: 'editorial', describe: 'Clean product-editorial motion: power3 entrances, quick power2 exits, no overshoot on entrances. The default.',
     ease: { enter: 'power3.out', exit: 'power2.in', move: 'power3.inOut', camera: 'power3.inOut', emphasis: 'back.out(1.7)' },
     duration: { enter: 0.28, exit: 0.22, transition: 0.45, camera: 0.8 },
     overshoot: 0.1, stagger: 1,
+    travel: 0, exitRatio: 0.79, followThrough: 0, parallax: { foreground: 1.15, mid: 0.65, background: 0.3 }, heroDim: 0.3,
     defaultTransition: { cuts: { type: 'push', dur: 0.45, direction: 'up' }, world: { type: 'pan', dur: 0.8 } },
     camera: { style: 'steady', drift: 7, driftPeriod: 11, breathe: 0.004, whip: 'expo.inOut', anticipation: false, moveBlur: 0 },
     ambient: 'standard'
@@ -73,6 +97,7 @@ export const GRAMMARS = freezeDeep({
     ease: { enter: 'expo.out', exit: 'power3.in', move: 'expo.inOut', camera: 'back.inOut(1.2)', emphasis: 'back.out(1.2)' },
     duration: { enter: 0.2, exit: 0.16, transition: 0.32, camera: 0.55 },
     overshoot: 0.05, stagger: 0.75,
+    travel: 0.3, exitRatio: 0.8, followThrough: 0.03, parallax: { foreground: 1.2, mid: 0.6, background: 0.25 }, heroDim: 0.25,
     defaultTransition: { cuts: { type: 'whip-pan', dur: 0.32, direction: 'right' }, world: { type: 'whip-pan', dur: 0.4 } },
     camera: { style: 'snap', drift: 6, driftPeriod: 9, breathe: 0.004, whip: 'expo.inOut', anticipation: true, moveBlur: 0.5 },
     ambient: 'standard'
@@ -82,6 +107,7 @@ export const GRAMMARS = freezeDeep({
     ease: { enter: 'power2.out', exit: 'sine.in', move: 'sine.inOut', camera: 'sine.inOut', emphasis: 'power2.out' },
     duration: { enter: 0.5, exit: 0.36, transition: 0.7, camera: 1.1 },
     overshoot: 0, stagger: 1.25,
+    travel: 0.2, exitRatio: 0.72, followThrough: 0.08, parallax: { foreground: 1.12, mid: 0.68, background: 0.35 }, heroDim: 0.4,
     defaultTransition: { cuts: { type: 'fade', dur: 0.6 }, world: { type: 'pan', dur: 1.1 } },
     camera: { style: 'glide', drift: 10, driftPeriod: 14, breathe: 0.005, whip: 'sine.inOut', anticipation: false, moveBlur: 0 },
     ambient: 'subtle'
@@ -91,6 +117,7 @@ export const GRAMMARS = freezeDeep({
     ease: { enter: 'back.out(1.7)', exit: 'back.in(1.4)', move: 'back.inOut(1.4)', camera: 'back.inOut(1.6)', emphasis: 'elastic.out(1, 0.5)' },
     duration: { enter: 0.42, exit: 0.26, transition: 0.5, camera: 0.75 },
     overshoot: 0.2, stagger: 1.6,
+    travel: 0.3, exitRatio: 0.62, followThrough: 0.07, parallax: { foreground: 1.25, mid: 0.6, background: 0.25 }, heroDim: 0.35,
     defaultTransition: { cuts: { type: 'pan', dur: 0.5, direction: 'right' }, world: { type: 'pan', dur: 0.75 } },
     camera: { style: 'bounce', drift: 12, driftPeriod: 8, breathe: 0.006, whip: 'back.inOut(1.2)', anticipation: true, moveBlur: 0.5 },
     ambient: 'lively'
@@ -100,6 +127,7 @@ export const GRAMMARS = freezeDeep({
     ease: { enter: 'power1.out', exit: 'power1.in', move: 'power1.inOut', camera: 'power1.inOut', emphasis: 'power1.out' },
     duration: { enter: 0.6, exit: 0.45, transition: 0.8, camera: 1.3 },
     overshoot: 0, stagger: 1.3,
+    travel: 0.15, exitRatio: 0.75, followThrough: 0.1, parallax: { foreground: 1.08, mid: 0.7, background: 0.4 }, heroDim: 0.5,
     defaultTransition: { cuts: { type: 'fade', dur: 0.8 }, world: { type: 'pan', dur: 1.3 } },
     camera: { style: 'drift', drift: 8, driftPeriod: 16, breathe: 0.004, whip: 'power2.inOut', anticipation: false, moveBlur: 0 },
     ambient: 'subtle'
@@ -109,6 +137,7 @@ export const GRAMMARS = freezeDeep({
     ease: { enter: 'power2.inOut', exit: 'power2.in', move: 'power2.inOut', camera: 'power2.inOut', emphasis: 'power2.inOut' },
     duration: { enter: 0.7, exit: 0.45, transition: 0.9, camera: 1.3 },
     overshoot: 0, stagger: 1.4,
+    travel: 0.25, exitRatio: 0.64, followThrough: 0.12, parallax: { foreground: 1.2, mid: 0.6, background: 0.2 }, heroDim: 0.2,
     defaultTransition: { cuts: { type: 'fade', dur: 0.9 }, world: { type: 'pan', dur: 1.3 } },
     camera: { style: 'glide', drift: 14, driftPeriod: 12, breathe: 0.008, whip: 'power3.inOut', anticipation: false, moveBlur: 0.25 },
     ambient: 'lively',
@@ -121,7 +150,13 @@ const PANEL_ENTER = 0.36;
 
 const EDITORIAL = GRAMMARS.editorial;
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-const OVERRIDE_KEYS = ['base', 'ease', 'duration', 'overshoot', 'stagger', 'defaultTransition', 'camera', 'ambient'];
+const OVERRIDE_KEYS = ['base', 'ease', 'duration', 'overshoot', 'stagger', 'defaultTransition', 'camera', 'ambient', 'travel', 'exitRatio', 'followThrough', 'parallax', 'heroDim'];
+export const TRAVEL_RANGE = Object.freeze({ min: 0.5, max: 2 });
+export const PARALLAX_DEPTHS = Object.freeze(['foreground', 'mid', 'background']);
+// [min, max] of each numeric token, for presets and overrides alike.
+const TOKEN_RANGE = Object.freeze({ travel: [0, 0.5], exitRatio: [0.4, 1], followThrough: [0, 0.3], heroDim: [0, 0.8] });
+const PARALLAX_RANGE = Object.freeze({ foreground: [1, 1.5], mid: [0.3, 1], background: [0, 1] });
+const within = (value, [min, max]) => typeof value === 'number' && value >= min && value <= max;
 const CAMERA_KEYS = ['style', 'drift', 'driftPeriod', 'breathe', 'whip', 'anticipation', 'moveBlur'];
 
 /**
@@ -161,6 +196,14 @@ export function grammarErrors(value, path = 'motion.grammar') {
       if (blur !== undefined && !(typeof blur === 'number' && blur >= 0 && blur <= 1)) errors.push(`${path}.camera.moveBlur must be a strength between 0 and 1`);
     }
   }
+  for (const [key, range] of Object.entries(TOKEN_RANGE)) if (value[key] !== undefined && !within(value[key], range)) errors.push(`${path}.${key} must be between ${range[0]} and ${range[1]}`);
+  if (value.parallax !== undefined) {
+    if (!isObject(value.parallax)) errors.push(`${path}.parallax must be an object {${PARALLAX_DEPTHS.join(', ')}}`);
+    else for (const [depth, rate] of Object.entries(value.parallax)) {
+      if (!PARALLAX_DEPTHS.includes(depth)) errors.push(`${path}.parallax.${depth} is not a depth (allowed: ${PARALLAX_DEPTHS.join(', ')})`);
+      else if (!within(rate, PARALLAX_RANGE[depth])) errors.push(`${path}.parallax.${depth} must be between ${PARALLAX_RANGE[depth][0]} and ${PARALLAX_RANGE[depth][1]}`);
+    }
+  }
   return errors;
 }
 
@@ -168,7 +211,8 @@ export function grammarErrors(value, path = 'motion.grammar') {
  * The story's motion grammar: story.motion.grammar as a preset name, or
  * {base, ...overrides} merged over the base preset (editorial by default).
  * → a plain grammar object {id, base, custom, describe, ease, duration,
- * overshoot, stagger, defaultTransition, camera, ambient, panelEnter, hold}. Throws on an
+ * overshoot, travel, exitRatio, followThrough, parallax, heroDim, stagger,
+ * defaultTransition, camera, ambient, panelEnter, hold}. Throws on an
  * invalid grammar (validateStory reports the same problems first).
  */
 export function resolveGrammar(story) {
@@ -182,11 +226,19 @@ export function resolveGrammar(story) {
   const preset = GRAMMARS[name];
   const own = isObject(value) ? value : {};
   const custom = Object.keys(own).some((key) => key !== 'base') || Object.keys(feel).length > 0;
+  const duration = { ...preset.duration, ...(feel.duration ?? {}), ...(own.duration ?? {}) };
+  const exitRatio = own.exitRatio ?? preset.exitRatio;
+  // An override that sets the entrance (or the ratio) but not the exit gets its exit from the ratio.
+  if (own.duration?.exit === undefined && (own.duration?.enter !== undefined || own.exitRatio !== undefined)) duration.exit = round(Math.max(0.05, duration.enter * exitRatio), 3);
   return {
     id: name, base: name, custom, describe: preset.describe,
     ease: { ...preset.ease, ...(feel.ease ?? {}), ...(own.ease ?? {}) },
-    duration: { ...preset.duration, ...(feel.duration ?? {}), ...(own.duration ?? {}) },
+    duration,
     overshoot: own.overshoot ?? feel.overshoot ?? preset.overshoot,
+    travel: own.travel ?? preset.travel, exitRatio,
+    followThrough: own.followThrough ?? preset.followThrough,
+    parallax: { ...preset.parallax, ...(own.parallax ?? {}) },
+    heroDim: own.heroDim ?? preset.heroDim,
     stagger: own.stagger ?? preset.stagger,
     defaultTransition: { cuts: { ...preset.defaultTransition.cuts }, world: { ...preset.defaultTransition.world }, ...(feel.defaultTransition ?? {}), ...(own.defaultTransition ?? {}) },
     camera: { ...preset.camera, ...(feel.camera ?? {}), ...(own.camera ?? {}) },
@@ -201,7 +253,9 @@ export function isEditorialGrammar(grammar) {
   if (!grammar) return true;
   return EASE_ROLES.every((role) => grammar.ease?.[role] === EDITORIAL.ease[role])
     && DURATION_ROLES.every((role) => grammar.duration?.[role] === EDITORIAL.duration[role])
-    && (grammar.stagger ?? 1) === EDITORIAL.stagger;
+    && (grammar.stagger ?? 1) === EDITORIAL.stagger
+    && ['travel', 'followThrough', 'heroDim'].every((key) => (grammar[key] ?? EDITORIAL[key]) === EDITORIAL[key])
+    && PARALLAX_DEPTHS.every((depth) => (grammar.parallax?.[depth] ?? EDITORIAL.parallax[depth]) === EDITORIAL.parallax[depth]);
 }
 
 // ---------------------------------------------------------------------------
@@ -274,6 +328,28 @@ export function grammarDuration(grammar, role, seconds, { min = 0, max = Infinit
   const own = grammar.duration?.[role], base = EDITORIAL.duration[role];
   if (own === undefined || own === base) return seconds;
   return round(Math.min(max, Math.max(min, seconds * (own / base))), 4);
+}
+
+/**
+ * A move's designed duration scaled by how far it travels: × (distance /
+ * reference) ** grammar.travel, the factor clamped to TRAVEL_RANGE (or the
+ * given min / max). `reference` is the distance the designed duration is
+ * right for. Editorial (travel 0) returns the input unchanged.
+ */
+export function grammarTravel(grammar, seconds, distance, reference, { min = TRAVEL_RANGE.min, max = TRAVEL_RANGE.max } = {}) {
+  const power = grammar?.travel ?? 0;
+  if (!power || !(distance > 0) || !(reference > 0)) return seconds;
+  return round(seconds * Math.min(max, Math.max(min, (distance / reference) ** power)), 4);
+}
+
+/** Seconds a child at `depth` levels below its parent trails it (0 for editorial). */
+export function grammarFollowThrough(grammar, depth = 1) {
+  return round((grammar?.followThrough ?? 0) * depth, 4);
+}
+
+/** The opacity the rest of the frame falls to behind the hero (editorial: 0.3). */
+export function grammarHeroDim(grammar) {
+  return grammar?.heroDim ?? EDITORIAL.heroDim;
 }
 
 /** A default stagger (seconds) scaled by the grammar's stagger multiplier. */

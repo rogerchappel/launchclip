@@ -18,6 +18,7 @@ kit/
     grammar.mjs         motion grammars (editorial, snappy, smooth, playful, documentary, cinematic)
     transitions.mjs     typed transitions and scene render windows
     transition-frames.mjs  what a transition's two plates put on screen per frame; the cover, stall and pop check
+    motion-check.mjs    rules of good motion from the grammar and timeline ops: eases, cascades, exits, crowding, rests
     camera-world.mjs    world layout, camera path, parallax and motion blur
     ambient.mjs         frame-pure ambient motion: background field, hold drift
     editorial-core.mjs  editorial module spec → resolved model (no HTML)
@@ -444,6 +445,8 @@ export function track(keys)              // keys: [{t, v, ease?}] → (t) => val
 export function stagger(index, {each, from = "start", count})  // → delay seconds
 export function countUp(t, {from, to, start, frames = 18, fps = 30, format}) // matches editorial textFrames()
 export function springValue(t, {start, damping = 14, stiffness = 140, mass = 1, from = 0, to = 1})
+export function springByFeel(duration, bounce = 0) // → {damping, stiffness, mass: 1} for springValue
+export function springVisibleDuration({damping = 14, stiffness = 140, mass = 1}) // → seconds
 export function splitWords(text) / splitChars(text) // → [{text, index}]
 export function motionBlurPx(velocityPxPerFrame, {max = 24}) // → blur radius, 0 at rest
 ```
@@ -462,6 +465,29 @@ and every frame-pure reader (`zoomStateAt`, `cameraStateAt`) agree.
 
 The GSAP eases (`power3.out`, …) must match `gsap.parseEase()` to within 1e-6.
 GSAP is a devDependency for that test.
+
+**Springs by feel.** `springByFeel(duration, bounce)` picks a spring by how it
+looks and returns the `{damping, stiffness, mass}` that `springValue` takes, so
+the spring maths and its Remotion parity are unchanged:
+`springValue(t, {start, ...springByFeel(0.4, 0.15)})`.
+
+- `duration` is the **visible duration** in seconds: the time from the start
+  until the value first comes within 1 % of its travel (`SPRING_ARRIVAL`) of
+  the target. The bounce and the settle after it run longer, but this is when
+  the move reads as landed.
+- `bounce` is the first overshoot as a fraction of the travel, from 0 (critically
+  damped, never passes the target) to below 1; 0.27 passes the target by 27 %,
+  the same measure as `springEase(overshoot)`.
+- `springVisibleDuration(config)` is the inverse for an existing spring. Time
+  a follower off it (`start + springVisibleDuration(config)`), not off the
+  full settle. `springValue` draws any spring with damping ratio ≥ 1 as
+  critically damped, and the duration reported matches what it draws.
+
+The damping ratio ζ comes from the first peak of the damped-spring solution,
+`bounce = exp(−πζ/√(1−ζ²))`, and the natural frequency from the arrival time,
+which scales as 1/ω0. The idea of choosing a spring by `visualDuration` and
+`bounce` is borrowed from [Motion's ai-kit](https://github.com/motiondivision/ai-kit);
+the definitions and maths here are our own.
 
 ## Motion grammar (`kit/core/grammar.mjs`)
 
@@ -489,6 +515,47 @@ breathing-scale amplitude, the whip-pan ease). `overshoot` is the measured
 peak overshoot of the enter and emphasis eases; `stagger` multiplies every
 module's default stagger.
 
+Each grammar also sets five tokens, all overridable:
+
+| Grammar | `travel` | `exitRatio` | `followThrough` | `parallax` (foreground, mid, background) | `heroDim` |
+|---|---|---|---|---|---|
+| `editorial` | 0 | 0.79 | 0 s | 1.15, 0.65, 0.3 | 0.3 |
+| `snappy` | 0.3 | 0.8 | 0.03 s | 1.2, 0.6, 0.25 | 0.25 |
+| `smooth` | 0.2 | 0.72 | 0.08 s | 1.12, 0.68, 0.35 | 0.4 |
+| `playful` | 0.3 | 0.62 | 0.07 s | 1.25, 0.6, 0.25 | 0.35 |
+| `documentary` | 0.15 | 0.75 | 0.1 s | 1.08, 0.7, 0.4 | 0.5 |
+| `cinematic` | 0.25 | 0.64 | 0.12 s | 1.2, 0.6, 0.2 | 0.2 |
+
+- `travel` (0–0.5): duration grows with distance. A move's duration is
+  multiplied by `(distance / reference) ** travel`, and the factor is clamped
+  to `TRAVEL_RANGE` (0.5–2). At 0.3 a move a quarter as far takes about two
+  thirds as long. 0 means distance never matters.
+- `exitRatio` (0.4–1): an exit's duration as a share of its entrance. Each
+  preset's `duration.exit` is its `duration.enter` × `exitRatio`. An override
+  that sets `duration.enter` or `exitRatio` without `duration.exit` gets its
+  exit from the ratio.
+- `followThrough` (0–0.3 s): how long a child trails its parent.
+- `parallax`: how far each depth moves for one unit of camera travel, with
+  the plates at 1: `foreground` (1–1.5) for overlays, `mid` (0.3–1) for a
+  scene's middle layer, `background` (0–1).
+- `heroDim` (0–0.8): the opacity the rest of the frame falls to behind the
+  focused element. Lower is darker.
+
+The starting numbers are the interface-scale ones in
+[motion-design-skill](https://github.com/LottieFiles/motion-design-skill)
+(MIT), rescaled for video and for each grammar's character. Editorial keeps
+the values the kit had before, so it stays the identity.
+
+Where each token reaches:
+
+| Token | Reaches | Does not reach yet |
+|---|---|---|
+| `exitRatio` | every exit that calls `grammarDuration(…, "exit")`: module shells, clip and photo fades | exits a module times itself |
+| `parallax` | the world camera's background layer and overlays (`cameraPlan`), and the back and middle layers of a `world` scene | the planets module's own star layers, UI depth (`ui-paint.mjs`) |
+| `heroDim` | the focus ring of every module that runs shot states | highlights a module dims itself (bar-chart `highlight`, isotype, scatter `focus`) |
+| `travel` | world-camera moves between shots, measured against the story's median hop | zooms, overviews, the loop move, element moves inside modules |
+| `followThrough` | overlays trailing the world camera (`overlayOps`) | children inside modules; `grammarFollowThrough` is there for them |
+
 Two preset settings are not overridable, and `{base: "cinematic", …}`
 inherits them:
 
@@ -515,7 +582,7 @@ world camera:
 
 ```js
 export const GRAMMARS, GRAMMAR_NAMES, DEFAULT_GRAMMAR;   // "editorial"
-export function resolveGrammar(story)                   // → {id, base, custom, ease, duration, overshoot, stagger, defaultTransition, camera, ambient, panelEnter, hold}
+export function resolveGrammar(story)                   // → {id, base, custom, ease, duration, overshoot, travel, exitRatio, followThrough, parallax, heroDim, stagger, defaultTransition, camera, ambient, panelEnter, hold}
 export function grammarErrors(value, path)              // validation messages (story.mjs mirrors them, import-free)
 export function isEditorialGrammar(grammar)
 export function easeRole(name)                          // "enter" (.out) | "exit" (.in) | "move" (.inOut) | "emphasis" (back/elastic/bounce .out) | null (linear, steps)
@@ -523,6 +590,10 @@ export function grammarEase(grammar, name, {props, roles = ["enter", "exit", "em
 export function calmEase(name)                          // the family without overshoot (back.out → power2.out)
 export function grammarDuration(grammar, role, seconds, {min, max})
 export function grammarStagger(grammar, seconds, {min, max})
+export function grammarTravel(grammar, seconds, distance, reference, {min, max})   // seconds × (distance / reference) ** travel, clamped to TRAVEL_RANGE
+export function grammarFollowThrough(grammar, depth = 1)   // seconds a child `depth` levels down trails its parent
+export function grammarHeroDim(grammar)                 // opacity behind the hero (editorial 0.3)
+export const TRAVEL_RANGE, PARALLAX_DEPTHS;             // {min: 0.5, max: 2}; ["foreground", "mid", "background"]
 export function grammarTweens(list, grammar, options)   // remap ops / animations in place
 ```
 
@@ -532,7 +603,9 @@ Rules:
   grammar's value for that role equals editorial's, so stories without
   `motion` (and stories with `"editorial"`) compile byte for byte as before
   (`test/grammar.test.js` pins the pre-grammar HyperFrames hashes of every
-  golden and the editorial corpus `EXPLICIT_16X9_SHA256`).
+  golden and the editorial corpus `EXPLICIT_16X9_SHA256`). Its tokens are
+  the old constants: no travel scaling, no follow-through, parallax 1.15 /
+  0.65 / 0.3 and a 0.3 dim.
 - `resolveModule` passes the grammar as `ctx.grammar` to catalogue modules
   and as `resolveEditorialModule(spec, {grammar})` to editorial kinds (only
   when it is not editorial); non-editorial models carry `model.grammar`.
@@ -834,6 +907,12 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
 
 `holds` and `states` in `launchclip finish` (docs/DIRECTION_GUARDRAILS.md §7):
 nothing still for over 3 s, no shot over 10 s without a change.
+`choreography` (§8, `kit/core/motion-check.mjs`): `grammarMotionFindings(grammar)`
+and `sceneMotionFindings({id, motion, ops, states})` return
+`{rule, severity, at, ids, detail}` findings for an entrance that eases in, an
+exit that eases out, a linear move, an exit slower than its entrance, a
+cascade over its budget, a crowded move and states with no rest between them;
+the thresholds are `MOTION_CHECK`.
 
 ### State events (`eval/scorecard.mjs`, `scripts/state-events.mjs`)
 
@@ -2486,7 +2565,8 @@ shared parts in `kit/core/looks/parts.mjs`.
 - `spacing` (0–1, default 0.12): the gap between neighbouring plates, as a
   fraction of the canvas along the move.
 - `parallax` (default true in world mode): the background depth layer moves
-  at 0.3× and overlays at 1.15×. `false` keeps the same background, moving
+  at the grammar's `parallax.background` and overlays at its
+  `parallax.foreground` (editorial: 0.3× and 1.15×). `false` keeps the same background, moving
   1× with the plates, and turns overlay parallax off (world plates are
   transparent, so there is always a background behind them).
 - `blur` (default: the grammar's): whip-pans always blur at full strength;
@@ -2536,10 +2616,13 @@ Model:
   It composes with ambient motion's hold drift, which lives inside each plate.
 - Background and parallax (`PARALLAX`, `plan.depth`): every world story has
   one background depth layer behind the transparent plates. It moves
-  `plan.depth` × the plates' screen travel (0.3 with parallax, `PARALLAX.flat`
-  = 1 with `parallax: false`; never scaled); overlays (track ≥ 1) move 1.15×
-  relative to the camera state where they settle (`overlayOps`, parallax
-  only). The layer is ambient motion's background field when the story has
+  `plan.depth` × the plates' screen travel (the grammar's `parallax.background` with parallax,
+  0.3 for editorial; `PARALLAX.flat` = 1 with `parallax: false`; never
+  scaled); overlays (track ≥ 1) move the grammar's `parallax.foreground`
+  (editorial 1.15×) relative to the camera state where they settle, starting
+  the grammar's `followThrough` after each camera move (`overlayOps`,
+  parallax only). A move between shots lasts its transition's `dur` ×
+  `grammarTravel` of its distance against the story's median hop. The layer is ambient motion's background field when the story has
   one, else soft brand glows (`backgroundLayer`), never both. The field is
   one continuous backdrop across the whole world extent
   (`backgroundExtent`): each blob is repeated on its own lattice

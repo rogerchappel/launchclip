@@ -302,6 +302,67 @@ iris (or push-blur, light-sweep, glow-wipe, dot-wipe); the new picture
 arrives over the old one, which stays whole under it, so the frame never
 drops to the background (docs/KIT_CONTRACTS.md, "Transitions").
 
+## 8. Motion check
+
+**Rule.** Things arrive slowing down and leave speeding up, nothing slides at
+one speed, a cascade is over quickly, a scene that has settled changes one
+thing at a time, and there is a still moment between beats. The rules are the
+checklist in LottieFiles'
+[motion-design-skill](https://github.com/LottieFiles/motion-design-skill)
+(MIT). Its numbers are for interfaces, in milliseconds; the thresholds here
+are set from the shipped grammars and the example stories.
+
+**Enforced** (`kit/core/motion-check.mjs`, run by `choreographyGate` in
+`src/movement_guardrails.js`). It reads the resolved grammar, each scene's
+timing (`model.motion`) and the timeline ops both renderers play, so it needs
+no render and runs with `--plan-only`.
+
+- **Finish gate `choreography`.** Errors fail the gate; warnings are listed.
+
+| Finding | Severity | Fails when |
+| --- | --- | --- |
+| `entrance-ease` | error | `motion.grammar.ease.enter`, a scene's entrance or an element that slides or grows in uses an `.in` ease. `.out` and `.inOut` pass; a slam (scaling down into place) is left alone |
+| `exit-ease` | error | `motion.grammar.ease.exit`, a scene's exit or an element that moves as it leaves uses an `.out` ease, overshooting ones included |
+| `linear-move` | error | the grammar's enter, exit, move or camera ease is linear, a scene arrives or leaves on a linear ease, or an element travels (x, y) on one for 1.5 s or less |
+| `exit-longer` | error | `motion.grammar.duration.exit` is longer than `duration.enter` by a frame or more; or a scene or an element takes over twice as long to leave as it took to arrive |
+| `long-stagger` | error | three or more elements with the same tween, each starting before the one before has finished, run over 2 s from the first start to the last |
+| `crowded-move` | warning | in a scene of six or more elements, over three quarters of them are in a move of 1.5 s or less at one moment, from 0.5 s after the entrance to the exit |
+| `no-rest` | warning | two of a scene's states (`scene.states`) land less than 1.2 s apart |
+
+Each finding names the scene and the element, says what is wrong and gives
+the fix, so a repair pass or a person can act on it.
+
+**Where the numbers come from** (`MOTION_CHECK`).
+
+- Every preset grammar's exit is shorter than its entrance, so the grammar
+  rule asks for exactly that. A few shipped devices leave slower than they
+  arrive on purpose (a zoom-through, a cut-out hole: twice as long), so the
+  scene and element rule only fails beyond twice.
+- The longest shipped cascade is 1.05 s, 1.68 s under the widest preset
+  stagger (playful, ×1.6) and 1.8 s at the largest stagger a grammar may set
+  (×3), where the module clamps it. The 2 s budget sits just above, so no
+  `motion.grammar.stagger` trips it today; it catches a module that does not
+  clamp its own cascade.
+- The source says no more than a third of the elements should move at once.
+  Shipped builds move up to two thirds of a chart in one state change, so the
+  line is three quarters and it only warns.
+- A state's bloom is gone after 0.92 s; one editorial entrance (0.28 s) of
+  stillness after it gives 1.2 s. Validation already refuses states under
+  0.6 s apart.
+
+**Left alone on purpose.** An element that appears and is gone again within
+1.5 s is a flash (a bloom, a ring, a sweep) and is not held to the entrance
+and exit rules. A tween longer than 1.5 s is continuous motion (a turn, a
+sway, a scroll, a progress bar) and may be linear. Fades with no movement are
+not held to an ease direction.
+
+**Not checked yet.** The hero having the largest move: the ops carry no
+element sizes and no element is marked as the hero, so "largest" cannot be
+decided from them.
+
+**Stays free.** The grammar, its eases inside those directions, every
+duration, and how a module builds.
+
 ## Gates summary
 
 | Gate | Input | Fails when |
@@ -314,6 +375,7 @@ drops to the background (docs/KIT_CONTRACTS.md, "Transitions").
 | variety | cast scenes, track-0 scenes | the same shot back to back; a video of only diagrams and text cards |
 | holds | windows and ops at 4 Hz | nothing moves for more than 3 s (only the drift moving warns) |
 | states | shots, states and events | a shot holds one state for more than 10 s |
+| choreography | grammar, scene timing and ops | an entrance eases in, an exit eases out, a move is linear, an exit is slower than its entrance, a cascade runs over 2 s (crowded moves and states with no rest between them warn) |
 | lip-sync | character scenes' mouth changes, narration words | a mouth is open for more than 0.15 s (or 0.3 s in all) with no word of its own under it; a character on screen has a line and its mouth is open for under a quarter of it |
 
 `lip-sync` is `lipSyncGate({resolved, words})` in `src/quality_gates.js`
