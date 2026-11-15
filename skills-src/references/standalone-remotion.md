@@ -577,6 +577,20 @@ launchclip layout-check <project> --profile shorts --json
 
 Use `--profile landscape` for 16:9 deliveries.
 
+Then run the direction and motion checks. Neither command above runs them,
+and `launchclip cinematic-check` does not either, so a project rendered by
+hand skips them unless this step runs:
+
+```bash
+launchclip finish <project> --renderer remotion --plan-only
+```
+
+It renders nothing. It resolves the story and writes the checks that need no
+rendered pixels to `plan.checks.gates` in `finish.json`: physics, ghosting,
+density, variety, holds, states and choreography (the motion check: eases,
+staggers, exits, crowding and rests). Repair `storyboard.json` until none
+fails.
+
 Render stills and inspect them with the available image viewer. Frames are
 `Math.round(seconds × fps)`:
 
