@@ -7,8 +7,8 @@ import test from "node:test";
 import { TEXT_FADE } from "@launchclip/core/modules.mjs";
 import gsap from "gsap";
 import {
-  calmEase, DEFAULT_GRAMMAR, easeOvershoot, easeRole, GRAMMAR_NAMES, GRAMMARS, grammarDuration, grammarEase, grammarErrors, grammarStagger,
-  isEditorialGrammar, resolveGrammar
+  calmEase, DEFAULT_GRAMMAR, easeOvershoot, easeRole, GRAMMAR_NAMES, GRAMMARS, grammarDuration, grammarEase, grammarErrors, grammarFollowThrough, grammarHeroDim, grammarStagger,
+  grammarTravel, isEditorialGrammar, PARALLAX_DEPTHS, resolveGrammar, TRAVEL_RANGE
 } from "@launchclip/core/grammar.mjs";
 import { getEase } from "@launchclip/core/motion.mjs";
 import { resolveEditorialModule } from "@launchclip/core/editorial-core.mjs";
@@ -177,6 +177,58 @@ test("resolveGrammar reads names and {base, ...overrides}; validation names the 
   assert.match(grammarErrors({ base: "snappy", ease: { wobble: "power1.out" } }).join(), /ease\.wobble is not a role/);
   assert.match(grammarErrors({ duration: { enter: 9 } }).join(), /duration\.enter must be between/);
   assert.throws(() => resolveGrammar({ motion: { grammar: { stagger: 99 } } }), /stagger/);
+});
+
+test("every grammar sets travel, exit ratio, follow-through, parallax and hero dim, inside the validated ranges", () => {
+  for (const name of GRAMMAR_NAMES) {
+    const g = GRAMMARS[name];
+    const { travel, exitRatio, followThrough, parallax, heroDim } = g;
+    assert.deepEqual(grammarErrors({ base: name, travel, exitRatio, followThrough, parallax, heroDim }), [], name);
+    assert.deepEqual(Object.keys(parallax), PARALLAX_DEPTHS, name);
+    assert.ok(parallax.foreground > 1 && parallax.mid < 1 && parallax.background < parallax.mid, `${name}: front fastest, back slowest`);
+    assert.ok(exitRatio < 1, `${name}: an exit is shorter than its entrance`);
+    assert.ok(Math.abs(g.duration.exit - g.duration.enter * exitRatio) < 0.005, `${name}: duration.exit is duration.enter × exitRatio`);
+    const resolved = resolveGrammar({ motion: { grammar: name } });
+    for (const key of ["travel", "exitRatio", "followThrough", "heroDim"]) assert.equal(resolved[key], g[key], `${name}.${key}`);
+    assert.deepEqual(resolved.parallax, { ...parallax });
+  }
+  // Editorial stays the identity: distance never matters, nothing trails, and the depths and dim are the kit's constants.
+  const e = GRAMMARS.editorial;
+  assert.deepEqual([e.travel, e.followThrough, e.heroDim, e.parallax], [0, 0, 0.3, { foreground: 1.15, mid: 0.65, background: 0.3 }]);
+  assert.equal(isEditorialGrammar(resolveGrammar({ motion: { grammar: { base: "editorial", heroDim: 0.5 } } })), false);
+  assert.match(grammarErrors({ travel: 2 }).join(), /travel must be between 0 and 0\.5/);
+  assert.match(grammarErrors({ exitRatio: 1.2 }).join(), /exitRatio must be between 0\.4 and 1/);
+  assert.match(grammarErrors({ followThrough: -1 }).join(), /followThrough must be between/);
+  assert.match(grammarErrors({ heroDim: 1 }).join(), /heroDim must be between 0 and 0\.8/);
+  assert.match(grammarErrors({ parallax: { sky: 1 } }).join(), /parallax\.sky is not a depth/);
+  assert.match(grammarErrors({ parallax: { background: 2 } }).join(), /parallax\.background must be between 0 and 1/);
+});
+
+test("an override that sets only the entrance gets its exit from the exit ratio; an explicit exit wins", () => {
+  const of = (grammar) => resolveGrammar({ motion: { grammar } }).duration;
+  assert.equal(of({ base: "smooth", duration: { enter: 1 } }).exit, 0.72);
+  assert.equal(of({ base: "smooth", exitRatio: 0.5 }).exit, 0.25);
+  assert.equal(of({ base: "smooth", duration: { enter: 1, exit: 0.9 } }).exit, 0.9);
+  assert.equal(of("smooth").exit, GRAMMARS.smooth.duration.exit);
+  // Every exit caller reads it through grammarDuration.
+  const g = resolveGrammar({ motion: { grammar: { base: "smooth", duration: { enter: 1 } } } });
+  assert.equal(grammarDuration(g, "exit", 0.22), 0.72);
+});
+
+test("grammarTravel scales a duration by distance, clamped; follow-through and hero dim read the grammar", () => {
+  const snappy = resolveGrammar({ motion: { grammar: "snappy" } }), editorial = resolveGrammar({});
+  assert.equal(grammarTravel(editorial, 0.8, 50, 1000), 0.8);
+  assert.equal(grammarTravel(snappy, 0.8, 1000, 1000), 0.8);
+  assert.ok(grammarTravel(snappy, 0.8, 250, 1000) < 0.8 && grammarTravel(snappy, 0.8, 3000, 1000) > 0.8);
+  assert.equal(grammarTravel(snappy, 0.8, 250, 1000), Math.round(0.8 * 0.25 ** 0.3 * 1e4) / 1e4);
+  assert.equal(grammarTravel(snappy, 1, 1, 1000), TRAVEL_RANGE.min);
+  assert.equal(grammarTravel(snappy, 1, 1e9, 1000), TRAVEL_RANGE.max);
+  assert.equal(grammarTravel(snappy, 0.8, 0, 1000), 0.8, "no travel, no rescale");
+  assert.equal(grammarFollowThrough(editorial), 0);
+  assert.equal(grammarFollowThrough(snappy), 0.03);
+  assert.equal(grammarFollowThrough(snappy, 2), 0.06);
+  assert.equal(grammarHeroDim(null), 0.3);
+  assert.equal(grammarHeroDim(snappy), 0.25);
 });
 
 test("grammarEase maps designed eases by role, keeps linear ones, and never overshoots opacity or blur", () => {
