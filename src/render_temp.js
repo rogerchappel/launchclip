@@ -40,7 +40,14 @@ export async function useProjectTemp(project, env = process.env) {
   // A parent that cannot be written (a drive's root folder): keep the system temp folder.
   try { await mkdir(root, { recursive: true }); } catch { return { dir: null, async release() {} }; }
   await pruneAbandoned(root);
-  const dir = await mkdtemp(path.join(root, `${process.pid}-`));
+  let dir;
+  for (let attempt = 0; ; attempt += 1) {
+    try { dir = await mkdtemp(path.join(root, `${process.pid}-`)); break; } catch (error) {
+      // Another render's release() can remove the empty root between the mkdir above and here.
+      if (error?.code !== "ENOENT" || attempt >= 4) throw error;
+      await mkdir(root, { recursive: true });
+    }
+  }
   const saved = VARIABLES.map((name) => [name, Object.hasOwn(env, name) ? env[name] : undefined]);
   for (const name of VARIABLES) env[name] = dir;
   let released = false;
