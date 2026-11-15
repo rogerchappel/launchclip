@@ -61,5 +61,6 @@ LaunchClip's goal: **a SaaS founder points it at their product and gets a launch
 - **Exploded-view object scenes:** the idea is shown as one isometric machine of forty or more solid parts, in four tones with a single lit accent and no arrows, that comes apart and snaps back. Borrowed from the [anatomy](https://skills.wheresryan.sh/anatomy) skill, with the motion rebuilt frame by frame.
 - **Openverse as a media source:** openly licensed images and audio (no video), filtered for commercial use, with the attribution line it returns.
 - **Small borrowings from [Remotion's skills](https://github.com/remotion-dev/skills):** hand-drawn highlights on text, a light leak over a cut, scale that eases evenly to the eye, and safe margins and minimum type sizes as a check.
+- **Real 3D scenes with three.js** ([RFC](WEBGL_SCENES_RFC.md)): research into drawing the 3D modules with real lighting, shadows and depth of field, a device that shows your own footage on its screen, and a 3D environment behind the world camera, with both renderers kept in step.
 
 Have an idea or a need? [Open an issue](https://github.com/rogerchappel/launchclip/issues).
