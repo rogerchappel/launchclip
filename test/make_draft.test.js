@@ -94,6 +94,20 @@ test("--speed draft: one streamed script call, a take per sentence, a rule-made 
   } finally { await draft.cleanup(); }
 });
 
+test("a look with stacked captions keeps the direction call's plan, on one-line captions", async () => {
+  // Seed 7845237e draws stacked captions, which the character cards would hide; the directed plan used to be dropped for it.
+  const draft = await draftRun();
+  try {
+    const { report } = await draft.run({ speed: "draft", seed: "7845237e" });
+    const story = await draft.read("storyboard.json");
+    assert.deepEqual(story.cast.characters.map((member) => member.id), ["jar", "yeast"]);
+    assert.equal(story.overlays.find((overlay) => overlay.type === "captions").preset, "word-highlight");
+    assert.ok(report.warnings.some((warning) => /one-line captions/.test(warning)));
+  } finally {
+    await draft.cleanup();
+  }
+});
+
 test("a direction call that is late leaves the rule-made plan standing, and the run does not wait for it", async () => {
   // The late call takes 30 s (unref'd, so it holds nothing open): a slow machine's whole draft still ends well before it.
   const draft = await draftRun({ directionMs: 30_000, env: { LAUNCHCLIP_DRAFT_DIRECTION_MS: "30" } });

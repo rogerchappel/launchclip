@@ -1757,6 +1757,15 @@ async function planDraft(ctx, planOptions, { media, shots, assets }) {
   const roles = defaultExplainerCast().roles;
   const ruled = planWith(made.storyboard, made.fallbacks, { cast: made.cast, roles });
   ruled.catch(() => {}); // awaited below
+  // A look whose captions stack a word a line stands too tall to clear a character card, so tooling hides them and the
+  // captions gate fails the plan. A draft then takes one-line captions and keeps the rest of the look, for the directed
+  // plan as for the rule-made one.
+  const captionsOnly = (result) => result.status !== "passed" && (result.errors ?? []).length > 0 && result.errors.every((line) => /^captions: /.test(String(line)));
+  const oneLine = (storyboard) => ({ ...storyboard, overlays: (storyboard.overlays ?? []).map((overlay) => (overlay?.type === "captions" ? { ...overlay, preset: "word-highlight" } : overlay)) });
+  const oneLined = () => {
+    report.warnings.push("draft: the look's stacked captions would be hidden under the character cards; the draft uses one-line captions (word-highlight)");
+    ctx.draftCaptions = "word-highlight"; // finalizeStory keeps it over the seeded look's preset
+  };
   const direction = { status: "off" };
   let directed = null;
   if (draft.waits.directionMs > 0) {
@@ -1781,7 +1790,12 @@ async function planDraft(ctx, planOptions, { media, shots, assets }) {
       const applied = applyDraftDirection(rule, outcome.result.answer);
       if (!applied) { direction.status = "invalid"; direction.reason = "the answer changed nothing the kit can draw"; }
       else {
-        const plan = await planWith(applied.storyboard, applied.fallbacks, applied.explainer ?? { cast: made.cast, roles });
+        const explainer = applied.explainer ?? { cast: made.cast, roles };
+        let plan = await planWith(applied.storyboard, applied.fallbacks, explainer);
+        if (captionsOnly(plan)) {
+          const again = await planWith(oneLine(applied.storyboard), applied.fallbacks, explainer);
+          if (again.status === "passed") { plan = again; oneLined(); }
+        }
         if (plan.status === "passed") { directed = plan; direction.status = "applied"; direction.changed = applied.changed.length; }
         else { direction.status = "invalid"; direction.reason = `the directed storyboard failed its checks (${(plan.errors ?? []).slice(0, 2).join("; ")})`; }
       }
@@ -1789,17 +1803,9 @@ async function planDraft(ctx, planOptions, { media, shots, assets }) {
     if (direction.status !== "applied") ctx.say(`draft: the direction call was ${direction.status}${direction.reason ? ` (${direction.reason})` : ""}; the rule-made storyboard stands`);
   }
   let plan = directed ?? await ruled;
-  // A look whose captions stack a word a line stands too tall to clear a character card, so tooling hides them and the
-  // captions gate fails the plan. A draft then takes one-line captions and keeps the rest of the look.
-  const captionsOnly = (result) => result.status !== "passed" && (result.errors ?? []).length > 0 && result.errors.every((line) => /^captions: /.test(String(line)));
-  const oneLine = (storyboard) => ({ ...storyboard, overlays: (storyboard.overlays ?? []).map((overlay) => (overlay?.type === "captions" ? { ...overlay, preset: "word-highlight" } : overlay)) });
   if (captionsOnly(plan)) {
     const again = await planWith(oneLine(made.storyboard), made.fallbacks, { cast: made.cast, roles });
-    if (again.status === "passed") {
-      report.warnings.push("draft: the look's stacked captions would be hidden under the character cards; the draft uses one-line captions (word-highlight)");
-      plan = again;
-      ctx.draftCaptions = "word-highlight"; // finalizeStory keeps it over the seeded look's preset
-    }
+    if (again.status === "passed") { plan = again; oneLined(); }
   }
   // A rule-made plan that fails its checks is planned again plain (a character beside each line's words, no shots, media or
   // diagrams): a draft does not fail on a clip or a layout slip.
