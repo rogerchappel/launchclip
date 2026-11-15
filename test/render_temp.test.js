@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rmdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -53,4 +53,25 @@ test("folders left by processes that are gone are removed; live ones are kept", 
   assert.ok(existsSync(live));
   await temp.release();
   assert.ok(existsSync(live), "another process's folder survives the release");
+});
+
+test("a sibling render that removes the shared folder in between does not fail this one", async () => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), "launchclip-render-temp-"));
+  const root = path.join(parent, TEMP_FOLDER);
+  // The first try finds the shared folder gone, as when another render's release() has just removed it.
+  let tries = 0;
+  const makeTemp = async (prefix) => {
+    tries += 1;
+    if (tries === 1) await rmdir(root);
+    return mkdtemp(prefix);
+  };
+  const temp = await useProjectTemp(path.join(parent, "launch"), {}, { makeTemp });
+  assert.equal(tries, 2);
+  assert.ok(existsSync(temp.dir));
+  await temp.release();
+  // A folder that never appears is still an error, after a few tries.
+  let failures = 0;
+  const gone = async () => { failures += 1; throw Object.assign(new Error("gone"), { code: "ENOENT" }); };
+  await assert.rejects(useProjectTemp(path.join(parent, "launch"), {}, { makeTemp: gone }), /gone/);
+  assert.equal(failures, 5);
 });
