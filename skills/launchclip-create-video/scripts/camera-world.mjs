@@ -46,7 +46,7 @@
 // story that uses a camera transition. Otherwise cameraPlan() returns null
 // and the compilers emit exactly what they did before.
 
-import { getEase, motionBlurPx } from './motion.mjs';
+import { getEase, motionBlurPx, scaleStepAt, scaleTweenOps } from './motion.mjs';
 import { OVERVIEW, isCameraTransition } from './transitions.mjs';
 import { resolveGrammar } from './grammar.mjs';
 import { FIELD_PARALLAX, fieldTiles } from './ambient.mjs';
@@ -573,7 +573,7 @@ export function cameraStateAt(plan, t) {
     if (t < move.start - EPS) break;
     const p = move.duration > 0 ? Math.min(1, Math.max(0, (t - move.start) / move.duration)) : 1;
     const k = p >= 1 ? 1 : getEase(move.ease)(p);
-    state = { x: lerp(move.from.x, move.to.x, k), y: lerp(move.from.y, move.to.y, k), zoom: lerp(move.from.zoom, move.to.zoom, k), rotation: lerp(move.from.rotation, move.to.rotation, k) };
+    state = { x: lerp(move.from.x, move.to.x, k), y: lerp(move.from.y, move.to.y, k), zoom: scaleStepAt(p, { from: move.from.zoom, to: move.to.zoom, duration: move.duration, ease: move.ease }), rotation: lerp(move.from.rotation, move.to.rotation, k) };
   }
   return state;
 }
@@ -715,7 +715,8 @@ export function cameraOps(plan) {
   for (const move of plan.moves) {
     const timing = { start: move.start, duration: move.duration, ease: move.ease };
     ops.push({ type: 'tween', target: 'pan', ...timing, from: panOf(move.from), to: panOf(move.to) });
-    ops.push({ type: 'tween', target: 'zoom', ...timing, from: zoomOf(move.from), to: zoomOf(move.to) });
+    // A wide zoom eases evenly to the eye (motion.mjs scaleLerp).
+    ops.push(...scaleTweenOps({ type: 'tween', target: 'zoom', ...timing, from: zoomOf(move.from), to: zoomOf(move.to) }));
   }
   if (plan.background) {
     ops.push({ type: 'set', target: 'background', time: 0, props: { ...plan.background.home } });

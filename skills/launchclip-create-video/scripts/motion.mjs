@@ -180,6 +180,69 @@ export function tween(t, {from, to, start = 0, duration, ease: easeName = DEFAUL
   return lerpValue(from, to, getEase(easeName)(clamp01((t - start) / duration)));
 }
 
+// A scale change this wide (larger over smaller) is eased in log space.
+export const WIDE_SCALE = 2;
+
+/**
+ * Scale between `from` and `to` at eased progress k, even to the eye. A
+ * linear scale looks fast at the small end and slow at the large end, because
+ * the eye reads the ratio between frames, not the difference. From WIDE_SCALE
+ * up the scale is interpolated in log space (equal progress, equal ratio);
+ * a smaller change stays linear, where the two are within a few per cent.
+ */
+export function scaleLerp(from, to, k) {
+  const wide = from > 0 && to > 0 && Math.max(from / to, to / from) >= WIDE_SCALE;
+  return wide ? from * Math.pow(to / from, k) : from + (to - from) * k;
+}
+
+/** tween() for a scale: the same timing and ease, interpolated with scaleLerp. */
+export function tweenScale(t, {from, to, start = 0, duration, ease: easeName = DEFAULT_EASE}) {
+  if (!(duration >= 0)) throw new Error('tween duration must be >= 0');
+  if (t <= start && duration > 0) return from;
+  if (t >= start + duration) return to;
+  return scaleLerp(from, to, getEase(easeName)(clamp01((t - start) / duration)));
+}
+
+// Straight steps a second along a wide scale change: fine enough that the
+// speed has no visible corner at a step, at 30 or 60 frames a second.
+const SCALE_STEPS = 240;
+const wideScale = (a, b) => a > 0 && b > 0 && Math.max(a / b, b / a) >= WIDE_SCALE;
+const r6 = value => Math.round(value * 1e6) / 1e6;
+
+/**
+ * The scale a camera draws at linear progress p of a move: scaleLerp, sampled
+ * 240 times a second and joined by straight lines when the change is wide, so it is
+ * exactly what scaleTweenOps' linear tweens draw at any time.
+ */
+export function scaleStepAt(p, {from, to, duration, ease: easeName = DEFAULT_EASE}, rate = SCALE_STEPS) {
+  const eased = getEase(easeName);
+  if (p >= 1) return to;
+  if (!wideScale(from, to)) return scaleLerp(from, to, eased(p));
+  const count = Math.max(1, Math.ceil(duration * rate - 1e-6)), i = Math.min(count - 1, Math.floor(p * count));
+  const at = n => r6(n >= count ? to : n <= 0 ? from : scaleLerp(from, to, eased(n / count)));
+  return at(i) + (at(i + 1) - at(i)) * (p * count - i);
+}
+
+/**
+ * A tween op ({start, duration, ease, from, to} with from[key] a scale) as the
+ * ops that draw it: itself when the scale change is small; else its other
+ * properties as one tween, and the scale as short linear tweens along
+ * the scaleLerp curve, so a renderer that only tweens linearly (a GSAP
+ * fromTo) draws scaleStepAt.
+ */
+export function scaleTweenOps(op, key = 'scale', rate = SCALE_STEPS) {
+  const a = op.from[key], b = op.to[key];
+  if (!wideScale(a, b)) return [op];
+  const count = Math.max(1, Math.ceil(op.duration * rate - 1e-6)), eased = getEase(op.ease);
+  const at = i => r6(i >= count ? b : i <= 0 ? a : scaleLerp(a, b, eased(i / count)));
+  const time = i => r6(op.start + (op.duration * i) / count);
+  const {[key]: _from, ...from} = op.from, {[key]: _to, ...to} = op.to;
+  return [
+    ...(Object.keys(to).length ? [{...op, from, to}] : []),
+    ...Array.from({length: count}, (_, i) => ({...op, start: time(i), duration: r6(time(i + 1) - time(i)), ease: 'none', from: {[key]: at(i)}, to: {[key]: at(i + 1)}}))
+  ];
+}
+
 /**
  * Keyframe track. keys: [{t, v, ease?}] or [[t, v, ease?]]. Returns a function
  * of absolute time. Keys are sorted by t; the first value holds before the
