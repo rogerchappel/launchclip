@@ -668,12 +668,15 @@
 
 ### Changed
 
+- HyperFrames moves from 0.7.58 to 0.7.111, which clears its `adm-zip` and
+  `@hono/node-server` advisories. That release copies a mono sound to both
+  sides at full level, 3 dB above what Remotion renders, so the HyperFrames
+  compiler now declares a mono mix, voice or base recording at 0.7071 of its
+  volume and the two renders sit at the same loudness again.
 - `onnxruntime-node` moves to 1.31.1 (from 1.27.0), with compatible updates
   to the packages under the other dependencies. `npm audit --omit=dev` goes
-  from fourteen findings to six. What remains comes from `hyperframes`
-  0.7.58 (`adm-zip`, `@hono/node-server`) and from `sharp` through
-  `kokoro-js`. `hyperframes` 0.7.111 clears the first two but renders audio
-  3 dB away from Remotion's, so it is not taken yet.
+  from fourteen findings to three, all one advisory: `sharp`, through
+  `kokoro-js`, with no fix upstream.
 - Remotion is pinned at 4.0.543 (from 4.0.536), for every `remotion` and
   `@remotion/*` package, and the kit and engine peer ranges follow it. The
   release fixes renders that hung after a browser crash or a failed

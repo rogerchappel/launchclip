@@ -54,13 +54,15 @@ const sha = (value) => createHash("sha256").update(value).digest("hex");
 // compiler closed float seams between back-to-back tweens (seamTweens): a
 // few durations end 1 µs earlier (0.14 → 0.139999, 0.175 → 0.174999,
 // 8.518 → 8.517999 …) so they no longer overlap the next tween; nothing else.
+// All but cooling (no sound) re-pinned with HyperFrames 0.7.111: a mono mix
+// or base recording is declared at 0.7071 of its volume (data-volume only).
 const PRE_GRAMMAR_HTML_SHA256 = {
   cooling: "37b43aac4ca34a6995d6086fe341ef4bf3350842548f0d46c600b1f22c4a717b",
-  minimal: "507b5a5424d4bd568b4955c60b300bcd284f710d52ba1774517fe16c34e501ec",
-  "promo-16x9": "a58586c4610a7f6c962a42e2f76252712c6fccb479bf1dc478c51a4c0c352131",
-  "explainer-9x16": "b5c34336c704406f727f6453cbde9b7dae5e97cf7a612e8594096aa578b5e8ed",
-  "data-story-9x16": "28dbea6f156bb037cee1cae9aa3bc572c3016b3e5bebaeb9dab2885b3c03c352",
-  footage: "017f6bb23cdcd55385fa6e85c5e823f4d9fdd14a587fdf507f83320f30c8beae"
+  minimal: "67c86782bb05e9a3a403070e64431e0454319652a77ebe4b1496650f58268e52",
+  "promo-16x9": "048cd31ddead7df29fbbf976ff25679ca4e6c7dc3778aec8be48906c2b847e56",
+  "explainer-9x16": "09b7b71cba4519ae98572f00b4480fe57d752750fbe9edd61efb0f6c3632a633",
+  "data-story-9x16": "eab385e262a0ca1423d9d4e9f2e22ac196daf30f8d4a9c5addb2fb413a7b60c5",
+  footage: "50730148d9c032f74f81d9e298ceea1b52e42d4597fbd894a8a51c00b4324f96"
 };
 // test/editorial_core.test.js: the explicit-rect 16:9 corpus subset (re-pinned
 // with it when bound messages moved to 2-decimal bounds; error strings only).

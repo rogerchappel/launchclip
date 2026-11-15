@@ -64,7 +64,7 @@ test("compiles the minimal story into a HyperFrames project that follows the run
 
     // Exactly one root audio, from audio.mix, as a direct child of the root.
     assert.equal(html.match(/<audio\b/g).length, 1);
-    assert.match(html, /<audio id="lc-audio" class="clip" src="assets\/audio\/mix\.wav" data-start="0" data-duration="6" data-media-start="0" data-volume="1" data-track-index="0"><\/audio>/);
+    assert.match(html, /<audio id="lc-audio" class="clip" src="assets\/audio\/mix\.wav" data-start="0" data-duration="6" data-media-start="0" data-volume="0\.7071" data-track-index="0"><\/audio>/, "a mono mix sits 3 dB down, as Remotion renders it");
 
     // Scenes: emitter output inside a layer, on distinct tracks while they overlap.
     assert.match(html, /<div id="lc-scene-s1" class="lc-scene lc-plate"[^>]*data-launchclip-render-end="3\.4"/, "s1 is held through s2's 0.4 s fade");
