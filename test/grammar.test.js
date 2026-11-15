@@ -11,6 +11,7 @@ import {
   grammarTravel, isEditorialGrammar, PARALLAX_DEPTHS, resolveGrammar, TRAVEL_RANGE
 } from "@launchclip/core/grammar.mjs";
 import { getEase } from "@launchclip/core/motion.mjs";
+import { validateStory } from "@launchclip/core/story.mjs";
 import { resolveEditorialModule } from "@launchclip/core/editorial-core.mjs";
 import { emitEditorialModule } from "../kit/hyperframes/editorial-ui-modules.mjs";
 import { resolveModule } from "@launchclip/core/modules.mjs";
@@ -196,6 +197,10 @@ test("every grammar sets travel, exit ratio, follow-through, parallax and hero d
   const e = GRAMMARS.editorial;
   assert.deepEqual([e.travel, e.followThrough, e.heroDim, e.parallax], [0, 0, 0.3, { foreground: 1.15, mid: 0.65, background: 0.3 }]);
   assert.equal(isEditorialGrammar(resolveGrammar({ motion: { grammar: { base: "editorial", heroDim: 0.5 } } })), false);
+  // story.mjs mirrors the checks, import-free.
+  const storyErrors = (grammar) => validateStory({ schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 4 }, motion: { grammar }, scenes: [{ id: "s1", module: "hook-title", start: 0, end: 4, params: { headline: "Hi" } }] }).errors.join();
+  for (const bad of [{ travel: 2 }, { exitRatio: 1.2 }, { followThrough: -1 }, { heroDim: 1 }, { parallax: { sky: 1 } }, { parallax: { background: 2 } }]) assert.ok(storyErrors(bad).includes(grammarErrors(bad)[0]), JSON.stringify(bad));
+  assert.doesNotMatch(storyErrors({ base: "smooth", travel: 0.4, exitRatio: 0.6, followThrough: 0.1, heroDim: 0.4, parallax: { mid: 0.5 } }), /motion\.grammar/);
   assert.match(grammarErrors({ travel: 2 }).join(), /travel must be between 0 and 0\.5/);
   assert.match(grammarErrors({ exitRatio: 1.2 }).join(), /exitRatio must be between 0\.4 and 1/);
   assert.match(grammarErrors({ followThrough: -1 }).join(), /followThrough must be between/);
