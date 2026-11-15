@@ -59,8 +59,10 @@ after the animatic, then rejoin at step 5. Headless:
    one catalogue module per scene, typed `in` transitions (the boundaries
    `cinematic-check` reads), and scene starts and hits anchored to narration
    words (`word:<text>`). Pick one `motion.grammar` and, for travel, the world
-   camera. Check with `launchclip story validate` (it checks the map too) and
-   `launchclip layout-check`. Also write `STORYBOARD.md`, `DESIGN.md` and
+   camera. Check with `launchclip story validate` (it checks the map too),
+   `launchclip layout-check` and `launchclip finish <project> --plan-only`,
+   which runs the direction and motion checks without rendering (they are in
+   `plan.checks.gates` in `finish.json`). Also write `STORYBOARD.md`, `DESIGN.md` and
    `QUALITY.md`. A story with characters follows the direction guardrails
    ("Direction guardrails" in [references/workflow.md](references/workflow.md)):
    - every map line with cast cues names its key `action`, and a cast scene
