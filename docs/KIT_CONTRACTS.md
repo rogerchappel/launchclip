@@ -22,7 +22,7 @@ kit/
     ambient.mjs         frame-pure ambient motion: background field, hold drift
     editorial-core.mjs  editorial module spec → resolved model (no HTML)
     layout-check.mjs    geometric safe-zone and collision checks
-  remotion/             TSX for Remotion 4.0.536 / React 19.3; published as
+  remotion/             TSX for Remotion 4.0.543 / React 19.3; published as
                         @launchclip/remotion (index.ts is its entry)
     entry.tsx           registerRoot(Root)
     Root.tsx            compositions.tsx plus every registry font (font-files.ts)
@@ -119,7 +119,7 @@ consumer guide.
   lists modules that need `@remotion/three`. It is empty: kit modules follow
   the portable-module rule (DOM, SVG, CSS 3D). `test/remotion_package.test.js`
   fails when a kit file imports three.js, so a WebGL module is listed first.
-- **Dependencies.** `react` (^19.3) and `remotion` (^4.0.536) are peers;
+- **Dependencies.** `react` (^19.3) and `remotion` (^4.0.543) are peers;
   `@launchclip/core` (exact) and the `@fontsource` packages (the root's
   pinned versions) are dependencies. The kit imports nothing else.
 - **Versioning.** Lockstep with `launchclip` and `@launchclip/core`, under

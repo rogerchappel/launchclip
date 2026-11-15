@@ -22,7 +22,7 @@ npm install --save-exact @launchclip/engine @launchclip/core
 ```
 
 The engine renders with Remotion (`remotion`, `@remotion/renderer`,
-`@remotion/bundler`, `@remotion/cli` ^4.0.536 and React ^19.3 are peer
+`@remotion/bundler`, `@remotion/cli` ^4.0.543 and React ^19.3 are peer
 dependencies) or HyperFrames (a dependency). FFmpeg and ffprobe must be on
 `PATH`. Optional dependencies (`kokoro-js`, `onnxruntime-node`, `playwright`)
 back the default local voice, the default matting and demo recording. Leave

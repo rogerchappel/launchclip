@@ -113,7 +113,7 @@ test("Remotion skill mirrors the cinematic contract with the Remotion runtime", 
   assert.match(reference, /hook-001-browser-still/);
   assert.doesNotMatch(reference, /hyperframes@/);
 
-  for (const pin of ["remotion@4.0.536", "@remotion/cli@4.0.536", "react@19.3.1"]) assert.ok(runtime.includes(pin), pin);
+  for (const pin of ["remotion@4.0.543", "@remotion/cli@4.0.543", "react@19.3.1"]) assert.ok(runtime.includes(pin), pin);
   assert.match(runtime, /LaunchclipStory/);
   assert.match(runtime, /useCurrentFrame\(\)/);
   assert.match(runtime, /premountFor/);

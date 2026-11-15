@@ -33,7 +33,7 @@ step comes up.
   Both checks are deterministic and do not call a model API.
 - Do not require, install, or invoke a Remotion or HyperFrames plugin or skill
   pack. Use this skill's bundled reference, its `assets/remotion-kit`, and a
-  project-local `remotion@4.0.536` / `@remotion/cli@4.0.536` install run
+  project-local `remotion@4.0.543` / `@remotion/cli@4.0.543` install run
   through `npx remotion`.
 - Remotion is source-available under its own licence; a company above its
   team-size threshold needs a company licence. Note this in `BRIEF.md` when the
@@ -765,7 +765,7 @@ scaffold, `storyboard.json` contract, frame-pure rule, and commands in the bundl
 reference. Work in this order:
 
 1. Verify Node.js, FFmpeg, and the pinned Remotion toolchain
-   (`remotion@4.0.536`, `@remotion/cli@4.0.536`, React 19.3).
+   (`remotion@4.0.543`, `@remotion/cli@4.0.543`, React 19.3).
 2. Probe, trim, transcribe, and temporally inspect supplied media locally.
 3. Scaffold a project from this skill's `assets/remotion-kit` without
    installing any skill pack.
@@ -865,7 +865,7 @@ one command that renders the final once they approve.
 
 After approval:
 
-1. Render from the Remotion CLI (`npx remotion render`, version 4.0.536) to a
+1. Render from the Remotion CLI (`npx remotion render`, version 4.0.543) to a
    stable output path at the requested quality, with the resolved story as
    props. Master the audio with `scripts/master-loudness.mjs` (−14 LUFS,
    −1 dBTP).

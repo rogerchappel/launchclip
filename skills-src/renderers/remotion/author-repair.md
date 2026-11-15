@@ -6,7 +6,7 @@ scaffold, `storyboard.json` contract, frame-pure rule, and commands in the bundl
 reference. Work in this order:
 
 1. Verify Node.js, FFmpeg, and the pinned Remotion toolchain
-   (`remotion@4.0.536`, `@remotion/cli@4.0.536`, React 19.3).
+   (`remotion@4.0.543`, `@remotion/cli@4.0.543`, React 19.3).
 2. Probe, trim, transcribe, and temporally inspect supplied media locally.
 3. Scaffold a project from this skill's `assets/remotion-kit` without
    installing any skill pack.

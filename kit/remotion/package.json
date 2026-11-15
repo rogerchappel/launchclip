@@ -78,7 +78,7 @@
   },
   "peerDependencies": {
     "react": "^19.3.0",
-    "remotion": "^4.0.536"
+    "remotion": "^4.0.543"
   },
   "devDependencies": {
     "esbuild": "0.28.1",
