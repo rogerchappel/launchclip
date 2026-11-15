@@ -4,6 +4,11 @@
 
 ### Added
 
+- `exploded-view`: one object as an isometric drawing of solid parts, in
+  four tones with a single lit part and ink outlines, that comes apart along
+  its axes, holds with its labels beside it and snaps back. Three built-in
+  objects (`server`, `phone`, `battery`) or a parts list of boxes and
+  cylinders; the paint order is checked back to front for every frame.
 - Research finds images on Openverse as well: openly licensed photographs
   and illustrations from Flickr, museums and other collections, limited to
   licences that allow commercial use and modification, each with the credit
