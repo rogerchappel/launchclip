@@ -294,6 +294,10 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   const modelById = new Map();
   const tailFrames = [];
   const sourceDurations = await videoDurations(story, sourceDir);
+  // HyperFrames copies a mono source to both sides at full level; Remotion
+  // (ffmpeg's own upmix) puts it 3 dB down on each. Match Remotion.
+  const mono = await monoSources(sourceDir, [base?.src, story.audio?.mix, story.audio?.voice]);
+  const upmix = (src) => (mono.has(src) ? Math.SQRT1_2 : 1);
   for (const entry of layers) {
     const track = allocate(entry.start, entry.renderEnd);
     const { model, out: built } = build(entry, { track });
@@ -477,7 +481,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     for (const segment of base.segments) {
       const timing = `data-start="${num(segment.start)}" data-duration="${num(segment.duration)}" data-media-start="${num(segment.sourceStart)}"`;
       baseMarkup.push(`<video id="lc-base-${segment.index}" class="clip lc-base-media" src="${attr(base.src)}" ${timing} data-track-index="${FIRST_SCENE_TRACK}" data-launchclip-base-segment="${segment.index}" muted playsinline style="position:absolute;${fit};z-index:1"></video>`);
-      if (!isolate && base.volume > 0) baseMarkup.push(`<audio id="lc-base-audio-${segment.index}" class="clip" src="${attr(base.src)}" ${timing} data-volume="${num(base.volume)}" data-track-index="${FIRST_SCENE_TRACK + 1}"></audio>`);
+      if (!isolate && base.volume > 0) baseMarkup.push(`<audio id="lc-base-audio-${segment.index}" class="clip" src="${attr(base.src)}" ${timing} data-volume="${num(base.volume * upmix(base.src))}" data-track-index="${FIRST_SCENE_TRACK + 1}"></audio>`);
     }
     // Subject: the matte clips over the base, under every front scene, moved
     // with the base cameras unless a subjectCamera runs; room treatments
@@ -563,7 +567,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   const audioSrc = isolate ? null : base ? story.audio?.mix ?? null : story.audio?.mix ?? story.audio?.voice ?? null;
   const mixVolume = typeof story.audio?.mix_volume === 'number' && audioSrc === story.audio?.mix ? story.audio.mix_volume : 1;
   if (audioSrc && sourceDir && !existsSync(path.join(sourceDir, audioSrc))) warnings.push(`audio file ${audioSrc} was not found in ${sourceDir}`);
-  const audio = audioSrc ? `<audio id="lc-audio" class="clip" src="${attr(audioSrc)}" data-start="0" data-duration="${num(D)}" data-media-start="0" data-volume="${num(mixVolume)}" data-track-index="0"></audio>` : '';
+  const audio = audioSrc ? `<audio id="lc-audio" class="clip" src="${attr(audioSrc)}" data-start="0" data-duration="${num(D)}" data-media-start="0" data-volume="${num(mixVolume * upmix(audioSrc))}" data-track-index="0"></audio>` : '';
 
   // Captions.
   let blurGuard = null;
@@ -1029,6 +1033,20 @@ async function videoDurations(story, sourceDir) {
     });
   })));
   return durations;
+}
+
+// The sources in sourceDir whose audio is mono (ffprobe; one it cannot read
+// is left out). → Set of src
+async function monoSources(sourceDir, sources) {
+  const mono = new Set();
+  if (!sourceDir) return mono;
+  await Promise.all([...new Set(sources.filter((src) => typeof src === 'string'))].map((src) => new Promise((resolve) => {
+    execFile('ffprobe', ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=channels', '-of', 'csv=p=0', path.join(sourceDir, src)], (error, stdout) => {
+      if (!error && Number(String(stdout).trim()) === 1) mono.add(src);
+      resolve();
+    });
+  })));
+  return mono;
 }
 
 // A module's sole <video> that runs out before its clip ends → {html: an
