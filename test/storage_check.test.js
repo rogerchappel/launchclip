@@ -14,7 +14,7 @@ test("knows where removable drives mount", () => {
   assert.equal(mountPoint("/media/roger/Footage/x"), "/media/roger/Footage");
   assert.equal(mountPoint("/run/media/roger/Footage/x"), "/run/media/roger/Footage");
   assert.equal(mountPoint("/mnt/footage/x"), "/mnt/footage");
-  assert.equal(mountPoint("/Users/roger/Videos"), null);
+  assert.equal(mountPoint("/Users/me/Videos"), null);
   assert.equal(mountPoint("/Volumes"), null);
 });
 

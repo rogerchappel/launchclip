@@ -37,7 +37,7 @@ function startJob(env, kind, label, holdMs) {
 test("three jobs started at once with 2 render slots run 2 and queue the third, which says who holds them", async () => {
   const env = await queueEnv("render:2");
   try {
-    const jobs = ["acme/launch", "thoroughbreds-yt/ep-14", "acme/teaser"].map((label) => startJob(env, "render", label, 1200));
+    const jobs = ["acme/launch", "weekly-yt/ep-14", "acme/teaser"].map((label) => startJob(env, "render", label, 1200));
     const exits = await Promise.all(jobs.map((job) => job.exited));
     assert.deepEqual(exits.map((exit) => exit.code), [0, 0, 0], jobs.map((job) => job.stderr).join("\n"));
     const byStart = [...jobs].sort((a, b) => a.acquired - b.acquired);
@@ -45,7 +45,7 @@ test("three jobs started at once with 2 render slots run 2 and queue the third, 
     // Never more than two at once: the third starts only after one of the first two let go.
     assert.ok(third.acquired >= Math.min(first.released, second.released), `third started at ${third.acquired}, before ${Math.min(first.released, second.released)}`);
     assert.ok(second.acquired < first.released, "the first two run together");
-    assert.match(third.stderr, /^waiting for a render slot: 2 of 2 in use by (acme\/launch|thoroughbreds-yt\/ep-14|acme\/teaser), (acme\/launch|thoroughbreds-yt\/ep-14|acme\/teaser)$/m);
+    assert.match(third.stderr, /^waiting for a render slot: 2 of 2 in use by (acme\/launch|weekly-yt\/ep-14|acme\/teaser), (acme\/launch|weekly-yt\/ep-14|acme\/teaser)$/m);
     // One line per change of holders (it may first see one holder and one job ahead), never a repeat.
     const lines = third.stderr.trim().split("\n");
     assert.ok(lines.every((line, i) => line.startsWith("waiting for a render slot: ") && line !== lines[i - 1]), lines.join("\n"));

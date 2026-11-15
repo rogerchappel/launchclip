@@ -82,7 +82,7 @@ go:
     "min_free_gb": 40
   },
   "cache": "~/.cache/launchclip",
-  "collections": ["acme", "thoroughbreds-yt", "thoroughbreds-shorts"]
+  "collections": ["acme", "weekly-yt", "weekly-shorts"]
 }
 ```
 
@@ -351,7 +351,7 @@ agent sessions.
   PID, start time and project. A lock whose PID is gone is stale and is
   removed.
 - A job that can't get a slot waits and says so (`waiting for a render slot:
-  2 of 2 in use by acme/launch, thoroughbreds-yt/ep-14`). It never fails for
+  2 of 2 in use by acme/launch, weekly-yt/ep-14`). It never fails for
   lack of a slot.
 - `launchclip queue [--json]` lists what's running and waiting across the
   machine.

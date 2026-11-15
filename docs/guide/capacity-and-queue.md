@@ -7,7 +7,7 @@ matting, Ollama) takes a local-model slot. When the slots are full, the next
 job waits its turn and says so in one line:
 
 ```
-waiting for a render slot: 2 of 2 in use by acme/launch, thoroughbreds-yt/ep-14
+waiting for a render slot: 2 of 2 in use by acme/launch, weekly-yt/ep-14
 ```
 
 It never fails for lack of a slot. Jobs are named by the last two folders of

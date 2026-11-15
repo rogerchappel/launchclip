@@ -7,12 +7,12 @@
     "commit": {
       "author": {
         "name": "Roger Chappel",
-        "email": "miscanalysis@gmail.com",
+        "email": "author@example.com",
         "date": "2026-06-13T21:04:08Z"
       },
       "committer": {
         "name": "Roger Chappel",
-        "email": "miscanalysis@gmail.com",
+        "email": "author@example.com",
         "date": "2026-06-13T22:55:55Z"
       },
       "message": "direct: default OpenAI model to gpt-5.5\n\ngpt-5.5 (latest) lands valid + lint-clean in fewer attempts than o4-mini and\nwith zero advisories (gap-free, butt-joined scenes) on the 18s test. It routes\nthrough the existing reasoning-model path (gpt-5* prefix). o4-mini remains a\ncheaper fallback via --model / OPENAI_MODEL.\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>",

@@ -227,17 +227,17 @@ POST /api/v1/review-items
 {
   "content_type": "video",
   "source": "launchclip",
-  "title": "runcard demo short",
+  "title": "sample-app demo short",
   "approval_status": "pending",
   "video_url": "https://...",
   "thumbnail_url": "https://...",
   "duration_seconds": 30,
   "social_caption": "Evidence-backed draft caption...",
   "metadata_json": {
-    "source_repo": "rogerchappel/runcard",
-    "source_url": "https://github.com/rogerchappel/runcard",
+    "source_repo": "acme/sample-app",
+    "source_url": "https://github.com/acme/sample-app",
     "platform_targets": ["x", "linkedin", "tiktok"],
-    "launchclip_workspace": ".launchclip/runcard",
+    "launchclip_workspace": ".launchclip/sample-app",
     "claim_status": "evidence_backed"
   },
   "recipe_json": {
