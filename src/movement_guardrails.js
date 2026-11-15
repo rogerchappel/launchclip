@@ -4,6 +4,7 @@
 //
 //   holdGate(story, {media})  nothing holds still: no span over 3 s without motion
 //   stateGate(story)   builds, not holds: no shot over 10 s without a change
+//   choreographyGate(story)  the motion check (§8): eases, cascades, exits, crowding, rests
 //
 // Each gate → {status, findings: [{rule, severity, at, ids, detail}]}.
 
@@ -29,6 +30,8 @@ import { MODULES as CHARACTERS } from "@launchclip/core/catalog-characters.mjs";
 import { MODULES as WORLD } from "@launchclip/core/catalog-world.mjs";
 import { driftEligible } from "@launchclip/core/ambient.mjs";
 import { stateTimes } from "@launchclip/core/shot-states.mjs";
+import { resolveGrammar } from "@launchclip/core/grammar.mjs";
+import { grammarMotionFindings, sceneMotionFindings } from "@launchclip/core/motion-check.mjs";
 import { renderedModels } from "./direction_guardrails.js";
 
 // Thresholds (docs/DIRECTION_GUARDRAILS.md §7).
@@ -47,14 +50,19 @@ const TIMELINES = new Map([
   ...MEDIA_LAYOUTS.map((def) => [def.id, mediaLayoutTimeline])
 ]);
 
+/** A model's timeline ops as both renderers play them, or null when its module has no op list. */
+export function modelOps(model) {
+  const timeline = TIMELINES.get(model.module);
+  if (!timeline) return null;
+  try { const ops = timeline(model); return Array.isArray(ops) ? ops : []; } catch { return []; }
+}
+
 /** [from, to] spans in which a model's ops change something on screen. */
 function opSpans(model) {
-  const timeline = TIMELINES.get(model.module);
+  const ops = modelOps(model);
   const spans = [];
-  if (timeline) {
-    let ops = [];
-    try { ops = timeline(model); } catch { ops = []; }
-    for (const op of Array.isArray(ops) ? ops : []) {
+  if (ops) {
+    for (const op of ops) {
       if (op.type === "tween" && op.duration > 0 && Object.keys(op.to ?? {}).some((key) => op.from?.[key] !== op.to[key])) spans.push([op.start, op.start + op.duration]);
       else if (op.type === "loop") spans.push([op.start, op.start + op.cycle * (op.repeats ?? 1)]);
       else if (op.type === "set" && op.props && "text" in op.props) spans.push([op.time - 0.05, op.time + 0.05]);
@@ -158,4 +166,18 @@ export function stateGate(story) {
     }
   }
   return gateResult(findings, { shots: plates.length, states });
+}
+
+/**
+ * The motion check (§8, kit/core/motion-check.mjs): the story's grammar and
+ * every scene's timing and op list against the rules of good motion. Errors:
+ * linear-move, entrance-ease, exit-ease, exit-longer, long-stagger. Warnings:
+ * crowded-move, no-rest.
+ */
+export function choreographyGate(story) {
+  const { entries } = renderedModels(story);
+  const findings = grammarMotionFindings(resolveGrammar(story));
+  for (const [id, { entry, model }] of entries) findings.push(...sceneMotionFindings({ id, motion: model.motion, ops: modelOps(model) ?? [], states: stateTimes(entry.scene) }));
+  // Errors first, so the 40 kept are the ones that fail the gate.
+  return gateResult(findings.sort((a, b) => (a.severity === "error" ? 0 : 1) - (b.severity === "error" ? 0 : 1)), { scenes: entries.size });
 }

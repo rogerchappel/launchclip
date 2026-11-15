@@ -18,6 +18,7 @@ kit/
     grammar.mjs         motion grammars (editorial, snappy, smooth, playful, documentary, cinematic)
     transitions.mjs     typed transitions and scene render windows
     transition-frames.mjs  what a transition's two plates put on screen per frame; the cover, stall and pop check
+    motion-check.mjs    rules of good motion from the grammar and timeline ops: eases, cascades, exits, crowding, rests
     camera-world.mjs    world layout, camera path, parallax and motion blur
     ambient.mjs         frame-pure ambient motion: background field, hold drift
     editorial-core.mjs  editorial module spec → resolved model (no HTML)
@@ -440,12 +441,37 @@ export function track(keys)              // keys: [{t, v, ease?}] → (t) => val
 export function stagger(index, {each, from = "start", count})  // → delay seconds
 export function countUp(t, {from, to, start, frames = 18, fps = 30, format}) // matches editorial textFrames()
 export function springValue(t, {start, damping = 14, stiffness = 140, mass = 1, from = 0, to = 1})
+export function springByFeel(duration, bounce = 0) // → {damping, stiffness, mass: 1} for springValue
+export function springVisibleDuration({damping = 14, stiffness = 140, mass = 1}) // → seconds
 export function splitWords(text) / splitChars(text) // → [{text, index}]
 export function motionBlurPx(velocityPxPerFrame, {max = 24}) // → blur radius, 0 at rest
 ```
 
 The GSAP eases (`power3.out`, …) must match `gsap.parseEase()` to within 1e-6.
 GSAP is a devDependency for that test.
+
+**Springs by feel.** `springByFeel(duration, bounce)` picks a spring by how it
+looks and returns the `{damping, stiffness, mass}` that `springValue` takes, so
+the spring maths and its Remotion parity are unchanged:
+`springValue(t, {start, ...springByFeel(0.4, 0.15)})`.
+
+- `duration` is the **visible duration** in seconds: the time from the start
+  until the value first comes within 1 % of its travel (`SPRING_ARRIVAL`) of
+  the target. The bounce and the settle after it run longer, but this is when
+  the move reads as landed.
+- `bounce` is the first overshoot as a fraction of the travel, from 0 (critically
+  damped, never passes the target) to below 1; 0.27 passes the target by 27 %,
+  the same measure as `springEase(overshoot)`.
+- `springVisibleDuration(config)` is the inverse for an existing spring. Time
+  a follower off it (`start + springVisibleDuration(config)`), not off the
+  full settle. `springValue` draws any spring with damping ratio ≥ 1 as
+  critically damped, and the duration reported matches what it draws.
+
+The damping ratio ζ comes from the first peak of the damped-spring solution,
+`bounce = exp(−πζ/√(1−ζ²))`, and the natural frequency from the arrival time,
+which scales as 1/ω0. The idea of choosing a spring by `visualDuration` and
+`bounce` is borrowed from [Motion's ai-kit](https://github.com/motiondivision/ai-kit);
+the definitions and maths here are our own.
 
 ## Motion grammar (`kit/core/grammar.mjs`)
 
@@ -843,6 +869,12 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
 
 `holds` and `states` in `launchclip finish` (docs/DIRECTION_GUARDRAILS.md §7):
 nothing still for over 3 s, no shot over 10 s without a change.
+`choreography` (§8, `kit/core/motion-check.mjs`): `grammarMotionFindings(grammar)`
+and `sceneMotionFindings({id, motion, ops, states})` return
+`{rule, severity, at, ids, detail}` findings for an entrance that eases in, an
+exit that eases out, a linear move, an exit slower than its entrance, a
+cascade over its budget, a crowded move and states with no rest between them;
+the thresholds are `MOTION_CHECK`.
 
 ### State events (`eval/scorecard.mjs`, `scripts/state-events.mjs`)
 

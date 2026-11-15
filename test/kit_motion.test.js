@@ -6,7 +6,7 @@ import gsap from 'gsap';
 import {spring} from 'remotion';
 import {buildEditorialModule} from '../skills/launchclip-create-video/scripts/editorial-ui-modules.mjs';
 import * as motion from '@launchclip/core/motion.mjs';
-import {ease, getEase, tween, track, stagger, countUp, springValue, splitWords, splitChars, motionBlurPx,
+import {ease, getEase, tween, track, stagger, countUp, springValue, springByFeel, springVisibleDuration, SPRING_ARRIVAL, splitWords, splitChars, motionBlurPx,
   interpolateColor, clamp01, seconds, frames} from '@launchclip/core/motion.mjs';
 
 const samples = Array.from({length: 101}, (_, i) => i / 100);
@@ -151,6 +151,30 @@ test('springValue matches Remotion spring() within 1e-3', () => {
   assert.throws(() => springValue(1, {damping: 0}), /damping/);
 });
 
+test('springByFeel lands at the visible duration and overshoots by the bounce', () => {
+  const fps = 240;
+  for (const duration of [.15, .4, .8, 1.5]) for (const bounce of [0, .02, .1, .27, .5]) {
+    const config = springByFeel(duration, bounce), label = `${duration}s bounce ${bounce}`;
+    assert.equal(config.mass, 1);
+    // Arrival: 1 % short of the target at the visible duration, and further away before it.
+    close(springValue(duration, {...config, fps}), 1 - SPRING_ARRIVAL, 1e-6, `arrival ${label}`);
+    assert.ok(springValue(duration * .95, {...config, fps}) < 1 - SPRING_ARRIVAL, `before ${label}`);
+    let peak = 0;
+    for (let f = 0; f <= duration * 4 * fps; f++) peak = Math.max(peak, springValue(f / fps, {...config, fps}));
+    close(peak, 1 + bounce, bounce ? 1e-3 : 1e-9, `peak ${label}`);
+    close(springVisibleDuration(config), duration, 1e-9, `round trip ${label}`);
+  }
+  // An existing spring: Remotion's own spring() is 1 % short at the reported duration.
+  for (const config of [{damping: 16, stiffness: 170}, {damping: 20, stiffness: 400, mass: .6}, {damping: 200, stiffness: 100}]) {
+    const frame = springVisibleDuration(config) * 30;
+    close(spring({frame, fps: 30, config}), 1 - SPRING_ARRIVAL, 1e-6, JSON.stringify(config));
+  }
+  assert.throws(() => springByFeel(0, .2), /duration/);
+  assert.throws(() => springByFeel(.4, 1), /bounce/);
+  assert.throws(() => springByFeel(.4, -.1), /bounce/);
+  assert.throws(() => springVisibleDuration({stiffness: 0}), /stiffness/);
+});
+
 test('splitWords and splitChars index their parts', () => {
   assert.deepEqual(splitWords('  Ship  it\nnow '), [{text: 'Ship', index: 0}, {text: 'it', index: 1}, {text: 'now', index: 2}]);
   assert.deepEqual(splitChars('a b'), [{text: 'a', index: 0}, {text: ' ', index: 1}, {text: 'b', index: 2}]);
@@ -172,7 +196,7 @@ test('helpers', () => {
   assert.equal(clamp01(3), 1);
   assert.equal(seconds(45, 30), 1.5);
   assert.equal(frames(1.5, 30), 45);
-  for (const name of ['ease', 'getEase', 'tween', 'track', 'stagger', 'countUp', 'springValue', 'splitWords', 'splitChars', 'motionBlurPx',
+  for (const name of ['ease', 'getEase', 'tween', 'track', 'stagger', 'countUp', 'springValue', 'springByFeel', 'springVisibleDuration', 'splitWords', 'splitChars', 'motionBlurPx',
     'interpolateColor', 'clamp01', 'seconds', 'frames']) assert.ok(name in motion, name);
 });
 
