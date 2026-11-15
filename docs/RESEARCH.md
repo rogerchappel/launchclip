@@ -330,10 +330,21 @@ the script's claim-free sentences), and portraits:
 | Provider | Taken when |
 | --- | --- |
 | Wikimedia Commons | `extmetadata` licence is CC0, public domain, CC BY or CC BY-SA |
+| Openverse (images only) | the licence allows commercial use and modification (CC0, public domain mark, CC BY, CC BY-SA) and the item names its creator |
 | NASA Image and Video Library | NASA-credited (third-party credits are dropped) |
 | Internet Archive | the item's `licenseurl` is public domain, CC0 or CC BY (Prelinger items carry it) |
 | Library of Congress | rights text says "No known restrictions on publication" |
 | Pexels, Pixabay | `PEXELS_API_KEY` / `PIXABAY_API_KEY` set |
+
+Openverse is searched anonymously, which it limits to about 20 requests a
+minute and 200 a day (one request per media query). When the allowance runs
+out, research stops asking Openverse and carries on with the other sources.
+`OPENVERSE_CLIENT_ID` and `OPENVERSE_CLIENT_SECRET`, from a client
+[registered with Openverse](https://api.openverse.org/v1/#tag/auth), raise
+the limits; both must be set. An Openverse asset's `attribution` is the
+credit line Openverse returns, and its own copies of Commons and NASA items
+are left out because those are searched directly. Openverse audio is not
+used: research sources pictures and footage only.
 
 NC, ND, fair-use and unlabelled items are dropped at search time and counted
 in `rejected`. YouTube, streaming services and social video hosts are blocked

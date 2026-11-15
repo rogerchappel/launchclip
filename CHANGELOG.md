@@ -4,6 +4,13 @@
 
 ### Added
 
+- Research finds images on Openverse as well: openly licensed photographs
+  and illustrations from Flickr, museums and other collections, limited to
+  licences that allow commercial use and modification, each with the credit
+  line Openverse writes. It needs no key. When Openverse's anonymous
+  allowance (about 20 requests a minute, 200 a day) runs out, research
+  carries on with its other sources; `OPENVERSE_CLIENT_ID` and
+  `OPENVERSE_CLIENT_SECRET` raise the limits.
 - A motion check runs with the other finish gates, before the render
   (`choreography` in `qa/finish/gates.json`, and with `--plan-only`). It
   fails a plan whose entrances ease in, whose exits ease out, that moves

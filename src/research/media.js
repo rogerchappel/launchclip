@@ -1,8 +1,8 @@
 // Media sourcing (gap map C4): footage and stills for metaphor beats, from
-// licence-clear sources only. Wikimedia Commons, NASA, the Internet Archive
-// (public-domain items and the Prelinger collection), the Library of Congress
-// (items with no known restrictions), and Pexels and Pixabay when their keys
-// are set. Every asset carries its licence, author, attribution string and
+// licence-clear sources only. Wikimedia Commons, Openverse (images open to
+// commercial use and modification), NASA, the Internet Archive (public-domain
+// items and the Prelinger collection), the Library of Congress (items with no
+// known restrictions), and Pexels and Pixabay when their keys are set. Every asset carries its licence, author, attribution string and
 // source page. Anything without a clear licence is dropped at search time,
 // and no clip ever comes from YouTube, a streaming service or a film or TV
 // release. Icons, logos, music and sound effects are not sourced here: the
@@ -95,7 +95,8 @@ export async function findMedia(http, queries, options = {}) {
     const ordered = interleave(found, (asset) => asset.provider).sort((a, b) => Number(b.type === "video") - Number(a.type === "video"));
     for (const asset of ordered.slice(0, perQuery)) {
       const id = `${asset.provider}-${slug(asset.title ?? asset.source_url)}`.slice(0, 64);
-      assets.push({ id: uniqueId(id, assets), ...asset, attribution: attributionFor(asset), fetched_at: options.now ?? new Date().toISOString() });
+      // A provider's own credit line (Openverse returns one) is kept as given.
+      assets.push({ id: uniqueId(id, assets), ...asset, attribution: asset.attribution ?? attributionFor(asset), fetched_at: options.now ?? new Date().toISOString() });
     }
   }
   return { assets, rejected, providers: providers.map((provider) => provider.id) };
@@ -113,7 +114,9 @@ export function rejectReason(asset) {
 // Providers
 
 export function mediaProviders(env = process.env, only = null) {
-  const all = [commons(), nasa(), internetArchive(), libraryOfCongress(), ...(env.PEXELS_API_KEY ? [pexels(env.PEXELS_API_KEY)] : []), ...(env.PIXABAY_API_KEY ? [pixabay(env.PIXABAY_API_KEY)] : [])];
+  // Openverse comes second: it is the widest keyless source of general photographs, and only the first few providers reach a short list.
+  const credentials = env.OPENVERSE_CLIENT_ID && env.OPENVERSE_CLIENT_SECRET ? { id: env.OPENVERSE_CLIENT_ID, secret: env.OPENVERSE_CLIENT_SECRET } : null;
+  const all = [commons(), openverse(credentials), nasa(), internetArchive(), libraryOfCongress(), ...(env.PEXELS_API_KEY ? [pexels(env.PEXELS_API_KEY)] : []), ...(env.PIXABAY_API_KEY ? [pixabay(env.PIXABAY_API_KEY)] : [])];
   return only ? all.filter((provider) => only.includes(provider.id)) : all;
 }
 
@@ -144,6 +147,41 @@ export function commonsAsset(page) {
     preview_url: info.thumburl ?? null,
     width: info.width ?? null,
     height: info.height ?? null
+  };
+}
+
+/** credentials: {id, secret} of a registered Openverse client, or null to search anonymously (about 20 requests a minute, 200 a day). */
+export function openverse(credentials = null) {
+  let token;
+  return {
+    id: "openverse",
+    name: "Openverse",
+    async search(http, query) {
+      // One token request per run; a refused one leaves the search anonymous.
+      if (credentials && token === undefined) {
+        const body = new URLSearchParams({ grant_type: "client_credentials", client_id: credentials.id, client_secret: credentials.secret }).toString();
+        token = (await http.json("https://api.openverse.org/v1/auth_tokens/token/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body }))?.access_token ?? null;
+      }
+      // Commons and NASA are searched directly, so Openverse's copies of them are left out. Images only: Openverse has no video.
+      const data = await http.json(`https://api.openverse.org/v1/images/?q=${encodeURIComponent(query)}&license_type=commercial,modification&excluded_source=wikimedia,nasa&mature=false&page_size=6`, token ? { headers: { authorization: `Bearer ${token}` } } : undefined);
+      return (data?.results ?? []).map(openverseAsset);
+    }
+  };
+}
+
+export function openverseAsset(result) {
+  return {
+    type: "image",
+    title: result.title || null,
+    author: result.creator || null,
+    // The search asks for commercial use and modification; the licence is read again here, so an NC or ND item that slips through is dropped.
+    licence: normaliseLicence(`cc ${result.license ?? ""} ${result.license_version ?? ""}`, result.license_url || null),
+    attribution: result.attribution || undefined,
+    source_url: result.foreign_landing_url,
+    media_url: result.url ?? null,
+    preview_url: result.thumbnail ?? null,
+    width: result.width ?? null,
+    height: result.height ?? null
   };
 }
 
