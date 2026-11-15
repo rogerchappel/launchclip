@@ -145,6 +145,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 ## 3D data objects
 
 - Catalogue I modules (glass-bars-3d, coin-stack, rack-shelf, device-box, paper-stack, planet-family) are real 3D objects drawn from data under a slow orbiting or dollying camera. Use one for the hero beat of a chapter (the price line-up, the cost gap, the model family), not for every number: a flat bar-chart or stat-card keeps the pace between them.
+- exploded-view is the object as the explanation: a server, a phone or a battery pack (params.object) drawn in isometric, coming apart into labelled parts with exactly one lit part, then snapping back. Use it when the script is about what is inside the thing, in a scene of 4 s or more, and say which part is the point in the title; it has no arrows, so do not ask it to point.
 - Build, do not cut: give one 3D scene 2–4 states on the words that name them (bars grow, then the lit bar on "half the price"; trays stack, then the focus tray slides out on its name; the marker hops step to step; the readout counts while the narration talks about load; each paper section gets its check or flag on its word).
 - Values, prices, scores and statuses come from the brief or assets only. Names are short (≤ 24, planets ≤ 16): the modules fail when text no longer fits at key size on its face, so shorten the copy or use fewer items rather than shrinking it.
 
@@ -326,6 +327,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | talks about a server, GPU or box running live ("one GPU", "on a single node", "it has been up for", "requests so far"): the device lands with a screen counting requests and an uptime clock | device-box |
 | walks through a long document, report or paper section by section, with what passed and what failed ("chapter by chapter", "page 14", "the audit found", "red flags"): sections land as a stack and each gets a check or a red flag (books, or a folder that opens, as variants) | paper-stack |
 | introduces a product family from small to large ("the small one, the mid one, the flagship", "three sizes", "light, standard and pro"): each member as a moon, earth, sun or galaxy with its name and tagline, the camera tracking across | planet-family |
+| explains what a machine is made of or which part inside it matters ("inside a server", "what is in your phone", "one weak cell", "under the hood"): an isometric drawing of the object comes apart into its parts, one of them lit, then snaps back | exploded-view |
 | reads an official benchmark chart or a score against cost or size ("on the chart", "cost per task", "the official numbers vs the re-run"): series lines draw on, one glows, guides and callouts land one at a time, an official chart and a re-run side by side | scatter-plot |
 | says one thing is N times faster or finishes first ("3× faster", "in half the time"): rows fill like progress bars at their own speeds and the winner gets its badge | race-bars |
 | walks through several benchmarks or tests at once ("across four benchmarks", "wins 18 of 20"): a dashboard of mini bar charts with one legend, each lighting its winner | small-multiples |
@@ -2137,6 +2139,18 @@ params:
 events: build, body-0, body-1, body-2, body-3, body-4
 variants: track (default), lineup
 
+### exploded-view (keeps captions)
+One object as an isometric drawing of solid parts, in four tones with a single lit accent part and ink outlines, that comes apart along its axes, holds with its labels beside it, and snaps back. Built-in objects: server, phone, battery; or a parts list.
+params:
+- object: a built-in object: server | phone | battery (this or parts)
+- parts: [{shape: box | cylinder, at: [x, y, z] (box: its low corner; cylinder: the centre of its base; x right, y left, both toward the viewer, z up), size: box [w, d, h] | cylinder [diameter, height], tone: deep | mid | light | pale, accent? (true on exactly one part: the lit one), explode? [dx, dy, dz] (one axis only), label? ≤ 18}] 2–48; parts are solid and may touch but not overlap
+- title: string ≤ 60 (optional)
+- source: string ≤ 80 (optional)
+- at: the explode: seconds from scene start (optional; else a matching hit, else a default)
+- snapAt: the snap back: seconds from scene start (optional; default just before the exit)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: explode, snap
+
 ### scatter-plot (keeps captions)
 Points or 1–5 series on two axes (linear or log, with ticks), built in beats: series lines draw on in order, one series takes the focus with a glow while the rest dim, and annotations land one at a time (dashed guides from a point to both axes with value pills, a "?" placeholder point, labelled callouts). Two panels compare an official chart with an independent re-run.
 params:
@@ -2574,6 +2588,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | device-box | 2 s | 0.5 s | scene − 0.65 s | the device lands from at and its screen powers on within about 1.2 s; the readout counts from its at to the end of the scene; the clock ticks on whole seconds |
 | paper-stack | 2 s | 0.5 s | scene − 0.65 s | the stack lands bottom first within about 1.4 s (the folder lands, opens about 0.8 s later and its files rise); statuses pop top to bottom after the build, up to 0.8 s apart |
 | planet-family | 2 s | 0.5 s | scene − 0.65 s | the first body shows with the build; each next body on its cue, at least 0.75 s apart (default: spread to the end of the scene) |
+| exploded-view | 2 s | 0.5 s | scene − 0.65 s | the explode takes about 1.1 s from at, the outermost part first; the snap back takes 0.6 s and ends before the exit; needs a scene of 4 s or more |
 | scatter-plot | 2 s | 0.5 s | scene − 0.65 s | the axes draw in 0.6 s from at; each series line draws in 0.9 s on its cue; default cues follow the build 0.45–0.8 s apart and squeeze to fit the scene |
 | race-bars | 2 s | 0.5 s | scene − 0.65 s | rows land from at, the race starts 0.6 s later; each row finishes in proportion to its time; the badge follows the winner's finish |
 | small-multiples | 2 s | 0.5 s | scene − 0.65 s | panels land up to 0.18 s apart from at, bars grow in 0.6 s; the highlight follows the build |
