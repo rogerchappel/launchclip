@@ -440,7 +440,8 @@ function statePlan(model, children, view) {
   const ink = inkFor(model.theme, color);
 
   // Focus: one step per state (focus persists until a state changes it).
-  let focus = null, dimTo = FOCUS_DIM;
+  // The dim behind the focus follows the motion grammar (editorial: FOCUS_DIM).
+  let focus = null, dimTo = model.grammar?.heroDim ?? FOCUS_DIM;
   const steps = [];
   for (const {state, targets} of resolved) {
     const f = targets.find(([kind]) => kind === 'focus')?.[1];

@@ -58,6 +58,18 @@ test('a param state morphs each element to where the new model settles it', () =
   assert.match(String(frameState(ops, 3 + STATE_MOVE * 0.6).get('cost-value-1').text), /^\$[123]$/);
 });
 
+test('the dim behind the focus follows the motion grammar (heroDim); a state\'s own dim still wins', () => {
+  const dimAt = (motion, states = [{at: 3, set: {focus: 1}}]) => {
+    const s = resolveStory({...story(barScene(states)), motion});
+    return frameState(catalogHTimeline(resolveModule(s.scenes[0], s)), 3.9).get('cost-bar-0').opacity;
+  };
+  assert.equal(dimAt({grammar: 'editorial'}), FOCUS_DIM);
+  assert.equal(dimAt({grammar: 'documentary'}), 0.5);
+  assert.equal(dimAt({grammar: 'cinematic'}), 0.2);
+  assert.equal(dimAt({grammar: {base: 'editorial', heroDim: 0.6}}), 0.6);
+  assert.equal(dimAt({grammar: 'cinematic'}, [{at: 3, set: {focus: 1, dim: 0.45}}]), 0.45);
+});
+
 test('the focus ring travels between targets and the rest dims to 30 %', () => {
   const m = model(barScene([{at: 3, set: {focus: 1}}, {at: 6, set: {focus: 0}}, {at: 9, set: {focus: null}}]));
   const view = catalogHView(m), ops = catalogHTimeline(m);

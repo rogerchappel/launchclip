@@ -18,6 +18,7 @@ import test from "node:test";
 import gsap from "gsap";
 import { ambientField, blobStateAt, fieldTiles, luma } from "@launchclip/core/ambient.mjs";
 import { backgroundExtent, backgroundFieldTiles, cameraPlan, opsStateAt, sceneObjectLookup } from "@launchclip/core/camera-world.mjs";
+import { resolveGrammar } from "@launchclip/core/grammar.mjs";
 import { resolveModule } from "@launchclip/core/modules.mjs";
 import { resolveStory } from "@launchclip/core/story.mjs";
 import { sceneWindows } from "@launchclip/core/transitions.mjs";
@@ -108,7 +109,8 @@ for (const { name, mutate, times } of CASES) {
     const story = await golden(mutate);
     const plan = planFor(story);
     const field = ambientField(story);
-    assert.equal(plan.depth, 0.3);
+    // The depth layer moves at the grammar's background rate (0.3 for editorial).
+    assert.equal(plan.depth, resolveGrammar(story).parallax.background);
     const { html } = await compileStoryToHyperFrames(story, { write: false, sourceDir: GOLDEN });
     // Field only, never clipped: no canvas-sized overflow-hidden box, no glows under it.
     assert.match(html, /<div id="lc-world-bg" class="lc-world-bg" aria-hidden="true"><div id="lc-amb-field-world" class="lc-world-field"/);
