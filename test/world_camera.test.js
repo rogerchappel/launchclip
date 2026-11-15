@@ -160,7 +160,8 @@ test("the camera path is continuous in position and velocity at every move bound
       if (boundary >= plan.duration - 1e-6) continue;
       const before = at(boundary - 1e-6), after = at(boundary + 1e-6);
       assert.ok(Math.hypot(after.x - before.x, after.y - before.y) < 0.01, `${move.sceneId} position jumps at ${boundary}`);
-      const vb = velocity(boundary - 2e-3, 1e-3), va = velocity(boundary + 2e-3, 1e-3);
+      // Probed half a millisecond either side: a wide zoom eased in log space is still shedding speed 2 ms from its end.
+      const vb = velocity(boundary - 5e-4, 2.5e-4), va = velocity(boundary + 5e-4, 2.5e-4);
       assert.ok(Math.hypot(va.x - vb.x, va.y - vb.y) < peak * 0.01, `${move.sceneId} velocity jumps at ${boundary}: ${JSON.stringify(vb)} → ${JSON.stringify(va)} (peak ${peak})`);
     }
   }

@@ -12,7 +12,7 @@ export const STORY_SCHEMA = "launchclip.story.v1";
 export const STORY_REVISION = 0;
 
 export const STORY_LANES = ["motion", "voiceover-motion", "footage-led"];
-export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe", "light-sweep", "push-blur"];
+export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe", "light-sweep", "push-blur", "light-leak"];
 export const STORY_ENDING_KEYS = Object.freeze(["loop_to", "in", "loop", "final"]);
 export const STORY_ENDING_FINALS = Object.freeze(["hold", "fade", "exit"]);
 // Camera transitions (kit/core/camera-world.mjs): the camera travels to the
@@ -689,7 +689,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (transition.from_object !== undefined) fromObjects.push({ index, path: `${path}.in.from_object`, value: transition.from_object });
         if (transition.type === "morph" && transition.from_object === undefined) warn(`${label} morphs without in.from_object; name the object handed across the boundary`);
         cameraTransitionRules(transition, `${path}.in`, { err, lane: story.lane, camera, track });
-        if ((transition.type === "dot-wipe" || transition.type === "light-sweep") && track !== 0) err(`${path}.in.type "${transition.type}" covers the whole frame; only a track-0 scene can arrive with it`);
+        if ((transition.type === "dot-wipe" || transition.type === "light-sweep" || transition.type === "light-leak") && track !== 0) err(`${path}.in.type "${transition.type}" covers the whole frame; only a track-0 scene can arrive with it`);
         for (const message of dotWipeOptionErrors(transition, `${path}.in`, storyFps(story))) err(message);
         for (const message of lightSweepOptionErrors(transition, `${path}.in`)) err(message);
         if (transition.type === "overview") overviews.push({ index, path: `${path}.in`, label, transition, start, track });

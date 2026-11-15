@@ -18,7 +18,9 @@
 // it can be read, a heading that anything passes over, text covered by
 // something drawn after it, two pieces of text on top of each other, a label
 // wider than its plate, pieces left unpositioned at the top-left corner or
-// never brought onto the screen, and a scene that is close to empty.
+// never brought onto the screen, a scene that is close to empty, text in the
+// frame's outer margin, text too small to read on a phone and a heading set
+// under a headline's size (SAFE, scaled with the frame).
 //
 //   layoutFaults(looks, options)   → the faults of one scene, from its measurements (pure)
 //   faultScore(faults)             → how bad they are, for "is the redraw better"
@@ -34,7 +36,12 @@ import { gsapFile } from "../preview.js";
 const MAX_LOOKS = 6;
 // How far from a cut a look stays, so the transition's own motion is not measured.
 const CUT_CLEARANCE = 0.45;
-const WEIGHT = Object.freeze({ "text-off-frame": 3, "text-outside-zone": 2, "heading-covered": 3, "text-covered": 2, "text-overlap": 2, "label-overflow": 1, unplaced: 3, "never-on-screen": 0.5, sparse: 6 });
+const WEIGHT = Object.freeze({ "text-off-frame": 3, "text-outside-zone": 2, "heading-covered": 3, "text-covered": 2, "text-overlap": 2, "label-overflow": 1, unplaced: 3, "never-on-screen": 0.5, sparse: 6, "text-in-margin": 1, "small-text": 1, "small-heading": 1 });
+// On a frame 1080 px on its short side (scaled with it): text keeps this far
+// from the sides and from the top and bottom, no text is smaller than `text`
+// and type set as a heading (HEADING_PX up) is at least `heading`. Each
+// weighs 1, so one alone is left and two ask for a redraw (REDRAW_FROM).
+export const SAFE = Object.freeze({ side: 80, end: 100, text: 44, heading: 84 });
 // Type from this size up is a heading: nothing may pass over it, even for a moment.
 const HEADING_PX = 56;
 // A redraw is asked for from this score up: one small overflow alone is left.
@@ -72,6 +79,8 @@ export function lookTimes(scene) {
 export function layoutFaults(looks, { canvas, zone, count = 0 } = {}) {
   const frame = { x: 0, y: 0, w: canvas.width, h: canvas.height };
   const read = { x: zone.x - 12, y: zone.y - 12, w: zone.width + 24, h: zone.height + 24 };
+  const k = Math.min(canvas.width, canvas.height) / 1080, px = (value) => Math.round(value * k);
+  const margin = { x: px(SAFE.side), y: px(SAFE.end), w: canvas.width - 2 * px(SAFE.side), h: canvas.height - 2 * px(SAFE.end) };
   const found = new Map(), lastSeen = new Map(), onFrame = new Set(), info = new Map();
   const note = (key, leaf, look, fault, other = null) => { const entry = found.get(key) ?? { leaf, other, looks: [] }; entry.looks.push(look); entry.fault = fault; found.set(key, entry); };
   for (const [look, { t, leaves }] of looks.entries()) {
@@ -84,6 +93,13 @@ export function layoutFaults(looks, { canvas, zone, count = 0 } = {}) {
       if (leaf.tag !== "text" || off >= 0.95) continue;
       if (off > 0.02) { note(`off:${leaf.i}`, leaf.i, look, { kind: "text-off-frame", at: t, what: `${named(leaf)} is ${Math.round(off * 100)}% off the frame at ${where(box)}`, box }); continue; }
       const outside = 1 - overlap(box, read) / area(box);
+      // Where the readable area already keeps text off an edge, only that fault is reported.
+      if (outside <= 0.08 && 1 - overlap(box, margin) / area(box) > 0.02) note(`margin:${leaf.i}`, leaf.i, look, { kind: "text-in-margin", at: t, what: `${named(leaf)} at ${where(box)} is in the frame's outer margin: keep text ${margin.x} px from the sides and ${margin.y} px from the top and bottom`, box });
+      if (leaf.o >= 0.5 && Number(leaf.size) > 0) {
+        if (leaf.size < px(SAFE.text)) note(`small:${leaf.i}`, leaf.i, look, { kind: "small-text", at: t, what: `${named(leaf)} is set at ${Math.round(leaf.size)} px: too small to read on a phone, set it at ${px(SAFE.text)} px or more`, box });
+        // Type set as a heading (HEADING_PX up) but under a headline's size.
+        else if (leaf.size >= HEADING_PX * k && leaf.size < px(SAFE.heading)) note(`heading:${leaf.i}`, leaf.i, look, { kind: "small-heading", at: t, what: `${named(leaf)} is set as a heading at ${Math.round(leaf.size)} px: a headline is ${px(SAFE.heading)} px or more (supporting text ${px(SAFE.text)} to ${Math.round(HEADING_PX * k) - 1} px)`, box });
+      }
       if (outside > 0.08) note(`zone:${leaf.i}`, leaf.i, look, { kind: "text-outside-zone", at: t, what: `${named(leaf)} at ${where(box)} is outside the area where text can be read (x ${zone.x} to ${zone.x + zone.width}, y ${zone.y} to ${zone.y + zone.height}); the platform's buttons and the captions cover the rest`, box });
       if (leaf.plate && (box.x < leaf.plate.x - 6 || box.x + box.w > leaf.plate.x + leaf.plate.w + 6)) note(`plate:${leaf.i}`, leaf.i, look, { kind: "label-overflow", at: t, what: `${named(leaf)} is ${box.w} px wide but the plate behind it is ${leaf.plate.w} px (text x ${box.x} to ${box.x + box.w}, plate x ${leaf.plate.x} to ${leaf.plate.x + leaf.plate.w})`, box });
       // A heading is covered when any part of it is, at any look (a blade passing over a title is seen); smaller text when most of it is, once settled.

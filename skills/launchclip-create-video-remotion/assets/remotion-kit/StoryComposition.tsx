@@ -512,7 +512,7 @@ const LightSweepLayer: React.FC<{ sweep: any; part: "dip" | "light" }> = ({ swee
   const { fps, width, height } = useVideoConfig();
   const t = sweep.start + frame / fps;
   const html = React.useMemo(() => ({ __html: lightSweepHtml(width, height, sweep) }), [width, height, sweep]);
-  const dip = React.useMemo(() => ({ __html: lightSweepDipHtml() }), []);
+  const dip = React.useMemo(() => ({ __html: lightSweepDipHtml(sweep) }), [sweep]);
   const css = React.useMemo(() => lightSweepCss(width, height), [width, height]);
   const progress = lightSweepProgress(sweep, t);
   return (
@@ -644,7 +644,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
   const picture = (children: React.ReactNode, key?: string) => (lookStepped(look) ? <Freeze key={key} frame={pictureFrame}>{children}</Freeze> : children);
   // Per sweep its dip (a shade) and its light (screened over it), as two layers.
   const sweepParts = (part: "dip" | "light") => sweeps.map((sweep: any) => picture(
-    <Sequence key={`${sweep.id}-${part}`} name={`light-sweep ${part} → ${sweep.sceneId}`} from={frames(sweep.start)} durationInFrames={Math.max(1, frames(sweep.start + sweep.dur) - frames(sweep.start))}>
+    <Sequence key={`${sweep.id}-${part}`} name={`${sweep.type ?? "light-sweep"} ${part} → ${sweep.sceneId}`} from={frames(sweep.start)} durationInFrames={Math.max(1, frames(sweep.start + sweep.dur) - frames(sweep.start))}>
       <LightSweepLayer sweep={sweep} part={part} />
     </Sequence>, `${sweep.id}-${part}`
   ));

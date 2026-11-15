@@ -13,7 +13,8 @@
 
 import {brandTextScale, timingRules} from './catalog-b-base.mjs';
 import {VARIANT_PARAM, clip, createHBase, fitText, inkOn, mixColor, r2, rt, textWidth, toneColor} from './catalog-h-base.mjs';
-import {abs, el, riseOps, set, tw} from './catalog-h-view.mjs';
+import {abs, drawOps, el, riseOps, set, strokePath, tw} from './catalog-h-view.mjs';
+import {MARK_KINDS, roughMark} from './rough-mark.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
 const rect = '{x, y, width, height} canvas px inside the safe zone (optional)';
@@ -44,7 +45,7 @@ function wrap(words, size, width) {
 }
 
 function titleResolve(params, ctx) {
-  const b = createHBase('motion-title', params, ctx, {allowed: ['text', 'kicker', 'sub', 'highlight', 'align', 'plate', 'tone', 'at', 'speed'], required: ['text'], variants: TITLE_VARIANTS, hidesCaptions: true});
+  const b = createHBase('motion-title', params, ctx, {allowed: ['text', 'kicker', 'sub', 'highlight', 'mark', 'align', 'plate', 'tone', 'at', 'speed'], required: ['text'], variants: TITLE_VARIANTS, hidesCaptions: true});
   const {check, u, rect} = b;
   const p = b.params;
   const text = check.str(p.text, 'params.text', 90);
@@ -54,6 +55,8 @@ function titleResolve(params, ctx) {
   const plate = p.plate === undefined ? false : check.bool(p.plate, 'params.plate');
   const speed = p.speed === undefined ? 1 : check.num(p.speed, 'params.speed', 0.5, 2);
   const accent = toneColor(b, p.tone, 'params.tone');
+  const markKind = p.mark === undefined ? null : check.oneOf(p.mark, 'params.mark', MARK_KINDS);
+  if (markKind && p.highlight === undefined) check.fail('params.mark', 'needs params.highlight: the words the mark is drawn over');
   const words = text.split(/\s+/).filter(Boolean);
   if (words.length > 16) check.fail('params.text', 'has more than 16 words; a title is a few words');
   const highlight = new Set();
@@ -106,12 +109,32 @@ function titleResolve(params, ctx) {
   const n = counts[unit];
   const stride = unit === 'character' ? Math.min(step, (1.4 / speed) / Math.max(1, n)) : step;
   const buildEnd = rt(t0 + stride * Math.max(0, n - 1) + each);
+  // A hand-drawn mark over each run of highlighted words in a line, drawn
+  // once the title has built. A masked row clips what leaves it, so there a
+  // circle or box is an underline.
+  const kind = markKind && MASKED.has(b.variant) && (markKind === 'circle' || markKind === 'box') ? 'underline' : markKind;
+  const marks = [];
+  if (kind) for (const row of rows) for (const [k, word] of row.words.entries()) {
+    if (!word.highlight) continue;
+    const last = marks.at(-1);
+    if (k && row.words[k - 1].highlight && last) { last.to = word.index; continue; }
+    marks.push({index: marks.length, from: word.index, to: word.index});
+  }
+  const flat = rows.flatMap(row => row.words);
+  for (const mark of marks) {
+    const phrase = flat.slice(mark.from, mark.to + 1).map(word => word.text).join(' ');
+    // The advance model's width sets the viewBox; the browser stretches it to the words' real box.
+    Object.assign(mark, roughMark(kind, {width: textWidth(phrase, size, 'display'), height: lineH, seed: `${b.id}|${phrase}|${mark.index}`}),
+      {at: rt(buildEnd - 0.1 + mark.index * 0.3), duration: rt((kind === 'circle' ? 0.6 : kind === 'marker' ? 0.4 : 0.5) / speed)});
+    for (const word of flat.slice(mark.from, mark.to + 1)) word.mark = mark.index;
+  }
+  const drawn = marks.length ? rt(marks.at(-1).at + marks.at(-1).duration) : buildEnd;
   b.events.push({id: `${b.id}-title`, name: 'title', time: t0, endTime: buildEnd, role: 'title', cue: unit === 'character' && b.variant === 'typewriter' ? 'keystroke-soft' : 'whoosh'});
-  if (buildEnd > b.start + b.lastEvent + 1e-6) check.fail('params.text', `builds until ${r2(buildEnd - b.start)} s with ${b.variant}; lengthen the scene, shorten the text or raise speed`);
+  if (drawn > b.start + b.lastEvent + 1e-6) check.fail('params.text', `builds until ${r2(drawn - b.start)} s with ${b.variant}${marks.length ? ' and its mark' : ''}; lengthen the scene, shorten the text or raise speed`);
   const ink = b.colors.paper;
   const plateFill = plate ? b.colors.primary : null;
   const content = {variant: b.variant, unit, rows, counts, size, lineH, top, align, pad, plate: plateFill, ink: plate ? inkOn(b.colors, plateFill) : ink, accent: plate ? inkOn(b.colors, plateFill) : accent,
-    kicker: kicker ? {text: kicker, size: kickerSize} : null, sub: subFit ? {text: sub, size: subFit.size, lines: subFit.lines} : null, t0, stride: rt(stride), each: rt(each), buildEnd, speed,
+    ...(marks.length ? {marks} : {}), kicker: kicker ? {text: kicker, size: kickerSize} : null, sub: subFit ? {text: sub, size: subFit.size, lines: subFit.lines} : null, t0, stride: rt(stride), each: rt(each), buildEnd, speed,
     muted: plate ? mixColor(inkOn(b.colors, plateFill), plateFill, 0.7) : b.theme.muted, shimmer: mixColor('#ffffff', accent, 0.5), blockH};
   return b.finish(content, {minTextPx: Math.min(size, subFit ? subFit.size : Infinity)});
 }
@@ -119,7 +142,8 @@ function titleResolve(params, ctx) {
 const ids = (model) => ({
   line: i => `${model.id}-l${i}`,
   word: i => `${model.id}-w${i}`,
-  char: i => `${model.id}-c${i}`
+  char: i => `${model.id}-c${i}`,
+  mark: (i, k) => `${model.id}-m${i}-${k}`
 });
 
 function titleView(model) {
@@ -134,13 +158,23 @@ function titleView(model) {
     inner.push(el('div', `${id}-kicker`, {margin: 0, whiteSpace: 'nowrap', fontFamily: fonts.meta, fontSize: c.kicker.size, lineHeight: '1.4', letterSpacing: '0.16em', color: c.plate ? c.ink : c.accent, opacity: 0, marginBottom: r2(26 * u)}, [c.kicker.text]));
   }
   const wordNode = word => {
-    const style = {display: 'inline-block', whiteSpace: 'pre', color: word.highlight ? c.accent : c.ink, ...(c.unit === 'word' ? {opacity: 0} : {})};
+    const style = {display: 'inline-block', whiteSpace: 'pre', color: word.highlight && word.mark === undefined ? c.accent : c.ink, ...(c.unit === 'word' ? {opacity: 0} : {})};
     const children = perChar ? word.chars.map(ch => el('span', I.char(ch.index), {display: 'inline-block', whiteSpace: 'pre', opacity: 0}, [ch.ch])) : [word.text];
     return el('span', I.word(word.index), style, children);
   };
   const rowsNodes = c.rows.map(row => {
     const words = [];
-    row.words.forEach((word, k) => { if (k) words.push(' '); words.push(wordNode(word)); });
+    let run = null;
+    row.words.forEach((word, k) => {
+      const mark = word.mark === undefined ? null : c.marks[word.mark];
+      // Marked words sit in one inline box and keep the ink colour: the mark behind them carries the tone.
+      if (mark && run?.mark !== mark) { run = {mark, kids: []}; if (k) words.push(' '); words.push(el('span', null, {display: 'inline-block', position: 'relative', whiteSpace: 'pre', isolation: 'isolate'}, run.kids)); }
+      else if (!mark) run = null;
+      const into = run ? run.kids : words;
+      if (run ? run.kids.length : k) into.push(' ');
+      into.push(wordNode(word));
+      if (run && word.index === mark.to) run.kids.push(el('svg', null, {position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', overflow: 'visible', zIndex: -1}, mark.paths.map((path, i) => strokePath(I.mark(mark.index, i), path.d, c.accent, path.width, {opacity: path.opacity, cap: path.cap})), {viewBox: `0 0 ${mark.width} ${mark.height}`, preserveAspectRatio: 'none', fill: 'none'}));
+    });
     const masked = MASKED.has(c.variant);
     const lineNode = el('div', I.line(row.index), {display: 'block', whiteSpace: 'pre', ...(c.unit === 'line' ? {opacity: 0} : {})}, words);
     // Masked effects rise through their row: the row clips, the line moves.
@@ -245,14 +279,15 @@ function titleTimeline(model, ops) {
       default: throw new Error(`motion-title: no timeline for ${c.variant}`);
     }
   }
+  for (const mark of c.marks ?? []) mark.paths.forEach((path, k) => drawOps(ops, I.mark(mark.index, k), start, rt(mark.at + mark.duration * path.share * k), rt(mark.duration * path.share), 'power2.inOut'));
   // Character effects keep each word's span still; masked letters show at once.
   if (c.variant === 'bottom-up-letters' || c.variant === 'top-down-letters') for (let i = 0; i < n; i++) set(ops, target(i), start, {opacity: 1});
 }
 
 export const motionTitle = {
   id: 'motion-title',
-  describe: 'A title that animates in with one of the 24 named text effects (its variants: per character, per word, per line or the whole element), with an optional kicker, sub-line, highlighted words and brand plate. Hides captions.',
-  params: {text: 'string ≤ 90 (≤ 16 words), required', kicker: 'string ≤ 32 above (optional)', sub: 'string ≤ 90 below (optional)', highlight: 'whole word or [words] 1–3 to colour with tone', align: '"center" | "left"',
+  describe: 'A title that animates in with one of the 24 named text effects (its variants: per character, per word, per line or the whole element), with an optional kicker, sub-line, highlighted words (with a hand-drawn mark over them) and brand plate. Hides captions.',
+  params: {text: 'string ≤ 90 (≤ 16 words), required', kicker: 'string ≤ 32 above (optional)', sub: 'string ≤ 90 below (optional)', highlight: 'whole word or [words] 1–3 to colour with tone', mark: `a hand-drawn mark in the tone colour that draws on over the highlighted words (which then keep the text colour) once the title has built: ${MARK_KINDS.join(' | ')} (optional; needs highlight)`, align: '"center" | "left"',
     plate: 'boolean: set the title on a brand-colour plate', tone: 'primary | accent | paper | #rrggbb (highlight colour)', speed: 'stagger speed 0.5–2 (default 1)', at: `build start: ${at}`,
     variant: `${VARIANT_PARAM}; one of the effects: ${Object.values(TEXT_EFFECTS).flat().join(', ')}`, rect},
   events: ['title'], timing: timingRules({rules: ['the build ends before the exit; long text with a character effect compresses its stagger to 1.4 s']}), variants: TITLE_VARIANTS,

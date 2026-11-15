@@ -1,7 +1,7 @@
 // The layout check of a visual explainer (src/make/visual_layout.js): what counts as a fault, and the redraw it leads to.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { REDRAW_FROM, faultLines, faultScore, layoutFaults, lookTimes, measureVisual } from "../src/make/visual_layout.js";
+import { REDRAW_FROM, SAFE, faultLines, faultScore, layoutFaults, lookTimes, measureVisual } from "../src/make/visual_layout.js";
 import { planVisualExplainer, visualArea, visualHelpers, visualPalette, sceneFragment, visualStoryboard } from "../src/make/visual_explainer.js";
 
 const FORMAT = { width: 1080, height: 1920, duration: 12 };
@@ -10,7 +10,7 @@ const OPTIONS = { canvas: AREA.canvas, zone: AREA.text, count: 40 };
 const BRAND = { colors: { bg: "#f4ead9", primary: "#c8552b", accent: "#2f6f5e", paper: "#1d1a16", ink: "#f4ead9" }, fonts: { display: "young-serif", body: "dm-sans", meta: "jetbrains-mono" } };
 // Enough ordinary shapes on screen that a scene is not "close to empty".
 const filler = (from = 100) => Array.from({ length: 14 }, (_, n) => ({ i: from + n, o: 1, tag: "rect", fill: "rgb(1, 2, 3)", box: { x: 200 + n * 10, y: 600, w: 80, h: 80 } }));
-const text = (i, words, box, more = {}) => ({ i, o: 1, tag: "text", fill: "rgb(0, 0, 0)", text: words, size: 40, box, ...more });
+const text = (i, words, box, more = {}) => ({ i, o: 1, tag: "text", fill: "rgb(0, 0, 0)", text: words, size: 44, box, ...more });
 const looks = (...frames) => frames.map((leaves, n) => ({ t: 1 + n, leaves: [...leaves, ...filler()] }));
 const kinds = (faults) => faults.map((fault) => fault.kind).sort();
 
@@ -166,4 +166,27 @@ test("in a real browser: a label off the frame and a piece left at the corner ar
   assert.equal(measured.get("clean").shapes, 15);
   assert.deepEqual(kinds(measured.get("faulty").faults), ["text-off-frame", "unplaced"]);
   assert.match(measured.get("faulty").faults.find((fault) => fault.kind === "text-off-frame").what, /text "Cut off label"/);
+});
+
+test("text in the frame's outer margin, text too small for a phone and an undersized heading are faults, scaled with the frame", () => {
+  const wide = { canvas: { width: 1920, height: 1080 }, zone: { x: 96, y: 54, width: 1728, height: 972 }, count: 0 };
+  const once = (leaves, options = wide) => layoutFaults([{ t: 1, leaves }, { t: 2, leaves }], options);
+  assert.deepEqual(SAFE, { side: 80, end: 100, text: 44, heading: 84 });
+  // 16:9: the readable area starts 54 px down, the margin 100 px down.
+  assert.deepEqual(kinds(once([text(1, "Top line", { x: 400, y: 60, w: 600, h: 90 }, { size: 90 })])), ["text-in-margin"]);
+  assert.deepEqual(kinds(once([text(1, "Top line", { x: 400, y: 104, w: 600, h: 90 }, { size: 90 })])), []);
+  // Outside the readable area is that fault alone, not both.
+  assert.deepEqual(kinds(once([text(1, "Edge", { x: 660, y: 700, w: 400, h: 60 })], { ...OPTIONS, count: 0 })), ["text-outside-zone"]);
+  // Sizes: 44 px reads, 43 does not; 56 to 83 is a heading set too small; 84 is a headline.
+  const sized = (size) => kinds(once([text(1, "Words", { x: 400, y: 500, w: 400, h: size }, { size })]));
+  assert.deepEqual([43, 44, 55, 56, 83, 84].map(sized), [["small-text"], [], [], ["small-heading"], ["small-heading"], []]);
+  assert.match(once([text(1, "Words", { x: 400, y: 500, w: 400, h: 30 }, { size: 30 })])[0].what, /set at 30 px.*44 px or more/);
+  // Scaled with the frame's short side: half the frame, half the sizes and margins.
+  const half = { canvas: { width: 540, height: 960 }, zone: { x: 40, y: 140, width: 430, height: 585 }, count: 0 };
+  assert.deepEqual(kinds(once([text(1, "Small", { x: 100, y: 300, w: 200, h: 22 }, { size: 22 })], half)), []);
+  assert.deepEqual(kinds(once([text(1, "Small", { x: 100, y: 300, w: 200, h: 21 }, { size: 21 })], half)), ["small-text"]);
+  // A piece still fading in is not measured for size, and one fault alone asks for no redraw.
+  assert.deepEqual(kinds(once([text(1, "Faint", { x: 400, y: 500, w: 400, h: 30 }, { size: 30, o: 0.3 })])), []);
+  assert.ok(faultScore(once([text(1, "Words", { x: 400, y: 500, w: 400, h: 30 }, { size: 30 })])) < REDRAW_FROM);
+  assert.ok(faultScore(once([text(1, "Words", { x: 400, y: 500, w: 400, h: 30 }, { size: 30 }), text(2, "More", { x: 400, y: 700, w: 400, h: 30 }, { size: 30 })])) >= REDRAW_FROM);
 });

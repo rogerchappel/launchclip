@@ -26,6 +26,7 @@
 // one fades up from under the same veil.
 
 import { resolveDotWipeColor } from './dot-wipe.mjs';
+import { lightLeakHtml } from './light-leak.mjs';
 
 export const LIGHT_SWEEP = Object.freeze({
   defaults: Object.freeze({ streaks: 3, angle: 64, color: 'accent' }),
@@ -124,7 +125,9 @@ export function lightSweepCss(width, height) {
 }
 
 /** The dip's markup (a string, both renderers parse the same): one black shade whose opacity follows --lc-ls. */
-export function lightSweepDipHtml() {
+export function lightSweepDipHtml(sweep) {
+  // A light leak only adds light: no shade.
+  if (sweep?.type === 'light-leak') return '';
   const { peak, down, up } = LIGHT_SWEEP.dip;
   return `<div class="lc-ls-dip" style="opacity:calc(${peak} * clamp(0, min(var(--lc-ls) / ${down}, (1 - var(--lc-ls)) / ${round(1 - up, 4)}), 1))"></div>`;
 }
@@ -176,6 +179,7 @@ const envelope = (streak, peak) => `calc(${peak} * min(1, ${local(streak)} / ${L
  * --lc-ls, over a wash that peaks at the middle.
  */
 export function lightSweepHtml(width, height, sweep) {
+  if (sweep?.type === 'light-leak') return lightLeakHtml(width, height, sweep);
   const color = HEX.test(sweep.color ?? '') ? sweep.color : '#ffffff';
   const c = rgb(color);
   const angle = -(sweep.angle ?? LIGHT_SWEEP.defaults.angle);
@@ -220,26 +224,29 @@ export function lightSweepSpots(scene, width, height) {
 /**
  * The light sweeps of a story: every track-0 window entry (and the loop
  * ending) that arrives with a light-sweep, options resolved, with the spots
- * of the scene it leaves (lightSweepSpots).
+ * of the scene it leaves (lightSweepSpots). A light-leak (light-leak.mjs) is
+ * drawn by the same layer, so it is listed here too, by its type.
  * windows: transitions.mjs sceneWindows.
- * → [{id, sceneId, start, dur, color, streaks, angle, spots}]
+ * → [{id, sceneId, start, dur, color, streaks, angle, spots}] (a leak: {id, sceneId, type: "light-leak", start, dur})
  */
+const LIGHT_TYPES = ['light-sweep', 'light-leak'];
 export function lightSweeps(story, windows) {
   const out = [];
   const width = story?.format?.width ?? 1080, height = story?.format?.height ?? 1920;
   const plates = (windows?.scenes ?? []).filter((entry) => entry.plate);
   // The plate the sweep leaves: the latest one that ends by its start.
   const leaving = (start) => plates.filter((entry) => entry.end <= start + 1e-6 && entry.start < start - 1e-6).reduce((best, entry) => (!best || entry.end > best.end ? entry : best), null);
-  const add = (id, sceneId, start, dur, spec, from) => {
+  const add = (id, sceneId, start, dur, spec, from, type) => {
+    if (type === 'light-leak') { out.push({ id: id.replace('lc-ls-', 'lc-ll-'), sceneId, type, start: round(start, 6), dur: round(dur, 6) }); return; }
     const options = lightSweepOptions(spec);
     out.push({ id, sceneId, start: round(start, 6), dur: round(dur, 6), ...options, color: resolveDotWipeColor(story?.brand, options.color), spots: lightSweepSpots(from?.scene, width, height) });
   };
   for (const entry of windows?.scenes ?? []) {
-    if (!entry.plate || entry.transitionIn?.type !== 'light-sweep' || !(entry.transitionIn.dur > 0)) continue;
-    add(`lc-ls-${entry.id}`, entry.id, entry.start, entry.transitionIn.dur, entry.scene?.in, leaving(entry.start));
+    if (!entry.plate || !LIGHT_TYPES.includes(entry.transitionIn?.type) || !(entry.transitionIn.dur > 0)) continue;
+    add(`lc-ls-${entry.id}`, entry.id, entry.start, entry.transitionIn.dur, entry.scene?.in, leaving(entry.start), entry.transitionIn.type);
   }
   const loop = windows?.loop;
-  if (loop?.transitionIn?.type === 'light-sweep' && loop.transitionIn.dur > 0) add(`lc-ls-${loop.sceneId}-loop`, `${loop.sceneId}-loop`, loop.start, loop.transitionIn.dur, story?.ending?.in, leaving(loop.start));
+  if (LIGHT_TYPES.includes(loop?.transitionIn?.type) && loop.transitionIn.dur > 0) add(`lc-ls-${loop.sceneId}-loop`, `${loop.sceneId}-loop`, loop.start, loop.transitionIn.dur, story?.ending?.in, leaving(loop.start), loop.transitionIn.type);
   return out.sort((a, b) => a.start - b.start);
 }
 

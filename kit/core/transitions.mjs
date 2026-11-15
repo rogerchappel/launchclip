@@ -39,6 +39,9 @@
 // arrives slightly large and defocused, `focus`, and racks sharp in a few
 // frames).
 //
+// light-leak (kit/core/light-leak.mjs adds warm light over the cut, peaking at
+// its middle; here the two plates crossfade under the peak).
+//
 // Full-frame pictures (FULL_FRAME_PLATES: a clip, a photo plate, a world):
 // the incoming plate covers the frame by itself, so the outgoing one stays
 // whole under it until the transition ends and the frame is never empty. In
@@ -57,8 +60,9 @@
 // the background.
 
 import { grammarEase, resolveGrammar } from './grammar.mjs';
+import { LIGHT_LEAK } from './light-leak.mjs';
 
-export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan', 'rack-focus', 'glow-wipe', 'card-to-card', 'overview', 'dot-wipe', 'light-sweep', 'push-blur']);
+export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan', 'rack-focus', 'glow-wipe', 'card-to-card', 'overview', 'dot-wipe', 'light-sweep', 'push-blur', 'light-leak']);
 /** Transitions that carry the card: its module rests (whole) at both ends instead of fading (kit/core/modules.mjs). */
 export const CARRY_TRANSITIONS = Object.freeze(['rack-focus', 'card-to-card']);
 export const CAMERA_TRANSITION_TYPES = Object.freeze(['pan', 'pull', 'orbit', 'whip-pan']);
@@ -336,6 +340,14 @@ function typedTweens(transition, { width, height, grammar = null, mode: cameraMo
       return { type, duration: d,
         in: held([t('opacity', 0, 1, 'power1.inOut', d * L.rise, d * L.fade), t('veil', 1, 0, 'power2.out', d * L.rise, d * (1 - L.rise)), t('scale', L.scaleIn, 1, 'power2.out', d * L.rise, d * (1 - L.rise))]),
         out: [t('veil', 0, 1, 'power1.in', 0, d * L.veil), t('scale', 1, L.scaleOut, 'power1.in'), t('opacity', 1, 0, 'power1.inOut', d * L.rise, d * L.outFade)] };
+    }
+    case 'light-leak': {
+      // Warm light floods the frame and peaks at the middle (light-leak.mjs);
+      // the plates crossfade under the peak. World mode: out, then in.
+      const from = d * (LIGHT_LEAK.peak - LIGHT_LEAK.swap / 2), over = d * LIGHT_LEAK.swap;
+      return { type, duration: d,
+        in: mode === 'world' ? [t('opacity', 0, 1, 'power1.inOut', from + over / 2, over / 2)] : [t('opacity', 0, 1, 'power1.inOut', from, over)],
+        out: mode === 'world' ? [t('opacity', 1, 0, 'power1.inOut', from, over / 2)] : [] };
     }
     case 'push-blur': {
       // The camera pushes into the outgoing plate (direction: where the

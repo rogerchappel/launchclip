@@ -58,3 +58,41 @@ test('highlights are whole words, the title fits or fails clearly', () => {
   assert.throws(() => resolve({text: Array.from({length: 17}, () => 'word').join(' ')}), /16 words/);
   assert.ok(model.hidesCaptions);
 });
+
+test('a mark is drawn over the highlighted words once the title has built, the same stroke every time', async () => {
+  const {MARK_KINDS, roughMark} = await import('@launchclip/core/rough-mark.mjs');
+  for (const kind of MARK_KINDS) {
+    const a = roughMark(kind, {width: 420, height: 160, seed: 'x'}), b = roughMark(kind, {width: 420, height: 160, seed: 'x'});
+    assert.deepEqual(a, b, `${kind} is the same for the same seed`);
+    assert.notDeepEqual(roughMark(kind, {width: 420, height: 160, seed: 'y'}).paths, a.paths, `${kind} differs with the seed`);
+    assert.equal(a.paths.length, kind === 'bracket' ? 2 : 1);
+    for (const path of a.paths) {
+      assert.match(path.d, /^M-?[\d.]+ -?[\d.]+( [QL]-?[\d.]+ -?[\d.]+( -?[\d.]+ -?[\d.]+)?)+$/, kind);
+      const numbers = path.d.match(/-?[\d.]+/g).map(Number);
+      // Drawn round the words: never further out than one line height.
+      assert.ok(numbers.every(n => Number.isFinite(n) && n > -200 && n < 420 + 200), `${kind} stays by its words`);
+    }
+  }
+  assert.throws(() => roughMark('squiggle', {width: 10, height: 10}), /unknown mark/);
+  // On a title: adjacent highlighted words share one mark; the stroke starts hidden and is drawn by the exit.
+  const model = resolve({text: 'Ship the video today', highlight: ['the', 'video'], mark: 'circle'}, '16:9');
+  const {marks, buildEnd} = model.content;
+  assert.equal(marks.length, 1);
+  assert.deepEqual([marks[0].from, marks[0].to, marks[0].kind], [1, 2, 'circle']);
+  const out = EMITTERS['motion-title'](model);
+  assert.match(out.html, /<svg[^>]*preserveAspectRatio="none"[^>]*>\s*<path id="scene-m0-0"/);
+  assert.doesNotMatch(out.html + out.motion, /undefined|NaN/);
+  const ops = catalogHTimeline(model);
+  assert.equal(frameState(ops, buildEnd - 0.2).get('scene-m0-0').strokeDashoffset, 1);
+  assert.equal(frameState(ops, model.motion.exitStart - 0.01).get('scene-m0-0').strokeDashoffset, 0);
+  // Words apart get a mark each, one after the other; the marked words keep the ink colour.
+  const two = resolve({text: 'Ship the video today', highlight: ['ship', 'today'], mark: 'marker'});
+  assert.equal(two.content.marks.length, 2);
+  assert.ok(two.content.marks[1].at > two.content.marks[0].at);
+  assert.doesNotMatch(EMITTERS['motion-title'](two).html, new RegExp(`color:${two.content.accent}[^>]*>Ship`));
+  // A masked row would clip a circle: it is an underline there. No mark, no change to the title.
+  assert.equal(resolve({text: 'Ship the video', highlight: 'video', mark: 'circle', variant: 'mask-reveal-up'}).content.marks[0].kind, 'underline');
+  assert.equal(resolve({text: 'Ship the video', highlight: 'video'}).content.marks, undefined);
+  assert.throws(() => resolve({text: 'Ship the video', mark: 'circle'}), /needs params.highlight/);
+  assert.throws(() => resolve({text: 'Ship the video', highlight: 'video', mark: 'squiggle'}), /params.mark/);
+});

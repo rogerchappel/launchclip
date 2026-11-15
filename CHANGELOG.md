@@ -38,6 +38,22 @@
   answering; the priority tier costs more per token and rarely queues.
   Models not listed are sent as before, and a listed model falls back to a
   standard host when the priority one cannot take the call.
+- `motion-title` takes `mark`: a hand-drawn underline, circle, box, pair of
+  brackets or marker stroke that draws on over the highlighted words. The
+  stroke is generated from a seed (`kit/core/rough-mark.mjs`), so both
+  renderers draw the same one.
+- `scaleLerp`, `tweenScale`, `scaleTweenOps` and `scaleStepAt` in
+  `kit/core/motion.mjs`: a scale change of 2× or more is interpolated in log
+  space, so it eases evenly to the eye. A zoom inside a shot and a world
+  camera move use it; smaller changes are as before.
+- A `light-leak` transition: warm light floods in from one side, peaks at
+  the cut and clears (0.6–1 s), seeded by the scene's id and built from
+  gradients on a screen blend. It only adds light, where `light-sweep` dips
+  the frame to near black.
+- The visual explainer's layout check also reports text in the frame's outer
+  margin (80 px from the sides, 100 px from the top and bottom at 1080), text
+  under 44 px and a heading under 84 px, scaled with the frame. One alone is
+  left; two ask for a redraw.
 - `make --script-model <provider:model[@effort]>` (or `LAUNCHCLIP_SCRIPT_MODEL`)
   gives the script its own model. The script stage's calls (the concepts,
   the judge, the story, the script and its repairs) go to it and every other

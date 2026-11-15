@@ -219,7 +219,7 @@ test('HyperFrames: the sweep sits over the scenes, the smear filter rides the ou
 test('Remotion draws the same sweep markup and smear filter from the same state', async () => {
   const tsx = await readFile(path.join(ROOT, 'kit/remotion/StoryComposition.tsx'), 'utf8');
   assert.match(tsx, /lightSweepHtml\(width, height, sweep\)/);
-  assert.match(tsx, /lightSweepDipHtml\(\)/);
+  assert.match(tsx, /lightSweepDipHtml\(sweep\)/);
   assert.match(tsx, /const progress = lightSweepProgress\(sweep, t\)/);
   // The dip, then the light, both driven by the same progress.
   assert.match(tsx, /className="lc-light-sweep-dip"[^\n]*\["--lc-ls" as any\]: progress[^\n]*\n\s*: <div className="lc-light-sweep"[^\n]*\["--lc-ls" as any\]: progress/);
@@ -260,4 +260,44 @@ test('transition filters never overshoot: a springing grammar eases only the tra
       }
     }
   }
+});
+
+test('light-leak: warm light peaks at the middle and clears, the plates crossfade under it, and both renderers get the same seeded markup', async () => {
+  const {LIGHT_LEAK, lightLeakAt, lightLeakBlooms, lightLeakHtml} = await import('@launchclip/core/light-leak.mjs');
+  assert.ok(STORY_TRANSITIONS.includes('light-leak') && TRANSITION_TYPES.includes('light-leak'));
+  assert.deepEqual(errorsOf(two({type: 'light-leak', dur: 0.8})), []);
+  // It takes no options, covers the whole frame (track 0 only) and the loop ending takes it too.
+  assert.match(errorsOf(two({type: 'light-leak', dur: 0.8, color: 'accent'})).join('\n'), /in\.color is a dot-wipe option; "light-leak" does not take it/);
+  assert.match(errorsOf(two({type: 'light-leak', dur: 0.8, streaks: 3})).join('\n'), /in\.streaks is a light-sweep option; "light-leak" does not take it/);
+  assert.match(errorsOf(raw([card('a', 0, 12), card('b', 2, 5, {track: 1, in: {type: 'light-leak', dur: 0.8}})])).join('\n'), /"light-leak" covers the whole frame/);
+  assert.deepEqual(errorsOf(raw([card('a', 0, 12)], {ending: {loop_to: 'a', in: {type: 'light-leak', dur: 0.8}}})), []);
+  // The light: nothing at either end, full at the peak.
+  assert.deepEqual([0, LIGHT_LEAK.peak, 1].map(lightLeakAt), [0, 1, 0]);
+  assert.ok(lightLeakAt(0.25) > 0.4 && lightLeakAt(0.25) < 0.6);
+  // The layers: the incoming plate is hidden until the swap, half in at the peak and whole after it; the outgoing one stays under it.
+  const d = 0.8, tw = transitionTweens({type: 'light-leak', dur: d}, size);
+  const at = (t) => layerStateAt(t, tw.in.map((item) => ({...item, at: 10 + item.start, role: 'in'})), getEase);
+  assert.equal(at(10 + d * (LIGHT_LEAK.peak - LIGHT_LEAK.swap / 2) - 0.01).opacity, 0);
+  assert.ok(Math.abs(at(10 + d * LIGHT_LEAK.peak).opacity - 0.5) < 0.01);
+  assert.equal(at(10 + d * (LIGHT_LEAK.peak + LIGHT_LEAK.swap / 2)).opacity, 1);
+  assert.deepEqual(tw.out, []);
+  // World mode's plates are transparent: out, then in.
+  const world = transitionTweens({type: 'light-leak', dur: d}, {...size, mode: 'world'});
+  assert.ok(world.out.some((item) => item.prop === 'opacity' && item.to === 0));
+  // Seeded by the scene: the same blooms every time, other blooms for another scene, all warm, no filters.
+  const story = resolveStory(two({type: 'light-leak', dur: d}));
+  const [leak] = lightSweeps(story, sceneWindows(story));
+  assert.deepEqual([leak.id, leak.type, leak.dur], ['lc-ll-b', 'light-leak', d]);
+  assert.deepEqual(lightLeakBlooms(1080, 1920, leak), lightLeakBlooms(1080, 1920, leak));
+  assert.notDeepEqual(lightLeakBlooms(1080, 1920, {id: 'lc-ll-other'}).blooms, lightLeakBlooms(1080, 1920, leak).blooms);
+  const html = lightSweepHtml(1080, 1920, leak);
+  assert.equal(html, lightLeakHtml(1080, 1920, leak));
+  assert.equal((html.match(/radial-gradient/g) ?? []).length, 3);
+  assert.doesNotMatch(html, /filter|NaN|undefined/);
+  assert.equal(lightSweepDipHtml(leak), '', 'a leak only adds light: no shade under it');
+  // HyperFrames draws it on the light-sweep's screen-blended layer and drives the same property.
+  const compiled = await compileStoryToHyperFrames(story, {write: false, sourceDir: EXAMPLE});
+  assert.ok(compiled.html.includes(`<div id="lc-ll-b" class="lc-light-sweep" data-launchclip-transition="light-leak"`));
+  assert.ok(compiled.html.includes(html));
+  assert.match(compiled.html, /tl\.fromTo\("#lc-ll-b", \{ "--lc-ls": 0 \}/);
 });

@@ -580,7 +580,11 @@ the measurements, when the check finds:
 - two pieces of text on top of each other;
 - a piece left unpositioned at the top-left corner (a prop called with its
   arguments in the wrong order);
-- a scene that is close to empty.
+- a scene that is close to empty;
+- two or more of the smaller faults: text within 80 px of the sides or
+  100 px of the top and bottom, text set under 44 px, or a heading (type of
+  56 px or more) set under 84 px. The sizes are for a frame 1080 px on its
+  short side and scale with it; the illustrator is told the same numbers.
 
 A redraw is kept only where it measures better; otherwise the first drawing
 stays and the run warns that faults remain. With no browser on the machine

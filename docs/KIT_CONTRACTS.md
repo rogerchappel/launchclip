@@ -437,6 +437,10 @@ export const ease = { linear, "power1.in", "power1.out", "power1.inOut", … "po
   "expo.*", "circ.*", "sine.*", "back.*" (default overshoot 1.70158) };
 export function getEase(name)            // GSAP-style name, e.g. "power3.out", "back.out(1.4)", "steps(6)", "none"
 export function tween(t, {from, to, start, duration, ease = "power1.out"}) // clamped
+export function scaleLerp(from, to, k)   // a scale at eased progress k: log space from WIDE_SCALE (2×) up, linear under it
+export function tweenScale(t, {from, to, start, duration, ease}) // tween() for a scale, through scaleLerp
+export function scaleTweenOps(op, key = "scale") // a tween op → the ops that draw it (short linear steps when wide)
+export function scaleStepAt(p, {from, to, duration, ease}) // the scale those ops draw at linear progress p
 export function track(keys)              // keys: [{t, v, ease?}] → (t) => value (numbers or {x,y,…} objects)
 export function stagger(index, {each, from = "start", count})  // → delay seconds
 export function countUp(t, {from, to, start, frames = 18, fps = 30, format}) // matches editorial textFrames()
@@ -446,6 +450,19 @@ export function springVisibleDuration({damping = 14, stiffness = 140, mass = 1})
 export function splitWords(text) / splitChars(text) // → [{text, index}]
 export function motionBlurPx(velocityPxPerFrame, {max = 24}) // → blur radius, 0 at rest
 ```
+
+**Scale that eases evenly to the eye.** A large scale change interpolated
+linearly looks fast at the small end and slow at the large end, because the
+eye reads the ratio between frames. `scaleLerp` interpolates in log space
+(equal progress, equal ratio) when the larger scale is at least `WIDE_SCALE`
+(2) times the smaller, and linearly under that, where the two differ by a few
+per cent. The camera uses it for a zoom inside a shot (`zooms.mjs`) and for a
+world camera move (`camera-world.mjs`). A GSAP `fromTo` can only tween
+linearly, so `scaleTweenOps` writes a wide scale tween as 240 short linear
+tweens a second along the curve, shortest at the two ends where the ease
+turns hardest (its other properties stay one tween), and
+`scaleStepAt` is the frame-pure value of exactly those steps: both renderers
+and every frame-pure reader (`zoomStateAt`, `cameraStateAt`) agree.
 
 The GSAP eases (`power3.out`, …) must match `gsap.parseEase()` to within 1e-6.
 GSAP is a devDependency for that test.
@@ -839,6 +856,28 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
   clears its veil and scale by the end (`power2.out`). Largest frame-to-frame
   change measured on a dark interface reel: 25 (17.6 with heavy motion
   blur), spread over about ten frames.
+- `light-leak` (`kit/core/light-leak.mjs`, track-0 scenes only, 0.6–1 s, 20
+  to 30 frames; `{type: "light-leak", dur}`, no options): warm light floods
+  in from one side, peaks at the middle of the transition and clears, as
+  film fogged by a leak in the camera. Where the light-sweep dips the frame
+  nearly to black under thin streaks, the leak only adds light and never
+  darkens. It is drawn on the light-sweep's screen-blended layer (`lightSweeps`
+  lists it with `type: "light-leak"`, `lightSweepHtml` hands it to
+  `lightLeakHtml`, and there is no dip), so both renderers drive the same
+  `--lc-ls`. The markup is gradients only, no filters: a linear wash across
+  the whole frame, strongest on the side the light enters from (0.9 at the
+  peak), and three soft elliptical blooms (deep orange, red, a pale yellow
+  core; 0.8–1.5 of the frame's long side) that start just inside that edge
+  and drift up to 45 % of the width across it. The side and every bloom's
+  place, size and drift come from a hash of the scene's id
+  (`lightLeakBlooms`), never `Math.random`. The light is `lightLeakAt(p)`:
+  linear up to the peak at 0.5 and linear down to the end. The layer side:
+  the plates crossfade over the middle 30 % (`power1.inOut`), the incoming
+  one held hidden until then; in world mode the outgoing plate fades over
+  the first half of that span and the incoming one over the second.
+
+  ![A light leak over 0.8 s, HyperFrames above and Remotion below](images/light-leak.jpg)
+
 - `push-blur` (`{type: "push-blur", dur, direction?}`, about 0.5 s; direction
   is where the content travels, `"up"` by default): the camera pushes into the
   outgoing plate (scale 1 → 1.15, travel 12 % of the frame along the
@@ -3129,7 +3168,9 @@ without a cut. The shape matches `evidence-clip`'s `focus`.
 - Framing (`zoomFrame`): the camera centres the box, but the centre is
   clamped so the zoomed view never leaves the plate.
 - Timing: each zoom eases in at `at` over the grammar's camera duration
-  clamped to 0.5–0.8 s (`zoomTiming`), with the grammar's camera ease. It
+  clamped to 0.5–0.8 s (`zoomTiming`), with the grammar's camera ease. A
+  zoom of 2× or more eases in log space (`scaleLerp`, `kit/core/motion.mjs`),
+  so it does not rush at its small end. It
   eases back out at `until`; without `until` it hands straight over to the
   next zoom (the camera travels box to box) or, on the last zoom, eases out
   so it is back at rest when the shot ends, before the next shot's move.
@@ -6799,10 +6840,27 @@ out the same DOM in both renderers.
 | element (7) | micro-scale-fade, shimmer-sweep, fade-through, shared-axis-z, scale-down-fade, focus-blur-resolve, shared-axis-x | The whole block; shimmer-sweep passes a 15% band of a lighter copy across the text (a moving clip-path) |
 
 Params: `text` ≤ 90 (≤ 16 words), `kicker`, `sub`, `highlight` (1–3 whole
-words in the tone colour), `align` (center, left), `plate` (a brand-colour
+words in the tone colour), `mark`, `align` (center, left), `plate` (a brand-colour
 plate), `tone`, `speed` (0.5–2), `at`. Event `title`. The build must end
 before the exit; long text fails naming the effect, so lengthen the scene,
 shorten the text or raise `speed`.
+
+`mark` (`underline`, `circle`, `box`, `bracket`, `marker`; needs `highlight`)
+draws a hand-drawn mark in the tone colour over the highlighted words once
+the title has built; the words then keep the text colour. Adjacent
+highlighted words on one line share a mark, and marks draw one after the
+other. The strokes come from `roughMark(kind, {width, height, seed})`
+(`kit/core/rough-mark.mjs`): SVG paths with a seeded wobble (the scene id,
+the words and the mark's index), so the same title gets the same stroke in
+both renderers and on every render. The mark is an SVG inside the words'
+inline box, behind the text, its viewBox sized by the advance model and
+stretched to the words' real box; each path draws on with a dash offset
+(0.4–0.6 s, `power2.inOut`). A masked effect (`bottom-up-letters`,
+`top-down-letters`, `mask-reveal-up`) clips its rows, so a `circle` or `box`
+there is an `underline`. Parity fixtures:
+`test/fixtures/parity/h-motion-title-mark-*-portrait.json`.
+
+![The five marks, HyperFrames above and Remotion below](images/title-marks.jpg)
 
 ### Channel furniture (`catalog-h-channel.mjs`)
 
