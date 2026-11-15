@@ -6696,6 +6696,38 @@ Parity fixtures: `test/fixtures/parity/h-{glass-bars-3d,coin-stack,rack-shelf,de
 (every variant in portrait, the default in landscape, plus the staircase
 marker, token discs and price rail cases).
 
+### Catalogue I: exploded view (`catalog-i-exploded.mjs`)
+
+`exploded-view` draws one object as solid parts in a fixed 30° isometric
+projection, in four tones (`deep`, `mid`, `light`, `pale`, stepped between
+the brand's dark and light ends) with exactly one lit `accent` part and ink
+outlines. The camera sits close on the assembled object, pulls back as it
+comes apart along its axes, holds while the labels show, and pushes in as
+it snaps back. There are no leader lines or arrows: a label sits beside the
+drawing at the height of its part (two columns in landscape, one on the
+right in portrait).
+
+- The projection is orthographic, so a part moving through space is a 2D
+  translate on screen. Each part is one `div` holding its SVG faces (a box:
+  top, +x and +y faces; a cylinder: side, shade strip and top ellipse),
+  moved by `x`/`y` ops. There is no CSS 3D context.
+- Paint order is the DOM order, fixed for the scene. `resolve` samples the
+  explode and the snap at 120 Hz, compares every pair of parts whose screen
+  boxes overlap, and sorts the constraints (`paintOrder`). A parts list
+  whose parts overlap in space, or swap sides on the way, fails with the
+  two part indices.
+- The part that travels farthest leaves first and lands last (of equals,
+  the one ahead along the way out), so a stack peels from the outside in.
+- `resolve` rejects a parts list without exactly one `accent: true`, a tone
+  outside the four, and an `explode` along more than one axis.
+
+| Module | Params (beyond title, source, rect) | Events | Motion |
+| --- | --- | --- | --- |
+| `exploded-view` | `object` (`server`, `phone`, `battery`) or `parts` 2–48 `{shape box · cylinder, at [x, y, z], size [w, d, h] · [diameter, height], tone, accent?, explode? [dx, dy, dz], label? ≤ 18}`, `at`, `snapAt` | explode, snap | Assembled hold; parts leave over 0.65 s each (power2.inOut) staggered across 0.45 s while the camera pulls back; labels fade in as their part arrives; parts return over 0.4 s each (power3.in) across 0.2 s. Needs 4 s |
+
+Parity fixtures: `test/fixtures/parity/h-exploded-view-*.json` (the server
+in both aspects, the phone in portrait, the battery pack in landscape).
+
 ### Motion titles (`catalog-h-text.mjs`)
 
 `motion-title` is a caption-independent title (it hides captions). Its

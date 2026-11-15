@@ -4,6 +4,11 @@
 
 ### Added
 
+- `exploded-view`: one object as an isometric drawing of solid parts, in
+  four tones with a single lit part and ink outlines, that comes apart along
+  its axes, holds with its labels beside it and snaps back. Three built-in
+  objects (`server`, `phone`, `battery`) or a parts list of boxes and
+  cylinders; the paint order is checked back to front for every frame.
 - Nineteen backdrop plates that carry no subject of their own, drawn in code
   and lit in the brand's colours: `veil`, `facets`, `halftone`, `grain`,
   `blooms`, `light-leak`, `spotlight`, `studio`, `beams`, `prism`, `bands`,
