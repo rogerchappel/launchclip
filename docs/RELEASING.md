@@ -48,8 +48,7 @@ You can run it locally with `node scripts/release-check.mjs pack`.
 
 | Advisory | Comes from | Fix |
 |---|---|---|
-| `adm-zip` | `hyperframes` 0.7 and `onnxruntime-node` 1.27 | `hyperframes` 0.8 and `onnxruntime-node` 1.31 |
-| `@hono/node-server` | `hyperframes` | `hyperframes` 0.8 |
+| `adm-zip` | `onnxruntime-node` 1.27 | `onnxruntime-node` 1.31 |
 | `sharp` | `kokoro-js` → `@huggingface/transformers` | Not yet released upstream |
 | `zod` | Pinned by Remotion's studio packages, and the Anthropic SDK | Not yet released upstream |
 

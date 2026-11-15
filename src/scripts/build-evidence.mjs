@@ -17,7 +17,7 @@ import { buildTemporalEvidenceSchedule, parseDeclaredSequenceBoundaries } from '
 import { hyperframesEnv } from '../renderers/hyperframes_env.js';
 import { renderRemotionStills } from '../renderers/remotion_segments.js';
 
-const HYPERFRAMES_VERSION = '0.7.58';
+const HYPERFRAMES_VERSION = '0.7.111';
 const BROWSER_SOURCE = 'browser-still';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // The package root: two folders up from src/scripts/ (three from a skill's
