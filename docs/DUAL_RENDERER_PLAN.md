@@ -205,7 +205,7 @@ Thresholds (`eval/renderer-thresholds.json`, overridable per story under
 `stories.<id>`): SSIM ≥ 0.97 at every scheduled frame, frame counts equal
 within one frame (between renderers and against the story), integrated
 loudness within 0.5 LU and true peak within 1 dB, matching audio streams with
-at most 25 ms offset and an aligned residual at or below -30 dB, and the
+at most 25 ms offset and an aligned residual at or below -30 dB (-29 for `minimal`, -25 for `footage`), and the
 validate, layout, compile (no placeholders), motion and audio gates passing.
 The motion gate is enforced: ambient motion (`kit/core/ambient.mjs`, see
 KIT_CONTRACTS.md) keeps settled frames above the cinematic change-energy and

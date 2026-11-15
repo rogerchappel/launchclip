@@ -1,6 +1,6 @@
 {
   "schema_version": "launchclip.renderer-thresholds.v1",
-  "description": "Pass/fail limits for npm run eval:renderers (src/renderer_eval.js). parity.min_ssim applies to every frame on the temporal-evidence schedule; min_ssim_all_frames (null = report only) to the per-frame scan of the whole video. duration compares video frame counts with each other and with the story. loudness compares the two renders. audio.max_offset_ms allows the 1024-sample (21.3 ms) AAC priming delay HyperFrames leaves in its mux; max_residual_db applies after aligning that offset. gates: true = must pass, \"report\" = measured and shown but never fails, false = skipped; motion is report-only because the golden stories hold settled editorial frames below the cinematic change-energy floor in both renderers. stories.<id> overrides any of these for one golden story.",
+  "description": "Pass/fail limits for npm run eval:renderers (src/renderer_eval.js). parity.min_ssim applies to every frame on the temporal-evidence schedule; min_ssim_all_frames (null = report only) to the per-frame scan of the whole video. duration compares video frame counts with each other and with the story. loudness compares the two renders. audio.max_offset_ms allows a 1024-sample (21.3 ms) AAC priming delay (HyperFrames 0.7.58 left one in its mux; 0.7.111 does not); max_residual_db applies after aligning that offset. minimal's sound starts in its first 21 ms, where HyperFrames 0.7.111's AAC encode is less exact, so its residual limit is -29. gates: true = must pass, \"report\" = measured and shown but never fails, false = skipped; motion is report-only because the golden stories hold settled editorial frames below the cinematic change-energy floor in both renderers. stories.<id> overrides any of these for one golden story.",
   "parity": {
     "min_ssim": 0.97,
     "min_ssim_all_frames": null
@@ -25,6 +25,11 @@
     "audio": true
   },
   "stories": {
+    "minimal": {
+      "audio": {
+        "max_residual_db": -29
+      }
+    },
     "footage": {
       "audio": {
         "max_residual_db": -25
