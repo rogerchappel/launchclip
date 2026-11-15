@@ -110,7 +110,7 @@
     "@remotion/motion-blur": "4.0.543",
     "@remotion/three": "4.0.543",
     "@remotion/transitions": "4.0.543",
-    "hyperframes": "0.7.58",
+    "hyperframes": "0.7.111",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "remotion": "4.0.543",
@@ -132,7 +132,7 @@
   "optionalDependencies": {
     "gpt-tokenizer": "3.4.0",
     "kokoro-js": "1.2.1",
-    "onnxruntime-node": "1.27.0",
+    "onnxruntime-node": "1.31.1",
     "playwright": "1.64.1"
   }
 }

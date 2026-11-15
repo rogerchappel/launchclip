@@ -296,7 +296,7 @@ module and the renderer.
 ### Open renderer gaps (investigated 2026-11-10)
 
 **Partial re-render (`--scene`, `--chapter`) is still Remotion-only.** The
-installed HyperFrames, 0.7.58, cannot render a frame range: `hyperframes
+installed HyperFrames, 0.7.111, cannot render a frame range: `hyperframes
 render --help` has no start, end or frames option, and `hyperframes docs
 rendering` does not mention one. The latest release on npm, 0.9.26, adds
 `--start` and `--end` in seconds (MP4 only, a whole frame rate of 24, 25, 30
@@ -307,7 +307,7 @@ proven:
   `--start`/`--end`. An upgrade moves every pixel of the HyperFrames path, so
   it needs the whole parity corpus run first.
 - Use the compiler's `window` option (`windowComposition`), which already
-  renders one scene's stretch for `--preview-scene` on 0.7.58.
+  renders one scene's stretch for `--preview-scene` on 0.7.111.
 
 Either way, the bar before `PARTIAL_RENDERERS` in `src/render_segments.js`
 gains `hyperframes` is a test that stitches segment renders and finds them
