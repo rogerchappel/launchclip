@@ -11,7 +11,8 @@
   once in. The idle bob is capped at 4% of an element's height
   (`idleFor` in `kit/core/fluid-motion.mjs`). Both renderers, with long
   parity fixtures (`h-*-idle-portrait`) and the sample
-  `examples/story/group-idle-9x16` (icon-grid, item-list, social-wall).
+  `examples/story/group-idle-9x16`. drop-grid's landing settles with no
+  overshoot (`power3.out`), and its contact shadow spreads on impact.
 - **A treatment block in the direction map.** `DIRECTION.json` may carry
   `treatment`: the film in one sentence, the one object that carries it,
   what it must never do, the brief's locked words and claims, a worked
