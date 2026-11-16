@@ -42,6 +42,10 @@
 // light-leak (kit/core/light-leak.mjs adds warm light over the cut, peaking at
 // its middle; here the two plates crossfade under the peak).
 //
+// before-after (kit/core/before-after.mjs draws the handle and the labels
+// over the cut): here the incoming plate is clipped to the revealed side, a
+// straight wipe along the same steps (with a pause, two legs).
+//
 // Full-frame pictures (FULL_FRAME_PLATES: a clip, a photo plate, a world):
 // the incoming plate covers the frame by itself, so the outgoing one stays
 // whole under it until the transition ends and the frame is never empty. In
@@ -61,8 +65,9 @@
 
 import { grammarEase, resolveGrammar } from './grammar.mjs';
 import { LIGHT_LEAK } from './light-leak.mjs';
+import { BEFORE_AFTER, beforeAfterSteps } from './before-after.mjs';
 
-export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan', 'rack-focus', 'glow-wipe', 'card-to-card', 'overview', 'dot-wipe', 'light-sweep', 'push-blur', 'light-leak']);
+export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan', 'rack-focus', 'glow-wipe', 'card-to-card', 'overview', 'dot-wipe', 'light-sweep', 'push-blur', 'light-leak', 'before-after']);
 /** Transitions that carry the card: its module rests (whole) at both ends instead of fading (kit/core/modules.mjs). */
 export const CARRY_TRANSITIONS = Object.freeze(['rack-focus', 'card-to-card']);
 export const CAMERA_TRANSITION_TYPES = Object.freeze(['pan', 'pull', 'orbit', 'whip-pan']);
@@ -332,6 +337,15 @@ function typedTweens(transition, { width, height, grammar = null, mode: cameraMo
         in: [t('opacity', 0, 0, 'none', 0, half), t('opacity', 0, 1, 'none', half, 0)],
         out: [t('opacity', 1, 0, 'none', half, 0)] };
     }
+    case 'before-after': {
+      // A handle drags across (before-after.mjs); the incoming plate opens
+      // behind it on the same legs, the outgoing one stays whole under it.
+      const side = { left: 'wipeL', right: 'wipeR', up: 'wipeT', down: 'wipeB' }[direction] ?? 'wipeL';
+      return { type, duration: d,
+        // Its own ease, not the grammar's: the handle (drawn apart) must sit on the edge.
+        in: beforeAfterSteps(d, transition?.pause).map((s) => ({ prop: side, from: round(100 * (1 - s.from), 3), to: round(100 * (1 - s.to), 3), start: s.start, duration: s.duration, ease: BEFORE_AFTER.ease })),
+        out: fadeOut };
+    }
     case 'light-sweep': {
       // Light streaks sweep over the cut (light-sweep.mjs); the outgoing plate
       // darkens into soft blobs and drifts forward, fading as the incoming one
@@ -407,7 +421,8 @@ export function layerStateAt(t, tweens, getEase) {
     const value = tw.from + (tw.to - tw.from) * (p >= 1 ? 1 : getEase(tw.ease)(p));
     state[tw.prop] = value;
     if (tw.prop === 'iris') clipped = p < 1;
-    if (WIPE_PROPS.includes(tw.prop)) wiped = p < 1;
+    // A wipe that rests part-way (before-after's pause) keeps its clip.
+    if (WIPE_PROPS.includes(tw.prop)) wiped = p < 1 || Math.abs(value) > EPS;
   }
   // A finished iris or wipe covers the whole frame; drop the clip so the
   // layer is identical to an unclipped one.
