@@ -16,7 +16,7 @@
 // Canonical copy: kit/hyperframes/story-compiler.mjs. Skills ship a copy whose
 // ../core/ imports point at ./ (scripts/sync-skills.mjs).
 
-import { copyFile, cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { copyFile, cp, mkdir, open, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
@@ -1035,18 +1035,41 @@ async function videoDurations(story, sourceDir) {
   return durations;
 }
 
-// The sources in sourceDir whose audio is mono (ffprobe; one it cannot read
-// is left out). → Set of src
+// The sources in sourceDir whose audio is mono. A WAV file says so in its
+// header, so a compiled page is the same with or without FFmpeg installed;
+// any other file is asked of ffprobe, and one it cannot read is left out.
+// → Set of src
 async function monoSources(sourceDir, sources) {
   const mono = new Set();
   if (!sourceDir) return mono;
-  await Promise.all([...new Set(sources.filter((src) => typeof src === 'string'))].map((src) => new Promise((resolve) => {
-    execFile('ffprobe', ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=channels', '-of', 'csv=p=0', path.join(sourceDir, src)], (error, stdout) => {
-      if (!error && Number(String(stdout).trim()) === 1) mono.add(src);
-      resolve();
+  await Promise.all([...new Set(sources.filter((src) => typeof src === 'string'))].map(async (src) => {
+    const file = path.join(sourceDir, src);
+    const channels = await wavChannels(file) ?? await new Promise((resolve) => {
+      execFile('ffprobe', ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=channels', '-of', 'csv=p=0', file], (error, stdout) => resolve(error ? null : Number(String(stdout).trim())));
     });
-  })));
+    if (channels === 1) mono.add(src);
+  }));
   return mono;
+}
+
+// A WAV file's channel count, read from its fmt chunk. → number, or null when the file is not a readable WAV
+async function wavChannels(file) {
+  let handle;
+  try {
+    handle = await open(file, 'r');
+    const { buffer, bytesRead } = await handle.read(Buffer.alloc(4096), 0, 4096, 0);
+    if (bytesRead < 12 || buffer.toString('latin1', 0, 4) !== 'RIFF' || buffer.toString('latin1', 8, 12) !== 'WAVE') return null;
+    for (let at = 12; at + 8 <= bytesRead;) {
+      const size = buffer.readUInt32LE(at + 4);
+      if (buffer.toString('latin1', at, at + 4) === 'fmt ') return at + 12 <= bytesRead ? buffer.readUInt16LE(at + 10) : null;
+      at += 8 + size + (size % 2);
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    await handle?.close();
+  }
 }
 
 // A module's sole <video> that runs out before its clip ends → {html: an
