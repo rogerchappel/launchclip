@@ -8,9 +8,10 @@
 //                                                     drawn on past it through a camera move)
 //     in?:  {from: scene id, items: [{id, box?}],    elements it receives (box: the
 //            move?: {start, duration, ease},      source's rect at the boundary, in this
-//            ride?: {samples, centre}}            plate's px; move: the camera move it
+//            ride?: {samples, centre}, restFrom?} plate's px; move: the camera move it
 //                                                     arrives by; ride: the camera's inverse
-//                                                     on a zoom or roll, see rideOps)
+//                                                     on a zoom or roll, see rideOps; restFrom:
+//                                                     when its rest is sampled from, the ride's end)
 //     exitTo?, enterFrom?                             the root motion lifted off the root
 //   }
 //
@@ -283,6 +284,10 @@ function skipEntrances(model, ops, targets, index) {
   const start = model.start;
   const settles = new Map();
   const rests = restValues(model, ops, targets);
+  // On a ride, a module may hold its elements' entrances until the camera arrives (an overview's 2 s or more), so
+  // the received elements' rest is sampled from then; their ancestors (node-graph's slow -cam push) keep the scene's.
+  const restFrom = model.carry.in?.restFrom;
+  if (restFrom !== undefined) for (const [id, rest] of restValues(model, ops, new Set(model.carry.in.items.map(item => item.id)), restFrom)) rests.set(id, rest);
   for (const target of targets) {
     const mine = ops.map((op, i) => ({op, i})).filter(({op}) => op.target === target).sort((a, b) => opTime(a.op) - opTime(b.op) || a.i - b.i);
     for (const key of KEYS) {
@@ -303,12 +308,12 @@ function skipEntrances(model, ops, targets, index) {
   for (const [target, props] of settles) ops.push({type: 'set', target, time: start, props});
 }
 
-/** target → {key: the value it holds for most of the scene (sampled up to the exit)}. */
-function restValues(model, ops, targets) {
+/** target → {key: the value it holds for most of the scene (sampled from `after` up to the exit)}. */
+function restValues(model, ops, targets, after = model.start) {
   const counts = new Map();
-  const end = model.motion.exitStart, samples = 48;
+  const from = Math.min(after, model.motion.exitStart), end = model.motion.exitStart, samples = 48;
   for (let k = 0; k <= samples; k += 1) {
-    const state = frameState(ops, model.start + ((end - model.start) * k) / samples);
+    const state = frameState(ops, from + ((end - from) * k) / samples);
     for (const target of targets) {
       const props = state.get(target);
       if (!props) continue;

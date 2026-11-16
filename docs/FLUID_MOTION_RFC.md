@@ -195,7 +195,7 @@ has to write per scene.
   its boundary; `carry: false` opts that scene out.
 - **Planner.** The prompt gets one sentence: with flow on, leave the boundary
   between two scenes that share elements a cut (no `in`), a pan, a
-  whip-pan, a push, a pull or a whip, and the engine carries what they share.
+  whip-pan, a push, a pull, an orbit or a whip, and the engine carries what they share.
 
 ### 6.2 Pairing (a resolve pass)
 
@@ -215,7 +215,7 @@ these is a validation error that names it):
   `whip` slide, or by a `push` or `pull` of the camera. Across a pan A's
   rect is mapped through the two plates' world placements, across a slide by
   B's layer offset, and the element travels with the move (§6.5); across a
-  push or pull it rides a layer that cancels the camera (§6.6). An orbit or
+  push, pull or orbit it rides a layer that cancels the camera (§6.6). An
   overview and every other typed transition keep their own look. A world-camera cut stacks B on A's
   placement, so it is a still plate. A feel's ambient camera and kicks are
   fine: they move the whole composition, so A and B still share one
@@ -402,7 +402,7 @@ Samples: `examples/story/flow-camera-9x16` (a pan at 4 s, a whip-pan at
 
 ### 6.6 Carry through zoom and roll
 
-Status: push and pull shipped (2026-11-17); orbit and overview next. Push, pull, orbit and overview
+Status: shipped (2026-11-17): push, pull, orbit and overview. Push, pull, orbit and overview
 change the camera's zoom or roll, so §6.5's rule (travel in the world with
 the camera's timing and ease) no longer lands on a straight line: through a
 2× dolly an element that should hold still bulges about 6% off its place
@@ -472,8 +472,7 @@ keeps type level; a carried card that rolled with the camera would land
 tilted against a slot that is upright.
 
 **Overview.** Out, hold, in: two camera moves with one hold. The ride takes
-both legs (one translate and rotation tween each, the zoom sampled across
-each). The FLIP spans from the first leg's start to the second's end on the
+both legs and the hold (it is sampled, below). The FLIP spans from the first leg's start to the second's end on the
 camera's ease, so a held title sits still over the whole overview while the
 span of plates shrinks and grows under it.
 
@@ -497,9 +496,24 @@ slides, cuts and still plates keep their exact ops. Nothing is a pin on a ride
 Tests: the screen-path tests of §6.5 now also run a world push, a world pull
 and a cuts pull (on A's copy at the boundary, never off the straight line,
 settled on the slot), and the ride's scale times the camera's zoom is 1 and
-its rotation cancels the roll on every sample. Sample and parity fixture: `examples/story/flow-zoom-9x16` (a
-push at 4 s, a pull at 8 s). Next: orbit (the rotation tween), then overview
-(two legs).
+its rotation cancels the roll on every sample. Sample and parity fixture:
+`examples/story/flow-zoom-9x16` (a push at 4 s, a pull at 8 s).
+
+**Shipped: orbit** (world and cuts mode), on the same ride: it cancels the
+roll, so carried elements stay upright while the plates turn 9° under them.
+Sample and parity fixture: `examples/story/flow-orbit-9x16` (an orbit right
+at 4 s, one left at 8 s).
+
+**Shipped: overview.** The ride samples the camera across both legs and the
+hold, and the FLIP spans them on the camera's ease. One more change: a module
+holds its entrances until the camera arrives (an overview's 2.4 s), so a
+received element's pre-entrance pose held a third of the scene and read as
+its rest. Its rest is now sampled from the ride's end (`restFrom`); its
+ancestors keep the scene's window, so node-graph's slow `-cam` push stays a
+push. The ride test also checks exactness: on every tenth of the move each
+element is on screen within a pixel of where it is in B's px with the ride
+taken out. Sample and parity fixture: `examples/story/flow-overview-9x16` (a
+pan at 4 s, an overview at 8 s).
 
 **Unproven.** A pan that rebalances the scale after a chain of pushes
 (`besidePlacement`) also changes zoom; the ride would handle it, but it stays
@@ -800,11 +814,11 @@ fill rather than overflow. A badge or count past three characters, or a
 ## 12. What is unproven
 
 - ~~Carry through a moving camera or a moving transition (§6).~~ **Pans,
-  whip-pans and the push and whip slides shipped (§6.5).** Still open
-  ([rd/carry-moving-camera.md](rd/carry-moving-camera.md)): moves that zoom or
-  roll (push, pull, orbit, overview), where the same world travel bulges about
-  6% off its line mid-move and needs a layer that cancels the camera (the
-  ride layer, §6.6: push and pull shipped, orbit and overview next); blur
+  whip-pans and the push and whip slides shipped (§6.5); push, pull, orbit
+  and overview shipped on the ride layer, which cancels the camera (§6.6).**
+  Still open ([rd/carry-moving-camera.md](rd/carry-moving-camera.md)): a pan
+  that rebalances the scale after a chain of pushes (refused, so pans keep
+  their ops); blur
   from the element's own screen velocity rather than the camera's.
 - ~~Whether a container morph (tween only the box's width, height and corner
   radius, cross-fade its contents) reads well enough to join auto-pairing.~~
