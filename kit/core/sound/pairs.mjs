@@ -7,15 +7,15 @@
 
 /** Rows: visuals (VFX effect names, transitions, module moments) → the families that pair with them, first is the default. */
 export const PAIRS = Object.freeze([
-  Object.freeze({ visuals: Object.freeze(['impact-shake', 'slam', 'stamp', 'sticker', 'hit-spark', 'crit-hit', 'impact-frame', 'small-explosion', 'ground-slam', 'smoke-bomb']), sounds: Object.freeze(['impact', 'thud', 'snap']), note: 'impact or thud when heavy, snap when light' }),
+  Object.freeze({ visuals: Object.freeze(['impact-shake', 'slam', 'stamp', 'sticker', 'hit-spark', 'crit-hit', 'impact-frame', 'small-explosion', 'ground-slam', 'smoke-bomb', 'crit-number']), sounds: Object.freeze(['impact', 'thud', 'snap']), note: 'impact or thud when heavy, snap when light' }),
   // sparkle joins shimmer and ping: the VFX catalogue pairs the sunburst and firework with it.
-  Object.freeze({ visuals: Object.freeze(['light-pulse', 'bloom', 'ring-flash', 'sunburst', 'firework-burst']), sounds: Object.freeze(['shimmer', 'ping', 'sparkle']), note: 'shimmer or ping' }),
+  Object.freeze({ visuals: Object.freeze(['light-pulse', 'bloom', 'ring-flash', 'sunburst', 'firework-burst', 'firework-rocket']), sounds: Object.freeze(['shimmer', 'ping', 'sparkle']), note: 'shimmer or ping' }),
   Object.freeze({ visuals: Object.freeze(['zoom-kick', 'whip', 'swipe-out', 'push', 'zoom']), sounds: Object.freeze(['whoosh', 'swipe']), note: 'a whoosh in the motion\'s direction' }),
   Object.freeze({ visuals: Object.freeze(['glitch']), sounds: Object.freeze(['glitch']), note: 'glitch' }),
-  Object.freeze({ visuals: Object.freeze(['count-up', 'chart-build']), sounds: Object.freeze(['tally']), note: 'tally, or the chart\'s sonification' }),
-  Object.freeze({ visuals: Object.freeze(['unlock', 'check-mark']), sounds: Object.freeze(['chime', 'success']), note: 'chime or success, each one higher' }),
+  Object.freeze({ visuals: Object.freeze(['count-up', 'chart-build', 'combo-counter']), sounds: Object.freeze(['tally']), note: 'tally, or the chart\'s sonification' }),
+  Object.freeze({ visuals: Object.freeze(['unlock', 'check-mark', 'level-up', 'achievement']), sounds: Object.freeze(['chime', 'success']), note: 'chime or success, each one higher' }),
   Object.freeze({ visuals: Object.freeze(['node-pulse']), sounds: Object.freeze(['ping']), note: 'ping, rising a step per node' }),
-  Object.freeze({ visuals: Object.freeze(['poof', 'collect-burst']), sounds: Object.freeze(['pop']), note: 'pop' })
+  Object.freeze({ visuals: Object.freeze(['poof', 'collect-burst', 'confetti']), sounds: Object.freeze(['pop']), note: 'pop' })
 ]);
 
 /** The classifier's impact row (src/sfx/classify.js TYPE_FAMILIES.impact; a test keeps them equal). */
