@@ -8,8 +8,8 @@
 //
 // Everything is timed in beats (params.bpm, 120 by default: one beat every
 // 0.5 s) and the scene is 20 beats (a longer one holds the opening frame after): hook 0–3, play 3–6, apart 6–16,
-// snap at 16, payoff 17–19, clear by 20. Layer moves overshoot (back.out) and
-// the snap anticipates (back.in); camera moves never overshoot.
+// snap at 16, payoff 17–19, clear by 20. Layer moves ease out and the snap
+// eases in (power3); nothing overshoots, camera moves included.
 //
 // 2D only, so both renderers draw the same tree: a layer is three nested
 // full-frame divs (screen offset > squash > rotation), which is an isometric
@@ -212,7 +212,7 @@ function layerTimeline(model, ops) {
   for (const [i, w] of c.hook.words.entries()) {
     const from = {opacity: 0, y: r2(36 * u), scaleX: 0.6, scaleY: 0.6};
     set(ops, `${id}-w${i}`, start, from);
-    tw(ops, `${id}-w${i}`, w.at, 0.35, 'back.out(2.2)', from, {opacity: 1, y: 0, scaleX: 1, scaleY: 1});
+    tw(ops, `${id}-w${i}`, w.at, 0.35, 'power3.out', from, {opacity: 1, y: 0, scaleX: 1, scaleY: 1});
     tw(ops, `${id}-w${i}`, rt(B.play - 0.18), 0.18, 'power2.in', {opacity: 1}, {opacity: 0});
     set(ops, `${id}-w${i}`, sampleTime(B.play), from);
   }
@@ -225,7 +225,7 @@ function layerTimeline(model, ops) {
     set(ops, `${id}-f${j}`, sampleTime(j + 1 < c.play.length ? c.play[j + 1].at : B.tilt), {opacity: 0});
   }
 
-  // Tilt into the stack (anticipation and a little overshoot on the planes; the camera eases without one).
+  // Tilt into the stack (slow → fast → slow, no overshoot).
   const tilt = 0.5, settle = 0.45;
   const push = {scaleX: PUSH, scaleY: PUSH};
   set(ops, `${id}-cam`, start, {...home, ...push});
@@ -239,16 +239,16 @@ function layerTimeline(model, ops) {
     set(ops, `${id}-L${i}-sq`, start, flat);
     set(ops, `${id}-L${i}-rot`, start, {rotation: 0});
     set(ops, `${id}-L${i}-edge`, start, {opacity: 0});
-    tw(ops, `${id}-L${i}-sq`, B.tilt, tilt, 'back.inOut(1.3)', flat, iso);
-    tw(ops, `${id}-L${i}-rot`, B.tilt, tilt, 'back.inOut(1.3)', {rotation: 0}, {rotation: TURN});
+    tw(ops, `${id}-L${i}-sq`, B.tilt, tilt, 'power3.inOut', flat, iso);
+    tw(ops, `${id}-L${i}-rot`, B.tilt, tilt, 'power3.inOut', {rotation: 0}, {rotation: TURN});
     tw(ops, `${id}-L${i}-edge`, B.tilt, tilt, 'power1.out', {opacity: 0}, {opacity: 1});
-    // Apart: the top layer lifts first, one layer a beat, each overshooting its slot.
-    if (i > 0) tw(ops, `${id}-L${i}`, rt(B.apart + (n - 1 - i) * B.beat), 0.45, 'back.out(1.7)', {y: 0}, {y: c.offsets[i]});
+    // Apart: the top layer lifts first, one layer a beat, each easing into its slot.
+    if (i > 0) tw(ops, `${id}-L${i}`, rt(B.apart + (n - 1 - i) * B.beat), 0.45, 'power3.out', {y: 0}, {y: c.offsets[i]});
     // Snap: every layer winds up and lands on the snap beat together.
     const spread = {y: r2(c.offsets[i] * SPREAD)};
     if (i > 0) tw(ops, `${id}-L${i}`, held, holdLen, 'power1.inOut', {y: c.offsets[i]}, spread);
-    if (i > 0) tw(ops, `${id}-L${i}`, rt(B.snap - 0.35), 0.35, 'back.in(1.6)', spread, {y: 0});
-    tw(ops, `${id}-L${i}-sq`, B.snap, settle, 'back.out(1.2)', iso, flat);
+    if (i > 0) tw(ops, `${id}-L${i}`, rt(B.snap - 0.35), 0.35, 'power3.in', spread, {y: 0});
+    tw(ops, `${id}-L${i}-sq`, B.snap, settle, 'power3.out', iso, flat);
     tw(ops, `${id}-L${i}-rot`, B.snap, settle, 'power3.out', {rotation: TURN}, {rotation: 0});
     tw(ops, `${id}-L${i}-edge`, B.snap, rt(settle - 0.1), 'power1.in', {opacity: 1}, {opacity: 0});
   }
@@ -279,7 +279,7 @@ function layerTimeline(model, ops) {
   const pop = {opacity: 0, scaleX: 0.7, scaleY: 0.7};
   set(ops, `${id}-payoff`, start, pop);
   tw(ops, `${id}-scrim`, B.payoff, 0.25, 'power2.out', {opacity: 0}, {opacity: SCRIM});
-  tw(ops, `${id}-payoff`, B.payoff, 0.4, 'back.out(2)', pop, {opacity: 1, scaleX: 1, scaleY: 1});
+  tw(ops, `${id}-payoff`, B.payoff, 0.4, 'power3.out', pop, {opacity: 1, scaleX: 1, scaleY: 1});
   tw(ops, `${id}-payoff`, B.clear, 0.25, 'power2.in', {opacity: 1, scaleX: 1, scaleY: 1}, {opacity: 0, scaleX: 1.04, scaleY: 1.04});
   tw(ops, `${id}-scrim`, B.clear, 0.3, 'power2.in', {opacity: SCRIM}, {opacity: 0});
   // Every element back in its opening state (the invisible ones too), so the seam check can be exact.

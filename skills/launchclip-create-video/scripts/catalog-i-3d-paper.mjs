@@ -278,7 +278,7 @@ function paperTimeline(model, ops) {
     tw(ops, `${id}-flap`, c.openAt, 0.8, 'power3.inOut', {rotation: 0}, {rotation: -78});
     c.items.forEach((item, i) => {
       set(ops, `${id}-f${i}`, start, {x: 0, y: 0});
-      tw(ops, `${id}-f${i}`, item.time, 0.7, 'back.out(1.4)', {y: 0}, {y: -item.lift});
+      tw(ops, `${id}-f${i}`, item.time, 0.7, 'power3.out', {y: 0}, {y: -item.lift});
     });
   } else {
     c.items.forEach((item, i) => {
@@ -288,7 +288,7 @@ function paperTimeline(model, ops) {
   }
   c.items.forEach((item, i) => {
     if (item.status === 'none') return;
-    popOps(ops, `${id}-st${i}`, start, item.statusAt, {from: 0.3, duration: 0.45, ease: 'back.out(2.2)'});
+    popOps(ops, `${id}-st${i}`, start, item.statusAt, {from: 0.3, duration: 0.45, ease: 'power3.out'});
     if (item.status === 'flag' && c.variant === 'sections') {
       set(ops, `${id}-fl${i}`, start, {opacity: 0});
       tw(ops, `${id}-fl${i}`, item.statusAt, 0.35, 'power2.out', {opacity: 0}, {opacity: 1});

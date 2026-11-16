@@ -124,9 +124,9 @@ function raceTimeline(model, ops) {
     set(ops, `${id}-timer-${i}`, start, {opacity: 0});
     tw(ops, `${id}-timer-${i}`, rt(c.raceAt - 0.15), 0.2, 'power1.out', {opacity: 0}, {opacity: 1});
     countOps(ops, `${id}-timer-${i}`, start, c.rows[i].samples[0]?.text ?? '0', r.samples);
-    if (r.winner) popOps(ops, `${id}-flag-${i}`, start, r.finish, {from: 0.3, duration: 0.4, ease: 'back.out(2.4)'});
+    if (r.winner) popOps(ops, `${id}-flag-${i}`, start, r.finish, {from: 0.3, duration: 0.4, ease: 'power3.out'});
   });
-  if (c.badge) popOps(ops, `${id}-badge`, start, c.badge.at, {from: 0.5, duration: 0.5, ease: 'back.out(2)'});
+  if (c.badge) popOps(ops, `${id}-badge`, start, c.badge.at, {from: 0.5, duration: 0.5, ease: 'power3.out'});
 }
 
 export const raceBars = {

@@ -59,7 +59,7 @@ function ratioNodes(id, c, fonts) {
 
 function ratioOps(ops, id, start, c, u) {
   if (!c.ratio) return;
-  popOps(ops, `${id}-ratio`, start, c.ratio.time, {from: 0.6, duration: 0.5, ease: 'back.out(2)'});
+  popOps(ops, `${id}-ratio`, start, c.ratio.time, {from: 0.6, duration: 0.5, ease: 'power3.out'});
   if (c.ratio.sub) riseOps(ops, `${id}-ratio-sub`, start, rt(c.ratio.time + 0.15), r2(14 * u));
 }
 

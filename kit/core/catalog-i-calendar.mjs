@@ -139,7 +139,7 @@ function carouselTimeline(model, ops) {
   tw(ops, `${id}-lens`, rt(c.buildAt + 0.3), 0.35, 'power2.out', {opacity: 0}, {opacity: 0.6});
   tw(ops, `${id}-lens`, rt(c.moveAt - 0.05), 0.2, 'power1.in', {opacity: 0.6}, {opacity: 0});
   tw(ops, `${id}-lens`, c.focusAt, 0.25, 'power2.out', {opacity: 0}, {opacity: 1});
-  tw(ops, `${id}-lens`, c.focusAt, 0.45, 'back.out(2.2)', {scaleX: 0.94, scaleY: 0.94}, {scaleX: 1, scaleY: 1});
+  tw(ops, `${id}-lens`, c.focusAt, 0.45, 'power3.out', {scaleX: 0.94, scaleY: 0.94}, {scaleX: 1, scaleY: 1});
   if (c.startEvent) {
     riseOps(ops, `${id}-schip`, start, rt(c.buildAt + 0.4), r2(12 * u));
     tw(ops, `${id}-schip`, rt(c.moveAt - 0.1), 0.2, 'power1.in', {opacity: 1}, {opacity: 0});
@@ -286,7 +286,7 @@ function gridTimeline(model, ops) {
     const row = Math.floor(i / 7), col = i % 7;
     set(ops, `${id}-cell-${i}`, start, {opacity: 0, x: 0, y: r2(16 * u), scaleX: 1, scaleY: 1});
     tw(ops, `${id}-cell-${i}`, rt(c.buildAt + (row + col) * 0.03), 0.4, 'power3.out', {opacity: 0, y: r2(16 * u)}, {opacity: cell.run ? 1 : 0.45, y: 0});
-    if (cell.run) popOps(ops, `${id}-fill-${i}`, start, cell.time, {from: 0.85, duration: 0.3, ease: 'back.out(2)', fade: 0.12});
+    if (cell.run) popOps(ops, `${id}-fill-${i}`, start, cell.time, {from: 0.85, duration: 0.3, ease: 'power3.out', fade: 0.12});
     if (cell.mark) popOps(ops, `${id}-mark-${i}`, start, rt(cell.time + 0.1), {from: 0.6, duration: 0.35});
   });
   c.legend.forEach((_, i) => riseOps(ops, `${id}-legend-${i}`, start, rt(c.legendAt + i * 0.1), r2(12 * u)));
