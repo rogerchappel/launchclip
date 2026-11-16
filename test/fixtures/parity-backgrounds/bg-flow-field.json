@@ -1,0 +1,16 @@
+{
+  "describe": "background kind flow-field (seed 7, 160 lines) on the minimal story (dark palette): the dashes travel between the two times",
+  "project": "examples/story/minimal",
+  "times": [
+    1.2,
+    5.5
+  ],
+  "patch": {
+    "background": {
+      "kind": "flow-field",
+      "params": {
+        "seed": 7
+      }
+    }
+  }
+}

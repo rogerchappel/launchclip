@@ -545,6 +545,7 @@ export function satisfyingLines() {
     'Make the words physical. When the line counts things ("10 times a day"), drop-grid drops one card per word: set params.times to the word times so each landing hits its word. When a number is still growing, live-counter or live-bars keep it ticking for the whole scene instead of landing and stopping.',
     'Weight beats fades: drops fall, squash and settle with a contact shadow and a puff of dust; milestones and deltas stamp in. One tactile hero per beat; keep a still beat after a big landing so it reads.',
     'A progress frame holds the video together: frame.counter {label? ≤ 24 ("DAY", "LIABILITY"), format? {prefix?, suffix?, pad?}, steps: [{scene | start, value | text}]} climbs in a top corner on the words that move it (day 1 → day 14, $0 → $261,118), and frame.progress {style: "scrubber"} carries a knob along the bottom. Values come from the script only.',
+    'A documentary or lab-notebook explainer can number its scenes as figures: frame.figure: true (or {label: "PLATE"}) puts "FIG. 03" top left and "03 / 12" top right on every main scene; leave it off otherwise.',
     'Caption presets for this look: tag-chips (the sentence builds word by word; key phrases land in ink chips) or serif-accent (one key word per line turns serif italic in the brand colour). Mark the key phrases in captions.emphasis.'
   ];
 }

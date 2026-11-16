@@ -8,7 +8,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
 
-import { brandFrameLayout, brandFramePlan, brandFrameRuntime, brandFrameSafe, frameLabels, frameLogoPlate, frameSources, frameWindows, intersectRects, storyFrame } from "@launchclip/core/brand-frame.mjs";
+import { brandFrameLayout, brandFramePlan, frameCounter, brandFrameRuntime, brandFrameSafe, frameLabels, frameLogoPlate, frameSources, frameWindows, intersectRects, storyFrame } from "@launchclip/core/brand-frame.mjs";
 import { captionStateAt, indexCaptionTweens } from "@launchclip/core/captions.mjs";
 import { profileGeometry } from "@launchclip/core/layout-check.mjs";
 import { resolveModule } from "@launchclip/core/modules.mjs";
@@ -45,6 +45,18 @@ test("storyFrame: defaults, the short title as kicker, and off switches", () => 
   assert.equal(storyFrame(story({}, { title: "A very long story title that will not fit in a kicker" })).kicker, null, "a long title is not a kicker");
   assert.equal(storyFrame(story({ kicker: { position: "top-right" } })).sections.position, "top-left", "labels take the other corner");
   assert.equal(storyFrame(story({ kicker: false, progress: true })).kicker, null);
+});
+
+test("frame.figure: FIG. NN top left and NN / total top right per track-0 scene", () => {
+  const s = story({ figure: true }, { scenes: [{ id: "a", start: 0, end: 4 }, { id: "o", start: 1, end: 2, track: 1 }, { id: "b", start: 4, end: 8 }, { id: "c", start: 9, end: 12 }] });
+  assert.deepEqual(frameLabels(s).map((entry) => [entry.start, entry.label]), [[0, "FIG. 01"], [4, "FIG. 02"], [9, "FIG. 03"]]);
+  assert.deepEqual(frameCounter(s).steps.map((step) => step.text), ["01 / 03", "02 / 03", "03 / 03"]);
+  assert.equal(frameCounter(s).position, "top-right");
+  assert.equal(storyFrame(s).kicker, null, "the figure takes the corner the kicker would");
+  assert.equal(frameLabels(story({ figure: { label: "PLATE" } }))[1].label, "PLATE 02");
+  assert.equal(frameLabels(story({})).length, 0, "opt-in");
+  const errors = validateStory({ schema: "launchclip.story.v1", lane: "motion", format: { width: 1080, height: 1920, fps: 30, duration: 4 }, scenes: [{ id: "a", module: "motion-title", start: 0, end: 4, params: { text: "Hi" } }], frame: { figure: { label: "" } } }).errors;
+  assert.ok(errors.some((message) => /frame\.figure/.test(message)), errors.join("\n"));
 });
 
 test("section labels and show windows follow the story's scenes", () => {

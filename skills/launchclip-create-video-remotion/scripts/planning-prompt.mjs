@@ -545,6 +545,7 @@ export function satisfyingLines() {
     'Make the words physical. When the line counts things ("10 times a day"), drop-grid drops one card per word: set params.times to the word times so each landing hits its word. When a number is still growing, live-counter or live-bars keep it ticking for the whole scene instead of landing and stopping.',
     'Weight beats fades: drops fall, squash and settle with a contact shadow and a puff of dust; milestones and deltas stamp in. One tactile hero per beat; keep a still beat after a big landing so it reads.',
     'A progress frame holds the video together: frame.counter {label? ≤ 24 ("DAY", "LIABILITY"), format? {prefix?, suffix?, pad?}, steps: [{scene | start, value | text}]} climbs in a top corner on the words that move it (day 1 → day 14, $0 → $261,118), and frame.progress {style: "scrubber"} carries a knob along the bottom. Values come from the script only.',
+    'A documentary or lab-notebook explainer can number its scenes as figures: frame.figure: true (or {label: "PLATE"}) puts "FIG. 03" top left and "03 / 12" top right on every main scene; leave it off otherwise.',
     'Caption presets for this look: tag-chips (the sentence builds word by word; key phrases land in ink chips) or serif-accent (one key word per line turns serif italic in the brand colour). Mark the key phrases in captions.emphasis.'
   ];
 }
@@ -658,7 +659,9 @@ export function scriptBeatLines() {
     'The hook beat\'s first scene shows the hook\'s subject from 0 s, with on-screen text that paraphrases the spoken hook in about 6–8 words and keeps its stakes (the myth, the mistake, the number with its unit, the bold claim): never a bare topic such as "Deck care?" or "Solar panels", which gives no reason to stay. In a video of 90 s or less that scene is an image (a photo, object, number with its unit, chart, character or product scene), never a title card (hook-title, motion-title, kinetic-words, section-card, masthead, glass-word, emphasis-caption); a title card may follow it.',
     'A beat with the share role carries the line a viewer would send or comment on: give it a scene of its own that shows it, not a recap card.',
     'Turns in the script ("but", "so", a reveal) are where a new scene, a transition or a hit lands; a payoff beat gets the strongest visual of the video.',
-    'The CTA beat gets the end card, worded exactly as the narration speaks it; no other scene shows a call to action.'
+    'The CTA beat gets the end card, worded exactly as the narration speaks it; no other scene shows a call to action.',
+    'The open-loop beat is a teaser, not a list item: its card is labelled as one (kicker "Coming up", or "Stay for number three"), never with the item\'s own label ("Material three", "Option 3"), and the item gets its own card in its turn. A later item shown before the earlier ones without that label fails the plan (order:).',
+    'Keep the frame full to the last second: the payoff and the CTA keep footage on screen (a clip, a media layout, or a card on a footage backdrop) or full-bleed type that fills most of the frame; never close on small cards or chips over the flat brand surface, and never run footage in one half over an empty panel for long. A stretch that is mostly flat surface fails the plan (density:).'
   ];
 }
 

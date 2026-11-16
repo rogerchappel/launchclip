@@ -1482,6 +1482,12 @@ underline).
   `brand_frame.sources` is ignored (a warning), like its labels.
   `validateStory` warns when a `unit-grid` or `number-line` scene has neither
   `params.source` nor a note on screen ("no source, no study claim").
+- Figure chrome (`figure: true | {label ≤ 12}`, off unless set): every
+  track-0 scene gets a section label top left ("FIG. 03", or the label as
+  prefix) and a counter step top right ("03 / 12"). `storyFrame` turns it
+  into plain `labels` and `counter`, so it is drawn by the same plan; the
+  kicker is off unless set, and a story's own labels and counter are
+  replaced (a warning). Parity: `f-frame-figure.json`.
 - `launchclip layout-check` warns (`brand-frame`) when key text or a hero
   overlaps the kicker or section label (`brandFrameFindings`).
 - Parity: `test/fixtures/parity-footage/f-frame-footage.json` (9:16 footage,
@@ -2098,6 +2104,7 @@ imports only `./ambient.mjs`, `./panels.mjs` and `./icons.mjs`, and
 | `weather` | type, intensity 0–1 (0.6), speed, color (primary) | a pixel weather loop plays (rain, snow, fog …); still at level off |
 | `rings` | density, intensity, weight 0.5–3 (1.5), bpm 40–200 (100), speed, color (primary) | a ring leaves the centre on every beat and grows past the corners (a scale glide per ring, a beat apart); speed 0 rests them concentric |
 | `bokeh` | density, intensity, scale, speed, color (accent) | soft discs with a hot core (light-sweep's falloff), a few white, drift slowly |
+| `flow-field` | seed 0–99999 (0: the story's seed), lines 80–400 (160), scale, octaves 1–4 (2), intensity, speed, color (primary) | dashes travel along seeded streamlines (one SVG, a `--flow` CSS variable glides 0 → −1 every 14 s ÷ speed); still at level off |
 
 `color` is `primary`, `accent` or `paper` (each kind has its own default).
 Density, intensity and grain default to 0.5 unless the table says otherwise.
