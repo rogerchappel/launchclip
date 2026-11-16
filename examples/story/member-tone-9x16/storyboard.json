@@ -1,7 +1,7 @@
 {
   "schema": "launchclip.story.v1",
-  "title": "The release crew (9:16 person members)",
-  "notes": "Sample for the person member (docs/FLUID_MOTION_RFC.md §10, member modules): a robot waits in an office at night while the six people who sign off a release flock out of a Release hub, three as drawn avatars or a portrait photo, three as initials tiles in the brand palette, wired into the hub with pulses on a 120 bpm grid, converging at 3 s as the robot cheers. The avatars are drawn SVGs, not real people. No narration and no paid calls.",
+  "title": "A kitchen whose stations wear their heat (9:16 tone members)",
+  "notes": "Sample for docs/FLUID_MOTION_RFC.md §10 (member modules): a robot runs the pre-dawn shift while its stations flock out of a head-chef hub, each a tone member: hot stations in steps of the brand primary (deeper is hotter), cold ones in steps of the accent, the counter in paper. Each wire and lit rim runs in its node's tone, with pulses on a 120 bpm grid. No narration and no paid calls.",
   "lane": "motion",
   "format": {
     "width": 1080,
@@ -68,7 +68,7 @@
     ]
   },
   "world": {
-    "kind": "office",
+    "kind": "kitchen",
     "time": "night"
   },
   "scenes": [
@@ -102,61 +102,79 @@
       }
     },
     {
-      "id": "crew",
+      "id": "team",
       "module": "node-graph",
       "track": 1,
       "start": 0,
       "end": 10,
       "params": {
         "hub": {
-          "label": "Release",
-          "icon": "rocket"
+          "label": "Head chef",
+          "icon": "chef-hat"
         },
         "nodes": [
           {
-            "id": "mira",
+            "id": "oven",
             "member": {
-              "module": "person",
-              "name": "Mira",
-              "image": "assets/people/mira.svg"
+              "module": "tone",
+              "tone": "primary-deeper",
+              "icon": "flame",
+              "label": "Oven"
             }
           },
           {
-            "id": "ana",
+            "id": "grill",
             "member": {
-              "module": "person",
-              "name": "Ana Lin"
+              "module": "tone",
+              "tone": "primary-deep",
+              "icon": "beef",
+              "label": "Grill"
             }
           },
           {
-            "id": "jonah",
+            "id": "bake",
             "member": {
-              "module": "person",
-              "name": "Jonah",
-              "image": "assets/people/jonah.svg",
-              "shape": "photo"
+              "module": "tone",
+              "tone": "primary",
+              "icon": "croissant",
+              "label": "Bake",
+              "badge": "3"
             }
           },
           {
-            "id": "lee",
+            "id": "proof",
             "member": {
-              "module": "person",
-              "name": "Lee Park"
+              "module": "tone",
+              "tone": "primary-light",
+              "icon": "timer",
+              "label": "Proof"
             }
           },
           {
-            "id": "sol",
+            "id": "chill",
             "member": {
-              "module": "person",
-              "name": "Sol",
-              "image": "assets/people/sol.svg"
+              "module": "tone",
+              "tone": "accent-deep",
+              "icon": "snowflake",
+              "label": "Chill"
             }
           },
           {
-            "id": "kit",
+            "id": "ice",
             "member": {
-              "module": "person",
-              "name": "Kit Wu"
+              "module": "tone",
+              "tone": "accent-light",
+              "icon": "ice-cream-cone",
+              "label": "Ices"
+            }
+          },
+          {
+            "id": "pass",
+            "member": {
+              "module": "tone",
+              "tone": "paper",
+              "icon": "bell-ring",
+              "label": "Pass"
             }
           }
         ],
@@ -166,7 +184,7 @@
           "x": 80,
           "y": 280,
           "width": 860,
-          "height": 700
+          "height": 640
         }
       }
     }

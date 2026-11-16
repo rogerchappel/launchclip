@@ -62,7 +62,7 @@ function graphResolve(params, ctx) {
     if (!given && node.label === undefined) check.fail(`${path}.label`, 'is required');
     if (node.icon !== undefined && !isIcon(node.icon)) check.fail(`${path}.icon`, `must be an icon name from kit/core/icons.mjs (got ${JSON.stringify(node.icon)})`);
     const graphic = given ?? graphicSpec(check, {kind: 'card', icon: node.icon ?? 'bot', label: node.label}, path);
-    return {id: revealId(check, node.id, `${path}.id`, `n${i}`, seen), label: graphic.label ?? graphic.text ?? graphic.prop ?? graphic.icon, icon: graphic.icon, graphic, color: palette[i], ink: inkOn(b.colors, palette[i]), index: i};
+    return {id: revealId(check, node.id, `${path}.id`, `n${i}`, seen), label: graphic.label ?? graphic.text ?? graphic.prop ?? graphic.icon, icon: graphic.icon, graphic, color: graphic.color ?? palette[i], ink: graphic.ink ?? inkOn(b.colors, palette[i]), index: i};
   });
   const hubRaw = typeof p.hub === 'string' ? {label: p.hub} : check.obj(p.hub, 'params.hub', ['label', 'icon'], ['label']);
   if (hubRaw.icon !== undefined && !isIcon(hubRaw.icon)) check.fail('params.hub.icon', `must be an icon name from kit/core/icons.mjs (got ${JSON.stringify(hubRaw.icon)})`);
