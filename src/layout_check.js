@@ -10,6 +10,7 @@ import { checkCameraSweeps, checkLayout, elementsFromEditorialLayout, elementsFr
 import { cameraPlan, captionDipWindows, sceneObjectLookup, screenPoint, worldPoint } from "@launchclip/core/camera-world.mjs";
 import { captionDipHidden, captionLineExtent, captionMoveHide, captionOptions, captionsOverlayOf, chunkWords } from "@launchclip/core/captions.mjs";
 import { backgroundContrastFindings } from "@launchclip/core/backgrounds.mjs";
+import { paleSurfaceFindings } from "@launchclip/core/palette.mjs";
 import { driftExtent, sceneDrift } from "@launchclip/core/ambient.mjs";
 import { emptyPlates, sceneWindows } from "@launchclip/core/transitions.mjs";
 import { storyBase } from "@launchclip/core/story.mjs";
@@ -197,7 +198,10 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   // against every tone the story's background kind lays over bg.
   const overlay = captionsOverlayOf(resolved);
   const backgroundFindings = backgroundContrastFindings(resolved, { captions: overlay && overlay.style !== "none" ? captionOptions(overlay, { brand: resolved.brand, format: resolved.format, story: resolved }) : null });
-  const findings = [...specFindings, ...report.findings, ...plateFindings, ...sweepFindings, ...faceFindings, ...textFindings, ...densityFindings, ...frameFindings, ...backgroundFindings].sort((a, b) => a.at - b.at);
+  // Palette (kit/core/palette.mjs): a warning when most of the frame sits bare on a pale ground.
+  const footage = elements.filter((element) => element.role === "media" && element.rect).map((element) => ({ start: Number(element.start), end: Number(element.end), area: (element.rect.width * element.rect.height) / (canvas.width * canvas.height) }));
+  const paletteFindings = paleSurfaceFindings({ colors: resolved.brand?.colors, duration: Number(resolved.resolved?.duration) || 0, media: footage });
+  const findings = [...specFindings, ...report.findings, ...plateFindings, ...sweepFindings, ...faceFindings, ...textFindings, ...densityFindings, ...frameFindings, ...backgroundFindings, ...paletteFindings].sort((a, b) => a.at - b.at);
   return {
     stage: "layout-check",
     project,
