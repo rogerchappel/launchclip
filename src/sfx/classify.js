@@ -4,8 +4,9 @@
 // family × palette × variant lands in its row, sorting sounds we did not make
 // into families, and measuring reference videos.
 //
-// Ported from rea-video's sfx_type (rea_video/audio.py), Apache-2.0,
-// Copyright 2026 JuneYaooo. Changes: JavaScript, our radix-2 FFT
+// Ported from rea-video's sfx_type (rea_video/audio.py), Copyright 2026
+// JuneYaooo, licensed under the Apache License, Version 2.0
+// (http://www.apache.org/licenses/LICENSE-2.0; THIRD_PARTY_NOTICES.md). Changes: JavaScript, our radix-2 FFT
 // (src/scripts/audio-features.mjs) at 48 kHz with the source's bin width,
 // onset and band, the families each type maps to, and the typing run taking
 // events rather than a file.
