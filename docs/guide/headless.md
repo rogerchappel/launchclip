@@ -377,6 +377,35 @@ pixels, so a host can show a problem before anyone pays for a render:
 
 `MAKE.json` `gates` stays `null` until a render: it is the rendered video's.
 
+### What a held render says
+
+Every gate in `finish.json` `gates` (also `qa/finish/gates.json`, `MAKE.json`
+`gates` and `plan.checks.gates`) carries plain words a host can show as they
+are, instead of paraphrasing the findings:
+
+- `summary` (failed gates only): one line for the person who made the video,
+  with no gate names, ratios or percentages, and up to three times, for
+  example "Some captions are hard to read over what's behind them (0:16)",
+  "The screen looks empty in places (0:03, 0:10)" or "The opening is slow to
+  get going".
+- `at` (failed gates only): the seconds (whole, sorted) of the findings
+  behind the summary, so a player can seek to each one. It is empty when the
+  problem has no time (the sound level, a style drift).
+- `at` on each finding that has a time, in seconds. Motion's still spans have
+  it as well as `start_seconds`.
+
+The `placeholders` gate also lists `findings` (rule `placeholder`, `at` the
+scene's start) and says in each `errors` line which scene shows a "Missing
+module" card and why: a module LaunchClip does not know, params that do not
+resolve, or a HyperFrames compile failure. Its `scenes` entries have a `kind`
+(`unknown-module`, `params`, `compile` or `custom`).
+
+Only what a viewer would notice holds a render. A text module shown for
+most of its reading time (70% or more) is a `text-hold` warning, not an
+error, and the motion gate's `hold_ratio` (relative to the video's own median
+change) is advice once the absolute stillness is measured; long stills still
+hold it.
+
 ### What the preview will not match
 
 - **Loudness.** The player plays the unmastered mix. The render masters the

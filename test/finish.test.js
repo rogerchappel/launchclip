@@ -600,7 +600,9 @@ test("no scene ships as a Missing module placeholder", async () => {
     const report = await runFinish(unknown, {}, fakeAdapters());
     assert.equal(report.status, "needs-repair");
     assert.equal(report.gates.placeholders.status, "failed");
-    assert.match(report.gates.placeholders.errors[0], /^s2 \(not-a-module\) renders as a "Missing module" placeholder/);
+    assert.equal(report.gates.placeholders.errors[0], 'Scene s2 (not-a-module) shows a "Missing module" card: "not-a-module" is not a module LaunchClip knows');
+    assert.equal(report.gates.placeholders.findings[0].at, report.gates.placeholders.at[0]);
+    assert.match(report.gates.placeholders.summary, /^A scene couldn't be drawn and shows a placeholder card \(0:\d\d\)$/);
   } finally {
     await rm(unknown, { recursive: true, force: true });
   }
@@ -617,7 +619,7 @@ test("placeholderScenes covers custom modules in HyperFrames and compiler fallba
   const both = { ...custom, scenes: [{ ...custom.scenes[0], source: { remotion: "remotion/Hero.tsx", hyperframes: "hyperframes/hero.html" } }, ...story.scenes.slice(1)] };
   assert.deepEqual(placeholderScenes(both, { renderer: "hyperframes" }), []);
   const fallback = placeholderScenes(story, { renderer: "hyperframes", compileWarnings: [`s2: HyperFrames emitter for "${story.scenes[1].module}" failed (boom); rendering a placeholder`] });
-  assert.deepEqual(fallback, [{ id: "s2", module: story.scenes[1].module, reason: `HyperFrames emitter for "${story.scenes[1].module}" failed (boom)` }]);
+  assert.deepEqual(fallback, [{ id: "s2", module: story.scenes[1].module, kind: "compile", reason: `HyperFrames emitter for "${story.scenes[1].module}" failed (boom)` }]);
 });
 
 test("a custom module with no form for the renderer stops the run before anything renders", async () => {
