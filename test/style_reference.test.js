@@ -9,7 +9,7 @@ import test from "node:test";
 
 import { colorDistance, STYLE_SCHEMA, validateStylePack } from "@launchclip/core/style.mjs";
 import { validateProfile } from "@launchclip/core/profiles.mjs";
-import { boundariesFromGrayFrames, captionCase, captionsFromDetection, columnCase, compareToStyle, detectCaptions, detectLayouts, downsampleFrame, draftStyleFromReferences, grammarFromPacing, kmeansColors, layoutsFromDetection, overlayEventsFromGrayFrames, paletteClusters, panelShare, profileFromReferences } from "../src/style_reference.js";
+import { boundariesFromGrayFrames, captionCase, captionsFromDetection, columnCase, compareToStyle, detectCaptions, detectLayouts, downsampleFrame, draftStyleFromReferences, grammarFromPacing, kmeansColors, layoutsFromDetection, overlayEventsFromGrayFrames, paletteClusters, panelShare, profileFromReferences, soundFromAudio } from "../src/style_reference.js";
 import { checkStyleCommand, createStyleFromReferences } from "../src/style_commands.js";
 import { mediaSkip } from "./helpers/media.js";
 
@@ -317,4 +317,19 @@ test("downsampleFrame averages blocks", () => {
   assert.equal(half.height, 2);
   assert.equal(half.data[0], 200);
   assert.equal(half.data[2 * 3], 0);
+});
+
+test("measured tempo and SFX drive the drafted sound settings", () => {
+  const sound = soundFromAudio([
+    { audio: true, integrated_lufs: -16, silence_ratio: 0.3, transients_per_minute: 40, tempo_bpm: 118, beat_strength: 0.5, cuts_on_beat_ratio: 0.6, cuts_on_beat_lift: 2.5, sfx_per_min: 10, sfx_mix: { whoosh: 0.5, pop: 0.5 }, sfx_on_picture_ratio: 0.8, near_silences_per_min: 2 },
+    { audio: true, integrated_lufs: -18, silence_ratio: 0.3, transients_per_minute: 40, tempo_bpm: 122, beat_strength: 0.4, cuts_on_beat_ratio: 0.4, cuts_on_beat_lift: 1.5, sfx_per_min: 12, sfx_mix: { whoosh: 0, pop: 1 }, sfx_on_picture_ratio: 0.6, near_silences_per_min: 0 }
+  ]);
+  assert.equal(sound.sfx_density, "low", "typed SFX, not the transient count, set the density");
+  assert.deepEqual(sound.music.bpm_range, [115, 125]);
+  assert.equal(sound.stats.tempo_bpm, 120);
+  assert.deepEqual(sound.stats.sfx_mix, { whoosh: 0.25, pop: 0.75 });
+  assert.equal(sound.stats.cuts_on_beat_ratio, 0.5);
+  const unmeasured = soundFromAudio([{ audio: true, integrated_lufs: -20, silence_ratio: 0.05, transients_per_minute: 30 }]);
+  assert.equal(unmeasured.sfx_density, "high");
+  assert.equal(unmeasured.music.bpm_range, undefined);
 });

@@ -31,7 +31,7 @@
 // PARTICLE_RUNTIME (their source) is what HyperFrames inlines into the page.
 
 /** Paint-plan layer kinds. */
-export const PAINT_KINDS = Object.freeze(['field', 'swarm', 'ring', 'cloud', 'cells']);
+export const PAINT_KINDS = Object.freeze(['field', 'swarm', 'ring', 'cloud', 'cells', 'spectrum']);
 /** The largest token field a dot-field draws (1 px = 1 token in its bitmap). */
 export const MAX_FIELD = 2_000_000;
 
@@ -451,6 +451,64 @@ function lcPaintCells(ctx, L, t) {
   }
 }
 
+// Audio spectrum (audio-visualizer): L.bands holds five band levels (sub,
+// low, mid, high, air; 0..1) per video frame from frame L.f0, so the frame is
+// round(t × fps), the index Remotion and HyperFrames both use. Bars sit on a
+// log-frequency axis between the bands, each with a fixed texture so the
+// shape is not five ramps.
+function lcSpectrumValues(L, t) {
+  const frames = (L.bands.length / 5) | 0, grow = lcEase('out', (t - L.at) / 0.5), out = [];
+  let f = Math.round(t * L.fps) - L.f0;
+  f = f < 0 ? 0 : f >= frames ? frames - 1 : f;
+  for (let i = 0; i < L.n; i++) {
+    const p = L.n > 1 ? (i / (L.n - 1)) * 4 : 0, k = Math.min(3, Math.floor(p)), w = p - k;
+    const a = frames ? L.bands[f * 5 + k] : 0, b = frames ? L.bands[f * 5 + k + 1] : 0;
+    out.push(grow * (L.floor + (1 - L.floor) * (a + (b - a) * w) * (0.7 + 0.3 * lcHash(i, L.seed))));
+  }
+  return out;
+}
+
+function lcPaintSpectrum(ctx, L, t) {
+  if (t < L.at) return;
+  const v = lcSpectrumValues(L, t), n = L.n, B = L.box, cy = B.y + B.h / 2;
+  ctx.save();
+  ctx.fillStyle = lcRgba(L.rgb, 1);
+  ctx.strokeStyle = lcRgba(L.rgb, 1);
+  if (L.shape === 'ring') {
+    const R = Math.min(B.w, B.h) / 2, cx = B.x + B.w / 2, r0 = R * 0.46;
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = L.stroke;
+    ctx.beginPath(); ctx.arc(cx, cy, r0 - L.stroke * 2, 0, 6.2832); ctx.stroke();
+    ctx.lineWidth = (6.2832 * r0 / n) * 0.55;
+    for (let i = 0; i < n; i++) {
+      // Mirrored round the circle: bass at the top, air at the bottom, no seam.
+      const value = v[Math.round((1 - Math.abs((2 * i) / n - 1)) * (n - 1))];
+      const a = -1.5708 + (6.2832 * i) / n, len = Math.max(L.stroke, value * R * 0.52);
+      ctx.globalAlpha = 0.4 + 0.6 * value;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+      ctx.lineTo(cx + Math.cos(a) * (r0 + len), cy + Math.sin(a) * (r0 + len));
+      ctx.stroke();
+    }
+  } else if (L.shape === 'line') {
+    const step = n > 1 ? B.w / (n - 1) : 0, half = i => Math.max(L.stroke / 2, (v[i] * B.h) / 2);
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) ctx.lineTo(B.x + i * step, cy - half(i));
+    for (let i = n - 1; i >= 0; i--) ctx.lineTo(B.x + i * step, cy + half(i));
+    ctx.closePath();
+    ctx.globalAlpha = 0.22; ctx.fill();
+    ctx.globalAlpha = 1; ctx.lineWidth = L.stroke; ctx.lineJoin = 'round'; ctx.stroke();
+  } else {
+    const slot = B.w / n, w = slot * 0.62;
+    for (let i = 0; i < n; i++) {
+      const h = Math.max(w * 0.5, v[i] * B.h);
+      ctx.globalAlpha = 0.4 + 0.6 * v[i];
+      ctx.fillRect(B.x + i * slot + (slot - w) / 2, cy - h / 2, w, h);
+    }
+  }
+  ctx.restore();
+}
+
 function paintParticles(ctx, plan, t) {
   const cache = paintParticles.cache || (paintParticles.cache = new WeakMap());
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -465,6 +523,7 @@ function paintParticles(ctx, plan, t) {
     else if (L.kind === 'ring') lcPaintRing(ctx, L, t);
     else if (L.kind === 'cloud') lcPaintCloud(ctx, L, t);
     else if (L.kind === 'cells') lcPaintCells(ctx, L, t);
+    else if (L.kind === 'spectrum') lcPaintSpectrum(ctx, L, t);
   }
   if (plan.glow) {
     // Bloom: the frame blurred and added back over itself.
@@ -477,9 +536,9 @@ function paintParticles(ctx, plan, t) {
   }
 }
 
-const RUNTIME_FUNCTIONS = [lcHash, lcEase, lcRgba, lcCanvas, lcZoom, lcShuffle, lcFilled, lcFieldBitmap, lcPaintField, lcShapePoints, lcPaintSwarm, lcPaintRing, lcPaintCloud, lcCellXY, lcCellColor, lcPaintCells, paintParticles];
+const RUNTIME_FUNCTIONS = [lcHash, lcEase, lcRgba, lcCanvas, lcZoom, lcShuffle, lcFilled, lcFieldBitmap, lcPaintField, lcShapePoints, lcPaintSwarm, lcPaintRing, lcPaintCloud, lcCellXY, lcCellColor, lcPaintCells, lcSpectrumValues, lcPaintSpectrum, paintParticles];
 
 /** The painter's source, for HyperFrames to inline: defines window.lcPaintParticles once. */
 export const PARTICLE_RUNTIME = `window.lcPaintParticles = window.lcPaintParticles || (function () {\n${RUNTIME_FUNCTIONS.map(String).join('\n')}\nreturn paintParticles;\n})();`;
 
-export {paintParticles, lcShuffle as fillOrder, lcHash as particleHash, lcEase as particleEase, lcCellXY as cellPosition};
+export {paintParticles, lcShuffle as fillOrder, lcHash as particleHash, lcEase as particleEase, lcCellXY as cellPosition, lcSpectrumValues as spectrumValues};

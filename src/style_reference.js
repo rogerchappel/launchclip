@@ -24,8 +24,10 @@
 //   frame (480 px, one every 3 s), the layout mix and layout changes;
 // - cadence profile: shot lengths, visual changes and layout changes per
 //   minute as p10/p50/p90 over the references (launchclip.cadence-profile.v1);
-// - sound: integrated loudness, silence ratio and transient rate
-//   (src/render_audio_analysis.js) → SFX density and music presence;
+// - sound: integrated loudness, silence ratio and transient rate, then
+//   tempo, beat grid, typed SFX and their sync with the cuts
+//   (src/render_audio_analysis.js, docs/PLAN_AND_PACE_RFC.md §4.3) → SFX
+//   density, the SFX mix, music presence and tempo;
 // - drawing (src/drawing_traits.js): how the frames are drawn: outline
 //   presence and line weight, fill type, saturation and contrast, shape
 //   language, grain and frame stepping, each with a confidence, mapped to the
@@ -42,7 +44,7 @@ import { promisify } from "node:util";
 import { assignPaletteRoles, CADENCE_PROFILE_SCHEMA, colorDistance, contrastRatio, hexToHsl, nearestBundledFont, rgbToHex, STYLE_SCHEMA, STYLE_V3_DEFAULTS } from "@launchclip/core/style.mjs";
 import { FONT_REGISTRY } from "@launchclip/core/fonts.mjs";
 import { analyzeRenderMotion } from "./render_motion_analysis.js";
-import { analyzeProductionAudio } from "./render_audio_analysis.js";
+import { analyzeProductionAudio, analyzeRhythmFile, rhythmSync, SFX_TYPES } from "./render_audio_analysis.js";
 import { combineDrawingNumbers, drawingLimits, drawingTraits, measureDrawing } from "./drawing_traits.js";
 import { mapDrawingTraits } from "./drawing_match.js";
 
@@ -593,7 +595,8 @@ export function detectLayouts(frames) {
 
 /**
  * Measure one reference video: palette clusters, pacing, energy, captions and
- * sound, and how it is drawn. adapters: {run, motion, audio, changes,
+ * sound, and how it is drawn. adapters: {run, motion, audio, rhythm (null
+ * skips tempo and SFX), changes,
  * refineCase (null skips the caption-case re-read), drawing (null skips the
  * drawing traits)} to replace ffmpeg-backed steps in tests.
  */
@@ -656,6 +659,22 @@ export async function analyzeReference(file, options = {}, adapters = {}) {
         silence_ratio: audio.output?.silence_ratio ?? null,
         transients_per_minute: round((transients / duration) * 60, 2)
       };
+      const rhythm = adapters.rhythm === null ? null : await (adapters.rhythm ?? analyzeRhythmFile)(resolved);
+      if (rhythm) {
+        const minutes = duration / 60;
+        const sync = rhythmSync({ beats: rhythm.beats, sfx: rhythm.sfx, cuts: Array.isArray(motion.cuts) ? motion.cuts : [], events: boundaries, duration });
+        Object.assign(sound, {
+          tempo_bpm: rhythm.tempo_bpm,
+          beat_strength: rhythm.beat_strength,
+          cuts_on_beat_ratio: sync.cuts_on_beat_ratio,
+          cuts_on_beat_lift: sync.cuts_on_beat_lift,
+          beat_synced: sync.beat_synced,
+          sfx_per_min: round(rhythm.sfx.length / minutes, 2),
+          sfx_mix: Object.fromEntries(SFX_TYPES.map((type) => [type, rhythm.sfx.length ? round(rhythm.sfx.filter((entry) => entry.type === type).length / rhythm.sfx.length, 3) : 0])),
+          sfx_on_picture_ratio: sync.sfx_on_picture_ratio,
+          near_silences_per_min: round(rhythm.near_silences.length / minutes, 2)
+        });
+      }
     } else sound = { audio: false };
   }
   return { file: resolved, name: path.basename(resolved), sha256: await sha256(resolved), kind: image ? "image" : "video", width: info.width, height: info.height, duration_seconds: round(info.duration, 3), palette, vivid, captions, layouts, pacing, energy, sound, drawing };
@@ -823,21 +842,54 @@ export function ambientFromEnergy(energy) {
   return { level, confidence: 0.55 };
 }
 
-/** SFX density and music presence from loudness, silence and transients. */
+// Measured SFX per minute → density, split at the midpoints of finish's
+// cue pace (low 12, normal 18, high 30 cues per minute; src/finish.js cuePace).
+const SFX_RATE_LOW = 15, SFX_RATE_HIGH = 24;
+
+/**
+ * SFX density, music presence and tempo from loudness, silence, transients
+ * and (when measured, docs/PLAN_AND_PACE_RFC.md §4.3) typed SFX and the beat grid.
+ */
 export function soundFromAudio(sounds) {
   const withAudio = sounds.filter((sound) => sound?.audio);
   if (!withAudio.length) return { sfx_density: 'low', music: null, confidence: 0.2, notes: ['references have no audio track; sound settings are defaults'] };
-  const transients = mean(withAudio.map((sound) => sound.transients_per_minute));
-  const silence = mean(withAudio.map((sound) => sound.silence_ratio));
-  const lufs = mean(withAudio.map((sound) => sound.integrated_lufs));
-  const sfx = transients > 24 ? 'high' : transients < 8 ? 'low' : 'normal';
-  const musicPresent = Number.isFinite(silence) && silence < 0.12 && Number.isFinite(lufs) && lufs > -32;
+  const average = (key) => mean(withAudio.map((sound) => sound[key]));
+  const transients = average('transients_per_minute');
+  const silence = average('silence_ratio');
+  const lufs = average('integrated_lufs');
+  const sfxRate = average('sfx_per_min');
+  const measured = Number.isFinite(sfxRate);
+  const sfx = measured ? (sfxRate > SFX_RATE_HIGH ? 'high' : sfxRate < SFX_RATE_LOW ? 'low' : 'normal') : transients > 24 ? 'high' : transients < 8 ? 'low' : 'normal';
+  const tempos = withAudio.map((sound) => sound.tempo_bpm).filter(Number.isFinite);
+  const tempo = mean(tempos);
+  const musicPresent = tempos.length > 0 || (Number.isFinite(silence) && silence < 0.12 && Number.isFinite(lufs) && lufs > -32);
+  const mixes = withAudio.map((sound) => sound.sfx_mix).filter(Boolean);
+  const sfxMix = mixes.length ? Object.fromEntries(Object.keys(mixes[0]).map((type) => [type, round(mean(mixes.map((mix) => mix[type])), 3)])) : null;
+  const level = Number.isFinite(lufs) ? ` (reference loudness ${lufs.toFixed(1)} LUFS)` : '';
+  const hint = tempos.length ? `a steady beat at about ${Math.round(tempo)} BPM${level}` : `continuous bed under the voice${level}`;
+  const stats = {
+    transients_per_minute: round(transients, 2), silence_ratio: round(silence, 4), integrated_lufs: round(lufs, 2),
+    ...(measured ? {
+      tempo_bpm: tempos.length ? round(tempo, 1) : null,
+      beat_strength: round(average('beat_strength'), 3),
+      cuts_on_beat_ratio: round(average('cuts_on_beat_ratio'), 3),
+      cuts_on_beat_lift: round(average('cuts_on_beat_lift'), 2),
+      sfx_per_min: round(sfxRate, 2),
+      sfx_mix: sfxMix,
+      sfx_on_picture_ratio: round(average('sfx_on_picture_ratio'), 3),
+      near_silences_per_min: round(average('near_silences_per_min'), 2)
+    } : {})
+  };
   return {
     sfx_density: sfx,
-    music: musicPresent ? { prompt_hints: [`continuous bed under the voice (reference loudness ${lufs.toFixed(1)} LUFS)`], energy_curve: 'steady' } : null,
-    confidence: 0.45,
-    notes: [`transients ${transients?.toFixed(1)}/min → ${sfx}`, musicPresent ? `audio is continuous (silence ${(silence * 100).toFixed(1)}%), so a music bed is likely` : `audio has gaps (silence ${((silence ?? 0) * 100).toFixed(1)}%); music presence unclear`],
-    stats: { transients_per_minute: round(transients, 2), silence_ratio: round(silence, 4), integrated_lufs: round(lufs, 2) }
+    music: musicPresent ? { prompt_hints: [hint], energy_curve: 'steady', ...(tempos.length ? { bpm_range: [Math.round(Math.min(...tempos) - 3), Math.round(Math.max(...tempos) + 3)] } : {}) } : null,
+    confidence: measured ? 0.6 : 0.45,
+    notes: [
+      measured ? `typed SFX ${sfxRate.toFixed(1)}/min outside speech → ${sfx}${sfxMix ? ` (${Object.entries(sfxMix).filter(([, share]) => share > 0).map(([type, share]) => `${type} ${Math.round(share * 100)}%`).join(', ')})` : ''}` : `transients ${transients?.toFixed(1)}/min → ${sfx}`,
+      tempos.length ? `a beat at ${tempo.toFixed(1)} BPM (strength ${stats.beat_strength}), so a music bed is likely` : musicPresent ? `audio is continuous (silence ${(silence * 100).toFixed(1)}%), so a music bed is likely` : `audio has gaps (silence ${((silence ?? 0) * 100).toFixed(1)}%); music presence unclear`,
+      ...(Number.isFinite(stats.cuts_on_beat_ratio) ? [`${Math.round(stats.cuts_on_beat_ratio * 100)}% of hard cuts land within 70 ms of a beat (${stats.cuts_on_beat_lift}× chance)`] : [])
+    ],
+    stats
   };
 }
 
@@ -1066,7 +1118,7 @@ export function referenceReport(pack, references, inferred) {
   lines.push('', '## Cadence profile', '');
   if (profile) lines.push(`Measured from ${profile.references} video reference${profile.references === 1 ? '' : 's'} as p10 / p50 / p90 (\`profile\` in style.json; the dials move targets inside these bands). With fewer than three references the bands are narrow: add more of your best videos to widen them.`, '', '| Measure | p10 | p50 | p90 |', '| --- | --- | --- | --- |', ...Object.entries(profile.measures).map(([key, range]) => `| ${key} | ${range.p10} | ${range.p50} | ${range.p90} |`));
   else lines.push('No video reference: no profile; pick a shipped one by id in `profile`.');
-  lines.push('', '## Sound', '', `- sound.sfx_density: **${pack.sound.sfx_density}** (confidence ${sound.confidence.toFixed(2)}).`, ...sound.notes.map((note) => `- ${note}`), `- music: ${pack.sound.music ? 'a bed is suggested; set provider and prompt hints to taste' : 'not inferred'}. Tempo (bpm) is not measured.`);
+  lines.push('', '## Sound', '', `- sound.sfx_density: **${pack.sound.sfx_density}** (confidence ${sound.confidence.toFixed(2)}).`, ...sound.notes.map((note) => `- ${note}`), `- music: ${pack.sound.music ? 'a bed is suggested; set provider and prompt hints to taste' : 'not inferred'}.${pack.sound.music?.bpm_range ? ` Tempo ${pack.sound.music.bpm_range.join('–')} BPM (sound.music.bpm_range).` : ' No beat measured.'}`);
   lines.push('', '## Fonts', '', `- brand.fonts: \`${JSON.stringify(pack.brand.fonts)}\` (confidence ${fonts.confidence.toFixed(2)}).`, ...fonts.notes.map((note) => `- ${note}`));
   lines.push('', '## Drawing', '');
   if (drawing) lines.push(...drawingReport(pack, drawing));

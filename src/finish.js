@@ -30,7 +30,7 @@ import { promisify } from "node:util";
 import { chunkWords, narrationWords } from "@launchclip/core/captions.mjs";
 import { knownModules, resolveModule } from "@launchclip/core/modules.mjs";
 import { customModuleGaps } from "@launchclip/core/custom-modules.mjs";
-import { pickAudioFeatures } from "@launchclip/core/audio-react.mjs";
+import { audioFeatureNeeds, pickAudioFeatures } from "@launchclip/core/audio-react.mjs";
 import { customModuleProblems } from "../kit/hyperframes/custom-module.mjs";
 import { LOOK_MEASURES } from "@launchclip/core/profiles.mjs";
 import { useProjectTemp } from "./render_temp.js";
@@ -50,6 +50,8 @@ import { getRenderer, resolveRendererName } from "./renderers/index.js";
 import { deriveBoundaries, resolveStory, storyBase, storyFormat } from "./story.js";
 import { storyChapters } from "@launchclip/core/story.mjs";
 import { vfxSounds } from "@launchclip/core/vfx/plan.mjs";
+import { VFX_EFFECTS } from "@launchclip/core/vfx/catalog.mjs";
+import { pairsCheck, storyVisuals } from "@launchclip/core/sound/pairs.mjs";
 import { ffmetadataChapters, youtubeChapterProblems, youtubeChapters } from "@launchclip/core/long-form.mjs";
 import { directionFileFor, moduleParamErrors, readScriptBeside, validateStory } from "./story_cli.js";
 import { ANIMATIC_FILE, ANIMATIC_VIDEO, writeAnimatic } from "./animatic.js";
@@ -338,6 +340,20 @@ export function bindCues(story, { models, palette = false } = {}) {
   }
   cues.sort((a, b) => a.at - b.at || a.cue.localeCompare(b.cue));
   return { cues, warnings };
+}
+
+/**
+ * The VFX ↔ sound pairs check (kit/core/sound/pairs.mjs) on bound cues, as
+ * finish warnings: each error on its own line, the unpaired warnings in one.
+ * Visual changes are cuts, hits, VFX peaks and module events; a transition's
+ * whoosh starts before its cut, so it is left out.
+ */
+export function cuePairNotes(story, cues, modelFor = () => null) {
+  const { hits, changes } = storyVisuals(story, { peaks: Object.fromEntries(Object.entries(VFX_EFFECTS).map(([name, info]) => [name, info.peak])) });
+  for (const scene of Array.isArray(story?.scenes) ? story.scenes : []) for (const event of modelFor(scene)?.events ?? []) if (Number.isFinite(Number(event.time))) changes.push(Number(event.time));
+  const sounds = cues.filter((cue) => cue.source !== "transition").map((cue) => ({ at: cue.lands_at ?? cue.at, cue: cue.cue }));
+  const { errors, warnings } = pairsCheck({ hits, changes, sounds });
+  return [...errors.map((error) => `pairs: ${error}`), ...(warnings.length ? [`pairs: ${warnings.length} warning${warnings.length === 1 ? "" : "s"}, first: ${warnings[0]}`] : [])];
 }
 
 // Cue pacing. Most catalogue modules tag their title and emphasis events
@@ -761,7 +777,7 @@ export function defaultAdapters() {
     motion: (video, out, options) => writeMotionReport(video, out, options),
     audio: (video, manifest, options) => analyzeProductionAudio(video, manifest, options),
     // The style gate's measurements (loudness has its own gate, so no audio pass).
-    styleReference: (video) => analyzeReference(video, {}, { audio: async () => ({ output: {} }) }),
+    styleReference: (video) => analyzeReference(video, {}, { audio: async () => ({ output: {} }), rhythm: null }),
     resolveStyle: (request, options) => resolveStyleV2(request, options)
   };
 }
@@ -1271,6 +1287,7 @@ const STAGES = [
       const score = scored ? scoreFor(ctx.resolved) : null;
       const bound = score ? { cues: score.cues, warnings: [] } : sfxOn ? bindCues(ctx.resolved, { models, palette: Boolean(sound.palette) }) : { cues: [], warnings: [] };
       if (!score) bound.cues = paceCues(applyDensity(bound.cues, density, storyId), density, storyId);
+      if (sfxOn && !score) ctx.warnings.push(...cuePairNotes(ctx.resolved, bound.cues, models));
       const typing = sfxOn ? typingSchedule(collectTyping(ctx.resolved, { models }), { seed: storyId, ...densityTyping(density) }) : [];
       const libraries = sfxOn ? await resolveLibraries({ project: ctx.project, library: ctx.options.sfxLibrary ?? (audio.sfx_library ? path.resolve(ctx.project, audio.sfx_library) : undefined), home: ctx.options.sfxHome }) : [];
       // One line when a cue family is missing from every SFX library and falls
@@ -1334,14 +1351,14 @@ const STAGES = [
         voice: voice ? await fileHash(path.join(ctx.project, voice)) : null,
         speech_key: speechKey,
         duration: ctx.resolved.resolved.duration,
-        react: Boolean(ctx.copy.audio?.react),
+        react: Boolean(audioFeatureNeeds(ctx.copy).length),
         timing: sync.strategy === "snap" ? storyTiming(ctx.copy) : null,
         scripts: [await fileHash(SCRIPT.synth), await treeFingerprint(SOUND_DIR), await fileHash(SCRIPT.mix), await fileHash(SCRIPT.features), await fileHash(path.join(ROOT, "src", "music", "beats.js")), await fileHash(path.join(ROOT, "src", "music", "beat_sync.js"))],
         ...(score ? { score: { room: score.room, earshot: Boolean(findEarshot(ctx.adapters.env ?? process.env)), sounds: [await fileHash(path.join(ROOT, "src", "sfx", "score.js")), await fileHash(path.join(ROOT, "src", "sfx", "score_sounds.js"))] } } : {}),
         kit: kit ?? undefined,
         sfx: { mode: sfxMode, ...(sfxMode === "earshot" ? { earshot: await fileHash(path.join(ROOT, "src", "sfx", "earshot.js")) } : {}), density, typing, libraries: libraries.map((library) => ({ scope: library.scope, dir: library.dir, families: hashValue(library.manifest.families) })) }
       });
-      const outputs = [PATHS.mix, PATHS.audioManifest, PATHS.sfxManifest, ...(ctx.copy.audio?.react ? [PATHS.audioFeatures] : []), ...(typing.length ? [PATHS.typing] : [])];
+      const outputs = [PATHS.mix, PATHS.audioManifest, PATHS.sfxManifest, ...(audioFeatureNeeds(ctx.copy).length ? [PATHS.audioFeatures] : []), ...(typing.length ? [PATHS.typing] : [])];
       if (music.kind !== "none") outputs.push(PATHS.beatSync, await beatsTarget(ctx.project));
       return { inputHash, outputs, score, scoreFor, sfxOn, sfxMode, earshotBin: sfxChoice.earshot ?? null, cues: bound.cues, cueWarnings: [...choice.warnings, ...bound.warnings], bed, music, choice, voice, speechKey, provider, lock, trackKey, sync, typing, libraries, storyId, density, sound, kit };
     },
@@ -1433,7 +1450,7 @@ const STAGES = [
       const mixed = await ctx.adapters.buildMix({ voice: voiceFile, music: musicFile, ambience: ambienceFile, cues, sfxDir: path.join(kitDir, "sfx"), duration, out: mixFile, musicVolume: plan.bed?.volume ?? 0.42, ...(plan.music.duck != null ? { musicDuck: plan.music.duck } : {}), ...(ambienceFile ? { ambienceVolume: AMBIENCE_VOLUME } : {}), ...(speechKey ? { key: speechKey.file, keySegments: speechKey.segments } : {}), ...(scorePlan ? { score: { room: scorePlan.room } } : {}) });
       // Only for a story with audio.react: the final mix and its buses, measured once per video frame for the
       // audio-reactive layers (kit/core/audio-react.mjs); both renderers read it.
-      if (ctx.copy.audio?.react) await ctx.adapters.audioFeatures?.(path.join(ctx.project, PATHS.audioFeatures), { mix: mixFile, music: musicFile, voice: voiceFile }, { fps: Number(ctx.resolved.resolved?.fps ?? ctx.resolved.format?.fps ?? 30), duration });
+      if (audioFeatureNeeds(ctx.copy).length) await ctx.adapters.audioFeatures?.(path.join(ctx.project, PATHS.audioFeatures), { mix: mixFile, music: musicFile, voice: voiceFile }, { fps: Number(ctx.resolved.resolved?.fps ?? ctx.resolved.format?.fps ?? 30), duration });
       const placed = (mixed?.cues ?? cues).map((cue, index) => ({ ...cues[index], ...cue, file: cues[index]?.file ?? cue.file ?? path.join(kitDir, "sfx", `${cue.cue}.wav`) }));
       const sfxManifest = path.join(ctx.project, PATHS.sfxManifest);
       // Same shape build-mix.mjs --sfx-manifest writes; cinematic-check reads it through AUDIO-MANIFEST.json.
@@ -1525,8 +1542,8 @@ const STAGES = [
       // Caption plates (docs/DIRECTION_GUARDRAILS.md §3): lines over a
       // character or a card, and lines a past render measured illegible.
       await applyCaptionPlates(ctx);
-      ctx.audioFeatures = ctx.copy.audio?.react ? await readOptionalJson(path.join(ctx.project, PATHS.audioFeatures)) : null;
-      if (ctx.copy.audio?.react && !ctx.audioFeatures) ctx.warnings.push(`audio.react: no ${PATHS.audioFeatures} (the sound stage writes it from the mix), so the reactive layers are not drawn`);
+      ctx.audioFeatures = audioFeatureNeeds(ctx.copy).length ? await readOptionalJson(path.join(ctx.project, PATHS.audioFeatures)) : null;
+      if (audioFeatureNeeds(ctx.copy).length && !ctx.audioFeatures) ctx.warnings.push(`audio.react / audio-visualizer: no ${PATHS.audioFeatures} (the sound stage writes it from the mix), so the reactive layers are not drawn and the visualizer rests`);
       const resolved = withAudioFeatures(resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null }), ctx.audioFeatures);
       ctx.resolved = resolved;
       await writeResolvedCopy(ctx);
@@ -1622,7 +1639,7 @@ const STAGES = [
 
 /** The resolved story with the series its audio.react layers read (from AUDIO_FEATURES.json) as audio.features. */
 export function withAudioFeatures(resolved, features) {
-  const picked = resolved?.audio?.react && features ? pickAudioFeatures(resolved, features) : null;
+  const picked = features && audioFeatureNeeds(resolved).length ? pickAudioFeatures(resolved, features) : null;
   return picked ? { ...resolved, audio: { ...resolved.audio, features: picked } } : resolved;
 }
 

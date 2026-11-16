@@ -192,6 +192,20 @@ The check: every visual hit with energy ≥ 2 has a sound within 40 ms; every
 impact-class sound has a visual change within 80 ms. Unpaired sounds are a
 warning, not an error.
 
+**Shipped (phase 3).** `src/sfx/classify.js` ports the rules; every family
+sits in one row (shimmer and tally with ding; the keystrokes with click;
+error-buzz with hit). On our own kit, 381 of 1,259 family × palette × variant
+sounds land in their row: synthetic keys, clicks and ticks are tonal enough
+to read as ding, and many impacts as pop. So the family-name test (media
+suite) checks against `test/fixtures/sfx-classify-baseline.json` and fails
+when a sound leaves its row, not until every sound is in it. Tightening the
+rules for synthetic sounds, or the families that miss, is open.
+`kit/core/sound/pairs.mjs` holds the pairs (sparkle joins shimmer and ping,
+and a pop row for the spawn and pickup effects, as the VFX catalogue pairs
+them); `finish` runs the check on the bound cues and reports it as warnings
+for now. The cue binder still takes each effect's sound from the VFX
+catalogue, which a test keeps inside its pair.
+
 ## 4. Audio-reactive visuals
 
 Renderers must never analyse audio themselves: Remotion's browser audio helpers
@@ -234,7 +248,17 @@ opt-in layers sit with the light's over group in both renderers
 `src/scripts/audio-features.mjs` writes `AUDIO_FEATURES.json` with `series`
 and `buses.{mix,music,voice}` only (no `fx` bus yet), and only for stories
 that set `audio.react`; `finish` attaches just the series a story reads as
-`audio.features`. The module rows above remain open.
+`audio.features`. The module rows above remain open, except the first:
+
+**Shipped (audio-visualizer).** A catalogue H module
+(`kit/core/catalog-h-audio.mjs`, variants `bars`, `line`, `ring`;
+params `bus`, `tone`, `bars`, `at`). It slices the scene's frames of the five
+band series from `audio.features` into a paint plan, and the shared painter
+(`kit/core/particles.mjs`, kind `spectrum`) draws them in both renderers at
+frame round(t × fps). `finish` writes `AUDIO_FEATURES.json` for any story with
+`audio.react` or an `audio-visualizer` scene (`audioFeatureNeeds`). Parity
+fixtures: `test/fixtures/parity/h-audio-visualizer-*.json`, which carry
+synthetic features (the parity harness keeps `audio.features`).
 
 ## 5. Data sonification for charts
 

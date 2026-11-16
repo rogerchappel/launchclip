@@ -94,6 +94,8 @@ export async function sceneStory(story, sceneId) {
   // holding settled past the end as a non-looping story's last scene does.
   const filtered = {...structuredClone(resolved), lane: 'motion', ambient: 'off', scenes: [structuredClone(scene)], overlays: [], ending: {final: 'exit'}};
   delete filtered.audio;
+  // Measured sound (audio-visualizer, audio.react) is data, not audio: keep it.
+  if (resolved.audio?.features) filtered.audio = {features: structuredClone(resolved.audio.features)};
   return {story: filtered, scene: filtered.scenes[0]};
 }
 

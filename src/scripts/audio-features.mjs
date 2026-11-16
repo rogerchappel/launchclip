@@ -72,7 +72,28 @@ function kWeight(samples) {
   return out;
 }
 
-const median = (values) => { const sorted = Float64Array.from(values).sort(); return sorted[sorted.length >> 1]; };
+/**
+ * Percussive part of magnitude spectra (one Float64Array per frame) by a
+ * median-filter harmonic/percussive split: median of HPSS_BINS along
+ * frequency (P) and along time (H), soft mask P²/(P² + H²).
+ */
+export function percussiveSpectra(spectra) {
+  const frames = spectra.length, bins = spectra[0]?.length ?? 0, radius = HPSS_BINS >> 1;
+  const across = new Float64Array(HPSS_BINS), along = new Float64Array(HPSS_BINS);
+  return spectra.map((spectrum, f) => {
+    const percussive = new Float64Array(bins);
+    for (let k = 0; k < bins; k += 1) {
+      for (let d = -radius; d <= radius; d += 1) {
+        along[d + radius] = spectra[Math.min(frames - 1, Math.max(0, f + d))][k];
+        across[d + radius] = spectrum[Math.min(bins - 1, Math.max(0, k + d))];
+      }
+      const p = across.sort()[radius], h = along.sort()[radius];
+      const pp = p * p, hh = h * h;
+      percussive[k] = pp + hh > 0 ? spectrum[k] * (pp / (pp + hh)) : 0;
+    }
+    return percussive;
+  });
+}
 const scale = (value, [low, high]) => Math.min(1, Math.max(0, (value - low) / (high - low)));
 const round3 = (value) => Math.round(value * 1000) / 1000;
 
@@ -119,21 +140,10 @@ export function busFeatures(left, right, { fps, frames }) {
       raw[name][f] = scale(db, BAND_RANGE);
     }
   }
-  // Percussive part: per bin, the frequency median beats the time median.
-  const radius = HPSS_BINS >> 1;
+  const percussiveParts = percussiveSpectra(spectra);
   let previous = null;
   for (let f = 0; f < frames; f += 1) {
-    const percussive = new Float64Array(half);
-    for (let k = 0; k < half; k += 1) {
-      const across = [], along = [];
-      for (let d = -radius; d <= radius; d += 1) {
-        along.push(spectra[Math.min(frames - 1, Math.max(0, f + d))][k]);
-        across.push(spectra[f][Math.min(half - 1, Math.max(0, k + d))]);
-      }
-      const p = median(across), h = median(along);
-      const pp = p * p, hh = h * h;
-      percussive[k] = pp + hh > 0 ? spectra[f][k] * (pp / (pp + hh)) : 0;
-    }
+    const percussive = percussiveParts[f];
     let flux = 0;
     if (previous) for (let k = 0; k < half; k += 1) flux += Math.max(0, Math.log1p(percussive[k]) - Math.log1p(previous[k]));
     raw.onset[f] = flux;
@@ -145,7 +155,7 @@ export function busFeatures(left, right, { fps, frames }) {
   return Object.fromEntries(SERIES.map((name) => [name, follow(raw[name], fps)]));
 }
 
-async function decode(file, seconds) {
+export async function decode(file, seconds) {
   const { stdout } = await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', file, '-t', String(seconds), '-ac', '2', '-ar', String(RATE), '-f', 'f32le', '-'], { encoding: 'buffer', maxBuffer: 1 << 30 });
   const all = new Float32Array(stdout.buffer, stdout.byteOffset, stdout.byteLength / 4);
   const left = new Float32Array(all.length / 2), right = new Float32Array(all.length / 2);
