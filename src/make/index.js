@@ -76,7 +76,7 @@ import { reviewAnimatic, runHeadlessCritic } from "./critic.js";
 import { ANIMATIC_FILE, ANIMATIC_VIDEO, readAnimatic } from "../animatic.js";
 import { redirectShots, retakeProject, runRetakes } from "./retakes.js";
 import { placeActions } from "../acting_place.js";
-import { RETAKES_FILE, changedScenes,criticBriefSection, criticFindings, criticImproved, criticProblems, criticRepairBudget, criticRepairRoute, criticScore, findingScenes } from "./critic_repair.js";
+import { RETAKES_FILE, changedScenes, criticBriefSection, criticFindings, criticKeepLines, criticImproved, criticProblems, criticRepairBudget, criticRepairRoute, criticScore, findingScenes } from "./critic_repair.js";
 import { readProjectStory } from "../story_loader.js";
 import { plannedSubjectRanges } from "../subject/plan.js";
 import { TRACK_FILE, appFacesTrack, fileProjectMatte, fileProjectTrack, readStoryTrack } from "../subject/project.js";
@@ -1429,7 +1429,8 @@ export function criticChunks(map, round) {
   const byShot = new Map((map.chapters ?? []).flatMap((chapter) => chapter.shots ?? []).map((shot) => [shot.id, shot]));
   for (const chunk of map.chunks ?? []) for (const id of chunk.shots ?? []) for (const state of byShot.get(id)?.states ?? []) stateChunk.set(state.id, chunk.id);
   const findings = round.findings ?? [];
-  const lines = round.problems ?? [];
+  // The keep lines name no finding, so they reach every chunk the round directs.
+  const lines = [...(round.problems ?? []), ...criticKeepLines(round.keep)];
   const out = new Map();
   if (round.mode === "repair") {
     for (const [index, finding] of findings.entries()) for (const scene of finding.scenes ?? []) {
@@ -1544,7 +1545,7 @@ async function planStage(ctx) {
   // A critic repair round (criticRepairs): a replan carries the critic's
   // findings in its brief; a repair starts from the current storyboard.
   const round = ctx.criticRound ?? null;
-  const planBrief = round?.mode === "replan" ? `${brief.trimEnd()}\n${criticBriefSection(round.problems)}` : brief;
+  const planBrief = round?.mode === "replan" ? `${brief.trimEnd()}\n${criticBriefSection(round.problems, round.keep)}` : brief;
   await writeFile(path.join(project, MAKE_PATHS.brief), planBrief);
   const lane = routing.lane;
   const fixedAudio = { ...ctx.audio };
@@ -1627,7 +1628,7 @@ async function planStage(ctx) {
     ...(lane === "footage-led" && subject ? { subject } : {}),
     style: style?.pack ?? null,
     direction: round?.mode === "repair" && round.direction ? round.direction : true,
-    ...(round?.mode === "repair" ? { seed: { storyboard: round.storyboard, errors: round.problems } } : {}),
+    ...(round?.mode === "repair" ? { seed: { storyboard: round.storyboard, errors: [...round.problems, ...criticKeepLines(round.keep)] } } : {}),
     profile,
     maxRepairs,
     // Clip-led planning: the footage the plan may cut, and the density dial (--density, else the style's).
@@ -2402,7 +2403,8 @@ async function stageCritic(ctx) {
   const result = await runCritic(ctx);
   if (result.status !== "written") return criticPending(ctx, result.reason ?? "the critic did not run");
   await criticRepairs(ctx, result);
-  if (ctx.report.critic?.verdict !== "ship") ctx.report.next_steps.push(`The headless critic asked for ${ctx.report.critic.verdict} (${ctx.report.critic.findings} finding${ctx.report.critic.findings === 1 ? "" : "s"} in qa/critic.json): edit storyboard.json scenes, then run launchclip finish ${ctx.project} --scene <id>, or launchclip make again with --replan`);
+  if (ctx.report.critic?.verdict === "recapture") ctx.report.next_steps.push(`The headless critic could not judge the evidence (recapture, qa/critic.json): rebuild the sheets with launchclip finish ${ctx.project} (the render is cached), then review again`);
+  else if (ctx.report.critic?.verdict !== "ship") ctx.report.next_steps.push(`The headless critic asked for ${ctx.report.critic.verdict} (${ctx.report.critic.findings} finding${ctx.report.critic.findings === 1 ? "" : "s"} in qa/critic.json): edit storyboard.json scenes, then run launchclip finish ${ctx.project} --scene <id>, or launchclip make again with --replan`);
   return { status: "done" };
 }
 
@@ -2415,16 +2417,18 @@ function criticPending(ctx, reason) {
 }
 
 // One critic pass over the current render: report.critic and the critic gate.
-async function runCritic(ctx, label = "critic") {
+// prior: the critique a repair round answers (the verdict pass scores its findings).
+async function runCritic(ctx, label = "critic", prior = null) {
   const { project, report } = ctx;
   ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (headless critic over qa/critic-sheets/)`);
   const quality = ctx.finish?.gates?.coverage?.findings ?? [];
+  const tells = ctx.finish?.gates?.tells?.findings ?? [];
   // A character story's critic reads the shot list beside the frames (and the bible's reference sheets, which it finds itself).
   const shots = isAnimation(ctx.routing) ? { shots: (await retakeProject(project)).shots } : {};
-  const result = await (ctx.adapters.critic ?? runHeadlessCritic)({ project, client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, quality, rules: rulesText(ctx), ...shots });
+  const result = await (ctx.adapters.critic ?? runHeadlessCritic)({ project, client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, quality, tells, ...(prior ? { prior } : {}), rules: rulesText(ctx), ...shots });
   if (result.cost_usd !== undefined) addCost(report, label, ctx.model, { cost_usd: result.cost_usd, usage: result.usage, model: result.model });
   if (result.status !== "written") return result;
-  report.critic = { status: "written", file: "qa/critic.json", verdict: result.verdict, findings: result.findings, reviewed: result.reviewed, unreviewed: result.unreviewed, warnings: result.warnings, model: result.model, note: "headless model critic over contact sheets; a human or fresh-agent review is still the definition of done" };
+  report.critic = { status: "written", file: "qa/critic.json", verdict: result.verdict, findings: result.findings, ...(result.keep?.length ? { keep: result.keep } : {}), reviewed: result.reviewed, unreviewed: result.unreviewed, warnings: result.warnings, model: result.model, note: "headless model critic over contact sheets; a human or fresh-agent review is still the definition of done" };
   if (report.gates) report.gates.critic = { status: result.verdict === "ship" ? "passed" : "failed", verdict: result.verdict, findings: result.findings, source: "qa/critic.json (headless)" };
   return result;
 }
@@ -2499,21 +2503,28 @@ async function criticRepairs(ctx, first) {
     const opening = (loaded.resolved?.scenes ?? []).find((scene) => (scene.track ?? 0) === 0)?.id ?? null;
     const mode = criticRepairRoute(critique, findings, opening);
     const problems = criticProblems(findings);
-    const entry = { round, mode, verdict_before: before.verdict, findings_before: before, scenes: [...new Set(findings.flatMap((finding) => finding.scenes))], kept: false };
+    const entry = { round, mode, verdict_before: before.verdict, findings_before: before, scenes: mode === "recapture" ? [] : [...new Set(findings.flatMap((finding) => finding.scenes))], kept: false };
     report.critic_repairs.push(entry);
-    ctx.say(`critic repair ${round} of ${budget}: ${mode} for ${before.blocking} blocking and ${before.major} major finding(s)${entry.scenes.length ? ` in ${entry.scenes.join(", ")}` : ""}`);
+    ctx.say(mode === "recapture" ? `critic repair ${round} of ${budget}: recapture, rebuilding the evidence (the video is not touched)` : `critic repair ${round} of ${budget}: ${mode} for ${before.blocking} blocking and ${before.major} major finding(s)${entry.scenes.length ? ` in ${entry.scenes.join(", ")}` : ""}`);
     const t0 = performance.now();
     const snapshot = await snapshotRound(ctx);
     const repairs = report.repairs;
     try {
-      ctx.criticRound = { round, mode, problems, findings: criticFindings(findings), storyboard: await readJson(path.join(project, MAKE_PATHS.story)), direction: await readJson(path.join(project, MAKE_PATHS.direction)) };
-      await stageStoryboard(ctx);
-      const after = await readProjectStory(project);
-      ctx.finishScenes = mode === "repair" ? changedScenes(loaded.resolved, after.resolved) : null;
-      if (ctx.finishScenes && !ctx.finishScenes.length) throw new Error("the repair changed no scene");
-      entry.rendered = ctx.finishScenes ?? "all";
+      if (mode === "recapture") {
+        // Only the evidence is rebuilt: with its outputs gone, finish redoes evidence and gates and keeps the cached render.
+        await Promise.all(["qa/temporal-evidence", "qa/critic-sheets"].map((rel) => rm(path.join(project, rel), { recursive: true, force: true })));
+        entry.rendered = [];
+      } else {
+        ctx.criticRound = { round, mode, problems, keep: critique.keep ?? [], findings: criticFindings(findings), storyboard: await readJson(path.join(project, MAKE_PATHS.story)), direction: await readJson(path.join(project, MAKE_PATHS.direction)) };
+        await stageStoryboard(ctx);
+        const after = await readProjectStory(project);
+        ctx.finishScenes = mode === "repair" ? changedScenes(loaded.resolved, after.resolved) : null;
+        if (ctx.finishScenes && !ctx.finishScenes.length) throw new Error("the repair changed no scene");
+        entry.rendered = ctx.finishScenes ?? "all";
+      }
       await stageFinish(ctx);
-      const result = await runCritic(ctx, `critic-${round}`);
+      // After a repair the critic scores its own earlier findings (the verdict pass); after a recapture it judges afresh.
+      const result = await runCritic(ctx, `critic-${round}`, mode === "recapture" ? null : critique);
       if (result.status !== "written") throw new Error(`the critic did not run again (${result.reason ?? result.status})`);
       critique = await critiqueOf(ctx, result);
       const after_ = criticScore(critique);
