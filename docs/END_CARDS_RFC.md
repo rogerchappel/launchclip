@@ -202,6 +202,7 @@ is built for.
 | `badge-row` | card | download | the app's mark, the store badges in a row, the rating as stars in the accent colour |
 | `countdown` | card, footage-blur | launch | the date counts down to the launch day and locks |
 | `diagonal-band` | card | url, follow | one bold diagonal band in the accent colour crosses the frame, the action on it |
+| `marquee` | card, footage-live | follow, url | the action runs as two tickers moving opposite ways, the logo holding still between them |
 
 ### 5.5 Loop-led
 
