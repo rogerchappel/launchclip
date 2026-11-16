@@ -107,6 +107,16 @@ For a scene that is the sound itself, use the `audio-visualizer` module: a spect
 
 `bus` picks the sound (`mix` by default), `tone` the colour and `bars` how many (8–128). It reads the same `AUDIO_FEATURES.json`; without it the bars rest flat.
 
+## Charts you can hear
+
+Add `"sonify": true` to the sound block (`audio.sound` in a story, or a style's `sound`) and every chart scene plays its data as a plucked string while it draws: `bar-chart`, `stacked-bar`, `pie-chart`, `area-chart`, `radar-chart`, `sparkline` and `progress-ring`.
+
+```json
+"audio": { "sound": { "sonify": true, "music": { "genre": "ambient", "key": "A" } } }
+```
+
+Higher values play higher notes, in the music's key. Each bar, segment or point plays on the frame it appears, panned to where it sits. Pie slices build a chord, radar plays an arpeggio, a progress ring climbs to its value, and a highlighted bar or slice plays again an octave up. It replaces the chart's tally blips. It is off unless you ask for it.
+
 ## Delivery-ready loudness
 
 Every finished video is mastered to −14 LUFS with a −1 dBTP ceiling, the level YouTube, TikTok and Instagram expect. The voice stays clearly above the music.

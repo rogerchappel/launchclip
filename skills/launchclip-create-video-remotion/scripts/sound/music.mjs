@@ -16,7 +16,7 @@
 //
 // Notes inside a cycle are found with a balanced if() tree on time, so a
 // sample costs log(notes) comparisons rather than one term per note.
-import { fmt, rng, semi, wave, tonicHz } from './dsp.mjs';
+import { RATE, fmt, rng, semi, wave, tonicHz } from './dsp.mjs';
 import { GENRE_SPECS, MUSIC_GENRES, MUSIC_KEYS, normalizeKey } from './options.mjs';
 
 const QUALITY = {
@@ -474,4 +474,55 @@ export function genreBed(choice, seed = 'launchclip') {
     pump: built.pump ?? 0,
     crackle: built.crackle ?? 0
   };
+}
+
+// ---------------------------------------------------------------------------
+// Karplus-Strong pluck. A feedback delay line cannot be an aevalsrc
+// expression, so this voice renders samples in JS. The noise burst comes from
+// a seeded generator, so the same arguments give the same samples.
+
+/**
+ * A plucked string: a burst of seeded noise, as long as one period, through
+ * a delay line of one period whose two-tap average darkens it on every pass.
+ * f in Hz; dur in seconds (the string falls 60 dB over it); vel 0–1 is the
+ * peak and the brightness (a harder pluck has more high partials). Returns
+ * mono Float32Array samples at `rate`.
+ */
+export function karplusStrong({ f, dur, vel = 0.8, seed = 'pluck', rate = RATE }) {
+  if (!(f > 20 && f < rate / 4)) throw new Error(`karplusStrong: f must be 20 Hz to rate/4; got ${f}`);
+  if (!(dur > 0)) throw new Error(`karplusStrong: dur must be above 0; got ${dur}`);
+  const total = Math.ceil(dur * rate);
+  const out = new Float32Array(total);
+  const period = rate / f;
+  // The two-tap average delays by half a sample; the read tap takes the rest (linearly interpolated).
+  const delay = period - 0.5;
+  // Loss per pass, so the loop falls 60 dB over dur.
+  const rho = Math.min(0.9995, 10 ** (-3 / (f * dur)));
+  const r = rng(`${seed}|ks|${fmt(f)}`);
+  const burst = Math.min(total, Math.ceil(period));
+  const lowpass = 0.15 + 0.7 * (1 - Math.min(1, Math.max(0, vel)));
+  const excite = new Float32Array(burst);
+  let state = 0, peak = 0;
+  for (let i = 0; i < burst; i++) {
+    state = lowpass * state + (1 - lowpass) * (2 * r.next() - 1);
+    excite[i] = state;
+    peak = Math.max(peak, Math.abs(state));
+  }
+  const at = (x) => {
+    if (x < 0) return 0;
+    const i = Math.floor(x);
+    return out[i] + (x - i) * ((out[i + 1] ?? 0) - out[i]);
+  };
+  for (let n = 0; n < total; n++) {
+    const fed = rho * 0.5 * (at(n - delay) + at(n - delay - 1));
+    out[n] = (n < burst ? excite[n] / (peak || 1) : 0) + fed;
+  }
+  // A 5 ms fade at the end, so a cut note never clicks.
+  const fade = Math.min(total, Math.round(0.005 * rate));
+  for (let i = 0; i < fade; i++) out[total - 1 - i] *= i / fade;
+  let max = 0;
+  for (const value of out) max = Math.max(max, Math.abs(value));
+  const gain = max ? vel / max : 0;
+  for (let i = 0; i < total; i++) out[i] *= gain;
+  return out;
 }
