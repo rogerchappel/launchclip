@@ -50,6 +50,7 @@ Five R&D documents, each built in small steps that work on their own. Every visu
   - A retro pixel look and style for game-flavoured videos.
   - Weather backgrounds: rain, snow, fog, fireflies, aurora and god rays.
   - Effects on a character or a card: freeze it, electrify it, scan it, dissolve it.
+  - More looks for the same moments, beside the pixel one: Lottie animations (vector sparkles, bursts, hand-drawn pops and confetti, recoloured to the brand) through the Lottie players both renderers already have, and a soft, painterly look that draws the same effects with CC0 particle textures (smoke, flame, sparks, stars). Each look keeps the same timing, peaks and sounds, and every Lottie file's licence is recorded.
 - **Taste checks** ([RFC](VIDEO_TELLS_RFC.md)):
   - The registry of video tells below, as data: from purple gradients and glowing cards to a fade on every cut and a title card for a hook, each checked on the plan or the render, each with its fix. Our own defaults are fixed first: the cyan-on-near-black brand, bouncy eases in the module catalogue, the 27% overshoot in the `kinetic` feel, the big-number-small-label stat card and the "Chapter N" kicker.
   - A copy check for tired phrasing: the script and every on-screen line are checked for buzzwords, stacked "Not this. That." lines and dash-heavy sentences, and the planner's own examples stop teaching them.
