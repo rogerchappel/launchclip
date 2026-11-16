@@ -92,11 +92,20 @@ export const STORY_GRADE_PRESETS = ["clean", "warm-film", "teal-amber", "cool-te
 export const STORY_GRADE_KEYS = ["preset", "cube", "strength", "tint"];
 // story.finish passes in chain order (optical first, film last) and their
 // params (docs/FINISHING_AND_ELEMENTS_RFC.md §E.1; kit/core/finish.mjs reads
-// this table): [min, max, default] for a number, or a boolean default. grade
-// takes the story.grade fields instead.
+// this table): [min, max, default] for a number ([min, max, [x, y]] for a
+// point), a boolean or "#rrggbb" default, an array of names for a choice (the
+// first is the default), or {times, default} for hit times: a list of up to
+// `times` seconds, or "cuts" (every track-0 scene start after the first).
+// grade takes the story.grade fields instead.
 export const STORY_FINISH_MAX = 8;
+export const STORY_FINISH_TIMES = 32;
 export const STORY_FINISH_PASSES = Object.freeze({
+  bloom: Object.freeze({ threshold: [0.5, 0.95, 0.75], radius: [0.5, 2, 1], strength: [0, 2, 0.6], tint: "#ffffff" }),
   aberration: Object.freeze({ px: [0.5, 4, 1.5], falloff: [0, 1, 1] }),
+  "zoom-blur": Object.freeze({ amount: [0, 0.5, 0.12], centre: [0, 1, [0.5, 0.5]], samples: [4, 24, 16], at: Object.freeze({ times: STORY_FINISH_TIMES, default: [] }) }),
+  burn: Object.freeze({ at: Object.freeze({ times: STORY_FINISH_TIMES, default: "cuts" }), frames: [8, 14, 10], band: [0.02, 0.3, 0.08], colour: "#ff6a1a", seed: [0, 999999, 0] }),
+  crt: Object.freeze({ scan: [0, 1, 0.35], grille: [0, 1, 0.25], bleed: [0, 1, 0.4], curvature: [0, 0.15, 0.04], tracking: [0, 1, 0.2], powerOn: false }),
+  halftone: Object.freeze({ cell: [4, 48, 10], angle: [0, 90, 45], ink: "#15131a", paper: "#f3eee4", accent: "#e4572e", mode: Object.freeze(["dot", "line", "duotone"]) }),
   grade: null,
   grain: Object.freeze({ amount: [0, 1, 0.06], size: [1, 4, 1.5], mono: true, seed: [0, 999999, 0] })
 });
@@ -1918,6 +1927,10 @@ function validateFinish(value, err, path = "finish") {
       const rule = spec[key];
       if (rule === undefined) err(`${at}.${key} is not a ${pass} param (${Object.keys(spec).join(", ")})`);
       else if (typeof rule === "boolean") { if (typeof v !== "boolean") err(`${at}.${key} must be true or false`); }
+      else if (typeof rule === "string") { if (!/^#[0-9a-f]{6}$/i.test(String(v))) err(`${at}.${key} must be a #rrggbb colour`); }
+      else if (rule.times) { if (!(v === "cuts" || (Array.isArray(v) && v.length <= rule.times && v.every((n) => typeof n === "number" && n >= 0)))) err(`${at}.${key} must be "cuts" or up to ${rule.times} times in seconds`); }
+      else if (typeof rule[0] === "string") { if (!rule.includes(v)) err(`${at}.${key} must be one of ${rule.join(", ")}`); }
+      else if (Array.isArray(rule[2])) { if (!(Array.isArray(v) && v.length === 2 && v.every((n) => typeof n === "number" && n >= rule[0] && n <= rule[1]))) err(`${at}.${key} must be [x, y], each from ${rule[0]} to ${rule[1]}`); }
       else if (!(typeof v === "number" && v >= rule[0] && v <= rule[1])) err(`${at}.${key} must be a number from ${rule[0]} to ${rule[1]}`);
     }
   });

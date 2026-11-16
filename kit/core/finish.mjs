@@ -30,8 +30,22 @@ export function finishParams(pass, given = {}) {
   const spec = STORY_FINISH_PASSES[pass];
   if (!spec) return { ...given };
   const out = {};
-  for (const [key, rule] of Object.entries(spec)) out[key] = given[key] ?? (Array.isArray(rule) ? rule[2] : rule);
+  for (const [key, rule] of Object.entries(spec)) out[key] = given[key] ?? ruleDefault(rule);
   return out;
+}
+
+// A STORY_FINISH_PASSES rule's default: [min, max, default], a choice's first
+// name, {times, default}, or the boolean or colour itself.
+function ruleDefault(rule) {
+  if (Array.isArray(rule)) return typeof rule[0] === 'number' ? rule[2] : rule[0];
+  return rule?.times ? rule.default : rule;
+}
+
+/** Hit times in seconds: a list as given, or "cuts" (each track-0 scene start after the first). */
+export function finishTimes(story, at) {
+  if (at !== 'cuts') return [...(at ?? [])].sort((a, b) => a - b);
+  const starts = (story?.scenes ?? []).filter((scene) => (scene?.track ?? 0) === 0).map((scene) => Number(scene.start)).filter((t) => t > 0);
+  return [...new Set(starts)].sort((a, b) => a - b);
 }
 
 /**
@@ -49,7 +63,11 @@ export function resolveFinish(story) {
     const given = byName.get(pass);
     // grade: a {pass: "grade"} entry's fields, or story.grade as written.
     if (pass === 'grade') { if (given && given !== 'off') chain.push({ pass, params: given }); }
-    else chain.push({ pass, params: finishParams(pass, given) });
+    else {
+      const params = finishParams(pass, given);
+      if ('at' in params) params.at = finishTimes(story, params.at);
+      chain.push({ pass, params });
+    }
   }
   return chain;
 }
