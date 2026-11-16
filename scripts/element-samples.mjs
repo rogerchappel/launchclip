@@ -41,6 +41,7 @@ export const SAMPLES = Object.freeze({
   'tooltip': {title: 'New', text: 'Drop a recording here to cut it'},
   'callout-arrow': {text: 'Your brand colours'},
   'motion-title': {kicker: 'Launch week', text: 'Ship the video with the feature', highlight: 'video', sub: 'One prompt, every format'},
+  'item-list': {title: 'Before you post', subject: 'Your Short', ticks: true, items: [{label: 'Hook in the first second'}, {label: 'Captions on every line'}, {label: 'One idea per scene'}, {label: 'End on the payoff'}]},
   'icon-grid': {title: 'Everything in one prompt', items: [{icon: 'clapperboard', label: 'Scenes'}, {icon: 'captions', label: 'Captions'}, {icon: 'audio-waveform', label: 'Voice'}, {icon: 'palette', label: 'Brand'}, {icon: 'smartphone', label: 'Shorts'}, {icon: 'monitor-play', label: 'YouTube'}]},
   'map-highlight': {title: 'Where LaunchClip renders most', highlight: [{country: 'France', value: '18%'}, {country: 'Germany', value: '24%'}, {country: 'Spain', value: '9%'}, {country: 'UK', label: 'UK', value: '14%'}], source: 'Render logs, Oct 2026'},
   'unit-grid': {title: '49 trained lifters', count: 49, groups: [{count: 24, label: 'Heavy: 8–12 reps', tone: 'primary'}, {count: 25, label: 'Light: 20–25 reps', tone: 'accent'}]},

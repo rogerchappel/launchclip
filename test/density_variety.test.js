@@ -52,3 +52,13 @@ test("density: a character story's captions fill the third they sit in; other st
   const hidden = densityGate({ ...story(scenes), bible }, { rects: [cast, { ...top, hide: [[1, 9]] }], profile: "shorts" });
   assert.ok(hidden.findings.some((finding) => finding.rule === "empty-region" && /top third/.test(finding.detail)), JSON.stringify(hidden.findings));
 });
+
+test("variety: a checklist card is a boxed-list warning; item-list is not", () => {
+  const rows = [{ label: "Cache dependencies", status: "done", at: 0.5 }, { label: "Split the tests", status: "done", at: 1.2 }];
+  const boxed = varietyGate(story([world("w", 0, 6), { id: "list", module: "checklist", track: 1, start: 0, end: 6, params: { title: "Three changes", rows } }]));
+  const finding = boxed.findings.find((entry) => entry.rule === "boxed-list");
+  assert.equal(finding?.severity, "warning", JSON.stringify(boxed.findings));
+  assert.match(finding.detail, /item-list/);
+  const free = varietyGate(story([world("w", 0, 6), { id: "list", module: "item-list", track: 1, start: 0, end: 6, params: { items: rows.map((row) => row.label), ticks: true } }]));
+  assert.equal(free.findings.some((entry) => entry.rule === "boxed-list"), false);
+});

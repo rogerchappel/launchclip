@@ -337,14 +337,14 @@
    {
     "shot": "short-3-sh3",
     "start": 19.639,
-    "module": "process-steps",
+    "module": "item-list",
     "change": "swap",
     "text": "once you count the chips, the power and the people."
    },
    {
     "shot": "short-3-sh3",
     "start": 23.932,
-    "module": "process-steps",
+    "module": "item-list",
     "change": "build",
     "text": "Northlight has not confirmed a number."
    },
