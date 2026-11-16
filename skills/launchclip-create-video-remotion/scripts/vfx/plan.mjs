@@ -107,6 +107,17 @@ export function vfxTransitions(story) {
 }
 
 /**
+ * When a VFX cover transition hides the frame, in story seconds: {start,
+ * full: [from, to], end}. The effect runs from start to end and covers every
+ * pixel over `full` (the plan's timing; kit/core/transition-frames.mjs reads it).
+ */
+export function vfxCoverSpan(type, start, dur) {
+  const info = VFX_TRANSITIONS[type], D = info.module.meta.duration, speed = D / dur, middle = (info.cover[0] + info.cover[1]) / 2;
+  const from = start + dur / 2 - middle / speed;
+  return {start: from, full: [from + info.cover[0] / speed, from + info.cover[1] / speed], end: from + D / speed};
+}
+
+/**
  * Plan cues for the VFX covers: each effect sped up to fit its whole life
  * into the transition, the middle of its full cover on the midpoint (where
  * the plates swap). The 320 × 180 screen sits centred on the art canvas,
@@ -115,7 +126,7 @@ export function vfxTransitions(story) {
 function transitionCues(story, aw, ah, colors) {
   return vfxTransitions(story).map(transition => {
     const info = VFX_TRANSITIONS[transition.type], D = info.module.meta.duration, speed = D / transition.dur;
-    const middle = (info.cover[0] + info.cover[1]) / 2, start = r3(transition.start + transition.dur / 2 - middle / speed);
+    const start = r3(vfxCoverSpan(transition.type, transition.start, transition.dur).start);
     const portrait = ah > aw;
     const entry = {
       effect: transition.type,

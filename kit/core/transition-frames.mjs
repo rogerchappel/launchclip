@@ -30,7 +30,8 @@ import { cameraPlan, cameraStateAt, sceneObjectLookup, worldPoint } from './came
 import { dotWipeCover, dotWipes } from './dot-wipe.mjs';
 import { resolveModule } from './modules.mjs';
 import { getEase } from './motion.mjs';
-import { CAMERA_TRANSITION_TYPES, FULL_FRAME_PLATES, layerStateAt, sceneWindows } from './transitions.mjs';
+import { CAMERA_TRANSITION_TYPES, FULL_FRAME_PLATES, VFX_COVER_TRANSITIONS, layerStateAt, sceneWindows } from './transitions.mjs';
+import { vfxCoverSpan } from './vfx/plan.mjs';
 
 /**
  * cover: the least share of the screen the two plates cover together; gap:
@@ -109,6 +110,9 @@ export function transitionFrames(story, sceneId, { windows = sceneWindows(story)
   // The outgoing plate: the one the transition carries (its window runs into this one).
   const previous = plates.filter((item) => item !== entry && item.start < entry.start - 1e-6 && item.renderEnd > entry.start + 1e-6).at(-1) ?? null;
   const wipe = dotWipes(story, windows).find((item) => item.sceneId === entry.id) ?? null;
+  // A VFX cover (kit/core/vfx/plan.mjs): taken as rising evenly to its full cover, then clearing evenly.
+  const vfxCover = VFX_COVER_TRANSITIONS.includes(entry.transitionIn.type) ? vfxCoverSpan(entry.transitionIn.type, entry.start, entry.transitionIn.dur) : null;
+  const vfxAt = (t) => (!vfxCover ? 0 : t < vfxCover.full[0] ? Math.max(0, (t - vfxCover.start) / (vfxCover.full[0] - vfxCover.start)) : t <= vfxCover.full[1] ? 1 : Math.max(0, (vfxCover.end - t) / (vfxCover.end - vfxCover.full[1])));
   const first = Math.round(entry.start * fps), last = Math.round((entry.start + entry.transitionIn.dur) * fps);
   const columns = check.columns, rows = Math.max(1, Math.round((columns * height) / width));
   const points = [];
@@ -118,7 +122,7 @@ export function transitionFrames(story, sceneId, { windows = sceneWindows(story)
   const sample = (frame) => {
     const t = frame / fps;
     const incoming = plateAt(entry, t, options), outgoing = plateAt(previous, t, options);
-    const dots = wipe ? Math.min(1, dotWipeCover(wipe, t) * (wipe.cover ?? 1)) : 0;
+    const dots = wipe ? Math.min(1, dotWipeCover(wipe, t) * (wipe.cover ?? 1)) : vfxAt(t);
     // Per point: the weight of the incoming plate (on top), the outgoing one and the background, and where each plate is read from.
     const cells = points.map((point) => {
       const qi = incoming ? incoming.toLocal(point) : null, qo = outgoing ? outgoing.toLocal(point) : null;
