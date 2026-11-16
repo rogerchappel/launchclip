@@ -239,6 +239,50 @@ Checks:
   both modes and three style palettes, one PNG per category. Golden hashes
   catch drift; the sheet is also what a human reviews before a batch merges.
 
+## 4a. Built so far (phases 0–2) and where it differs from the plan above
+
+The impact layer works end to end in both renderers. What was built, and the
+places the plan changed once it met the code:
+
+- **Vendored:** the core (no actor rig, scenes, acts or `createFx`) and ten
+  effects: hit-spark, crit-hit, impact-frame, ground-slam, small-explosion,
+  smoke-bomb, firework-burst, poof, sunburst, collect-burst
+  (`kit/core/vfx/vendor/`, licence verbatim, a source header on every file).
+- **Driver:** `kit/core/vfx/driver.mjs`, measured above. The painter also
+  snaps story time to the 1/120 s grid, so float noise in a renderer's clock
+  never decides whether a cue has started.
+- **One layer per story, not per scene.** The cues of every scene go on one
+  colour canvas and one light canvas (`plus-lighter`) over all the scenes and
+  the light's over group, under the wipes, the brand frame and the captions.
+  `layer: "back"` is not built.
+- **Timing uses the story's anchor grammar:** `at` is seconds, `"word:<text>"`
+  or `"beat:<n>"`, resolved like `hits`. `{"anchor": …}` (module anchors) waits
+  for the fluid-motion anchors. `align` defaults to `"peak"`: impacts land on
+  their moment unless a cue asks for `"start"`.
+- **Placement:** `x`/`y` are fractions of the frame (default the centre),
+  snapped to the art grid: the short side is 180 art pixels (6 px at 1080p).
+  `scale`, `mask` and the camera shake are not built.
+- **Colour:** `color` names a brand colour or a `#rrggbb`; `rampOf` makes an
+  8-step ramp from it (shadows from the background, highlights to white).
+  Without one, an effect keeps its own palette. The semantic ramps, the hue
+  shift and the brand-strict pull are not built.
+- **Peaks** come from the light buffer only (colour as a fallback): counting
+  colour put smoke-bomb's peak on its biggest smoke cloud at 2.95 s, not its
+  flash at 0.97 s. `scripts/vfx-peaks.mjs` measures; the test keeps them current.
+- **Sound:** each cue's paired family (or a named one, or `"none"`) is bound by
+  `finish` on the effect's peak, like a hit.
+- **Runtime:** `VFX_RUNTIME` is generated into the repo by
+  `scripts/vfx-runtime.mjs` (80 KB with all ten effects) rather than bundled
+  per story at compile time, because the compiler cannot rely on esbuild at
+  run time. Per-story trimming is worth doing once the catalogue grows.
+- **Render:** `pixel` only. `smooth` is still phase 3.
+- **Checks:** `test/vfx_driver.test.js` (purity), `test/vfx_layer.test.js`
+  (catalogue, validation, plan, runtime against the import byte for byte,
+  compiled page, sound), story parity on `examples/story/vfx-impacts-9x16`,
+  and `scripts/vfx-sheet.mjs` (every effect at six times in three palettes).
+  Golden sheet hashes, the effect check and the motion-check findings are
+  not built.
+
 ## 5. Phases
 
 | # | Step (one PR each) | Effort |
