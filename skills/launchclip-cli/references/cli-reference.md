@@ -1763,6 +1763,12 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip sfx list [--dir .launchclip/sfx]
   ```
 
+- `sound fetch`: Download CC0 sample libraries into $LAUNCHCLIP_CACHE/instruments (core: everything orchestral-lite and acoustic-pluck play, about 155 MB). Prints the size and asks first (--yes skips the question); every file is checked against its pinned SHA-256. finish never downloads: a missing instrument plays synth, with one warning.
+
+  ```text
+  launchclip sound fetch <core|all|library|instrument> [--yes] [--dir ~/.cache/launchclip/instruments] # download the CC0 sample libraries the sampled music genres play (asks first; renders never download)
+  ```
+
 - `sfx audition`: Write one audition file with every variant of a family.
 
   ```text
