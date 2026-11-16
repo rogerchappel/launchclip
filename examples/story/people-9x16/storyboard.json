@@ -1,7 +1,7 @@
 {
   "schema": "launchclip.story.v1",
   "title": "The release crew (9:16 person members)",
-  "notes": "Sample for the person member (docs/FLUID_MOTION_RFC.md §10, member modules): a robot waits in an office at night while the six people who sign off a release flock out of a Release hub, three as drawn avatars or a portrait photo, three as initials tiles in the brand palette, wired into the hub with pulses on a 120 bpm grid, converging at 3 s as the robot cheers. The avatars are drawn SVGs, not real people. No narration and no paid calls.",
+  "notes": "Sample for the person member (docs/FLUID_MOTION_RFC.md §10, member modules): a robot waits in an office at night while the seven people who sign off a release flock out of a Release hub, four as drawn avatars or portrait photos, three as initials tiles in the brand palette, wired into the hub with pulses on a 120 bpm grid, converging at 3 s as the robot cheers. The avatars are drawn SVGs, not real people. No narration and no paid calls.",
   "lane": "motion",
   "format": {"width": 1080, "height": 1920, "fps": 30, "duration": 10, "platform": "youtube-shorts"},
   "brand": {
@@ -23,8 +23,9 @@
         {"id": "jonah", "member": {"module": "person", "name": "Jonah", "image": "assets/people/jonah.svg", "shape": "photo"}},
         {"id": "lee", "member": {"module": "person", "name": "Lee Park"}},
         {"id": "sol", "member": {"module": "person", "name": "Sol", "image": "assets/people/sol.svg"}},
-        {"id": "kit", "member": {"module": "person", "name": "Kit Wu"}}
+        {"id": "kit", "member": {"module": "person", "name": "Kit Wu"}},
+        {"id": "dee", "member": {"module": "person", "name": "Dee Roy", "image": "assets/people/dee.svg", "shape": "photo"}}
       ],
-      "bpm": 120, "converge": 3, "rect": {"x": 80, "y": 280, "width": 860, "height": 700}}}
+      "bpm": 120, "converge": 3, "rect": {"x": 80, "y": 280, "width": 860, "height": 640}}}
   ]
 }
