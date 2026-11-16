@@ -196,7 +196,7 @@ function timeline(model, ops) {
     tw(ops, `${id}-bracket`, B.bracketTime, 0.45, 'power3.out', {strokeDashoffset: 1}, {strokeDashoffset: 0});
     set(ops, `${id}-${B.object}`, start, {opacity: 0, x: 0, y: 0, scaleX: 0.6, scaleY: 0.6});
     tw(ops, `${id}-${B.object}`, B.pillTime, 0.2, 'power1.out', {opacity: 0}, {opacity: 1});
-    tw(ops, `${id}-${B.object}`, B.pillTime, 0.45, 'back.out(1.6)', {scaleX: 0.6, scaleY: 0.6}, {scaleX: 1, scaleY: 1});
+    tw(ops, `${id}-${B.object}`, B.pillTime, 0.45, 'power3.out', {scaleX: 0.6, scaleY: 0.6}, {scaleX: 1, scaleY: 1});
   }
 }
 

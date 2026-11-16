@@ -277,7 +277,7 @@ function ctaTimeline(model, ops) {
   const below = r2(P.height * 1.4);
   set(ops, `${id}-pill`, start, {opacity: 0, x: 0, y: below, scaleX: 0.96, scaleY: 0.96});
   tw(ops, `${id}-pill`, c.inAt, 0.25, 'power1.out', {opacity: 0}, {opacity: 1});
-  tw(ops, `${id}-pill`, c.inAt, 0.7, 'back.out(1.4)', {y: below, scaleX: 0.96, scaleY: 0.96}, {y: 0, scaleX: 1, scaleY: 1});
+  tw(ops, `${id}-pill`, c.inAt, 0.7, 'power3.out', {y: below, scaleX: 0.96, scaleY: 0.96}, {y: 0, scaleX: 1, scaleY: 1});
   // The pointer glides in from the lower right, presses, and leaves.
   const from = {x: r2(160 * u), y: r2(120 * u)};
   set(ops, `${id}-pointer`, start, {opacity: 0, ...from, scaleX: 1, scaleY: 1});
@@ -289,7 +289,7 @@ function ctaTimeline(model, ops) {
   // The press, then Subscribed.
   set(ops, `${id}-button`, start, {scaleX: 1, scaleY: 1});
   tw(ops, `${id}-button`, c.click, 0.08, 'power2.in', {scaleX: 1, scaleY: 1}, {scaleX: 0.93, scaleY: 0.93});
-  tw(ops, `${id}-button`, rt(c.click + 0.08), 0.35, 'back.out(2.4)', {scaleX: 0.93, scaleY: 0.93}, {scaleX: 1, scaleY: 1});
+  tw(ops, `${id}-button`, rt(c.click + 0.08), 0.35, 'power3.out', {scaleX: 0.93, scaleY: 0.93}, {scaleX: 1, scaleY: 1});
   // Out, then in: the two labels differ in length, so they never show at once.
   set(ops, `${id}-sub`, start, {opacity: 1});
   tw(ops, `${id}-sub`, rt(c.click + 0.04), 0.1, 'power1.in', {opacity: 1}, {opacity: 0});
@@ -305,9 +305,9 @@ function ctaTimeline(model, ops) {
     for (const angle of swings) { tw(ops, `${id}-bell`, t, 0.11, 'sine.inOut', {rotation: last}, {rotation: angle}); last = angle; t = rt(t + 0.11); }
   }
   if (c.likeBox) {
-    popOps(ops, `${id}-liked`, start, rt(c.click + 0.6), {from: 0.4, duration: 0.4, ease: 'back.out(2.6)'});
+    popOps(ops, `${id}-liked`, start, rt(c.click + 0.6), {from: 0.4, duration: 0.4, ease: 'power3.out'});
     set(ops, `${id}-like`, start, {scaleX: 1, scaleY: 1});
-    tw(ops, `${id}-like`, rt(c.click + 0.6), 0.4, 'back.out(2.6)', {scaleX: 0.7, scaleY: 0.7}, {scaleX: 1, scaleY: 1});
+    tw(ops, `${id}-like`, rt(c.click + 0.6), 0.4, 'power3.out', {scaleX: 0.7, scaleY: 0.7}, {scaleX: 1, scaleY: 1});
   }
   tw(ops, `${id}-pill`, c.outAt, 0.5, 'power3.in', {opacity: 1, y: 0}, {opacity: 0, y: below});
 }

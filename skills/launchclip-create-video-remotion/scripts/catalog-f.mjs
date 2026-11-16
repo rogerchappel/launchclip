@@ -315,12 +315,12 @@ function proofWallTimeline(model, ops) {
     const target = `${id}-card-${card.index}`;
     set(ops, target, start, {opacity: 0, rotation: card.tilt, scaleX: 0.6, scaleY: 0.6});
     tw(ops, target, card.time, 0.08, 'none', {opacity: 0}, {opacity: 1});
-    tw(ops, target, card.time, 0.3, 'back.out(2.2)', {scaleX: 0.6, scaleY: 0.6}, {scaleX: 1, scaleY: 1});
+    tw(ops, target, card.time, 0.3, 'power3.out', {scaleX: 0.6, scaleY: 0.6}, {scaleX: 1, scaleY: 1});
   }
   if (c.hero) {
     set(ops, `${id}-hero`, start, {opacity: 0, rotation: -2, scaleX: 0.6, scaleY: 0.6});
     tw(ops, `${id}-hero`, c.hero.time, 0.1, 'none', {opacity: 0}, {opacity: 1});
-    tw(ops, `${id}-hero`, c.hero.time, 0.4, 'back.out(1.8)', {scaleX: 0.6, scaleY: 0.6}, {scaleX: 1, scaleY: 1});
+    tw(ops, `${id}-hero`, c.hero.time, 0.4, 'power3.out', {scaleX: 0.6, scaleY: 0.6}, {scaleX: 1, scaleY: 1});
     if (c.hero.mark) {
       set(ops, `${id}-mark`, start, {scaleX: 0});
       tw(ops, `${id}-mark`, c.hero.swipeAt, 0.35, 'power2.out', {scaleX: 0}, {scaleX: 1});
@@ -479,7 +479,7 @@ function scrapbookTimeline(model, ops) {
   tw(ops, `${id}-ring`, c.ringAt, 0.45, 'power2.out', {strokeDashoffset: 1}, {strokeDashoffset: 0});
   if (c.sub) {
     set(ops, `${id}-sub`, start, {opacity: 0, rotation: -3, scaleX: 0.5, scaleY: 0.5});
-    tw(ops, `${id}-sub`, c.subAt, 0.3, 'back.out(2)', {opacity: 0, scaleX: 0.5, scaleY: 0.5}, {opacity: 1, scaleX: 1, scaleY: 1});
+    tw(ops, `${id}-sub`, c.subAt, 0.3, 'power3.out', {opacity: 0, scaleX: 0.5, scaleY: 0.5}, {opacity: 1, scaleX: 1, scaleY: 1});
   }
   set(ops, `${id}-letters`, start, {opacity: 1});
   tw(ops, `${id}-letters`, c.exitStart, 0.3, 'power1.in', {opacity: 1}, {opacity: 0});

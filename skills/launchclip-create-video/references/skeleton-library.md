@@ -33,7 +33,7 @@ Every short video (90 s or less) meets the same quality rules, and when the brie
 | `dollar-a-second` $1 a second | scale | motion | 9:16 | 20–45 s | surprise | free | ready |
 | `if-it-were` If it were… | if-were | motion | 9:16 | 20–50 s | surprise | free | ready |
 | `versus` X vs Y | versus | motion, demo | 9:16, 1:1 | 20–60 s | debate | free | ready |
-| `nobody-tells` What nobody tells you | nobody-tells | motion, footage | 9:16 | 20–60 s | useful | free | ready |
+| `nobody-tells` The hidden cost | nobody-tells | motion, footage | 9:16 | 20–60 s | useful | free | ready |
 | `countdown` Countdown to number one | countdown | motion | 9:16 | 25–60 s | useful | free | ready |
 | `myth-check` Myth check | myth | motion, footage | 9:16 | 20–60 s | surprise | free | ready |
 | `last-time` The last time | last-time | character | 9:16 | 20–45 s | act | human-or-premium | blocked: needs pose lift |
@@ -77,16 +77,16 @@ Every short video (90 s or less) meets the same quality rules, and when the brie
 - **Titles:** "{X} vs {Y}: {stake}", "Stop choosing {X} for {stake}". **Cover:** the two sides split down the middle, the winner a shade brighter.
 - **Notes:** Needs a real measure on each side; a vibe comparison reads as an opinion piece.
 
-### `nobody-tells`: What nobody tells you
+### `nobody-tells`: The hidden cost
 
-- **Hook:** Name the thing the viewer already does and promise the part they have not been told. Template: "Nobody tells you {the hidden cost} of {the thing}."
+- **Hook:** Name the thing the viewer already does and promise the part they have not been told. Template: "{The thing} costs you {the hidden cost}, and it is not on the price tag."
 - **Beats:** The promise (hook, ~14%): The thing and the hidden part. → What you know (promise, ~14%): The version everyone hears, in one line. → What is under it (proof, ~28%): The hidden cost, with one concrete example from the brief. → What to do (payoff, ~20%): One thing the viewer can do about it. → Takeaway (share, ~14%): The takeaway worth saving, in one line. → Close (cta_or_loop, ~10%): One action, or a loop.
 - **Key shot:** the hidden cost revealed underneath the known one (`stacked-bar`, `waterfall`, `object-card`, `excerpt`, `torn-paper`, `callout-arrow`)
 - **Opening image:** the familiar thing itself (the receipt, the contract, the habit), never a title card (`object-card`, `photo-scene`, `excerpt`, `device-frame`, `polaroid`)
 - **Share (useful):** A takeaway the viewer will save or send to someone about to do the thing.
 - **Avoid:** a title card as the hook; a list of five tips; fear without a fix
 - **Voice:** free, frank, a friend letting you in on it. **Sound:** low density, long cues rare.
-- **Titles:** "What nobody tells you about {the thing}", "The hidden cost of {the thing}". **Cover:** the familiar thing with its hidden part torn open.
+- **Titles:** "The hidden cost of {the thing}", "What {the thing} costs after you pay for it". **Cover:** the familiar thing with its hidden part torn open.
 - **Notes:** The hidden part must come from the brief or evidence; never invent one.
 
 ### `countdown`: Countdown to number one

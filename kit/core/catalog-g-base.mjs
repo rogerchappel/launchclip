@@ -253,7 +253,7 @@ export const RISE = Object.freeze({opacity: 0, y: 26, scale: 1});
 export function pop(ops, model, target, time, {scale = POP.scale, duration = 0.5} = {}) {
   set(ops, target, model.start, {opacity: 0, x: 0, y: 0, scaleX: scale, scaleY: scale});
   tw(ops, target, time, 0.2, 'power1.out', {opacity: 0}, {opacity: 1});
-  tw(ops, target, time, duration, 'back.out(1.7)', {scaleX: scale, scaleY: scale}, {scaleX: 1, scaleY: 1});
+  tw(ops, target, time, duration, 'power3.out', {scaleX: scale, scaleY: scale}, {scaleX: 1, scaleY: 1});
 }
 
 /** Hidden at the scene start, then a short rise into place at `time`. */

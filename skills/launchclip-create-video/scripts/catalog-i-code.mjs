@@ -964,7 +964,7 @@ function timelineTimeline(model, ops) {
       const k = c.ticks.findIndex(t => t.lit === i);
       set(ops, `${id}-dayl-${k}`, start, {opacity: 0});
       tw(ops, `${id}-dayl-${k}`, pin.at, 0.25, 'power1.out', {opacity: 0}, {opacity: 1});
-      popOps(ops, `${id}-node-${k}`, start, pin.at, {from: 0.2, duration: 0.35, ease: 'back.out(2.4)'});
+      popOps(ops, `${id}-node-${k}`, start, pin.at, {from: 0.2, duration: 0.35, ease: 'power3.out'});
       const closed = {clipT: 100, clipR: 0, clipB: 0, clipL: 0};
       set(ops, `${id}-pin-${i}`, start, closed);
       tw(ops, `${id}-pin-${i}`, rt(pin.at - 0.05), 0.3, 'power2.out', closed, {clipT: 0, clipR: 0, clipB: 0, clipL: 0});

@@ -238,7 +238,7 @@ function lineageTimeline(model, ops) {
   const {id, start} = model;
   const c = model.content;
   chromeOps(model, ops);
-  c.people.forEach(person => popOps(ops, `${id}-person-${person.id}`, start, person.time, {from: 0.8, duration: 0.5, ease: 'back.out(1.8)', fade: 0.25}));
+  c.people.forEach(person => popOps(ops, `${id}-person-${person.id}`, start, person.time, {from: 0.8, duration: 0.5, ease: 'power3.out', fade: 0.25}));
   c.links.forEach((link, i) => {
     drawMaskOps(ops, `${id}-link-${i}`, start, link.time, 0.6);
     if (link.pill) popOps(ops, `${id}-linkl-${i}`, start, rt(link.time + 0.3), {from: 0.7, duration: 0.35});

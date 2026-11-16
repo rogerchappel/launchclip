@@ -201,7 +201,7 @@ function graphTimeline(model, ops) {
   tw(ops, `${id}-cam`, c.buildAt, rt(settle - c.buildAt), 'power1.inOut', {scaleX: 1, scaleY: 1}, {scaleX: 1.05, scaleY: 1.05});
   shakeOps(ops, `${id}-cam`, c.convergeAt, r2(14 * u));
   // Hub: pops in, breathes, its orbits turn; punches on converge.
-  popOps(ops, `${id}-hub`, start, c.buildAt, {from: 0.3, duration: 0.55, ease: 'back.out(1.7)', fade: 0.2});
+  popOps(ops, `${id}-hub`, start, c.buildAt, {from: 0.3, duration: 0.55, ease: 'power3.out', fade: 0.2});
   tw(ops, `${id}-hub`, c.convergeAt, 0.5, 'power3.out', {scaleX: 1.2, scaleY: 1.2}, {scaleX: 1, scaleY: 1});
   set(ops, `${id}-hub-label`, start, {opacity: 0, x: 0, y: r2(20 * u)});
   tw(ops, `${id}-hub-label`, rt(c.buildAt + 0.2), 0.45, 'power3.out', {opacity: 0, y: r2(20 * u)}, {opacity: 1, y: 0});

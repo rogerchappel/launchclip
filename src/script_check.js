@@ -33,6 +33,8 @@
 //   cta-choice        a series' viewer choice does not name every option at the end
 //   hedging           a short video hedges two or more times ("can help", "may need")
 //   sentence-length   a sentence over 25 words
+//   buzzword          two or more stock marketing phrases, or one in the hook
+//   aphorism          three or more stock cadences ("Not X. Y.", "nobody checks")
 //   options-unexplained  a list of three or more options ("timber, composite
 //                     and aluminium") whose items no other sentence comes back
 //                     to: the script names them and teaches nothing (derived)
@@ -42,6 +44,8 @@
 //   wpm-band, no-brief, no-duration, hedge (one hedge in a short video),
 //   open-loop (a short video over 30 s promises no later payoff in its first
 //   30%), rehook-missing (nothing reframes or re-hooks between 30% and 85%)
+//   buzzword (one, outside the hook), aphorism (two cadences), em-dash (3+
+//   and one per 500 characters), theater ("security theater" and friends)
 //
 // Fact-trace policy for small numbers: a bare count of ten or less with no
 // unit ("two steps", "3 ways", "one place") is phrasing, not a claim, and is
@@ -164,6 +168,20 @@ const URGENCY_SUPPORT = /\b(?:deadline|until|expires?|expiry|limited|last day|(?
 const PLACEHOLDER = /\b(?:jane doe|john doe|john smith|lorem ipsum|customer name|company name|product name|your name here|acme (?:corp|inc)|tbd|tbc)\b|\[[^\]]*\]|\{\{|<[a-z ]+>/i;
 const TESTIMONIAL_CUE = /\b(?:as (?:one|a|our) (?:customer|user|client|founder|reviewer)|(?:customers?|users?|clients?|reviewers?) (?:say|says|said|tell us|told us|call it|rave|describe it|write)|in (?:their|her|his) (?:own )?words|one (?:customer|user|client|founder) (?:said|says|told us|put it|wrote)|according to (?:one|a|our) (?:customer|user|client))\b/i;
 const SUPERLATIVE = /\b(?:revolutionary|revolutioni[sz]e|game[- ]chang(?:ing|er)|seamless(?:ly)?|the best(?! part)|best[- ]in[- ]class|ultimate|world[- ]class|cutting[- ]edge|next[- ]gen(?:eration)?|unparalleled|unmatched|groundbreaking|state[- ]of[- ]the[- ]art|effortless(?:ly)?|magical|incredible|unbelievable)\b/i;
+// Copy tells. The buzzword phrases, the aphorism regexes, the em-dash floor
+// and the "theater" heads are ported from impeccable by Paul Bakaus
+// (Apache-2.0; see THIRD_PARTY_NOTICES.md). Changed: Rust to JS, the
+// thresholds are per script and tuned for a 60 s narration, and the house
+// tics (nobody/no one…, "it's not X, it's", "here's the thing") are ours.
+const BUZZWORD = /\b(?:streamline your|empower your|supercharge your|unleash (?:your|the power)|leverage the power|harness the power|built for the modern|trusted by (?:leading|the world)|best[- ]in[- ]class|industry[- ]leading|world[- ]class|enterprise[- ]grade|next[- ]gen(?:eration)?|cutting[- ]edge|transform your business|revolutioni[sz]e[sd]?|game[- ]chang(?:er|ing)|mission[- ]critical|best of breed|future[- ]proof|seamless experience|seamlessly integrates?|drive (?:engagement|growth|results)|unlock(?:s|ed|ing)?|magic(?:al)?)\b/gi;
+const APHORISMS = [
+  /\bNot an? [a-z][^.!?]{1,40}[.!]\s+[A-Z][^.!?]{1,60}[.!]/g,
+  /\b[A-Z][^.!?]{4,80}[.!]\s+(?:No|Just)\s+[a-z][^.!?]{2,60}[.!]/g,
+  /\b(?:nobody|no one) (?:checks|talks about|tells you|notices|sees)\b/gi,
+  /\b(?:it'?s|this is) not (?:just |about )?[^.,;!?]{1,30}[,;:—–-]+\s*(?:it'?s|this is)\b/gi,
+  /\bhere'?s the (?:thing|catch|kicker|part)\b/gi
+];
+const THEATER = /\b(?:security|safety|privacy|compliance|growth|productivity|alignment|innovation|agile|hiring)\s+theat(?:er|re)\b/gi;
 const MECHANISM = /\b(?:because|by \w+ing|thanks to|using|via|which means|so (?:you|your)|that means|it (?:reads|checks|matches|syncs|runs|pulls|turns|sends|watches))\b/i;
 const ADDITIVE_START = /^(?:and then|and|also|plus|additionally|moreover|furthermore|in addition|on top of that|as well)\b/i;
 const B2B = /\b(?:b2b|saas|enterprise|api|apis|sdk|developers?|engineers?|devops|crm|erp|cfo|cto|ceo|finance teams?|ops teams?|compliance|soc ?2|integrations?|workflows?|stakeholders?|procurement|invoices?|payouts?|reconcil\w*|b2c)\b/i;
@@ -327,9 +345,9 @@ export function checkScript(input = {}) {
     else if (hedges.length === 1) add(warnings, "hedge", `"${hedges[0][0]}" hedges.`, "Say it firmly, with the specific the brief gives.", spanOf(sentenceAt(sentences, hedges[0].index)));
     if (duration != null && duration >= 30 && sentences.length >= 6) {
       const share = (sentence) => sentence.wordStart / Math.max(1, words);
-      if (!sentences.some((sentence) => share(sentence) < 0.3 && OPEN_LOOP.test(sentence.text))) add(warnings, "open-loop", "Nothing in the first 30% promises a later payoff (heuristic).", "Open a loop early (\"the last one is the one nobody checks\", \"one fix I'll give you at the end\") and close it before the call to action.", spanOf(sentences[1] ?? hook));
+      if (!sentences.some((sentence) => share(sentence) < 0.3 && OPEN_LOOP.test(sentence.text))) add(warnings, "open-loop", "Nothing in the first 30% promises a later payoff (heuristic).", "Open a loop early (\"the last one is the cheapest fix\", \"one fix I'll give you at the end\") and close it before the call to action.", spanOf(sentences[1] ?? hook));
       const middle = sentences.filter((sentence) => share(sentence) >= 0.3 && share(sentence) <= 0.85);
-      if (middle.length && !middle.some((sentence) => REHOOK.test(sentence.text) || countWords(sentence.text) <= 4)) add(warnings, "rehook-missing", "Nothing between 30% and 85% re-hooks or reframes (heuristic).", "Add one short pattern interrupt near the middle: a line that reframes what came before (\"The word is per.\", \"But here's the part nobody checks.\").", spanOf(middle[0]));
+      if (middle.length && !middle.some((sentence) => REHOOK.test(sentence.text) || countWords(sentence.text) <= 4)) add(warnings, "rehook-missing", "Nothing between 30% and 85% re-hooks or reframes (heuristic).", "Add one short pattern interrupt near the middle: a line that reframes what came before (\"The word is per.\", \"All three fail the same way: water sits on the cut end.\").", spanOf(middle[0]));
     }
   }
 
@@ -355,7 +373,7 @@ export function checkScript(input = {}) {
   // --- Claims and numbers (soft).
   for (const sentence of sentences) {
     const superlative = SUPERLATIVE.exec(sentence.text);
-    if (superlative) {
+    if (superlative && !new RegExp(BUZZWORD.source, "i").test(superlative[0])) {
       const next = sentences[sentence.index + 1]?.text ?? "";
       const backed = [sentence.text, next].some((text) => numberClaims(text).some((claim) => !claim.trivial) || MECHANISM.test(text));
       if (!backed) add(warnings, "superlative", `"${superlative[0]}" has no number or mechanism behind it.`, "Back it in the same or next sentence with a figure from the brief, how it works, or a demo; or cut it.", spanOf(sentence));
@@ -366,6 +384,22 @@ export function checkScript(input = {}) {
   for (const claim of traced) {
     if (!claim.precise) continue;
     add(warnings, "number-precision", `"${claim.text}" is hard to hear.`, `Round it for the ear ("about ${earRound(claim)}"); put the exact figure in the caption.`, { start: claim.start, end: claim.end, sentence: sentenceAt(sentences, claim.start).index, text: claim.text });
+  }
+
+  // --- Copy tells: stock phrases a reader recognises as generated.
+  const buzzwords = [...narration.matchAll(BUZZWORD)];
+  if (buzzwords.length) {
+    const inHook = buzzwords.some((match) => match.index < hook.end);
+    const phrases = [...new Set(buzzwords.map((match) => `"${match[0]}"`))].join(", ");
+    add(buzzwords.length > 1 || inHook ? errors : warnings, "buzzword", `${phrases}${inHook ? " in the hook" : ""}: stock marketing phrasing.`, "Say what the thing does, with its own nouns.", spanOf(sentenceAt(sentences, buzzwords[0].index)));
+  }
+  // One use of a cadence is voice; the repeat is the tell.
+  const aphorisms = APHORISMS.flatMap((pattern) => [...narration.matchAll(pattern)]).sort((a, b) => a.index - b.index);
+  if (aphorisms.length > 1) add(aphorisms.length > 2 ? errors : warnings, "aphorism", `${aphorisms.length} stock cadences (${aphorisms.map((match) => `"${match[0]}"`).join(", ")}); one a script is the cap.`, "Keep at most one. Replace the rest with the specific thing: the number, the name, the step.", spanOf(sentenceAt(sentences, aphorisms[1].index)));
+  const dashes = (narration.match(/—|\s–\s/g) ?? []).length;
+  if (dashes >= 3 && dashes * 500 >= narration.length) add(warnings, "em-dash", `${dashes} dashes in ${narration.length} characters (one per ${Math.round(narration.length / dashes)}).`, "Use a full stop or a comma; a voice does not read a dash.");
+  for (const match of narration.matchAll(THEATER)) {
+    add(warnings, "theater", `"${match[0]}" is a stock framing.`, "Name what is being faked and what the real version would do.", spanOf(sentenceAt(sentences, match.index)));
   }
 
   // --- Hook payoff (soft heuristic): a question in the hook should be

@@ -430,7 +430,7 @@ function heatTimeline(model, ops) {
   chromeOps(model, ops);
   c.rowLabels.forEach((_, i) => riseOps(ops, `${id}-row-${i}`, start, rt(c.buildAt - 0.15 + i * 0.04), 0, {dx: r2(-10 * u), duration: 0.35}));
   c.colLabels.forEach((_, j) => riseOps(ops, `${id}-col-${j}`, start, rt(c.buildAt - 0.15 + j * 0.03), r2(8 * u), {duration: 0.35}));
-  c.cells.forEach((cell, k) => popOps(ops, `${id}-cell-${k}`, start, cell.time, {from: 0.3, duration: 0.4, ease: 'back.out(1.8)', fade: 0.15}));
+  c.cells.forEach((cell, k) => popOps(ops, `${id}-cell-${k}`, start, cell.time, {from: 0.3, duration: 0.4, ease: 'power3.out', fade: 0.15}));
   riseOps(ops, `${id}-legend`, start, rt(c.buildEnd - 0.2), r2(8 * u));
 }
 
@@ -532,7 +532,7 @@ function leaderTimeline(model, ops) {
   });
   if (c.highlightAt !== null) {
     c.rows.forEach((_, i) => { if (i !== c.highlight) fadeOps(ops, `${id}-row-${i}`, c.highlightAt, 1, 0.45); });
-    tw(ops, `${id}-row-${c.highlight}`, c.highlightAt, 0.45, 'back.out(2)', {scaleX: 1, scaleY: 1}, {scaleX: 1.03, scaleY: 1.03});
+    tw(ops, `${id}-row-${c.highlight}`, c.highlightAt, 0.45, 'power3.out', {scaleX: 1, scaleY: 1}, {scaleX: 1.03, scaleY: 1.03});
   }
 }
 
@@ -623,7 +623,7 @@ function tableTimeline(model, ops) {
   c.columns.forEach((_, j) => popOps(ops, `${id}-head-${j}`, start, rt(c.buildAt + 0.1 + j * 0.08), {from: 0.7}));
   c.rows.forEach((row, i) => {
     riseOps(ops, `${id}-row-${i}`, start, row.time, r2(14 * u), {duration: 0.4});
-    row.values.forEach((_, j) => popOps(ops, `${id}-cell-${i}-${j}`, start, rt(row.time + 0.12 + j * 0.07), {from: 0.3, duration: 0.4, ease: 'back.out(2.2)'}));
+    row.values.forEach((_, j) => popOps(ops, `${id}-cell-${i}-${j}`, start, rt(row.time + 0.12 + j * 0.07), {from: 0.3, duration: 0.4, ease: 'power3.out'}));
   });
   if (c.highlight !== null) popOps(ops, `${id}-focus`, start, c.highlightAt, {from: 1.06, duration: 0.45, ease: 'power3.out'});
 }

@@ -284,13 +284,13 @@ export function spriteSceneTimeline(model, ops = []) {
     const from = {left: {x: -d, y: 0}, right: {x: d, y: 0}, top: {x: 0, y: -d}, bottom: {x: 0, y: d}, none: {x: 0, y: 0}}[prop.from];
     set(ops, target, start, {opacity: 0, x: from.x, y: from.y});
     tw(ops, target, prop.time, 0.18, 'power1.out', {opacity: 0}, {opacity: 1});
-    tw(ops, target, prop.time, T.propSlide, 'back.out(1.4)', {x: from.x, y: from.y}, {x: 0, y: 0});
+    tw(ops, target, prop.time, T.propSlide, 'power3.out', {x: from.x, y: from.y}, {x: 0, y: 0});
   }
   if (c.card) {
     const target = `${id}-card`;
     const rise = r2(36 * model.unit);
     set(ops, target, start, {opacity: 0, y: rise, scaleX: 0.92, scaleY: 0.92});
-    tw(ops, target, c.card.time, T.cardIn, 'back.out(1.6)', {opacity: 0, y: rise, scaleX: 0.92, scaleY: 0.92}, {opacity: 1, y: 0, scaleX: 1, scaleY: 1});
+    tw(ops, target, c.card.time, T.cardIn, 'power3.out', {opacity: 0, y: rise, scaleX: 0.92, scaleY: 0.92}, {opacity: 1, y: 0, scaleX: 1, scaleY: 1});
   }
   return ops;
 }

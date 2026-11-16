@@ -217,7 +217,7 @@ function unitTimeline(model, ops) {
   const still = {x: 0, y: 0, scaleX: 1, scaleY: 1};
   c.units.forEach((unit, i) => {
     const inner = `${id}-ui-${i}`;
-    popOps(ops, inner, start, unit.time, {from: 0.3, duration: 0.4, ease: 'back.out(2.2)'});
+    popOps(ops, inner, start, unit.time, {from: 0.3, duration: 0.4, ease: 'power3.out'});
     if (unit.move) {
       set(ops, `${id}-u-${i}`, start, still);
       tw(ops, `${id}-u-${i}`, unit.move.at, 0.75, 'power3.inOut', still, {x: unit.move.dx, y: unit.move.dy, scaleX: unit.move.scale, scaleY: unit.move.scale});
@@ -517,7 +517,7 @@ function lineTimeline(model, ops) {
   chromeOps(model, ops);
   set(ops, `${id}-line`, start, {x: 0, y: 0, scaleX: 0, scaleY: 1});
   tw(ops, `${id}-line`, c.buildAt, 0.6, 'power3.out', {scaleX: 0}, {scaleX: 1});
-  c.ticks.forEach((tick, k) => popOps(ops, `${id}-tick-${k}`, start, tick.time, {from: 0.2, duration: 0.35, ease: 'back.out(2)'}));
+  c.ticks.forEach((tick, k) => popOps(ops, `${id}-tick-${k}`, start, tick.time, {from: 0.2, duration: 0.35, ease: 'power3.out'}));
   for (const t of c.tickLabels) riseOps(ops, `${id}-tl-${t.k}`, start, rt(c.ticks[t.k].time + 0.05), r2(10 * u), {duration: 0.35});
   if (c.unit) riseOps(ops, `${id}-unit`, start, rt(c.buildEnd - 0.2), r2(10 * u));
   c.ranges.forEach((r, i) => {
@@ -532,11 +532,11 @@ function lineTimeline(model, ops) {
     riseOps(ops, `${id}-rl-${i}`, start, rt(r.time + 0.12), r2(22 * u));
   });
   if (c.marker) {
-    riseOps(ops, `${id}-marker`, start, c.marker.time, r2(-60 * u), {duration: 0.5, ease: 'back.out(1.8)'});
+    riseOps(ops, `${id}-marker`, start, c.marker.time, r2(-60 * u), {duration: 0.5, ease: 'power3.out'});
     if (c.marker.text) riseOps(ops, `${id}-ml`, start, rt(c.marker.time + 0.15), r2(14 * u));
   }
   c.points.forEach((pt, i) => {
-    popOps(ops, `${id}-pt-${i}`, start, pt.time, {from: 0.2, duration: 0.4, ease: 'back.out(2.4)'});
+    popOps(ops, `${id}-pt-${i}`, start, pt.time, {from: 0.2, duration: 0.4, ease: 'power3.out'});
     if (pt.text) riseOps(ops, `${id}-ptl-${i}`, start, rt(pt.time + 0.1), r2(10 * u));
   });
   if (c.zoom) {
@@ -548,11 +548,11 @@ function lineTimeline(model, ops) {
     set(ops, `${id}-zline`, start, {x: 0, y: 0, scaleX: 0, scaleY: 1});
     tw(ops, `${id}-zline`, rt(z.time + 0.4), 0.5, 'power3.out', {scaleX: 0}, {scaleX: 1});
     z.ticks.forEach((t, k) => {
-      popOps(ops, `${id}-zt-${k}`, start, t.time, {from: 0.2, duration: 0.35, ease: 'back.out(2)'});
+      popOps(ops, `${id}-zt-${k}`, start, t.time, {from: 0.2, duration: 0.35, ease: 'power3.out'});
       riseOps(ops, `${id}-ztl-${k}`, start, rt(t.time + 0.05), r2(10 * u), {duration: 0.35});
     });
     z.points.forEach((pt, i) => {
-      popOps(ops, `${id}-zp-${i}`, start, pt.time, {from: 0.2, duration: 0.45, ease: 'back.out(2.4)'});
+      popOps(ops, `${id}-zp-${i}`, start, pt.time, {from: 0.2, duration: 0.45, ease: 'power3.out'});
       if (pt.text) riseOps(ops, `${id}-zpl-${i}`, start, rt(pt.time + 0.1), r2(10 * u));
     });
   }

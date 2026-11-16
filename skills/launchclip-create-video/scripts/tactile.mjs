@@ -49,6 +49,7 @@ export function dropOps(ops, id, start, t, height, {fall = TACTILE.fall, give = 
   const land = rt(t + fall);
   const squashed = {scaleX: r2(1 + give * 0.6), scaleY: r2(1 - give)};
   tw(ops, id, land, TACTILE.squash, 'power1.out', {scaleX: 1, scaleY: 1}, squashed);
+  // Kept: squash-and-stretch on landing is the physical weight these satisfying-motion drops exist for.
   tw(ops, id, rt(land + TACTILE.squash), TACTILE.settle, 'back.out(3)', squashed, {scaleX: 1, scaleY: 1});
   return land;
 }
@@ -67,13 +68,14 @@ export function shadowOps(ops, id, start, t, fall = TACTILE.fall) {
 export function stampOps(ops, id, start, t, {tilt = -4} = {}) {
   set(ops, id, start, {opacity: 0, scaleX: 1.7, scaleY: 1.7, rotation: tilt - 8});
   tw(ops, id, t, 0.14, 'power4.in', {opacity: 0, scaleX: 1.7, scaleY: 1.7, rotation: tilt - 8}, {opacity: 1, scaleX: 0.94, scaleY: 0.94, rotation: tilt});
+  // Kept: a stamp's recoil after the press is the physical point of a stamp.
   tw(ops, id, rt(t + 0.14), 0.3, 'elastic.out(1,0.45)', {scaleX: 0.94, scaleY: 0.94}, {scaleX: 1, scaleY: 1});
 }
 
 /** A pulse on a landed object (a milestone, a count step): up and back. */
 export function pulseOps(ops, id, t, amount = 0.12) {
   tw(ops, id, t, 0.08, 'power2.out', {scaleX: 1, scaleY: 1}, {scaleX: r2(1 + amount), scaleY: r2(1 + amount)});
-  tw(ops, id, rt(t + 0.08), 0.32, 'back.out(2.4)', {scaleX: r2(1 + amount), scaleY: r2(1 + amount)}, {scaleX: 1, scaleY: 1});
+  tw(ops, id, rt(t + 0.08), 0.32, 'power3.out', {scaleX: r2(1 + amount), scaleY: r2(1 + amount)}, {scaleX: 1, scaleY: 1});
 }
 
 /**

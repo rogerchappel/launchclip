@@ -260,7 +260,7 @@ function compareTimeline(model, ops) {
     for (const s_ of c.sides) {
       const sign = s_.index ? 1 : -1;
       set(ops, `${id}-side-${s_.index}`, start, {opacity: 0, x: 0, y: 0, scaleX: 0.6, scaleY: 1});
-      tw(ops, `${id}-side-${s_.index}`, s_.time, 0.4, 'back.out(1.6)', {opacity: 0, scaleX: 0.6}, {opacity: 1, scaleX: 1});
+      tw(ops, `${id}-side-${s_.index}`, s_.time, 0.4, 'power3.out', {opacity: 0, scaleX: 0.6}, {opacity: 1, scaleX: 1});
       for (const item of s_.items) {
         const target = `${id}-item-${s_.index}-${item.index}`, from = {opacity: 0, x: r2(sign * 80 * unit), y: 0, rotation: sign * 4};
         set(ops, target, start, from);
@@ -568,7 +568,7 @@ function timelineTimeline(model, ops) {
     set(ops, `${id}-progress`, start, {[axis]: 0, [other]: 1});
     c.steps.forEach((step, i) => {
       set(ops, `${id}-node-${i}`, start, {opacity: 0, scaleX: 0.2, scaleY: 0.2, rotation: -90});
-      tw(ops, `${id}-node-${i}`, step.time, 0.5, 'back.out(1.8)', {opacity: 0, scaleX: 0.2, scaleY: 0.2, rotation: -90}, {opacity: 1, scaleX: 1, scaleY: 1, rotation: 0});
+      tw(ops, `${id}-node-${i}`, step.time, 0.5, 'power3.out', {opacity: 0, scaleX: 0.2, scaleY: 0.2, rotation: -90}, {opacity: 1, scaleX: 1, scaleY: 1, rotation: 0});
       const d = r2((L.across ? (i % 2 === 0 ? -1 : 1) : (i % 2 === 1 ? -1 : 1)) * 20 * model.unit);
       const from = L.across ? {opacity: 0, x: 0, y: d} : {opacity: 0, x: d, y: 0};
       set(ops, `${id}-text-${i}`, start, from);
@@ -580,7 +580,7 @@ function timelineTimeline(model, ops) {
   if (L.mode === 'cards') {
     c.steps.forEach((step, i) => {
       set(ops, `${id}-node-${i}`, start, {opacity: 0, x: 0, y: 0, scaleX: L.across ? 0.2 : 1, scaleY: L.across ? 1 : 0.2});
-      tw(ops, `${id}-node-${i}`, step.time, 0.5, 'back.out(1.5)', {opacity: 0, scaleX: L.across ? 0.2 : 1, scaleY: L.across ? 1 : 0.2}, {opacity: 1, scaleX: 1, scaleY: 1});
+      tw(ops, `${id}-node-${i}`, step.time, 0.5, 'power3.out', {opacity: 0, scaleX: L.across ? 0.2 : 1, scaleY: L.across ? 1 : 0.2}, {opacity: 1, scaleX: 1, scaleY: 1});
       if (i) {
         const from = L.across ? {opacity: 0, x: r2(-16 * model.unit), y: 0} : {opacity: 0, x: 0, y: r2(-16 * model.unit)};
         set(ops, `${id}-chevron-${i}`, start, from);

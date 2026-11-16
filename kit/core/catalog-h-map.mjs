@@ -343,7 +343,7 @@ function pinNode(nodeId, x, y, color, border, u, {glow = false} = {}) {
 function dropOps(ops, nodeId, start, time, u) {
   set(ops, nodeId, start, {opacity: 0, x: 0, y: r2(-60 * u), scaleX: 1, scaleY: 1});
   tw(ops, nodeId, time, 0.1, 'power1.out', {opacity: 0}, {opacity: 1});
-  tw(ops, nodeId, time, 0.55, 'bounce.out', {y: r2(-60 * u)}, {y: 0});
+  tw(ops, nodeId, time, 0.55, 'power3.out', {y: r2(-60 * u)}, {y: 0});
 }
 
 // ---------------------------------------------------------------------------
@@ -369,7 +369,7 @@ function mapTimeline(model, ops) {
     }
     if (c.variant === 'pins') dropOps(ops, `${id}-pin-${i}`, start, rt(m.time + 0.05), u);
     popOps(ops, `${id}-label-${i}`, start, rt(m.time + 0.15), {from: 0.6});
-    if (m.badgeBox) popOps(ops, `${id}-badge-${i}`, start, rt(m.time + 0.35), {from: 0.4, duration: 0.45, ease: 'back.out(2.4)'});
+    if (m.badgeBox) popOps(ops, `${id}-badge-${i}`, start, rt(m.time + 0.35), {from: 0.4, duration: 0.45, ease: 'power3.out'});
   });
   c.routes.forEach((r, i) => {
     set(ops, `${id}-rm-${i}`, start, {strokeDashoffset: 1});

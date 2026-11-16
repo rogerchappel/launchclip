@@ -266,13 +266,13 @@ function lineDiagramTimeline(model, ops) {
     else drawOps(ops, `${id}-line-${i}`, start, line.time, line.duration, 'power1.inOut');
     if (line.label) {
       if (line.label.leader) drawOps(ops, `${id}-leader-l${i}`, start, rt(line.label.time - 0.15), 0.25, 'power2.out');
-      popOps(ops, `${id}-label-${i}`, start, line.label.time, {from: 0.85, duration: 0.3, ease: 'back.out(2)'});
+      popOps(ops, `${id}-label-${i}`, start, line.label.time, {from: 0.85, duration: 0.3, ease: 'power3.out'});
     }
   });
-  c.vertices.forEach(v => popOps(ops, `${id}-v-${v.name}`, start, v.time, {from: 0.2, duration: 0.3, ease: 'back.out(2.6)'}));
+  c.vertices.forEach(v => popOps(ops, `${id}-v-${v.name}`, start, v.time, {from: 0.2, duration: 0.3, ease: 'power3.out'}));
   c.marks.forEach(mark => {
     if (mark.leader) drawOps(ops, `${id}-leader-m${mark.index}`, start, rt(Math.max(start, mark.time - 0.15)), 0.25, 'power2.out');
-    popOps(ops, `${id}-mark-${mark.index}`, start, mark.time, {from: 0.85, duration: 0.3, ease: 'back.out(2)'});
+    popOps(ops, `${id}-mark-${mark.index}`, start, mark.time, {from: 0.85, duration: 0.3, ease: 'power3.out'});
   });
 }
 

@@ -6,7 +6,7 @@
 // functions (no module-level constants); settled parts hold still, life comes
 // from staggered entrances and timed state changes.
 
-import {uiClamp, uiP, uiLerp, uiOutExpo, uiOutCubic, uiOutBack, uiHash, uiPad, uiEsc, uiN, uiEnter, uiTyped, uiCaret, uiDiv, uiWave, uiTone, uiChipHtml, uiHeader, uiPanelStyle, uiChildren} from './ui-paint.mjs';
+import {uiClamp, uiP, uiLerp, uiOutExpo, uiOutCubic, uiHash, uiPad, uiEsc, uiN, uiEnter, uiTyped, uiCaret, uiDiv, uiWave, uiTone, uiChipHtml, uiHeader, uiPanelStyle, uiChildren} from './ui-paint.mjs';
 
 /** Kind → draw function for the components in this file. */
 function UI_COMPONENT_TABLE() {
@@ -41,7 +41,7 @@ function uiMeter(el, t, ctx) {
   const from = p.from === undefined ? -31 : p.from, to = p.to === undefined ? -14 : p.to;
   const settle = p.settleAt === undefined ? a0 + 0.6 : p.settleAt;
   const lv = uiP(t, settle, 0.5), done = lv >= 1;
-  const ang = uiLerp(-80, 18, uiOutBack(lv, 1.3));
+  const ang = uiLerp(-80, 18, uiOutCubic(lv));
   const D = Math.max(120, Math.min(300, h - 150)), inner = D - 32, cx = inner / 2, len = inner * 0.44;
   let s = uiBar(ctx, p.title || 'LOUDNESS', p.unit === undefined ? 'LUFS' : p.unit);
   s += uiDiv('left:70px;top:110px;width:' + D + 'px;height:' + D + 'px;border-radius:50%;border:16px solid ' + c.line + ';box-sizing:border-box;' + uiEnter(t, a0 + 0.05, 'pop'),
@@ -76,7 +76,7 @@ function uiMarkerSnap(el, t, ctx) {
   const flash = uiP(t, snapAt + 0.18, 0.5), hitGlow = t >= snapAt + 0.18 ? uiLerp(40, 14, flash) : 14;
   s += uiDiv('left:' + uiN(mx - 3) + 'px;top:70px;width:6px;height:' + uiN(lineH) + 'px;background:' + c.accent + ';box-shadow:0 0 ' + uiN(hitGlow) + 'px ' + c.accent + ';' + uiEnter(t, a0 + 0.15, 'down', {dist: 80}),
     '<div style="position:absolute;left:-60px;top:-50px">' + uiChipHtml(ctx, {text: p.marker || 'HIT', size: 26}) + '</div>');
-  const sn = uiP(t, snapAt, 0.3), cx = uiLerp(fx, mx + 3, uiOutBack(sn, 1.2));
+  const sn = uiP(t, snapAt, 0.3), cx = uiLerp(fx, mx + 3, uiOutCubic(sn));
   const cw = Math.min(260, w * 0.27), ch = Math.min(96, h * 0.28), cy = Math.min(h * 0.44, h - ch - 70);
   s += uiDiv('left:' + uiN(cx) + 'px;top:' + uiN(cy) + 'px;width:' + uiN(cw) + 'px;height:' + uiN(ch) + 'px;border-radius:14px;background:' + c.tint + ';box-shadow:0 0 0 3px ' + c.accent + (sn >= 1 ? ',0 0 ' + uiN(uiLerp(40, 0, flash)) + 'px ' + c.accent : '') + ';font-family:' + ctx.fonts.mono + ';font-size:28px;color:' + c.accent + ';line-height:' + uiN(ch) + 'px;padding-left:18px;box-sizing:border-box;white-space:nowrap;overflow:hidden;' + uiEnter(t, a0 + 0.25, 'up', {dist: 60}), uiEsc(p.clip || '▸ hit.wav'));
   if (p.badge !== false) s += uiDiv('left:' + uiN(Math.min(w * 0.73, w - 200)) + 'px;top:' + uiN(h - 66) + 'px;' + uiEnter(t, snapAt + 0.2, 'pop'), uiChipHtml(ctx, {text: p.badge || 'ON BEAT', size: 28}));
@@ -228,7 +228,7 @@ function uiDownloads(el, t, ctx) {
     let inner = uiDiv('left:' + uiN(20 * k) + 'px;top:' + uiN(20 * k) + 'px;width:' + uiN(220 * k) + 'px;height:' + uiN(80 * k) + 'px', uiWave(26, 220 * k, 80 * k, 60 + i, sel ? c.accent : c.muted, t, a0 + 0.4 + i * 0.07, {d: 0.3}));
     inner += uiDiv('left:' + uiN(270 * k) + 'px;top:' + uiN(24 * k) + 'px;right:110px;white-space:nowrap;overflow:hidden;font-family:' + ctx.fonts.mono + ';font-size:' + uiN(32 * k) + 'px;font-weight:700;color:' + c.ink, uiEsc(it.label));
     if (it.sub) inner += uiDiv('left:' + uiN(270 * k) + 'px;top:' + uiN(70 * k) + 'px;white-space:nowrap;font-family:' + ctx.fonts.mono + ';font-size:' + uiN(24 * k) + 'px;color:' + c.muted, uiEsc(it.sub));
-    if (pick) { const b = 60 * k; inner += uiDiv('right:24px;top:' + uiN((rh - b) / 2) + 'px;width:' + uiN(b) + 'px;height:' + uiN(b) + 'px;border-radius:50%;background:' + (fly > 0 ? c.accent : c.line) + ';color:' + (fly > 0 ? c.onAccent : c.muted) + ';font-size:' + uiN(36 * k) + 'px;font-weight:900;text-align:center;line-height:' + uiN(b) + 'px;transform:scale(' + (fly > 0 ? uiOutBack(uiClamp(fly * 2)) : 1).toFixed(3) + ')', fly > 0 ? '✓' : '↓'); }
+    if (pick) { const b = 60 * k; inner += uiDiv('right:24px;top:' + uiN((rh - b) / 2) + 'px;width:' + uiN(b) + 'px;height:' + uiN(b) + 'px;border-radius:50%;background:' + (fly > 0 ? c.accent : c.line) + ';color:' + (fly > 0 ? c.onAccent : c.muted) + ';font-size:' + uiN(36 * k) + 'px;font-weight:900;text-align:center;line-height:' + uiN(b) + 'px;transform:scale(' + (fly > 0 ? uiOutCubic(uiClamp(fly * 2)) : 1).toFixed(3) + ')', fly > 0 ? '✓' : '↓'); }
     s += uiDiv('left:30px;top:' + uiN(y0 + i * step) + 'px;width:' + (w - 60) + 'px;height:' + uiN(rh) + 'px;border-radius:16px;background:' + (sel ? c.tint : c.panel2) + ';box-shadow:0 0 0 ' + (sel ? 3 : 2) + 'px ' + (sel ? c.accent : c.line) + ';' + uiEnter(t, a0 + 0.3 + i * 0.07, 'left', {dist: 120}), inner);
   }
   if (p.counterLabel !== false && picks.length) s += uiDiv('left:30px;top:' + uiN(h - 70) + 'px;font-family:' + ctx.fonts.mono + ';font-size:30px;color:' + c.muted + ';' + uiEnter(t, selectAt, 'up', {dist: 40}), uiEsc(p.counterLabel || 'DOWNLOADS') + ' <span style="color:' + c.accent + ';font-size:40px;font-weight:800">' + nd + '/' + picks.length + '</span>');
@@ -308,7 +308,7 @@ function uiFrameRuler(el, t, ctx) {
   const snapAt = p.snapAt === undefined ? a0 + 1 : p.snapAt;
   const slot = p.slot || {}, dropAt = slot.dropAt === undefined ? snapAt + 0.4 : slot.dropAt;
   const step = 120, xOf = function (f) { return w / 2 - 38 + (f - target) * step; };
-  const ph = uiP(t, a0 + 0.1, Math.max(0.2, snapAt - a0 - 0.1)), pos = uiLerp(start, target, uiOutBack(ph, 1.1)), cur = Math.round(pos);
+  const ph = uiP(t, a0 + 0.1, Math.max(0.2, snapAt - a0 - 0.1)), pos = uiLerp(start, target, uiOutCubic(ph)), cur = Math.round(pos);
   const done = t >= snapAt;
   // Bands: the pin's head from tp, the ruler at ry, the lane and slot at sy, the counter at the foot.
   const extra = h - 560, tp = extra * 0.2, ry = tp + 150, sh = 120 + Math.min(30, extra * 0.1), sy = ry + 150 + extra * 0.3, ch = 120;

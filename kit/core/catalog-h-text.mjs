@@ -230,10 +230,11 @@ function titleTimeline(model, ops) {
         from(i, {opacity: 1, x: 0, y: r2(-em * 1.05)}); go(i, each, 'power3.out', {y: r2(-em * 1.05)}, {y: 0}); break;
       case 'stagger-from-center':
       case 'stagger-from-edges':
-        from(i, {opacity: 0, x: 0, y: 0, scaleX: 0.2, scaleY: 0.2}); go(i, 0.2, 'power1.out', {opacity: 0}, {opacity: 1}); go(i, each, 'back.out(2)', {scaleX: 0.2, scaleY: 0.2}, {scaleX: 1, scaleY: 1}); break;
+        from(i, {opacity: 0, x: 0, y: 0, scaleX: 0.2, scaleY: 0.2}); go(i, 0.2, 'power1.out', {opacity: 0}, {opacity: 1}); go(i, each, 'power3.out', {scaleX: 0.2, scaleY: 0.2}, {scaleX: 1, scaleY: 1}); break;
       case 'per-word-crossfade':
         from(i, {opacity: 0}); go(i, each, 'power1.inOut', {opacity: 0}, {opacity: 1}); break;
       case 'spring-scale-in':
+        // Kept: a named spring effect a story picks on purpose; its elastic overshoot is the effect.
         from(i, {opacity: 0, x: 0, y: 0, scaleX: 0.3, scaleY: 0.3}); go(i, 0.15, 'power1.out', {opacity: 0}, {opacity: 1}); go(i, each * 1.4, 'elastic.out(1, 0.55)', {scaleX: 0.3, scaleY: 0.3}, {scaleX: 1, scaleY: 1}); break;
       case 'shared-axis-y':
         from(i, {opacity: 0, x: 0, y: r2(em * 0.35)}); go(i, each, 'power2.out', {opacity: 0, y: r2(em * 0.35)}, {opacity: 1, y: 0}); break;
