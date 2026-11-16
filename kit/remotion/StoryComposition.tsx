@@ -82,6 +82,8 @@ import { scenePlatePlan, scenePlateSpec, storyPlatePlan } from "@launchclip/core
 import { LIGHT_OVER_ID, LIGHT_Z, lightLayerStyle, lightOverStyle, lightPlan } from "@launchclip/core/lighting.mjs";
 // @ts-ignore plain ESM core module
 import { VFX_Z, vfxPlan } from "@launchclip/core/vfx/plan.mjs";
+// @ts-ignore plain ESM core module
+import { AUDIO_REACT_Z, audioReactPlan, audioReactStyle } from "@launchclip/core/audio-react.mjs";
 import { VfxCanvas } from "./catalog/VfxCanvas";
 // @ts-ignore plain ESM from kit/core
 import { worldBackdrops } from "@launchclip/core/world-backdrops.mjs";
@@ -203,6 +205,17 @@ export const LightField: React.FC<{ layers: any[]; t: number }> = ({ layers, t }
     {layers.map((layer: any) => <div key={layer.id} style={lightLayerStyle(layer, t) as React.CSSProperties} />)}
   </AbsoluteFill>
 );
+
+// Audio-reactive layers (kit/core/audio-react.mjs): per-frame values from the
+// story's audio.features, the same numbers the HyperFrames runtime indexes.
+const AudioReact: React.FC<{ plan: any; t: number; zIndex: number }> = ({ plan, t, zIndex }) => {
+  const { width, height } = useVideoConfig();
+  return (
+    <div id={plan.id} data-launchclip-audio-react aria-hidden style={{ position: "absolute", left: 0, top: 0, width, height, overflow: "hidden", pointerEvents: "none", zIndex }}>
+      {plan.layers.map((layer: any) => <div key={layer.id} id={`${plan.id}-${layer.id}`} style={audioReactStyle(layer, t, plan.fps) as React.CSSProperties} />)}
+    </div>
+  );
+};
 
 const LightOver: React.FC<{ plan: any; zIndex: number }> = ({ plan, zIndex }) => {
   // Under a stepped look the light holds with the picture.
@@ -643,6 +656,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
   const light = React.useMemo(() => lightPlan(story), [story]);
   // The VFX layer (kit/core/vfx): effect cues over every scene and the light, under the wipes and captions.
   const vfx = React.useMemo(() => vfxPlan(story), [story]);
+  const audioReact = React.useMemo(() => audioReactPlan(story), [story]);
   const lightFor = (scene: any) => (light?.under.length && (scenePlatePlan(story, scene) || sceneBackground(story, scene)) ? light.under : null);
   const plan = React.useMemo(() => cameraPlan(story, { windows, objects: sceneObjectLookup(story, (scene: any, value: any) => resolveModule(scene, value)) }), [story, windows]);
   const backdrops = React.useMemo(() => (plan?.mode === "world" ? worldBackdrops(story, plan, windows) : null), [story, plan, windows]);
@@ -784,6 +798,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
       {sweepDips}
       {sweepLights}
       {light?.over.length ? <LightOver plan={light} zIndex={LIGHT_Z.remotion} /> : null}
+      {audioReact ? <AudioReact plan={audioReact} t={pictureFrame / fps} zIndex={AUDIO_REACT_Z.remotion} /> : null}
       {vfx ? <VfxCanvas plan={vfx} t={pictureFrame / fps} zIndex={VFX_Z.remotion} /> : null}
       {wipeLayers}
       {look?.under ? <LookLayer plan={look} under /> : null}

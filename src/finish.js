@@ -17,6 +17,7 @@
 // written to .launchclip/finish/storyboard.json (resolved:
 // .launchclip/finish/story.resolved.json), which is what gets rendered.
 import { motionBlurOptions } from "./motion_blur.js";
+import { applyGrade, gradeWarnings, storyGradeCube } from "./grade.js";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -27,13 +28,14 @@ import { promisify } from "node:util";
 import { chunkWords, narrationWords } from "@launchclip/core/captions.mjs";
 import { knownModules, resolveModule } from "@launchclip/core/modules.mjs";
 import { customModuleGaps } from "@launchclip/core/custom-modules.mjs";
+import { pickAudioFeatures } from "@launchclip/core/audio-react.mjs";
 import { customModuleProblems } from "../kit/hyperframes/custom-module.mjs";
 import { LOOK_MEASURES } from "@launchclip/core/profiles.mjs";
 import { useProjectTemp } from "./render_temp.js";
 import { checkStorage, interruptedByStorage } from "./storage_check.js";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
-import { actingGate, densityGate, ghostingGate, physicsGate, varietyGate } from "./direction_guardrails.js";
+import { actingGate, densityGate, ghostingGate, physicsGate, tellsGate, varietyGate } from "./direction_guardrails.js";
 import { choreographyGate, holdGate, stateGate } from "./movement_guardrails.js";
 import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, lipSyncGate, paceGate, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
@@ -103,6 +105,7 @@ const SCRIPT = {
   synth: path.join(SCRIPTS, "synth-audio-kit.mjs"),
   mix: path.join(SCRIPTS, "build-mix.mjs"),
   master: path.join(SCRIPTS, "master-loudness.mjs"),
+  features: path.join(SCRIPTS, "audio-features.mjs"),
   evidence: path.join(SCRIPTS, "build-evidence.mjs")
 };
 const SOUND_DIR = path.dirname(fileURLToPath(import.meta.resolve("@launchclip/core/sound/dsp.mjs")));
@@ -117,7 +120,7 @@ export const LOUDNESS_TARGET = Object.freeze({ lufs: -14, tp: -1 });
 // are the parts of those two gates that wait for the render as well).
 export const RENDER_ONLY_GATES = Object.freeze(["loudness", "motion", "audio", "temporal_evidence", "style", "critic"]);
 // A master within this many LU of the level target complies (the mastering script's own tolerance).
-export const LOUDNESS_TOLERANCE_LU = 1.5;
+export const LOUDNESS_TOLERANCE_LU = 1;
 // A master that misses the target is run again at most this many times.
 export const MASTER_REPAIRS = 2;
 // How far under the measured overshoot a repair sets the peak ceiling (the script's own retry margin).
@@ -143,6 +146,7 @@ export const PATHS = Object.freeze({
   beatsFallback: "assets/audio/BEATS.json",
   beatSync: "qa/beat-sync.json",
   audioManifest: "AUDIO-MANIFEST.json",
+  audioFeatures: "AUDIO_FEATURES.json",
   evidence: "qa/temporal-evidence/manifest.json",
   gates: "qa/finish/gates.json",
   captionLegibility: "qa/finish/caption-legibility.json",
@@ -690,6 +694,8 @@ export function defaultAdapters() {
     voiceProvider: (name, options) => getVoiceProvider(name, options),
     normalizeVoice: (input, output) => normalizeLoudness(input, output),
     renderer: (name) => getRenderer(name),
+    // The colour grade over a finished render (src/grade.js): null when the story has none.
+    grade: (project, story, file) => applyGrade(project, story, file),
     // Cores for this render: the machine's cores split across the render slots.
     renderShare: () => renderShare(),
     withSlot: (kind, options, fn) => withSlot(kind, options, fn),
@@ -721,6 +727,10 @@ export function defaultAdapters() {
       const cues = normalizeCues(options.cues, options.sfxDir).map((cue, i) => (options.score ? { ...cue, pan: options.cues[i].pan, sweep: options.cues[i].sweep, ...(options.cues[i].take?.dur ? { sweep_seconds: options.cues[i].take.dur } : {}) } : cue));
       buildMix({ score: options.score ?? null, voice: options.voice, music: options.music, ambience: options.ambience, cues, duration: options.duration, out: options.out, musicVolume: options.musicVolume, musicDuck: options.musicDuck ?? null, ambienceVolume: options.ambienceVolume, key: options.key, keySegments: options.keySegments });
       return { cues };
+    },
+    async audioFeatures(out, buses, options) {
+      const { writeAudioFeatures } = await import("./scripts/audio-features.mjs");
+      return writeAudioFeatures(out, buses, options);
     },
     async master(input, output, target) {
       const { masterLoudness } = await import("./scripts/master-loudness.mjs");
@@ -1316,13 +1326,14 @@ const STAGES = [
         voice: voice ? await fileHash(path.join(ctx.project, voice)) : null,
         speech_key: speechKey,
         duration: ctx.resolved.resolved.duration,
+        react: Boolean(ctx.copy.audio?.react),
         timing: sync.strategy === "snap" ? storyTiming(ctx.copy) : null,
-        scripts: [await fileHash(SCRIPT.synth), await treeFingerprint(SOUND_DIR), await fileHash(SCRIPT.mix), await fileHash(path.join(ROOT, "src", "music", "beats.js")), await fileHash(path.join(ROOT, "src", "music", "beat_sync.js"))],
+        scripts: [await fileHash(SCRIPT.synth), await treeFingerprint(SOUND_DIR), await fileHash(SCRIPT.mix), await fileHash(SCRIPT.features), await fileHash(path.join(ROOT, "src", "music", "beats.js")), await fileHash(path.join(ROOT, "src", "music", "beat_sync.js"))],
         ...(score ? { score: { room: score.room, earshot: Boolean(findEarshot(ctx.adapters.env ?? process.env)), sounds: [await fileHash(path.join(ROOT, "src", "sfx", "score.js")), await fileHash(path.join(ROOT, "src", "sfx", "score_sounds.js"))] } } : {}),
         kit: kit ?? undefined,
         sfx: { mode: sfxMode, ...(sfxMode === "earshot" ? { earshot: await fileHash(path.join(ROOT, "src", "sfx", "earshot.js")) } : {}), density, typing, libraries: libraries.map((library) => ({ scope: library.scope, dir: library.dir, families: hashValue(library.manifest.families) })) }
       });
-      const outputs = [PATHS.mix, PATHS.audioManifest, PATHS.sfxManifest, ...(typing.length ? [PATHS.typing] : [])];
+      const outputs = [PATHS.mix, PATHS.audioManifest, PATHS.sfxManifest, ...(ctx.copy.audio?.react ? [PATHS.audioFeatures] : []), ...(typing.length ? [PATHS.typing] : [])];
       if (music.kind !== "none") outputs.push(PATHS.beatSync, await beatsTarget(ctx.project));
       return { inputHash, outputs, score, scoreFor, sfxOn, sfxMode, earshotBin: sfxChoice.earshot ?? null, cues: bound.cues, cueWarnings: [...choice.warnings, ...bound.warnings], bed, music, choice, voice, speechKey, provider, lock, trackKey, sync, typing, libraries, storyId, density, sound, kit };
     },
@@ -1412,6 +1423,9 @@ const STAGES = [
       }
       await writeJson(path.join(ctx.project, PATHS.cues), cues);
       const mixed = await ctx.adapters.buildMix({ voice: voiceFile, music: musicFile, ambience: ambienceFile, cues, sfxDir: path.join(kitDir, "sfx"), duration, out: mixFile, musicVolume: plan.bed?.volume ?? 0.42, ...(plan.music.duck != null ? { musicDuck: plan.music.duck } : {}), ...(ambienceFile ? { ambienceVolume: AMBIENCE_VOLUME } : {}), ...(speechKey ? { key: speechKey.file, keySegments: speechKey.segments } : {}), ...(scorePlan ? { score: { room: scorePlan.room } } : {}) });
+      // Only for a story with audio.react: the final mix and its buses, measured once per video frame for the
+      // audio-reactive layers (kit/core/audio-react.mjs); both renderers read it.
+      if (ctx.copy.audio?.react) await ctx.adapters.audioFeatures?.(path.join(ctx.project, PATHS.audioFeatures), { mix: mixFile, music: musicFile, voice: voiceFile }, { fps: Number(ctx.resolved.resolved?.fps ?? ctx.resolved.format?.fps ?? 30), duration });
       const placed = (mixed?.cues ?? cues).map((cue, index) => ({ ...cues[index], ...cue, file: cues[index]?.file ?? cue.file ?? path.join(kitDir, "sfx", `${cue.cue}.wav`) }));
       const sfxManifest = path.join(ctx.project, PATHS.sfxManifest);
       // Same shape build-mix.mjs --sfx-manifest writes; cinematic-check reads it through AUDIO-MANIFEST.json.
@@ -1503,7 +1517,9 @@ const STAGES = [
       // Caption plates (docs/DIRECTION_GUARDRAILS.md §3): lines over a
       // character or a card, and lines a past render measured illegible.
       await applyCaptionPlates(ctx);
-      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null });
+      ctx.audioFeatures = ctx.copy.audio?.react ? await readOptionalJson(path.join(ctx.project, PATHS.audioFeatures)) : null;
+      if (ctx.copy.audio?.react && !ctx.audioFeatures) ctx.warnings.push(`audio.react: no ${PATHS.audioFeatures} (the sound stage writes it from the mix), so the reactive layers are not drawn`);
+      const resolved = withAudioFeatures(resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null }), ctx.audioFeatures);
       ctx.resolved = resolved;
       await writeResolvedCopy(ctx);
       const assets = {};
@@ -1511,7 +1527,9 @@ const STAGES = [
       const missing = Object.entries(assets).filter(([, hash]) => hash === null).map(([asset]) => asset);
       if (missing.length) ctx.warnings.push(`referenced assets not found: ${missing.join(", ")}`);
       if (ctx.options.previewScene) return { always: `--preview-scene ${ctx.options.previewScene} renders that scene only`, outputs: [] };
-      const inputHash = hashValue({ renderer: ctx.rendererName, quality: ctx.quality, story: resolved, assets, words: ctx.words, version: VERSION, kit: await treeFingerprint(path.join(ROOT, "kit")), projectEntry: await fileHash(path.join(ctx.project, "remotion", "entry.tsx")) });
+      const graded = await storyGradeCube(ctx.project, resolved);
+      if (graded) ctx.warnings.push(...gradeWarnings(resolved, graded.cube));
+      const inputHash = hashValue({ renderer: ctx.rendererName, quality: ctx.quality, story: resolved, assets, words: ctx.words, grade: graded?.grade.cube ? await fileHash(path.resolve(ctx.project, graded.grade.cube)) : graded?.grade ?? null, version: VERSION, kit: await treeFingerprint(path.join(ROOT, "kit")), projectEntry: await fileHash(path.join(ctx.project, "remotion", "entry.tsx")) });
       return { inputHash, outputs: [rel(ctx.project, ctx.raw)] };
     },
     // One render slot of the machine queue (src/queue.js) for the whole stage.
@@ -1593,6 +1611,12 @@ const STAGES = [
   }
 ];
 
+/** The resolved story with the series its audio.react layers read (from AUDIO_FEATURES.json) as audio.features. */
+export function withAudioFeatures(resolved, features) {
+  const picked = resolved?.audio?.react && features ? pickAudioFeatures(resolved, features) : null;
+  return picked ? { ...resolved, audio: { ...resolved.audio, features: picked } } : resolved;
+}
+
 // ---------------------------------------------------------------------------
 // Master: loudness, then the chapters (long form, RFC §10.2)
 
@@ -1607,7 +1631,9 @@ async function masterDelivery(ctx) {
   let result = await ctx.adapters.master(ctx.raw, temporary, { lufs: LOUDNESS_TARGET.lufs, tp: LOUDNESS_TARGET.tp });
   // An adapter that reports no measurement keeps its own verdict.
   const meets = (pass) => (Number.isFinite(Number(pass.output?.integrated_lufs)) ? loudnessCompliant(pass.output) : Boolean(pass.compliant));
-  let compliant = meets(result);
+  // A silent mix is delivered unnormalised (the script warns); there is no level to repair.
+  const silent = result.skipped === "silent";
+  let compliant = silent ? !(Number(result.output?.true_peak_dbtp) > LOUDNESS_TARGET.tp) : meets(result);
   // A miss is repaired, not shipped: the master runs again from the raw
   // render, aimed past the target by what the last pass missed by.
   const repairs = [];
@@ -1617,9 +1643,10 @@ async function masterDelivery(ctx) {
     aim = repairAim(aim, miss);
     result = await ctx.adapters.master(ctx.raw, temporary, aim);
     compliant = meets(result);
-    repairs.push({ attempt: repairs.length + 1, missed: miss, aim, output: result.output, compliant });
+    repairs.push({ attempt: repairs.length + 1, missed: miss, aim, output: result.output, compliant, ...(result.warnings?.length ? { warnings: result.warnings } : {}) });
   }
   await rename(temporary, ctx.out);
+  for (const line of new Set([...(result.warnings ?? []), ...repairs.flatMap((repair) => repair.warnings ?? [])])) ctx.warnings.push(`loudness: ${line}`);
   const read = (output) => `${output?.integrated_lufs} LUFS / ${output?.true_peak_dbtp} dBTP`;
   const goal = `target ${LOUDNESS_TARGET.lufs} LUFS (within ${LOUDNESS_TOLERANCE_LU} LU), ≤ ${LOUDNESS_TARGET.tp} dBTP`;
   if (repairs.length && compliant) ctx.warnings.push(`loudness: the first master measured ${read(repairs[0].missed)} (${goal}); re-mastered ${repairs.length === 1 ? "once" : `${repairs.length} times`}, now ${read(result.output)}`);
@@ -1850,7 +1877,7 @@ async function runRender(ctx) {
     if (added.length) {
       await writeCaptionPlates(ctx, legibility, added);
       await applyCaptionPlates(ctx);
-      ctx.resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null });
+      ctx.resolved = withAudioFeatures(resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null }), ctx.audioFeatures);
       await writeResolvedCopy(ctx);
       details.segments_first_pass = segments ?? null;
       await renderStory(ctx, adapter, { output: ctx.raw, scenes, range: null });
@@ -1879,7 +1906,15 @@ export function previewPath(sceneId) {
 // render compiles and renders only that scene's window; an adapter without
 // renderSegments (a custom or injected Remotion adapter) renders the whole
 // story directly.
-async function renderStory(ctx, adapter, { output, scenes = [], previewScene = null, range = null }) {
+async function renderStory(ctx, adapter, options) {
+  const segments = await renderUngraded(ctx, adapter, options);
+  // The grade (story.grade, src/grade.js) goes over the finished picture, so
+  // the caption legibility pass that follows measures the graded frames.
+  await ctx.adapters.grade(ctx.project, ctx.resolved, options.output);
+  return segments;
+}
+
+async function renderUngraded(ctx, adapter, { output, scenes = [], previewScene = null, range = null }) {
   const common = { project: ctx.project, story: ctx.resolved, renderer: ctx.rendererName, adapter, quality: ctx.quality, concurrency: ctx.concurrency, output, scenes, previewScene, range, tools: ctx.adapters.segmentTools, now: ctx.adapters.now, progress: ctx.adapters.progress };
   if (ctx.rendererName === "hyperframes") {
     const compileAndRender = async (dir, file, extra = {}) => {
@@ -1972,6 +2007,12 @@ async function runGates(ctx, { pixels = true } = {}) {
     gates.variety = varietyGate(ctx.resolved);
   } catch (error) {
     gates.density ??= { status: "failed", error: error.message };
+  }
+  // The plan tells (docs/VIDEO_TELLS_RFC.md §1): no pixels, so --plan-only runs them too.
+  try {
+    gates.tells = tellsGate(ctx.resolved, { words: ctx.words ?? [] });
+  } catch (error) {
+    gates.tells = { status: "failed", error: error.message };
   }
   try {
     gates.holds = holdGate(ctx.resolved, { media: ctx.layout?.media ?? {} });

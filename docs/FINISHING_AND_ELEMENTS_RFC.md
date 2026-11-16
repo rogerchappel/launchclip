@@ -98,9 +98,13 @@ by path. `strength` mixes with identity.
 | `bleach` | −35 % sat, +contrast | dark documentary |
 | `ink-mono` | luminance only, paper-tinted | one-bit, pen plotter |
 
-`story.finish` gets `{pass: "grade", preset | cube, strength}`; the seeded
-style generator (`style-seed.mjs`) draws a preset from the tone like it
-draws the ambient level.
+Built (grade only): `story.grade` (or a style pack's `grade`) is `"off"`, a
+preset name, or `{preset | cube, strength}`; `launchclip finish` grades the
+render with ffmpeg `lut3d` (`src/grade.js`) before the caption legibility
+pass, so captions are measured on the graded frames, and warns when the
+grade pushes a brand colour pair under 4.5:1. The seeded style generator
+(`style-seed.mjs`) sets the look's preset, else the tone's. When the GL path
+lands, the grade moves into `story.finish` as `{pass: "grade", …}`.
 
 ## E.3 Gap checklist against a mature preset library
 

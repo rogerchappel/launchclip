@@ -227,6 +227,15 @@ construction and the parity harness only checks the pixels. Who reacts:
 The camera does not react: its eases stay slow → fast → slow with no overshoot,
 and the impact shake stays tied to hits, not loudness.
 
+**Shipped first (audio.react).** Rather than changing each module, three
+opt-in layers sit with the light's over group in both renderers
+(`kit/core/audio-react.mjs`): `glow` (music sub), `bar` (mix loudness) and
+`pulse` (music onsets), each overridable by bus, series and strength.
+`src/scripts/audio-features.mjs` writes `AUDIO_FEATURES.json` with `series`
+and `buses.{mix,music,voice}` only (no `fx` bus yet), and only for stories
+that set `audio.react`; `finish` attaches just the series a story reads as
+`audio.features`. The module rows above remain open.
+
 ## 5. Data sonification for charts
 
 Chart modules (`bar-chart`, `stacked-bar`, `pie-chart`, `area-chart`,

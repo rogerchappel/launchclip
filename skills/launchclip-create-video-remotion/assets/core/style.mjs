@@ -22,6 +22,7 @@ import { CADENCE_PROFILE_SCHEMA, validateProfile } from './profiles.mjs';
 import { DRAWING_STYLES, storyCastErrors } from './characters/cues.mjs';
 import { CHARACTER_SET_NAMES, castFromStyle } from './characters/generate.mjs';
 import { BACKGROUND_FADES, BACKGROUND_KINDS, backgroundErrors, panelFillErrors } from './backgrounds.mjs';
+import { gradeErrors } from './grade.mjs';
 import { lightErrors } from './lighting.mjs';
 import { MEDIUM_KINDS, mediumErrors } from './medium.mjs';
 import { LOOK_NAMES, applyLook, lookErrors, lookPresets, normalizeLook } from './look.mjs';
@@ -41,7 +42,7 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 const NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 const TOP = new Set(['schema', 'name', 'description', 'brand', 'motion', 'camera', 'ambient', 'captions', 'sound', 'modules', 'layout', 'intro', 'outro', 'loop', 'references', 'reference_stats', 'notes', 'created_at', 'upgraded_from']);
 // v3 fields (docs/VIDEO_QUALITY_RFC.md §9.1–9.3).
-const TOP_V3 = new Set(['layouts', 'vocabulary', 'profile', 'cast', 'brand_frame', 'dials', 'segments', 'avoid', 'generated', 'background', 'variants', 'world', 'medium', 'plate', 'light', 'look']);
+const TOP_V3 = new Set(['grade', 'layouts', 'vocabulary', 'profile', 'cast', 'brand_frame', 'dials', 'segments', 'avoid', 'generated', 'background', 'variants', 'world', 'medium', 'plate', 'light', 'look']);
 // Footage layouts (RFC §7.1). The layouts session owns their geometry; a
 // style only names them, so an unknown name is a warning, not an error.
 export const STYLE_LAYOUTS = Object.freeze(['full', 'split-left', 'split-right', 'framed', 'stacked', 'insert']);
@@ -307,6 +308,7 @@ export function validateStylePack(pack, { modules } = {}) {
       if (pack.camera.layout !== undefined && !['row', 'column', 'grid', 'path', 'auto'].includes(pack.camera.layout)) err('camera.layout must be one of row, column, grid, path, auto');
     }
   }
+  for (const message of gradeErrors(pack.grade)) err(message);
   if (pack.ambient !== undefined) {
     if (!isObject(pack.ambient)) err('ambient must be an object');
     else if (pack.ambient.level !== undefined && !STYLE_AMBIENT_LEVELS.includes(pack.ambient.level)) err(`ambient.level must be one of ${STYLE_AMBIENT_LEVELS.join(', ')}`);
@@ -721,6 +723,8 @@ export function applyStyle(story, pack, options = {}) {
   for (const [key, source] of [['background', pack.background], ['panel', panel], ['world', pack.world], ['plate', pack.plate], ['light', pack.light]]) {
     if (isObject(source) && out[key] === undefined) { out[key] = clone(source); applied.push(key); }
   }
+  // Grade (kit/core/grade.mjs): the pack's grade when the story sets none ("off" included).
+  if (pack.grade !== undefined && story.grade === undefined && out.grade === undefined) { out.grade = clone(pack.grade); applied.push('grade'); }
   // Medium (kit/core/medium.mjs): the pack's material when the story names
   // none; "none" adds nothing, so the story renders as before.
   if (pack.medium != null && pack.medium !== 'none' && pack.medium.kind !== 'none' && out.medium === undefined) { out.medium = clone(pack.medium); applied.push('medium'); }

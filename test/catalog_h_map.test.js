@@ -6,7 +6,7 @@ import {MODULES, VARIANTS, catalogHTimeline} from '@launchclip/core/catalog-h.mj
 import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {EMITTERS} from '../kit/hyperframes/catalog-h.mjs';
 import {COUNTRIES, WORLD_SIZE} from '@launchclip/core/world-110m.mjs';
-import {countryId, projectLonLat} from '@launchclip/core/catalog-h-map.mjs';
+import {ROUTE_HEAD, countryId, projectLonLat} from '@launchclip/core/catalog-h-map.mjs';
 import {equalEarth, unwrapRing} from '../scripts/vendor-world.mjs';
 import {EXTRA_SAMPLES, SAMPLES} from '../scripts/element-samples.mjs';
 
@@ -96,4 +96,64 @@ test('pins land by longitude and latitude, a route joins them, cards and badges 
   assert.throws(() => resolve({}), /needs highlight \(countries\) or pins \(places\)/);
   assert.throws(() => resolve({pins: [{lon: 0, lat: 0, label: 'A'}], route: true}), /route needs at least two pins/);
   assert.throws(() => resolve({pins: [{lon: 200, lat: 0, label: 'A'}]}), /params\.pins\[0\]\.lon/);
+});
+
+// Maps that travel (RFC §E.5): the journey route, arrivals and the camera.
+const journey = (name, aspect) => {
+  const sample = EXTRA_SAMPLES.find(e => e.name === name);
+  return {...MODULES['map-highlight'].resolve({...sample.params, variant: sample.variant}, {id: 'scene', start: 1, duration: sample.duration, format: FORMATS[aspect], brand, aspect, hits: []}), module: 'map-highlight'};
+};
+
+test('a journey: countries light in arc-length order with constant sequences; pins land as the route reaches them', () => {
+  for (const [name, aspect] of [['map-highlight-journey', '16:9'], ['map-highlight-journey-portrait', '9:16']]) {
+    const model = journey(name, aspect);
+    const c = model.content, T = c.travel;
+    const stops = c.marks.map(m => m.stop), times = c.marks.map(m => m.time);
+    assert.deepEqual([...stops].sort((a, b) => a - b), stops, 'arrivals follow the route');
+    assert.deepEqual([...times].sort((a, b) => a - b), times);
+    const ops = catalogHTimeline(model);
+    const draws = ops.filter(op => op.type === 'tween' && /-(country|border)-\d+$/.test(op.target) && op.to?.strokeDashoffset === 0);
+    assert.ok(draws.length === c.marks.length && draws.every(op => op.duration === 1.6), 'every border draws over 1.6 s');
+    for (const [i, leg] of T.legs.entries()) assert.ok(Math.abs(c.pins[i + 1].time - (leg.time + leg.duration - 0.15)) < 1e-6, `pin ${i + 1} lands with its leg`);
+    // The head travels with the drawn route and fades once it completes.
+    const mid = T.legs[1].time + T.legs[1].duration / 2;
+    const at = frameState(ops, mid);
+    assert.ok(Math.abs((1 - at.get('scene-jm').strokeDashoffset) - (ROUTE_HEAD - at.get('scene-core').strokeDashoffset)) < 1e-6);
+    assert.equal(at.get('scene-core').opacity, 1);
+    assert.equal(frameState(ops, T.routeEnd + 0.6).get('scene-core').opacity, 0);
+    const html = EMITTERS['map-highlight'](model).html + EMITTERS['map-highlight'](model).motion;
+    assert.doesNotMatch(html, /undefined|NaN/);
+  }
+});
+
+test('the map camera never overshoots, and pinned labels ride with the map', () => {
+  for (const [name, aspect] of [['map-highlight-journey', '16:9'], ['map-highlight-camera', '16:9']]) {
+    const model = journey(name, aspect);
+    const c = model.content, T = c.travel;
+    const ops = catalogHTimeline(model);
+    for (const seg of T.segments) {
+      assert.ok(['power2.inOut', 'power3.inOut', 'power2.out'].includes(seg.ease));
+      for (let f = 0; f <= 20; f++) {
+        const w = frameState(ops, seg.start + seg.duration * f / 20 + 1e-4).get('scene-world');
+        for (const [key, prop] of [['x', 'x'], ['y', 'y'], ['k', 'scaleX']]) {
+          const [lo, hi] = [Math.min(seg.from[key], seg.to[key]), Math.max(seg.from[key], seg.to[key])];
+          assert.ok(w[prop] >= lo - 1e-6 && w[prop] <= hi + 1e-6, `${name} ${prop} stays between its keys at ${f}/20`);
+        }
+      }
+    }
+    // A label anchored to a place stays on it while the camera moves.
+    for (let t = model.start; t < model.start + model.duration - 0.6; t += 0.37) {
+      const state = frameState(ops, t);
+      const w = state.get('scene-world');
+      c.marks.forEach((m, i) => {
+        const a = state.get(`scene-anchor-m${i}`);
+        const [wx, wy] = COUNTRIES[m.id].c;
+        const want = [c.box.x + c.origin.x + w.x + wx * c.s * w.scaleX, c.box.y + c.origin.y + w.y + wy * c.s * w.scaleY];
+        assert.ok(Math.abs(m.px + a.x - want[0]) < 1 && Math.abs(m.py + a.y - want[1]) < 1, `${name} ${m.name} at ${t.toFixed(2)} s`);
+      });
+    }
+  }
+  assert.throws(() => resolve({pins: [{lon: 0, lat: 0, label: 'A'}, {lon: 10, lat: 5, label: 'B'}], route: true, camera: 'follow'}), /"follow" needs a journey route/);
+  assert.throws(() => resolve({highlight: [{country: 'France', arrive: 'route'}]}), /arrive "route" needs a journey route/);
+  assert.throws(() => resolve({...EXTRA_SAMPLES.find(e => e.name === 'map-highlight-journey').params}), /the journey needs [\d.]+ s/);
 });

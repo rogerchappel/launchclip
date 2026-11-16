@@ -31,7 +31,7 @@ const fixture = (name, id, variant, shape, params, duration = SAMPLE_DURATIONS[i
 export function elementFixtures(ids = Object.keys(MODULES)) {
   const out = [];
   for (const id of ids) for (const [i, variant] of VARIANTS[id].entries()) for (const shape of i === 0 ? ['portrait', 'landscape'] : ['portrait']) out.push(fixture(fixtureName(id, variant, shape), id, variant, shape, SAMPLES[id]));
-  for (const extra of EXTRA_SAMPLES) if (ids.includes(extra.module) && MODULES[extra.module]) out.push(fixture(`h-${extra.name}`, extra.module, extra.variant, extra.shape, extra.params));
+  for (const extra of EXTRA_SAMPLES) if (ids.includes(extra.module) && MODULES[extra.module]) out.push(fixture(`h-${extra.name}`, extra.module, extra.variant, extra.shape, extra.params, extra.duration));
   return out;
 }
 

@@ -253,7 +253,7 @@ test("runFinish runs every stage, writes the resolved copy and report, then reus
     assert.equal(report.quality, "draft");
     assert.equal(report.voice, "test");
     assert.equal(report.final, path.join(project, "renders/draft.mp4"));
-    assert.deepEqual(Object.keys(report.gates), ["placeholders", "layout", "physics", "ghosting", "density", "variety", "holds", "states", "choreography", "captions", "loudness", "motion", "audio", "temporal_evidence", "direction", "acting", "coverage", "structure", "hook", "pace", "critic"]);
+    assert.deepEqual(Object.keys(report.gates), ["placeholders", "layout", "physics", "ghosting", "density", "variety", "tells", "holds", "states", "choreography", "captions", "loudness", "motion", "audio", "temporal_evidence", "direction", "acting", "coverage", "structure", "hook", "pace", "critic"]);
     assert.equal(report.gates.placeholders.status, "passed");
     assert.equal(report.gates.direction.status, "passed");
     assert.equal(report.gates.coverage.status, "passed");
@@ -1673,7 +1673,7 @@ test("a master that still misses after the repairs fails the loudness gate", asy
     assert.equal(runs, 1 + MASTER_REPAIRS);
     assert.equal(report.gates.loudness.status, "failed");
     assert.equal(report.gates.loudness.repairs, MASTER_REPAIRS);
-    assert.match(report.gates.loudness.errors[0], /the master is -19 LUFS \/ -1\.5 dBTP after 2 re-masters; target -14 LUFS \(within 1\.5 LU\), ≤ -1 dBTP/);
+    assert.match(report.gates.loudness.errors[0], /the master is -19 LUFS \/ -1\.5 dBTP after 2 re-masters; target -14 LUFS \(within 1 LU\), ≤ -1 dBTP/);
     assert.equal(report.status, "needs-repair");
     assert.match(report.warnings.join("\n"), /loudness: the master is -19 LUFS .* The loudness gate fails/);
   } finally {
@@ -1686,8 +1686,8 @@ test("repairAim moves the level by the miss and lowers the ceiling by the oversh
   // Inside the tolerance the level stays; only the peak is repaired.
   assert.deepEqual(repairAim({ lufs: -14, tp: -1 }, { integrated_lufs: -13.2, true_peak_dbtp: -0.9 }), { lufs: -14, tp: -1.3 });
   assert.deepEqual(repairAim({ lufs: -14, tp: -1 }, { integrated_lufs: -40, true_peak_dbtp: -20 }), { lufs: -9, tp: -1 }, "the aim stays inside what loudnorm accepts");
-  assert.equal(loudnessCompliant({ integrated_lufs: -15.5, true_peak_dbtp: -1 }), true);
-  assert.equal(loudnessCompliant({ integrated_lufs: -15.6, true_peak_dbtp: -3 }), false);
+  assert.equal(loudnessCompliant({ integrated_lufs: -15, true_peak_dbtp: -1 }), true);
+  assert.equal(loudnessCompliant({ integrated_lufs: -15.1, true_peak_dbtp: -3 }), false);
   assert.equal(loudnessCompliant({ integrated_lufs: -14, true_peak_dbtp: -0.9 }), false);
   assert.equal(loudnessCompliant({}), false);
 });
