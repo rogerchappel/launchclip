@@ -102,6 +102,8 @@ import { LOOK_FURNITURE_ID, LOOK_LAYER_ID, LOOK_Z, lookCss, lookDefs, lookPlan, 
 import { feelPlan, feelStateAt, feelTransform } from "@launchclip/core/kinetic.mjs";
 // @ts-ignore plain ESM from kit/core
 import { DOT_WIPE, dotWipeCover, dotWipeCss, dotWipePeak, dotWipeSvg, dotWipes } from "@launchclip/core/dot-wipe.mjs";
+// @ts-ignore plain ESM core module
+import { BEFORE_AFTER, beforeAfterAt, beforeAfterHtml, beforeAfterWipes } from "@launchclip/core/before-after.mjs";
 // @ts-ignore plain ESM from kit/core
 import { LIGHT_SWEEP, lightSweepCss, lightSweepDipHtml, lightSweepHtml, lightSweepProgress, lightSweeps } from "@launchclip/core/light-sweep.mjs";
 import { LayoutFrame } from "./LayoutFrame";
@@ -487,6 +489,15 @@ const FeelLayer: React.FC<{ plan: any; children: React.ReactNode }> = ({ plan, c
   return <AbsoluteFill style={{ transformOrigin: "50% 50%", transform: feelTransform(state) }}>{children}</AbsoluteFill>;
 };
 
+// One before-and-after wipe's handle and labels (kit/core/before-after.mjs):
+// the HyperFrames markup, its revealed share set per frame on --lc-ba.
+const BeforeAfterLayer: React.FC<{ wipe: any }> = ({ wipe }) => {
+  const frame = useCurrentFrame();
+  const { fps, width, height } = useVideoConfig();
+  const html = React.useMemo(() => beforeAfterHtml(width, height, wipe), [width, height, wipe]);
+  return <div className="lc-before-after" aria-hidden style={{ position: "absolute", left: 0, top: 0, width, height, pointerEvents: "none", zIndex: BEFORE_AFTER.z.remotion, ["--lc-ba" as any]: beforeAfterAt(wipe, wipe.start + frame / fps) }} dangerouslySetInnerHTML={{ __html: html }} />;
+};
+
 // One dot wipe (kit/core/dot-wipe.mjs) over its window: the HyperFrames
 // markup and CSS rule, its progress set per frame on --lc-dw and its peak
 // size (the cover option) on --lc-dc.
@@ -654,6 +665,12 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
       <DotWipeLayer wipe={wipe} />
     </Sequence>, wipe.id
   ));
+  const handles = React.useMemo(() => beforeAfterWipes(story, windows), [story, windows]);
+  wipeLayers.push(...handles.map((wipe: any) => picture(
+    <Sequence key={wipe.id} name={`before-after → ${wipe.sceneId}`} from={frames(wipe.start)} durationInFrames={Math.max(1, frames(wipe.start + wipe.dur) - frames(wipe.start))}>
+      <BeforeAfterLayer wipe={wipe} />
+    </Sequence>, wipe.id
+  )));
   const feelOn = Boolean(feel && !feel.idle);
   const feelWrap = (children: React.ReactNode) => (feelOn ? <FeelLayer plan={feel}>{children}</FeelLayer> : children);
   // Cuts mode: a shot's zooms move its own container (world mode: the camera).

@@ -344,6 +344,10 @@ function faceBase(ctx) {
   if (has(p, 'freckles')) for (let i = 0; i < 14; i++) out.push(el('ellipse', null, null, [], {cx: r1((noise(`fx${i}`) - 0.5) * rx * 1.1), cy: r1(ny - ry * 0.12 + noise(`fy${i}`) * ry * 0.16), rx: 1.1, ry: 1.1, fill: darken(c.skin, 0.35), opacity: 0.55}));
   if (has(p, 'bindi')) out.push(el('ellipse', null, null, [], {cx: 0, cy: r1(look.browY - look.eh * 1.2), rx: 2.6, ry: 2.6, fill: '#c8323c'}));
   if (has(p, 'nose-stud')) out.push(el('ellipse', null, null, [], {cx: r1(rx * 0.15), cy: r1(ny - ry * 0.01), rx: 1.6, ry: 1.6, fill: '#f3e6b4'}));
+  // The flaw (rig param `flaw`), where the toon styles put it (toon.mjs flawMarks).
+  if (p.flaw === 'cheek-plaster') out.push(strokeLine(`M${r1(-rx * 0.56)} ${r1(ny - ry * 0.02)}L${r1(-rx * 0.3)} ${r1(ny + ry * 0.03)}`, '#e8c595', r1(ry * 0.055), {strokeLinecap: 'butt'}));
+  if (p.flaw === 'brow-scar') out.push(strokeLine(`M${r1(look.ex - look.ew * 0.1)} ${r1(look.browY - look.eh * 1.1)}L${r1(look.ex + look.ew * 0.25)} ${r1(look.browY + look.eh * 0.9)}`, darken(c.skin, 0.3), 1.6, {strokeOpacity: 0.8}));
+  if (p.flaw === 'cheek-scratch') out.push(strokeLine(`M${r1(rx * 0.3)} ${r1(ny - ry * 0.04)}L${r1(rx * 0.46)} ${r1(ny + ry * 0.0)}M${r1(rx * 0.29)} ${r1(ny)}L${r1(rx * 0.43)} ${r1(ny + ry * 0.045)}`, '#b8505a', 1.4, {strokeOpacity: 0.85}));
   return out;
 }
 

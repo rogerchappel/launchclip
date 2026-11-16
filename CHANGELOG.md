@@ -13,6 +13,37 @@
   the new `layer-stack` module, drawn the same in both renderers.
 - Remotion draws catalogue H images with `<Img>`, so a still is on screen
   from frame 0 (a plain `<img>` could miss the first frame).
+- `node-graph`: 3–8 icon cards (agents, tools, steps) flock out of a hub and
+  fan above it on two staggered tiers, glowing wires draw into the hub with
+  dots streaming down them, and pulses of light land in the hub on a beat
+  grid (`bpm`), lighting each card as its pulse leaves and the hub as it
+  lands. At `converge` (a bar line by default) every wire fires at once: the
+  hub punches, the module's camera shakes and the cards ripple. Every card
+  and the hub breathe while on screen. The patterns are in
+  `kit/core/fluid-motion.mjs` (flock, wave, idle, impact shake, beat grid);
+  docs/FLUID_MOTION_RFC.md is the plan for the rest. The motion check now
+  reads an element that flashes on every beat as a flash, not an entrance.
+- Every character can carry one small deliberate flaw (`flaw`: a plaster
+  on one cheek, a scar through one eyebrow, scratches on one cheek), drawn
+  on the face in every drawing style. `bible freeze` and `cast create` give
+  one to a character that has none; it is kept in `must_keep`, and the
+  critic checks it beside each reference sheet. Each bible character also
+  gets a written `description` from its rig params (silhouette,
+  proportions, colours as hex, signature item, gesture, `must_keep`, the
+  flaw), the same words every time; `cast create` returns it too. A bible
+  frozen before this keeps its hash until it is frozen with `--force`.
+- A show bible can record a series `engine`: the problem that goes wrong
+  every episode, with the episodes pitched from it (`bible freeze --engine
+  "…" --episode "…"`). `make --animation --engine "…"` checks the premise
+  before episode one: when the writers' room cannot pitch five distinct
+  episodes from the engine, the run stops with a stronger engine proposed.
+- A before-and-after wipe: a handle drags across the shot and the other
+  version is revealed behind it, slow → fast → slow with no overshoot. As a
+  transition (`before-after`, with an optional rest half-way and a label on
+  each side) and as a media layout inside one scene (`before-after`: two
+  sources, or one with a grade on one side, the handle resting and reversing
+  at its stops). The planner reaches for it for redesigns, filters and grades
+  and raw-versus-edited takes.
 - `exploded-view`: one object as an isometric drawing of solid parts, in
   four tones with a single lit part and ink outlines, that comes apart along
   its axes, holds with its labels beside it and snaps back. Three built-in
@@ -151,6 +182,11 @@
 
 ### Changed
 
+- `picture-in-picture` is drawn as a `split-screen` on a 9:16 or square
+  frame (footage across the top for a top corner, the bottom for a bottom
+  one). A corner card there shrank the footage to a thumbnail and left the
+  panel beside it empty. The planner is told it is for 16:9; on 16:9 nothing
+  changes, and a stored portrait plan that names it still builds.
 - HyperFrames moves from 0.7.58 to 0.7.111, which clears its `adm-zip` and
   `@hono/node-server` advisories. That release copies a mono sound to both
   sides at full level, 3 dB above what Remotion renders, so the HyperFrames

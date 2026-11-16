@@ -15,7 +15,9 @@
 // Imports only sibling kit/core files.
 
 import {COLOR_SLOTS, isColorName} from './palette.mjs';
-import {isKind, normalizeKindParams} from './kinds.mjs';
+import {FLAWS, checkFlaw, isKind, normalizeKindParams} from './kinds.mjs';
+
+export {FLAWS};
 
 export const BUILDS = Object.freeze(['slim', 'average', 'athletic', 'broad', 'round', 'petite', 'stocky', 'curvy']);
 export const HEIGHTS = Object.freeze(['short', 'average', 'tall', 'very-short', 'very-tall']);
@@ -44,7 +46,7 @@ export const POSES = Object.freeze(['stand', 'point', 'wave', 'slump', 'type', '
 export const EXPRESSIONS = Object.freeze(['neutral', 'happy', 'delighted', 'frustrated', 'confused', 'surprised', 'focused',
   'sad', 'crying', 'worried', 'scared', 'angry', 'deadpan', 'side-eye', 'smirk', 'sheepish', 'in-love', 'excited', 'laughing', 'wink', 'thinking']);
 
-const PARAM_KEYS = ['build', 'height', 'age', 'skin', 'hair', 'outfit', 'accessories', 'headwear', 'mobility', 'colors'];
+const PARAM_KEYS = ['build', 'height', 'age', 'skin', 'hair', 'outfit', 'accessories', 'headwear', 'mobility', 'flaw', 'colors'];
 
 // ---------------------------------------------------------------------------
 // Params
@@ -73,10 +75,12 @@ const isObj = value => value && typeof value === 'object' && !Array.isArray(valu
  *   headwear     a HEADWEAR name (default none)
  *   mobility     a MOBILITY aid (default none): a wheelchair, a cane, a white
  *                cane, a forearm crutch, a prosthetic leg or arm
+ *   flaw         a FLAWS name (default none): one small deliberate imperfection
+ *                on the face (a plaster, a scar), kept in a bible's must_keep
  *   colors       {top, bottom, shoes, accent?} palette names, brand roles or hex
  *
  * kind: person (the default, never stored) or a kinds.mjs KINDS name; any
- * other kind takes only {kind, size?, colors: {body?, detail?, accent?}}.
+ * other kind takes only {kind, size?, marks?, flaw?, colors: {body?, detail?, accent?}}.
  */
 export function normalizeRigParams(params, path = 'character') {
   if (!isObj(params)) fail(path, 'must be an object');
@@ -107,6 +111,7 @@ export function normalizeRigParams(params, path = 'character') {
   if (accessories.filter(name => GLASSES.includes(name)).length > 1) fail(`${path}.accessories`, 'can have one pair of glasses');
   const headwear = params.headwear === undefined || params.headwear === null ? null : oneOf(params.headwear, `${path}.headwear`, HEADWEAR);
   const mobility = params.mobility === undefined || params.mobility === null ? null : oneOf(params.mobility, `${path}.mobility`, MOBILITY);
+  const flaw = checkFlaw(params.flaw, path);
   if (hairStyle === 'headscarf' && (accessories.includes('earrings') || accessories.includes('hearing-aid'))) fail(`${path}.accessories`, 'earrings and hearing aids sit under a headscarf; leave them out');
   if (hairStyle === 'headscarf' && headwear && headwear !== 'headphones') fail(`${path}.headwear`, `${headwear} does not go over a headscarf (headphones can)`);
   if ((age === 'child' || age === 'teen') && accessories.some(name => FACIAL_HAIR.includes(name) && name !== 'sideburns')) fail(`${path}.accessories`, `a ${age} has no beard, stubble or moustache`);
@@ -118,7 +123,7 @@ export function normalizeRigParams(params, path = 'character') {
   for (const slot of COLOR_SLOTS) if (!isColorName(colors[slot])) fail(`${path}.colors.${slot}`, `must be a palette colour, brand role or six-digit hex; got ${JSON.stringify(colors[slot])}`);
   return {
     build, height, ...(age !== 'adult' ? {age} : {}), skin: params.skin, hair: {style: hairStyle, color: hairColor},
-    outfit: {top, bottom, ...(over ? {over} : {})}, accessories, ...(headwear ? {headwear} : {}), ...(mobility ? {mobility} : {}), colors
+    outfit: {top, bottom, ...(over ? {over} : {})}, accessories, ...(headwear ? {headwear} : {}), ...(mobility ? {mobility} : {}), ...(flaw ? {flaw} : {}), colors
   };
 }
 

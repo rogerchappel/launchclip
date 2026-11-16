@@ -878,6 +878,35 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
 
   ![A light leak over 0.8 s, HyperFrames above and Remotion below](images/light-leak.jpg)
 
+- `before-after` (`kit/core/before-after.mjs`, track-0 scenes only, 1.2–2 s;
+  `{type: "before-after", dur, direction?, pause?, labels?: {before?,
+  after?}}`): the before-and-after wipe. A handle (a white line on the seam
+  with a round knob carrying two chevrons) drags across the frame and the
+  incoming scene, the other version (a redesign, a grade, the edited take),
+  opens behind it while the outgoing one stays whole under it. `direction`
+  is where the handle travels, as `glow-wipe`'s (`"left"` by default: the
+  after side opens from the right edge, before keeps the left); `pause`
+  (seconds, at most half the wipe) rests it half-way, so the move is two
+  legs (0 → 0.5, rest, 0.5 → 1) instead of one; `labels` puts a word on each
+  side (≤ 24 characters, upper case, free type with a soft shadow), each
+  clipped to its own side so the handle passes over it. Every leg is
+  `power2.inOut`: slow → fast → slow, symmetric, no overshoot, and the
+  grammar does not swap it, because the plate's clip and the handle must
+  stay on one edge. `beforeAfterSteps(dur, pause)` is the single source:
+  `transitions.mjs` turns its legs into the incoming plate's wipe insets
+  (`wipeL`/`wipeR`/`wipeT`/`wipeB`, 100 → 0; a wipe resting part-way keeps
+  its clip), and `beforeAfterWipes` lists each wipe for the overlay, drawn
+  over every scene (z as the dot-wipe) by the same markup in both renderers
+  (`beforeAfterHtml`) from one custom property, `--lc-ba` (the revealed
+  share): HyperFrames tweens it along the same legs (`beforeAfterGsap`),
+  Remotion sets it per frame (`beforeAfterAt`). The handle fades in off the
+  first edge and out onto the last over 6 % of the travel. In world mode the
+  outgoing plate fades over the first half, as the other layered reveals.
+  For two versions of one shot inside a scene, with a handle that can rest
+  and reverse, use the `before-after` media layout ("Media layouts").
+
+  ![The before-after transition mid-leg, resting half-way and mid-leg again, then the in-scene compare (mono before side) resting and reversed; HyperFrames above and Remotion below](images/before-after.jpg)
+
 - `push-blur` (`{type: "push-blur", dur, direction?}`, about 0.5 s; direction
   is where the content travels, `"up"` by default): the camera pushes into the
   outgoing plate (scale 1 → 1.15, travel 12 % of the frame along the
@@ -4399,7 +4428,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
 ### The kit (`kit/core/characters/`)
 
 - `rig.mjs`: rig params `{build, height, age?, skin, hair: {style, color},
-  outfit: {top, bottom, over?}, accessories, headwear?, mobility?, colors:
+  outfit: {top, bottom, over?}, accessories, headwear?, mobility?, flaw?, colors:
   {top, bottom, shoes, accent}}` (`normalizeRigParams` fixes the key order, so
   equal characters serialise identically; the optional fields appear only
   when set, so older characters keep their identity). The range: 8 builds, 5
@@ -4407,7 +4436,9 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   17 tops, 5 bottoms, 3 layers (apron, vest, hi-vis), 4 kinds of glasses, 6
   kinds of facial hair, jewellery, ties, scarves, stethoscopes, bags, 14
   headwear (faith headwear among them) and 6 mobility aids (wheelchair, cane,
-  white cane, forearm crutch, prosthetic leg or arm). A wheelchair seats the
+  white cane, forearm crutch, prosthetic leg or arm), and a `flaw` (`FLAWS`:
+  `cheek-plaster`, `brow-scar`, `cheek-scratch`, drawn on the face in every
+  style; a kind takes one too, `{kind, size?, marks?, flaw?, colors}`). A wheelchair seats the
   character in any set; a cane or crutch keeps its arm at rest
   (`acting.mjs sceneJoints`). body measurements (`rigGeometry`), the named poses
   (`stand point wave slump type think cheer shrug walk sit look stretch`, and
@@ -4892,22 +4923,25 @@ drawn (ANIMATION_PIPELINE_RFC.md §4.2):
         "build": "slim", "height": "tall", "skin": "deep",
         "hair": { "style": "locs", "color": "silver" },
         "outfit": { "top": "blazer", "bottom": "trousers" },
-        "accessories": ["round-glasses"],
+        "accessories": ["round-glasses"], "flaw": "brow-scar",
         "colors": { "top": "red", "bottom": "charcoal", "shoes": "black", "accent": "accent" },
         "character_file": "cast/nova.character.json",
         "sheet": "bible/sheets/nova.png", "fingerprint": "1acb77987b1a5632",
-        "must_keep": ["silver locs hair", "deep skin", "red blazer", "charcoal trousers", "round glasses"] } ] },
+        "must_keep": ["silver locs hair", "deep skin", "red blazer", "charcoal trousers", "round glasses", "a small scar through one eyebrow"],
+        "description": "Nova is an adult with a slim build and locs hair, in a blazer and trousers. Proportions: tall, about 5.5 heads tall, drawn outlined. Colours: skin #…, hair #…, … Signature item: round glasses. Gesture: folds both arms. Must keep: …; a small scar through one eyebrow. Flaw: a small scar through one eyebrow." } ] },
   "world": { "kind": "office", "time": "day", "sets": ["desk-laptop", "standing"],
     "props": [{ "id": "trophy", "on": "ground", "scale": 2.5 }], "shows": ["trophy"] },
   "style": { "pack": "project", "seed": 4821, "drawing_style": "outlined" },
   "rules": ["Rae never raises his voice."],
-  "inputs": { "script_hash": "sha256:…" } }
+  "inputs": { "script_hash": "sha256:…" },
+  "engine": { "problem": "Every fix Maya ships breaks something else in the office.",
+    "episodes": ["…five episode ideas pitched from it, one sentence each…"] } }
 ```
 
-- `cast` is the story cast shape with four additions per character:
+- `cast` is the story cast shape with five additions per character:
   `character_file` (the saved character it came from, inside the project;
-  a starter has none), `sheet`, `fingerprint` and `must_keep`.
-  `bibleCast(bible)` removes the four and is a valid `story.cast`. Every
+  a starter has none), `sheet`, `fingerprint`, `must_keep` and
+  `description`. `bibleCast(bible)` removes the five and is a valid `story.cast`. Every
   entry carries its full rig params, so the bible does not change when a
   starter or a saved file does. An `art` (illustrated) entry is refused:
   the rig draws the animatic and is the fallback for handed-in art.
@@ -4917,9 +4951,37 @@ drawn (ANIMATION_PIPELINE_RFC.md §4.2):
   `mustKeep(params)`: hair (or the headscarf), skin tone, top, bottom (not
   under a dress), over-layer, glasses, facial hair other than stubble, a
   hearing aid, a bindi, headwear, a mobility aid, and age when not an
-  adult. Colours are named as the params name them (`"hoodie in the
+  adult, and the flaw last. Colours are named as the params name them (`"hoodie in the
   brand's primary colour"` for a brand role). A file may add features; it
   may not drop one the params give.
+- `flaw` is a rig param (a person's or a kind's; `FLAWS`: `cheek-plaster`,
+  `brow-scar`, `cheek-scratch`): one small deliberate imperfection the rig
+  draws on the face in every drawing style, so drift is easy to spot for the
+  vision judge and a person. `bible freeze` gives a character with none one
+  fixed by its id (`defaultFlaw`) and writes it into the saved character
+  file, and `cast create` does the same; `--set flaw=<name>` chooses
+  another. The critic is told each character's flaw beside its sheet.
+- `description` is the character in words, written by
+  `characterDescription(member)` from the resolved rig params, the cast's
+  drawing style and the story brand's colours, in a fixed order: silhouette,
+  proportions (heads tall in the drawing style), colours as hex, one
+  signature item, one gesture, `must_keep` and the flaw. The same params
+  give the same words; it is frozen with the bible and pasted word for word
+  wherever the character is described in a prompt or brief
+  (GENERATED_FOOTAGE_RFC.md §4, §8). `cast create` returns the same
+  description for a character you design.
+- A bible frozen before flaws and descriptions keeps its hash: `bible
+  freeze` leaves it as it is (`validateBible` warns for each character)
+  until it is frozen with `--force`. The schema stays
+  `launchclip.show-bible.v1`: every new field is optional.
+- `engine` is for a bible a series shares: the recurring `problem` that
+  goes wrong every episode and is never solved for good, and the
+  `episodes` pitched from it. `engineFindings(engine)` is the premise check:
+  fewer than `ENGINE_EPISODES` (5) distinct ideas (an idea mostly another's
+  words, or only restating the problem, does not count) is a weak engine,
+  and the bible does not validate. `bible freeze --engine "…" --episode
+  "…"` writes it; `make --animation --engine "…"` pitches the episodes
+  first and stops with a stronger engine proposed when it is weak.
 - `world` is a story world (`storyWorldErrors`) plus `sets`, the sets the
   story may use (`SETS`), and `shows`, the props of `world.props` the story
   turns on (`launchclip bible freeze --props starting-gate,bucket`, or the
@@ -4941,8 +5003,12 @@ export function validateBible(bible, {script, exists} = {}) // → {ok, errors, 
 // exists(path): whether a project-relative file is on disk (sheets, character files).
 export function bibleHash(bible)                 // → "sha256:…"
 export function mustKeep(params)                 // → [feature]
+export const ENGINE_EPISODES                     // 5
+export function defaultFlaw(id)                  // → a FLAWS name, fixed by the id
+export function characterDescription(member)     // → the written description (a resolved cast member)
+export function engineFindings(engine)           // → [text]; [] when the engine gives five distinct episodes
 export function bibleFingerprint(member)         // member: a resolved cast member
-export function bibleCharacter(member, {character_file, sheet})  // → a bible cast entry
+export function bibleCharacter(member, {character_file, sheet, description})  // → a bible cast entry (description: false leaves it out)
 export function bibleCast(bible)                 // → story.cast
 export function bibleRef(bible, file)            // → {file, hash}
 export function bibleRefErrors(ref, path)        // also exported by story.mjs
@@ -4956,7 +5022,9 @@ Validation: the cast passes `storyCastErrors` and `resolveStoryCast`; a
 frozen bible has a voice, a sheet, a matching fingerprint and a complete
 `must_keep` on every character, and a hash that matches its content; every
 character the script lists has an entry and a voice; the world and every
-set exist; two characters sharing a voice is a warning.
+set exist; a description is non-empty text; an engine is `{problem,
+episodes}` and passes `engineFindings`; two characters sharing a voice, or a
+frozen character with no flaw or description, is a warning.
 
 Commands (`src/bible.js`):
 
@@ -6243,7 +6311,7 @@ callouts.
 
 ## Media layouts (catalogue D, `kit/core/catalog-d-media-layouts.mjs`)
 
-Seven modules that put library footage inside the motion design, so showing
+Eight modules that put library footage inside the motion design, so showing
 a photo or clip is not always a full-frame cut (`clip`, `photo-scene`) or a
 small tilted `polaroid`. All keep captions.
 
@@ -6256,6 +6324,7 @@ small tilted `polaroid`. All keep captions.
 | `media-stat` | a window beside the figure (`variant: "beside"`), or the whole frame under a dim scrim (`"behind"`) | `value` (a figure like `1,200 kg` counts up), `label`, `kicker`, `source` |
 | `media-list` | a small thumbnail per row (a still; a row without one shows its number) | 2–5 rows of text, revealed one by one (`at` or hits on `item-<i>`) |
 | `media-grid` | 2–4 tiles (`grid`, or `mosaic`: one large and the rest beside it; the default for three on 9:16 and 1:1), each with an optional label pill | an optional `title` |
+| `before-after` | one shot in two versions, full frame: `before` and `after`, or `before` alone with a `grade` (`flat`, `mono`, `warm`, `cool`, `vivid`; CSS filters, `BEFORE_AFTER_GRADES`) on `gradeSide` (`after` by default; `before` with `flat` for raw vs graded) | the handle of the before-after transition, travelling along `direction` through `stops` (1–4 shares of the after side, default `[0.5, 1]`; `[0.6, 0.3, 1]` rests and reverses), and an optional label on each side (`labels {before?, after?}`) |
 
 ```json
 { "module": "split-screen", "start": "word:corrugations", "end": "word:weight", "params": {
@@ -6296,7 +6365,21 @@ small tilted `polaroid`. All keep captions.
   layout-check allows that overlap and checks the rest. `layout.drift` is
   false and `layout.live` true (the hold gate counts the scene as moving).
 - **Events:** `item-<i>` (split-screen and picture-in-picture items,
-  media-list rows, media-grid tiles), `right` and `pick` (media-compare).
+  media-list rows, media-grid tiles), `right` and `pick` (media-compare),
+  `stop-<i>` (before-after: the handle arrives at a stop).
+- **before-after:** both windows fill the frame; the after window is clipped
+  at the handle with the op list's clip props (`clipT`/`clipR`/`clipB`/`clipL`,
+  % of the element; `propsToStyle` and the HyperFrames emitter write them as
+  one `inset()` clip-path, which GSAP tweens number by number), and so is
+  each label's full-frame side, so they agree with the handle frame for
+  frame. The handle starts 0.4 s in, each leg is `power2.inOut` (at most
+  1.3 s; the legs share 65 % of the room), rests up to 0.9 s between legs and
+  0.5 s after the last, fades in off the edge and out onto it when the last
+  stop is 0 or 1. One source without a `grade` fails (it would compare a shot
+  with itself), as does a stop that repeats the one before it. Labels sit in
+  the module safe area: the top corners, or for a vertical wipe the top and
+  just under the middle. Both sources play at once; a video is hoisted with
+  its clip and filter, as every window.
 - **Variety:** `src/insert_variety.js` treats each as framed footage: two in a
   row with the same `variant` rotate it (split-screen, picture-in-picture,
   media-stat), and a polaroid over the cap may become a split-screen with its
@@ -6993,6 +7076,7 @@ multi-state shot switches them on by those names.
 | `title-decompose` | `catalog-i-math.mjs` | chips, underline | `text` ≤ 120 (the title), `citation`, `terms` 1–5 `{text (a run of its words), gloss, sub?, icon?}`, `tone` | build, term-&lt;i&gt; | The citation rises and the words pop as chips in reading order; each term in title order lights its chips, draws a dashed connector down and raises its icon, gloss and sub; cells sit in the order their connectors leave the title, so wrapped terms never cross |
 | `feynman-diagram` | `catalog-i-math.mjs` | glow, ink | `preset` self-energy/exchange/annihilation, or `points` (`{name: [x, y]}` on a 12 × 6 grid) and `lines` 1–12 `{from, to, type: fermion/antifermion/photon/gluon/scalar/graviton, bend −1–1, label?, at?}`, `caption`, `tone` | build, line-&lt;i&gt; | Lines draw on in order (0.6 s each, about 0.55 s apart, both compressing so each label holds 1 s plus 0.3 s a word before the exit; a label with no time is dropped): fermions straight or bent with a mid-line arrow, photons and gravitons as waves, gluons as curls, scalars dashed; vertices pop as the first line reaches them; labels rise beside each line, away from the centre and clear of every line and vertex; the drawing (not the whole grid) is fitted to the frame and the caption shows with the build. Particle physics only: tooling (`src/diagram_fit.js`) turns a plain-word sketch planned here into a `line-diagram` |
 | `line-diagram` | `catalog-i-diagram.mjs` | blueprint, plain | `points` 2–16 (`{name: [x, y]}`, 0–100, y down), `lines` 1–16 `{from, to, style solid/dashed, weight normal/heavy, accent?, bend −1–1, label? ≤ 24, at?}`, `marks` 0–8 `{point, label}`, `title`, `note`, `tone`, `accent` | build, line-&lt;i&gt; | A drafting plate (a tint of the primary over bg, with a grid on the drawing's own units in blueprint) fills the rect; the sketch is scaled to fill it, keeping its proportions, with label bands only on the sides that have room. Strokes draw on in order (0.6 s, 0.5 s apart): solid in the primary, dashed and accent ones in the accent, 9 px or 18 px at 1080; dots pop where lines meet. Labels are pills with a solid backing, placed clear of every stroke, dot and label (`kit/core/diagram-layout.mjs` placeLabel; a leader line when they sit off or nearer another stroke) and pop as their stroke lands; gaps and draws compress so each holds 1 s plus 0.3 s a word before the exit, and a label with no time is dropped. The title rises with the enter and the note fades in with the build |
+| `node-graph` | `catalog-i-graph.mjs` | fan | `nodes` 3–8 (a label ≤ 14 or `{label, icon?, id?}`), `hub` (a label ≤ 16 or `{label, icon?}`), `tone`, `converge`, `bpm` 60–200 (default 120) | build, node-&lt;id&gt;, converge | Nodes flock out of the hub (the middle of the fan first, a quarter beat apart, arcing paths) onto two staggered tiers above it; each wire draws into the hub as its node lands. A glowing pulse (a dash on the wire, `strokeDashoffset`) lands in the hub on every beat, lighting the node as it leaves and flashing the hub ring as it lands; at `converge` (a bar line by default) every wire fires at once, the hub punches, the module's camera wrapper shakes (`fluid-motion.mjs` `shakeOps`) and the nodes ripple (`waveOps`). Every node and the hub breathe (`idleOps`, half-cycles over 1.6 s, amplitude from the grammar) and the camera wrapper pushes in 5% over the scene. Default times snap to the `bpm` grid. docs/FLUID_MOTION_RFC.md |
 
 **Typesetting.** `equation` draws plain data: `params.typeset`, made from
 `params.latex` by `src/math/typeset.js` with MathJax 3.2.2 (TeX input, SVG

@@ -23,6 +23,8 @@ import { mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { CHARACTER_PATHS, CHARACTER_SCHEMA, applyCharacterSets, characterCastEntry, characterPaths, normalizeCharacter, parseSet } from "@launchclip/core/characters/character.mjs";
 import { describeCharacter, newCharacterDefaults, pickVoice } from "@launchclip/core/characters/describe.mjs";
+import { characterDescription, defaultFlaw } from "@launchclip/core/bible.mjs";
+import { resolveStoryCast } from "@launchclip/core/characters/cues.mjs";
 import { isStarterId, starterCharacter, STARTER_IDS } from "@launchclip/core/characters/cast.mjs";
 import { EXPRESSIONS, POSES } from "@launchclip/core/characters/rig.mjs";
 import { listCharacters, loadCharacter, projectCastRoot, readCastPack, saveCharacter, writeCastPack } from "./character_store.js";
@@ -190,6 +192,8 @@ export async function castCreate(id, flags = {}, hooks = {}) {
     draft.voice = pickVoice(id, { voice: mapped.voice, accent: mapped.accent });
     assumed.push(`voice=${draft.voice}`);
   }
+  // One small deliberate flaw, so drift is easy to spot (the show bible keeps it in must_keep).
+  if (draft.params.flaw === undefined) { draft.params.flaw = defaultFlaw(id); assumed.push(`flaw=${draft.params.flaw}`); }
   const saved = await saveCharacter(normalizeCharacter(draft, id), { ...options, to });
   return finish("create", saved, { flags, options, sets, mapped, assumed, hooks });
 }
@@ -222,6 +226,7 @@ async function finish(action, saved, { flags, options, sets, mapped, assumed, ho
     stage: "cast", action, status: "ready", id: saved.character.id, file: saved.file, source: saved.source,
     ...(changed === undefined ? {} : { changed }),
     character: saved.character,
+    description: savedDescription(saved.character),
     applied: sets.map((set) => `${set.path}${set.op ?? "="}${set.value}`),
     ...(mapped.via ? { mapped_by: mapped.via } : {}),
     ...(assumed.length ? { assumed } : {}),
@@ -231,6 +236,12 @@ async function finish(action, saved, { flags, options, sets, mapped, assumed, ho
     ...(sheetError ? { sheet_error: sheetError } : {}),
     next: sheet ? `Look at ${sheet}; change it with launchclip cast edit ${saved.character.id} --set path=value` : `launchclip cast sheet ${saved.character.id}`
   };
+}
+
+/** A saved character's written description (kit/core/bible.mjs characterDescription), as a show bible freezes it. */
+export function savedDescription(character) {
+  const cast = { style: character.style ?? "flat", characters: [characterCastEntry(character)] };
+  return characterDescription(resolveStoryCast({ cast }).members.get(character.id));
 }
 
 // ---------------------------------------------------------------------------
