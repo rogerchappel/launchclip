@@ -790,7 +790,10 @@ export function evaluateMotionQuality(metrics, expected = {}) {
     findings.push(finding("dimensions", "blocking", `Rendered dimensions are ${metrics.width}×${metrics.height}; expected ${expected.width}×${expected.height}.`));
   }
   if (!metrics.frame_count) findings.push(finding("frames", "blocking", "No frame-difference samples were produced."));
-  if (above(metrics.motion.hold_ratio, expected.maximum_hold_ratio ?? 0.985)) findings.push(finding("motion", "major", `Frame-difference analysis reports ${(metrics.motion.hold_ratio * 100).toFixed(1)}% near-static frames.`));
+  // hold_ratio compares each frame with this video's own median change, so
+  // most frames fall under it by construction: advisory once the absolute
+  // still_share (stillnessFindings) is measured, which holds on real stills.
+  if (above(metrics.motion.hold_ratio, expected.maximum_hold_ratio ?? 0.985)) findings.push({ ...finding("motion", metrics.motion.still_share == null ? "major" : "minor", `Frame-difference analysis reports ${(metrics.motion.hold_ratio * 100).toFixed(1)}% near-static frames (relative to this video's own median change).`), measure: "hold_ratio" });
   if (below(metrics.motion_bursts_per_minute, expected.minimum_bursts_per_minute ?? 4)) findings.push(finding("motion", "major", `Only ${metrics.motion_bursts_per_minute.toFixed(1)} meaningful motion bursts per minute were detected.`));
   const motionFamily = metrics.family ?? classifyMotionFamily(metrics);
   const familyEnergyFloor = expected.minimum_change_energy_p50_by_family?.[motionFamily];

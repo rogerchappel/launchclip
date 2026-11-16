@@ -1,0 +1,49 @@
+{
+ "words": [
+  {
+   "text": "Number",
+   "start": 0.3,
+   "end": 0.62
+  },
+  {
+   "text": "three,",
+   "start": 0.7,
+   "end": 1.02
+  },
+  {
+   "text": "composite.",
+   "start": 1.1,
+   "end": 1.42
+  },
+  {
+   "text": "No",
+   "start": 1.5,
+   "end": 1.82
+  },
+  {
+   "text": "oiling,",
+   "start": 1.9,
+   "end": 2.22
+  },
+  {
+   "text": "just",
+   "start": 2.3,
+   "end": 2.62
+  },
+  {
+   "text": "your",
+   "start": 2.7,
+   "end": 3.02
+  },
+  {
+   "text": "weekends",
+   "start": 3.1,
+   "end": 3.42
+  },
+  {
+   "text": "back.",
+   "start": 3.5,
+   "end": 3.82
+  }
+ ]
+}

@@ -280,6 +280,9 @@ export function paramWords(params) {
 }
 
 /** The minimum fully-opaque hold for a text module of `words` words (s). */
+/** A text-hold under this share of its reading time holds the render; above it, it is a warning. */
+export const TEXT_HOLD_ERROR_SHARE = 0.7;
+
 export const textHold = (words) => Math.max(TEXT_FADE.minHold, Math.round(words * TEXT_FADE.perWord * 100) / 100);
 
 /**
@@ -290,7 +293,8 @@ export const textHold = (words) => Math.max(TEXT_FADE.minHold, Math.round(words 
  *   0.25 s in a row (a see-through person);
  * - slow-text-fade: a text module fading in or out over more than
  *   TEXT_FADE.max, or a fading transition on it longer than 0.5 s;
- * - text-hold: a text module fully shown for less than its reading time.
+ * - text-hold: a text module fully shown for less than its reading time
+ *   (an error under TEXT_HOLD_ERROR_SHARE of it, else a warning).
  */
 export function ghostingGate(story) {
   const findings = [];
@@ -347,7 +351,8 @@ export function ghostingGate(story) {
     const transition = entry.transitionIn;
     if (transition && ["fade", "dissolve", "crossfade"].includes(transition.type) && transition.dur > GHOSTING.textHalf + 1e-6) findings.push({ rule: "slow-text-fade", severity: "error", at: entry.start, ids: [id], detail: `${id} dissolves in over ${transition.dur} s; a text scene's fade takes at most ${GHOSTING.textHalf} s` });
     const read = readingTime(entry, model);
-    if (read.words && read.hold < read.need - 1e-6) findings.push({ rule: "text-hold", severity: "error", at: read.at, ids: [id], detail: `${id} (${read.words} words) is fully shown for ${read.hold} s; it needs ${read.need} s to be read (${TEXT_FADE.perWord} s a word, at least ${TEXT_FADE.minHold} s): lengthen the scene or cut the text` });
+    // A little short is not something a viewer notices (the planner's reading check retimes it); far short is.
+    if (read.words && read.hold < read.need - 1e-6) findings.push({ rule: "text-hold", severity: read.hold < read.need * TEXT_HOLD_ERROR_SHARE ? "error" : "warning", at: read.at, ids: [id], detail: `${id} (${read.words} words) is fully shown for ${read.hold} s; it needs ${read.need} s to be read (${TEXT_FADE.perWord} s a word, at least ${TEXT_FADE.minHold} s): lengthen the scene or cut the text` });
   }
   return gateResult(findings);
 }

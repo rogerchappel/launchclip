@@ -40,6 +40,7 @@ import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations
 import { actingGate, boxedOnFlatBackdrops, densityGate, ghostingGate, physicsGate, tellsGate, varietyGate } from "./direction_guardrails.js";
 import { visualDensityGate } from "./visual_density.js";
 import { choreographyGate, holdGate, stateGate } from "./movement_guardrails.js";
+import { explainGates } from "./gate_summary.js";
 import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, lipSyncGate, paceGate, prototypeCut, renderPaceGate, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
@@ -2311,7 +2312,7 @@ async function runGates(ctx, { pixels = true } = {}) {
     reason: "finish does not produce critic receipts",
     next_step: `Have a fresh-context critic review qa/critic-sheets/ and write qa/critic.json (citing the qa/temporal-evidence IDs), then run: launchclip cinematic-check ${ctx.project} --renderer ${ctx.rendererName} --video ${rel(ctx.project, ctx.out)} --expect-audio`
   };
-  return gates;
+  return explainGates(gates);
 }
 
 /**
@@ -2328,27 +2329,39 @@ export function placeholderScenes(resolved, { renderer, compileWarnings = [] } =
   for (const scene of Array.isArray(resolved?.scenes) ? resolved.scenes : []) {
     if (scene?.module === "custom") {
       const [gap] = customModuleGaps({ scenes: [scene] }, renderer);
-      if (gap) scenes.push({ id: scene.id, module: scene.module, reason: gap.reason });
+      if (gap) scenes.push({ id: scene.id, module: scene.module, kind: "custom", reason: gap.reason });
       continue;
     }
-    if (!known.has(scene?.module)) { scenes.push({ id: scene?.id, module: scene?.module ?? null, reason: `module "${scene?.module}" is not a known module` }); continue; }
+    if (!known.has(scene?.module)) { scenes.push({ id: scene?.id, module: scene?.module ?? null, kind: "unknown-module", reason: `module "${scene?.module}" is not a known module` }); continue; }
     try { resolveModule(scene, resolved); }
-    catch (error) { scenes.push({ id: scene.id, module: scene.module, reason: error.message }); }
+    catch (error) { scenes.push({ id: scene.id, module: scene.module, kind: "params", reason: error.message }); }
   }
   for (const message of compileWarnings) {
     const id = String(message).match(/^(?:hyperframes: )?([^:\s]+):/)?.[1];
-    if (id && !scenes.some((entry) => entry.id === id)) scenes.push({ id, module: resolved?.scenes?.find((scene) => scene.id === id)?.module ?? null, reason: String(message).replace(/^(?:hyperframes: )?[^:\s]+: /, "").replace(/; rendering a placeholder$/, "") });
+    if (id && !scenes.some((entry) => entry.id === id)) scenes.push({ id, module: resolved?.scenes?.find((scene) => scene.id === id)?.module ?? null, kind: "compile", reason: String(message).replace(/^(?:hyperframes: )?[^:\s]+: /, "").replace(/; rendering a placeholder$/, "") });
   }
   return scenes;
 }
 
 function placeholderGate(ctx) {
   const scenes = placeholderScenes(ctx.resolved, { renderer: ctx.rendererName, compileWarnings: ctx.compiledPlaceholders ?? [] });
+  const start = (id) => Number(ctx.resolved?.scenes?.find((scene) => scene.id === id)?.start);
+  const findings = scenes.slice(0, 20).map((entry) => ({ rule: "placeholder", severity: "error", ...(Number.isFinite(start(entry.id)) ? { at: start(entry.id) } : {}), ids: [entry.id], detail: placeholderMessage(entry) }));
   return {
     status: scenes.length ? "failed" : "passed",
     scenes: scenes.slice(0, 20),
-    errors: scenes.slice(0, 12).map((entry) => `${entry.id} (${entry.module ?? "no module"}) renders as a "Missing module" placeholder: ${entry.reason}`)
+    findings,
+    errors: findings.slice(0, 12).map((finding) => finding.detail)
   };
+}
+
+// Why a scene shows a "Missing module" card, in plain words.
+function placeholderMessage(entry) {
+  const name = `Scene ${entry.id}${entry.module ? ` (${entry.module})` : ""} shows a "Missing module" card`;
+  if (entry.kind === "unknown-module") return entry.module ? `${name}: "${entry.module}" is not a module LaunchClip knows` : `${name}: it names no module`;
+  if (entry.kind === "params") return `${name}: its params do not resolve (${entry.reason})`;
+  if (entry.kind === "compile") return `${name}: the HyperFrames compiler could not build it (${entry.reason})`;
+  return `${name}: ${entry.reason}`;
 }
 
 // The story's style pack (for its cadence profile), resolved once per run.
