@@ -28,6 +28,7 @@ import {el, set, tw} from './catalog-h-view.mjs';
 import {iconNode} from './icons.mjs';
 import {fontWidthScale} from './fonts.mjs';
 import {hashUnit, idleAmplitude, idleOps} from './fluid-motion.mjs';
+import {loopHome} from './loop.mjs';
 
 export const PLATFORMS = Object.freeze(['x', 'threads', 'bluesky', 'linkedin', 'reddit', 'generic']);
 export const LOOKS = Object.freeze(['glass', 'native', 'light']);
@@ -1049,7 +1050,7 @@ function wallTimeline(model, ops) {
     tw(ops, `${target}-c-glow`, rt(c.pullAt + 0.8), 0.5, 'power2.out', {opacity: 0}, {opacity: 1});
     if (t.front.i === c.focus[0]) highlightOps(ops, `${target}-c`, start, c.phrases);
     // In front, it breathes: the wrapper is inside the tile's scale, so the bob is divided by it; half the tilt keeps the words steady.
-    idleOps(ops, `${target}-idle`, start, rt(c.pullAt + 1.3), rt(model.motion.exitStart - 0.05), {bob: r2(c.idle.bob / c.frontScale), tilt: r2(c.idle.tilt * 0.5)});
+    idleOps(ops, `${target}-idle`, start, rt(c.pullAt + 1.3), rt(model.motion.exitStart - 0.05), {bob: r2(c.idle.bob / c.frontScale), tilt: r2(c.idle.tilt * 0.5)}, loopHome(model));
   });
   set(ops, `${id}-src`, start, {opacity: 0});
   tw(ops, `${id}-src`, rt(c.pullAt + 0.9), 0.4, 'power1.out', {opacity: 0}, {opacity: 1});

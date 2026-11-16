@@ -14,7 +14,8 @@ import {VARIANT_PARAM, createHBase, inkOn, mixColor, textWidth, titleBlock, tone
 import {abs, chromeNodes, chromeOps, el, label, popOps, set, tw} from './catalog-h-view.mjs';
 import {iconNode, isIcon} from './icons.mjs';
 import {AT, RECT, r2, revealId, rt} from './catalog-i-base.mjs';
-import {beatGrid, flockOps, hashUnit, idleAmplitude, idleOps, shakeOps, waveOps} from './fluid-motion.mjs';
+import {beatGrid, fitBpm, flockOps, hashUnit, idleAmplitude, idleOps, shakeOps, waveOps} from './fluid-motion.mjs';
+import {loopHome} from './loop.mjs';
 
 const GRAPH_VARIANTS = Object.freeze(['fan']);
 // Pulse: dash length (share of the wire) and travel time; a pulse lands on a beat.
@@ -92,7 +93,8 @@ function graphResolve(params, ctx) {
   nodes.forEach((n, i) => Object.assign(n, {cx: r2(hx + L.fan[i].x), cy: r2(hy + L.fan[i].y), rotation: L.fan[i].rotation}));
 
   // Timing on the beat grid (RFC §8): defaults snap to beats from the scene start.
-  const grid = beatGrid(bpm, b.start), beat = grid.beat;
+  // A loop's pulses run on a beat that divides the scene (RFC §8).
+  const grid = beatGrid(b.model.loop ? fitBpm(bpm, b.duration) : bpm, b.start), beat = grid.beat;
   // A pulse is shorter than a beat, so one wire's pulse is gone before the next one leaves.
   const travel = rt(Math.min(PULSE.travel, beat * 0.9));
   const rel = t => rt(t - b.start);
@@ -132,7 +134,7 @@ function graphResolve(params, ctx) {
   };
   round(Math.min(...busy) + travel, convergeAt - 2 * beat);
   nodes.forEach((n, k) => { pulses.push({node: k, arrive: convergeAt, converge: true}); busy[k] = convergeAt; });
-  round(convergeAt + 2 * beat, b.motion.exitStart - 0.1);
+  round(convergeAt + 2 * beat, (loopHome(b.model) ?? b.motion.exitStart) - 0.1);
   pulses.sort((a, c) => a.arrive - c.arrive || a.node - c.node);
 
   const hubColor = color, ink = inkOn(b.colors, hubColor);
@@ -205,7 +207,7 @@ function graphTimeline(model, ops) {
   tw(ops, `${id}-hub`, c.convergeAt, 0.5, 'power3.out', {scaleX: 1.2, scaleY: 1.2}, {scaleX: 1, scaleY: 1});
   set(ops, `${id}-hub-label`, start, {opacity: 0, x: 0, y: r2(20 * u)});
   tw(ops, `${id}-hub-label`, rt(c.buildAt + 0.2), 0.45, 'power3.out', {opacity: 0, y: r2(20 * u)}, {opacity: 1, y: 0});
-  idleOps(ops, `${id}-hub-idle`, start, rt(c.buildAt + 0.6), settle, c.idle);
+  idleOps(ops, `${id}-hub-idle`, start, rt(c.buildAt + 0.6), settle, c.idle, loopHome(model));
   [[0, 50], [1, -35]].forEach(([k, turn]) => {
     set(ops, `${id}-orbit-${k}`, start, {rotation: 0});
     tw(ops, `${id}-orbit-${k}`, c.buildAt, rt(model.end - c.buildAt), 'none', {rotation: 0}, {rotation: turn});
@@ -215,7 +217,7 @@ function graphTimeline(model, ops) {
   // Nodes: flock out of the hub into the fan, then breathe; each wire draws as its node lands.
   flockOps(ops, c.nodes.map(n => ({id: `${id}-node-${n.id}`, x: n.cx, y: n.cy, rotation: n.rotation, at: n.launchAt})), start, {x: h.x, y: h.y}, {duration: FLOCK});
   c.nodes.forEach(n => {
-    idleOps(ops, `${id}-node-${n.id}-idle`, start, rt(n.landAt + 0.35), settle, c.idle);
+    idleOps(ops, `${id}-node-${n.id}-idle`, start, rt(n.landAt + 0.35), settle, c.idle, loopHome(model));
     set(ops, `${id}-node-${n.id}-lit`, start, {opacity: 0});
     set(ops, `${id}-wire-${n.id}`, start, {opacity: 0, strokeDashoffset: 1});
     tw(ops, `${id}-wire-${n.id}`, n.wireAt, 0.45, 'power2.inOut', {opacity: 1, strokeDashoffset: 1}, {opacity: 1, strokeDashoffset: 0});

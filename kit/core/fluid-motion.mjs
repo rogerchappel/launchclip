@@ -42,22 +42,36 @@ export function idleFor(amp, height) {
  * A slow breath on `target` from `from` to `to` (absolute s): sine.inOut
  * half-cycles of y and rotation, each at least 1.6 s (so the motion check
  * reads them as continuous motion, not gestures), offset in phase and period
- * by a hash of the target, returning to rest by `to`.
+ * by a hash of the target, returning to rest by `to`. With `fitTo` (a loop,
+ * RFC §8) the half-cycles stretch or shrink so the chain lands at rest
+ * exactly at `fitTo` instead of stopping early.
  */
-export function idleOps(ops, target, start, from, to, {bob, tilt}) {
+export function idleOps(ops, target, start, from, to, {bob, tilt}, fitTo) {
   const seed = hashUnit(target);
-  const half = rt((IDLE.periodMin + (IDLE.periodMax - IDLE.periodMin) * seed) / 2);
+  let half = rt((IDLE.periodMin + (IDLE.periodMax - IDLE.periodMin) * seed) / 2);
   set(ops, target, start, {y: 0, rotation: 0});
-  if (to - from < half * 2) return;
+  const span = (fitTo ?? to) - from;
+  if (span < (fitTo === undefined ? half : IDLE.periodMin / 2) * 2) return;
+  let n = Math.floor(span / half + 1e-9);
+  if (fitTo !== undefined) {
+    n = Math.max(2, Math.round(span / half));
+    if (span / n < IDLE.periodMin / 2) n = Math.floor(span / (IDLE.periodMin / 2) + 1e-9);
+    half = span / n;
+  }
   const sign = seed < 0.5 ? 1 : -1;
-  let t = from, k = 0, prev = {y: 0, rotation: 0};
-  while (t + half * 2 <= to + 1e-9) {
+  let prev = {y: 0, rotation: 0};
+  for (let k = 0; k < n - 1; k++) {
     const s = (k % 2 === 0 ? 1 : -1) * sign;
     const next = {y: r2(-bob * s), rotation: r2(tilt * s)};
-    tw(ops, target, rt(t), half, 'sine.inOut', prev, next);
-    prev = next; t += half; k++;
+    tw(ops, target, rt(from + k * half), rt(half), 'sine.inOut', prev, next);
+    prev = next;
   }
-  tw(ops, target, rt(t), half, 'sine.inOut', prev, {y: 0, rotation: 0});
+  tw(ops, target, rt(from + (n - 1) * half), rt(half), 'sine.inOut', prev, {y: 0, rotation: 0});
+}
+
+/** The bpm nearest `bpm` whose beat divides `duration` s into whole beats (a loop's pulses wrap; RFC §8). */
+export function fitBpm(bpm, duration) {
+  return 60 * Math.max(1, Math.round(duration * bpm / 60)) / duration;
 }
 
 /**
