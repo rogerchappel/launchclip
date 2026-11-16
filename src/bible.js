@@ -130,7 +130,8 @@ export async function freezeBible(projectDir, options = {}, hooks = {}) {
   const cast = { style, ...(isObj(colors) ? { colors } : {}), characters };
   const castErrors = storyCastErrors(cast);
   if (castErrors.length) throw new Error(`the cast does not resolve:\n- ${castErrors.join("\n- ")}`);
-  const resolved = resolveStoryCast({ cast });
+  // The story's brand resolves brand-role colours to the hex the descriptions name.
+  const resolved = resolveStoryCast({ ...(isObj(story?.brand) ? { brand: story.brand } : {}), cast });
   const sheetOf = (id) => `${BIBLE_SHEETS}/${id}.png`;
   const frozenCast = {
     style, ...(isObj(colors) ? { colors } : {}),
