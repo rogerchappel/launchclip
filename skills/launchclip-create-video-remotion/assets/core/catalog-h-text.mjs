@@ -146,6 +146,14 @@ function titleResolve(params, ctx) {
     ...(marks.length ? {marks} : {}), kicker: kicker ? {text: kicker, size: kickerSize} : null, sub: subFit ? {text: sub, size: subFit.size, lines: subFit.lines} : null, t0, stride: rt(stride), each: rt(each), buildEnd, speed,
     muted: plate ? mixColor(inkOn(b.colors, plateFill), plateFill, 0.7) : b.theme.muted, shimmer: mixColor('#ffffff', accent, 0.5), blockH,
     ...(b.variant === 'scramble' ? {glyphs: SCRAMBLE_CHARSETS[charset]} : {})};
+  // scramble: each letter cycles only through glyphs about its own width, so none spills onto a neighbour.
+  if (b.variant === 'scramble') {
+    const set = [...SCRAMBLE_CHARSETS[charset]].map(g => ({g, w: textWidth(g, size, 'display')})).sort((a, z) => a.w - z.w);
+    for (const ch of rows.flatMap(row => row.words).flatMap(word => word.chars)) {
+      const fit = set.filter(x => x.w <= textWidth(ch.ch, size, 'display') * 1.15).map(x => x.g);
+      ch.glyphs = (fit.length >= 2 ? fit : set.slice(0, 2).map(x => x.g)).join('');
+    }
+  }
   return b.finish(content, {minTextPx: Math.min(size, subFit ? subFit.size : Infinity)});
 }
 
@@ -224,6 +232,7 @@ function titleTimeline(model, ops) {
   if (c.kicker) riseOps(ops, `${id}-kicker`, start, rt(Math.max(start, t0 - 0.2)), r2(12 * u), {duration: 0.4});
   if (c.sub) riseOps(ops, `${id}-sub`, start, rt(c.buildEnd - each * 0.4), r2(14 * u), {duration: 0.5});
   const n = c.counts[c.unit];
+  const chars = c.rows.flatMap(row => row.words).flatMap(word => word.chars);
   const order = orderOf(c.variant, n);
   const at = i => rt(t0 + c.stride * order(i));
   const target = i => (c.unit === 'character' ? I.char(i) : c.unit === 'word' ? I.word(i) : c.unit === 'line' ? I.line(i) : `${id}-block`);
@@ -241,9 +250,10 @@ function titleTimeline(model, ops) {
         const cycle = SCRAMBLE_CYCLE / model.fps;
         from(i, {opacity: 0}); set(ops, target(i), at(i), {opacity: 1});
         set(ops, `${target(i)}-r`, start, {opacity: 0});
-        set(ops, `${target(i)}-g`, start, {opacity: 1, text: c.glyphs[0]});
+        const pool = chars[i].glyphs;
+        set(ops, `${target(i)}-g`, start, {opacity: 1, text: pool[0]});
         for (let k = Math.floor(at(i) / cycle + 1e-9); k * cycle < lock - 1e-9; k++) {
-          set(ops, `${target(i)}-g`, sampleTime(Math.max(at(i), k * cycle)), {text: c.glyphs[Math.floor(hashUnit(`${id}|${i}|${k}`) * c.glyphs.length)]});
+          set(ops, `${target(i)}-g`, sampleTime(Math.max(at(i), k * cycle)), {text: pool[Math.floor(hashUnit(`${id}|${i}|${k}`) * pool.length)]});
         }
         set(ops, `${target(i)}-g`, lock, {opacity: 0});
         set(ops, `${target(i)}-r`, lock, {opacity: 1});
