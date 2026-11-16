@@ -96,3 +96,14 @@ test('story validation checks the carry shape', () => {
   assert.equal(errors({map: {'s1-title': 's2-title'}, via: 'x'}).length, 1);
   assert.equal(errors({map: {'s1-a': 's2-x', 's1-b': 's2-x'}}).length, 1);
 });
+
+test('both sides of a carry sit on a still plate: no per-scene hold drift', async () => {
+  const {sceneDrift} = await import('@launchclip/core/ambient.mjs');
+  const story = twoGraphs();
+  const [a, b] = story.scenes.map(scene => resolveModule(scene, story));
+  assert.equal(sceneDrift(story, story.scenes[0], a), null);
+  assert.equal(sceneDrift(story, story.scenes[1], b), null);
+  const plain = twoGraphs();
+  delete plain.scenes[1].carry;
+  assert.notEqual(sceneDrift(plain, plain.scenes[1], resolveModule(plain.scenes[1], plain)), null);
+});

@@ -75,6 +75,8 @@ function tag(model, {out = null, into = null}) {
   if (out) { carry.out = out; carry.exitTo = {...model.motion.exitTo}; model.motion.exitTo = {...ROOT_REST}; }
   if (into) { carry.in = into; carry.enterFrom = {...model.motion.enterFrom}; model.motion.enterFrom = {...ROOT_REST}; }
   model.carry = carry;
+  // A still plate: the per-scene hold drift (kit/core/ambient.mjs sceneDrift) restarts on every scene, so it is off on both sides.
+  if (model.layout) model.layout.drift = false;
 }
 
 // Boundary rects per story: keyed by the two scenes and what moves them.

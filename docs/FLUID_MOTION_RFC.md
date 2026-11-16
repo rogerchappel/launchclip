@@ -204,7 +204,9 @@ error that names it):
   between plates). A feel's ambient camera and kicks are fine: they move the
   whole composition, so A and B still share one coordinate space;
 - a module's own camera (node-graph's slow push, a zoom inside the shot) is
-  allowed, because rects are measured through it (below).
+  allowed, because rects are measured through it (below). The per-scene hold
+  drift (kit/core/ambient.mjs `sceneDrift`) is not: it restarts on every
+  scene, so a carry turns it off on both sides of the boundary.
 
 The candidates on each side are the module's **elements**: nodes with an id
 and a box whose nearest id-bearing ancestor is the module root or a wrapper
