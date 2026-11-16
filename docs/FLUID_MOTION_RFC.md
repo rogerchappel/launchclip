@@ -636,8 +636,7 @@ Member modules shipped:
   gives every node that height. A `sub`, `detail` or `subtitle` on a graphic
   now names it. Proof: `h-node-graph-sub-card-portrait`,
   `h-icon-grid-sub-card-portrait`, `test/member_sub_card.test.js`, and
-  `examples/story/members-sub-9x16` (the bakery team, a line each). Five
-  sub-cards fit the golden's 880 px rect at 31 px labels; seven do not.
+  `examples/story/members-sub-9x16` (the bakery team, a line each).
 
 ## 11. Phases
 
