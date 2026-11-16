@@ -1627,3 +1627,360 @@ export async function analyzeTransitionsFile(videoPath, options = {}, adapters =
   const result = classifyTransitions(buffer, W, H, T.fps, { ...options, cropped: true });
   return { ...result, crop, duration_seconds: round(buffer.length / (W * H) / T.fps, 3) };
 }
+
+// ---------------------------------------------------------------------------
+// Per-element entrances (docs/PLAN_AND_PACE_RFC.md §4.2). RGB frames 180 px
+// wide are reduced, frame by frame, to per-cell stats (4 px cells), so a
+// reference never sits in memory as pixels. Every threshold is the RFC's
+// unless its line says otherwise.
+export const ENTRANCE_CLASSIFY = Object.freeze({
+  width: 180,
+  fps: 30, // the RFC says ≤ 15: at 15 fps a start is only known to 67 ms, and the stagger test is one 30 fps frame
+  maxSeconds: 120, // shortcut: only the first two minutes are read (~0.65 MB of cell stats a second); stream events out if long references matter
+  cell: 4,
+  levels: 12, // a pixel changed when any channel moves more than this
+  cellShare: 0.12, // a cell is active when more than this share of its pixels changed
+  cut: Object.freeze({ share: 0.5, spike: 3 }), // a frame pair with this share of cells active, ≥ spike × both neighbours, splits shots (the RFC leaves "a shot" open)
+  continuous: Object.freeze({ active: 0.7, drift: 8, driftShare: 0.6, driftSeconds: 1 }), // drift is counted over 1 s windows in which the cell is never active, so an element that enters and stays is not drift
+  join: 1, // a cell's activity bridges gaps of this many frame pairs
+  splitSeconds: 0.12,
+  minArea: 0.002,
+  maxArea: 0.6, // not in the RFC: change over more of the frame is a transition or a camera move, not an element
+  role: 1.25, // not in the RFC: detail (luma gradient) after ÷ before ≥ this is an entrance, before ÷ after an exit, else a change
+  ease: Object.freeze({ out: 0.68, in: 0.32, linearCv: 0.45, floorPairs: 6, tail: 0.05, onset: 0.25 }), // not in the RFC (onset: an entrance starts where its activity first crosses this share of its peak): the noise floor taken off the activity is read over floorPairs each side, and the span runs out from the peak (up to floorPairs past the thresholded one) while activity is above tail × the peak
+  kind: Object.freeze({ tip: 0.35, correlation: 0.6, travel: 0.02, ownTravel: 0.25, scale: 0.6, presence: 10, firstShare: 0.5 }), // not in the RFC: presence is a cell's mean moved this far from before the event; the first frame read is the first with firstShare of the final presence; a slide also travels ownTravel of its own extent (a blurred shrink-in drifts ≤ 0.07, a slide ~1)
+  stagger: Object.freeze({ min: 3, size: 0.4, duration: 0.5, regularity: 0.4 })
+});
+
+export const ENTRANCE_EASES = Object.freeze(['ease-out', 'ease-in', 'in-out', 'linear']);
+export const ENTRANCE_KINDS = Object.freeze(['draw-on', 'slide', 'scale', 'fade']);
+// Measured ease → the grammar ease role it plays (kit/core/grammar.mjs easeRole); linear has none.
+export const ENTRANCE_EASE_ROLES = Object.freeze({ 'ease-out': 'enter', 'ease-in': 'exit', 'in-out': 'move', linear: null });
+// The median element-level module stagger (end-card and media layouts 0.28; equation 0.22, logo-row 0.14; brand lockup and short lists 0.35, photo lines 0.45):
+// a measured interval ÷ this is the grammar's stagger multiplier.
+export const MODULE_STAGGER_SECONDS = 0.28;
+
+/**
+ * A per-frame reducer for classifyEntrances: push(frame) takes one RGB frame
+ * (width × height × 3), finish(options) classifies what was pushed.
+ */
+export function entranceAccumulator(width, height, fps = ENTRANCE_CLASSIFY.fps) {
+  const E = ENTRANCE_CLASSIFY, S = E.cell;
+  const cw = Math.floor(width / S), ch = Math.floor(height / S), cells = cw * ch, perCell = S * S;
+  const means = [], details = [], shares = [], mags = [];
+  let previous = null;
+  return {
+    push(frame) {
+      const mean = new Uint8Array(cells * 3), detail = new Uint8Array(cells);
+      const share = previous ? new Uint8Array(cells) : null, mag = previous ? new Uint8Array(cells) : null;
+      for (let cy = 0; cy < ch; cy += 1) for (let cx = 0; cx < cw; cx += 1) {
+        let r = 0, g = 0, b = 0, grad = 0, changed = 0, moved = 0;
+        for (let y = cy * S; y < cy * S + S; y += 1) for (let x = cx * S; x < cx * S + S; x += 1) {
+          const k = (y * width + x) * 3;
+          r += frame[k]; g += frame[k + 1]; b += frame[k + 2];
+          const luma = frame[k] + 2 * frame[k + 1] + frame[k + 2];
+          if (x + 1 < width) { const j = k + 3; grad += Math.abs(luma - (frame[j] + 2 * frame[j + 1] + frame[j + 2])); }
+          if (y + 1 < height) { const j = k + width * 3; grad += Math.abs(luma - (frame[j] + 2 * frame[j + 1] + frame[j + 2])); }
+          if (previous) {
+            const d = Math.max(Math.abs(frame[k] - previous[k]), Math.abs(frame[k + 1] - previous[k + 1]), Math.abs(frame[k + 2] - previous[k + 2]));
+            moved += d;
+            if (d > E.levels) changed += 1;
+          }
+        }
+        const c = cy * cw + cx;
+        mean[c * 3] = r / perCell; mean[c * 3 + 1] = g / perCell; mean[c * 3 + 2] = b / perCell;
+        detail[c] = Math.min(255, grad / (perCell * 8));
+        if (previous) { share[c] = Math.round(changed / perCell * 255); mag[c] = Math.min(255, Math.round(moved / perCell)); }
+      }
+      means.push(mean); details.push(detail);
+      if (previous) { shares.push(share); mags.push(mag); }
+      previous = Buffer.from(frame);
+    },
+    finish(options = {}) { return classifyCells({ means, details, shares, mags, cw, ch, fps }, options); }
+  };
+}
+
+/**
+ * Per-element entrances from RGB frames (width × height × 3 each) at `fps`.
+ * → {events: [{at, seconds, role (enter | exit | change), area, box, ease?,
+ * kind?, direction?}], entrances (the role-enter events), sequences: [{at,
+ * count, interval, item_seconds, kind, ease}], continuous: {share, box},
+ * duration_seconds}
+ */
+export function classifyEntrances(rgbFrames, width, height, fps = ENTRANCE_CLASSIFY.fps, options = {}) {
+  const accumulator = entranceAccumulator(width, height, fps);
+  const size = width * height * 3;
+  for (let offset = 0; offset + size <= rgbFrames.length; offset += size) accumulator.push(rgbFrames.subarray(offset, offset + size));
+  return accumulator.finish(options);
+}
+
+function classifyCells({ means, details, shares, mags, cw, ch, fps }, options) {
+  const E = { ...ENTRANCE_CLASSIFY, ...options };
+  const cells = cw * ch, pairs = shares.length, on = Math.round(E.cellShare * 255);
+  const duration = round(means.length / fps, 3);
+  if (pairs < 2) return { events: [], entrances: [], sequences: [], continuous: { share: 0, box: null }, duration_seconds: duration };
+  const active = (p, c) => shares[p][c] > on;
+  const activeShare = shares.map((share) => { let n = 0; for (let c = 0; c < cells; c += 1) if (share[c] > on) n += 1; return n / cells; });
+  // Shots: frame ranges [first, last] split at hard cuts.
+  const shots = [];
+  let shotStart = 0;
+  for (let p = 0; p < pairs; p += 1) {
+    const s = activeShare[p], before = activeShare[p - 1] ?? 0, after = activeShare[p + 1] ?? 0;
+    if (s >= E.cut.share && s >= E.cut.spike * before && s >= E.cut.spike * after) { shots.push([shotStart, p]); shotStart = p + 1; }
+  }
+  shots.push([shotStart, means.length - 1]);
+  const events = [];
+  const continuousCells = new Uint8Array(cells);
+  let continuousWeight = 0;
+  const driftFrames = Math.round(E.continuous.driftSeconds * fps);
+  for (const [first, last] of shots) {
+    const shotPairs = last - first; // pairs first … last - 1
+    if (shotPairs < 2) continue;
+    // The continuous layer: cells active most of the shot, or drifting slowly while never active.
+    // Drifting cells are never active, so they make no events; only the busy ones are left out.
+    const continuous = new Uint8Array(cells), busy = new Uint8Array(cells);
+    const prefix = new Int32Array(shotPairs + 1);
+    for (let c = 0; c < cells; c += 1) {
+      for (let i = 0; i < shotPairs; i += 1) prefix[i + 1] = prefix[i] + (active(first + i, c) ? 1 : 0);
+      if (prefix[shotPairs] > E.continuous.active * shotPairs) { continuous[c] = 1; busy[c] = 1; continue; }
+      let eligible = 0, drifting = 0;
+      for (let t = first; t + driftFrames <= last; t += 1) {
+        if (prefix[t - first + driftFrames] - prefix[t - first] > 0) continue;
+        eligible += 1;
+        const a = means[t], b = means[t + driftFrames];
+        if (Math.max(Math.abs(a[c * 3] - b[c * 3]), Math.abs(a[c * 3 + 1] - b[c * 3 + 1]), Math.abs(a[c * 3 + 2] - b[c * 3 + 2])) > E.continuous.drift) drifting += 1;
+      }
+      if (eligible && drifting > E.continuous.driftShare * eligible) continuous[c] = 1;
+    }
+    let count = 0;
+    for (let c = 0; c < cells; c += 1) if (continuous[c]) { count += 1; continuousCells[c] = 1; }
+    continuousWeight += count / cells * (last - first + 1);
+    // Runs of activity per cell, joined across small gaps.
+    const runs = [], byCell = new Map();
+    for (let c = 0; c < cells; c += 1) {
+      if (busy[c]) continue;
+      let start = -1, end = -1;
+      for (let p = first; p < last; p += 1) {
+        if (!active(p, c)) continue;
+        if (start >= 0 && p - end - 1 <= E.join) { end = p; continue; }
+        if (start >= 0) runs.push({ c, a: start, b: end });
+        start = p; end = p;
+      }
+      if (start >= 0) runs.push({ c, a: start, b: end });
+    }
+    runs.forEach((run, i) => { if (!byCell.has(run.c)) byCell.set(run.c, []); byCell.get(run.c).push(i); });
+    // Connected cells whose runs overlap in time are one piece.
+    const parent = runs.map((_, i) => i);
+    const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+    runs.forEach((run, i) => {
+      const x = run.c % cw, y = Math.floor(run.c / cw);
+      for (const [nx, ny] of [[x + 1, y], [x, y + 1]]) {
+        if (nx >= cw || ny >= ch) continue;
+        for (const j of byCell.get(ny * cw + nx) ?? []) if (runs[j].a <= run.b + 1 && run.a <= runs[j].b + 1) parent[find(i)] = find(j);
+      }
+    });
+    const groups = new Map();
+    runs.forEach((run, i) => { const root = find(i); if (!groups.has(root)) groups.set(root, []); groups.get(root).push(run); });
+    const split = E.splitSeconds * fps;
+    for (const group of groups.values()) {
+      group.sort((left, right) => left.a - right.a);
+      let piece = [group[0]];
+      for (let i = 1; i <= group.length; i += 1) {
+        if (i < group.length && group[i].a - group[i - 1].a <= split) { piece.push(group[i]); continue; }
+        const event = describeEvent(piece, { means, details, mags, cw, ch, cells, fps, E });
+        if (event) events.push(event);
+        piece = [group[i]];
+      }
+    }
+  }
+  events.sort((left, right) => left.first - right.first);
+  // Touching draw-ons where one starts as the last ends are one draw-on (not
+  // any entrance: staggered items whose interval is their duration would join).
+  const entering = events.filter((event) => event.role === 'enter');
+  for (let i = 0; i < entering.length; i += 1) {
+    const a = entering[i];
+    if (a.joined) continue;
+    for (let j = i + 1; j < entering.length; j += 1) {
+      const b = entering[j];
+      if (b.joined || a.kind !== 'draw-on' || b.kind !== 'draw-on' || Math.abs(b.first - (a.last + 1)) > E.join + 1 || !touches(a.cellSet, b.cellSet, cw)) continue;
+      b.joined = true;
+      Object.assign(a, describeEvent([...a.runs, ...b.runs], { means, details, mags, cw, ch, cells, fps, E }), { kind: 'draw-on' });
+    }
+  }
+  const kept = events.filter((event) => !event.joined);
+  const entrances = kept.filter((event) => event.role === 'enter');
+  return {
+    events: kept.map(publicEvent),
+    entrances: entrances.map(publicEvent),
+    sequences: staggerSequences(entrances, shots, fps, E),
+    continuous: { share: round(continuousWeight / means.length, 4), box: cellBox(continuousCells, cw, ch) },
+    duration_seconds: duration
+  };
+}
+
+function publicEvent({ at, seconds, role, area, box, ease, kind, direction }) {
+  return { at, seconds, role, area, box, ...(role === 'enter' ? { ease, kind, ...(direction ? { direction } : {}) } : {}) };
+}
+
+function touches(a, b, cw) {
+  for (const c of b) {
+    const x = c % cw;
+    if (a.has(c) || a.has(c - cw) || a.has(c + cw) || (x > 0 && a.has(c - 1)) || (x < cw - 1 && a.has(c + 1))) return true;
+  }
+  return false;
+}
+
+function cellBox(set, cw, ch) {
+  let x0 = cw, y0 = ch, x1 = -1, y1 = -1;
+  const list = set instanceof Uint8Array ? [...set.keys()].filter((c) => set[c]) : set;
+  for (const c of list) { const x = c % cw, y = Math.floor(c / cw); x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  return x1 < 0 ? null : { x: round(x0 / cw, 3), y: round(y0 / ch, 3), width: round((x1 - x0 + 1) / cw, 3), height: round((y1 - y0 + 1) / ch, 3) };
+}
+
+// One event from its runs: span, role, and for an entrance its ease and how it enters.
+function describeEvent(runs, { means, details, mags, cw, ch, cells, fps, E }) {
+  const cellSet = new Set(runs.map((run) => run.c));
+  const area = cellSet.size / cells;
+  if (area < E.minArea || area > E.maxArea) return null;
+  const first = Math.min(...runs.map((run) => run.a)), last = Math.max(...runs.map((run) => run.b));
+  const list = [...cellSet];
+  const detailAt = (f) => list.reduce((sum, c) => sum + details[f][c], 0);
+  const before = detailAt(first), after = detailAt(last + 1);
+  const role = after >= E.role * Math.max(1, before) ? 'enter' : before >= E.role * Math.max(1, after) ? 'exit' : 'change';
+  const event = { first, last, runs, cellSet, role, at: round(first / fps, 3), seconds: round((last - first + 1) / fps, 3), area: round(area, 4), box: cellBox(list, cw, ch) };
+  if (role !== 'enter') return event;
+  // Ease: the share of the activity done by the span's midpoint.
+  const level = (p) => list.reduce((sum, c) => sum + mags[p][c], 0);
+  // Less the noise floor: the quietest of the medians just before and just after.
+  const around = (from, to) => { const values = []; for (let p = Math.max(0, from); p <= Math.min(mags.length - 1, to); p += 1) values.push(level(p)); return values.length ? median(values) : 0; };
+  const floor = Math.min(around(first - E.ease.floorPairs, first - 1), around(last + 1, last + E.ease.floorPairs));
+  // The thresholded span misses an ease's slow ends and keeps bridged noise:
+  // the span runs out from the peak while the activity stays above a share of it.
+  let top = first, peak = -Infinity;
+  for (let p = first; p <= last; p += 1) if (level(p) - floor > peak) { peak = level(p) - floor; top = p; }
+  let from = top, to = top;
+  while (from > Math.max(0, first - E.ease.floorPairs) && level(from - 1) - floor > E.ease.tail * peak) from -= 1;
+  while (to < Math.min(mags.length - 1, last + E.ease.floorPairs) && level(to + 1) - floor > E.ease.tail * peak) to += 1;
+  const curve = [];
+  for (let p = from; p <= to; p += 1) curve.push(Math.max(0, level(p) - floor));
+  const total = curve.reduce((sum, v) => sum + v, 0) || 1, n = curve.length;
+  let done = 0;
+  for (let i = 0; i < Math.floor(n / 2); i += 1) done += curve[i];
+  if (n % 2) done += curve[(n - 1) / 2] / 2;
+  const share = done / total, mean = total / n;
+  const cv = Math.sqrt(curve.reduce((sum, v) => sum + (v - mean) ** 2, 0) / n) / (mean || 1);
+  // An entrance lasts its widened span. Its onset, which staggers read, is
+  // where the curve first crosses a share of its peak, between frame pairs:
+  // the thresholded start jitters with an item's size on a slow ease-in.
+  event.seconds = round(n / fps, 3);
+  const cross = E.ease.onset * Math.max(...curve);
+  const k = curve.findIndex((v) => v >= cross);
+  event.onset = from + (k > 0 ? k - 1 + (cross - curve[k - 1]) / (curve[k] - curve[k - 1]) : 0);
+  event.at = round(event.onset / fps, 3);
+  event.ease = share > E.ease.out ? 'ease-out' : share < E.ease.in ? 'ease-in' : cv < E.ease.linearCv ? 'linear' : 'in-out';
+  Object.assign(event, entranceKind(event, list, { means, cw, fps, E }));
+  return event;
+}
+
+// How an element enters: a draw-on or wipe (a thin active tip whose start
+// time runs along x or y), a slide (the centroid travels), a scale (it
+// starts narrow), else a fade.
+function entranceKind({ first, last, runs }, list, { means, cw, E }) {
+  const K = E.kind;
+  const starts = new Map();
+  for (const run of runs) starts.set(run.c, Math.min(starts.get(run.c) ?? Infinity, run.a));
+  const tips = [];
+  for (let p = first; p <= last; p += 1) tips.push(runs.filter((run) => run.a <= p && run.b >= p).length / list.length);
+  const xs = list.map((c) => c % cw), ys = list.map((c) => Math.floor(c / cw)), ts = list.map((c) => starts.get(c));
+  const rx = pearson(xs, ts), ry = pearson(ys, ts);
+  if (median(tips) < K.tip && Math.max(Math.abs(rx), Math.abs(ry)) > K.correlation) {
+    return { kind: 'draw-on', direction: Math.abs(rx) >= Math.abs(ry) ? (rx > 0 ? 'right' : 'left') : (ry > 0 ? 'down' : 'up') };
+  }
+  const base = means[first];
+  const present = (f) => list.filter((c) => { const m = means[f]; return Math.max(Math.abs(m[c * 3] - base[c * 3]), Math.abs(m[c * 3 + 1] - base[c * 3 + 1]), Math.abs(m[c * 3 + 2] - base[c * 3 + 2])) > K.presence; });
+  const final = present(last + 1);
+  if (!final.length) return { kind: 'fade' };
+  let early = final;
+  for (let f = first + 1; f <= last + 1; f += 1) { const seen = present(f); if (seen.length >= K.firstShare * final.length) { early = seen; break; } }
+  const centroid = (set) => [set.reduce((s, c) => s + c % cw, 0) / set.length, set.reduce((s, c) => s + Math.floor(c / cw), 0) / set.length];
+  const [ex, ey] = centroid(early), [fx, fy] = centroid(final);
+  const ch = means[0].length / 3 / cw;
+  const dx = (fx - ex) / cw, dy = (fy - ey) / ch;
+  const extent = (f) => Math.max(...final.map(f)) - Math.min(...final.map(f)) + 1;
+  const ownX = Math.abs(fx - ex) / extent((c) => c % cw), ownY = Math.abs(fy - ey) / extent((c) => Math.floor(c / cw));
+  if ((Math.abs(dx) > K.travel && ownX >= K.ownTravel) || (Math.abs(dy) > K.travel && ownY >= K.ownTravel)) return { kind: 'slide', direction: Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up') };
+  const width = (set) => Math.max(...set.map((c) => c % cw)) - Math.min(...set.map((c) => c % cw)) + 1;
+  return width(early) < K.scale * width(final) ? { kind: 'scale' } : { kind: 'fade' };
+}
+
+function pearson(a, b) {
+  const n = a.length;
+  if (n < 3) return 0;
+  const ma = a.reduce((s, v) => s + v, 0) / n, mb = b.reduce((s, v) => s + v, 0) / n;
+  let sab = 0, saa = 0, sbb = 0;
+  for (let i = 0; i < n; i += 1) { sab += (a[i] - ma) * (b[i] - mb); saa += (a[i] - ma) ** 2; sbb += (b[i] - mb) ** 2; }
+  return saa && sbb ? sab / Math.sqrt(saa * sbb) : 0;
+}
+
+// Staggers: per shot, entrances of one kind with similar sizes and
+// durations, at least three, starting at regular gaps.
+function staggerSequences(entrances, shots, fps, E) {
+  const S = E.stagger, sequences = [];
+  const near = (a, b, tolerance) => Math.abs(a - b) <= tolerance * Math.max(a, b);
+  for (const [first, last] of shots) {
+    let remaining = entrances.filter((event) => event.first >= first && event.first < last);
+    while (remaining.length) {
+      const [head] = remaining;
+      // The entrances like the first, taken in order while each gap stays near the first gap.
+      const like = remaining.filter((event) => event === head || (event.kind === head.kind && near(event.area, head.area, S.size) && near(event.seconds, head.seconds, S.duration)));
+      const chain = like.slice(0, 2);
+      for (const event of like.slice(2)) if (Math.abs(event.onset - chain.at(-1).onset - (chain[1].onset - head.onset)) <= S.regularity * (chain[1].onset - head.onset)) chain.push(event); else break;
+      const gaps = differences(chain.map((event) => event.onset));
+      const mean = gaps.reduce((s, v) => s + v, 0) / Math.max(1, gaps.length);
+      const std = Math.sqrt(gaps.reduce((s, v) => s + (v - mean) ** 2, 0) / Math.max(1, gaps.length));
+      if (chain.length < S.min || mean <= 0 || std > S.regularity * mean) { remaining = remaining.slice(1); continue; }
+      remaining = remaining.filter((event) => !chain.includes(event));
+      const eases = chain.map((event) => event.ease);
+      sequences.push({ at: chain[0].at, count: chain.length, interval: round(mean / fps, 3), item_seconds: round(median(chain.map((event) => event.seconds)), 3), kind: head.kind,
+        ease: eases.sort((a, b) => eases.filter((v) => v === b).length - eases.filter((v) => v === a).length)[0] });
+    }
+  }
+  return sequences;
+}
+
+/**
+ * Profile fields from classifyEntrances: entrance_seconds (p50),
+ * stagger_interval_seconds (p50 of the sequences' intervals),
+ * entrance_ease_mix, entrance_kind_mix (shares) and continuous_layer_share.
+ * Medians are null without entrances or sequences.
+ */
+export function entranceStats(result) {
+  const entrances = result?.entrances ?? [];
+  const mix = (key) => {
+    const counts = {};
+    for (const event of entrances) counts[event[key]] = (counts[event[key]] ?? 0) + 1;
+    return Object.fromEntries(Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([name, n]) => [name, round(n / entrances.length, 3)]));
+  };
+  const intervals = (result?.sequences ?? []).map((sequence) => sequence.interval);
+  return {
+    entrance_seconds: entrances.length ? round(median(entrances.map((event) => event.seconds)), 3) : null,
+    stagger_interval_seconds: intervals.length ? round(median(intervals), 3) : null,
+    entrance_ease_mix: mix('ease'),
+    entrance_kind_mix: mix('kind'),
+    continuous_layer_share: result?.continuous?.share ?? 0
+  };
+}
+
+/** Decode a video at 180 px wide and ENTRANCE_CLASSIFY.fps (the first maxSeconds) and classify its entrances. adapters.stream replaces the ffmpeg reader. */
+export async function analyzeEntrancesFile(videoPath, options = {}, adapters = {}) {
+  const resolved = path.resolve(videoPath);
+  const run = adapters.run ?? runCommand;
+  const probe = JSON.parse((await run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", resolved])).stdout);
+  const { width: vw, height: vh } = probe.streams?.[0] ?? {};
+  if (!vw || !vh) throw new Error(`No video stream found: ${resolved}`);
+  const E = ENTRANCE_CLASSIFY;
+  const W = E.width, H = Math.max(E.cell, 2 * Math.round(W * vh / vw / 2));
+  const accumulator = entranceAccumulator(W, H, E.fps);
+  await (adapters.stream ?? streamRawFrames)("ffmpeg", ["-hide_banner", "-loglevel", "error", "-t", String(E.maxSeconds), "-i", resolved, "-vf", `fps=${E.fps},scale=${W}:${H}:flags=area,format=rgb24`, "-an", "-f", "rawvideo", "pipe:1"], W * H * 3, (frame) => accumulator.push(frame));
+  return accumulator.finish(options);
+}

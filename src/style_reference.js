@@ -43,7 +43,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { assignPaletteRoles, CADENCE_PROFILE_SCHEMA, colorDistance, contrastRatio, hexToHsl, nearestBundledFont, rgbToHex, STYLE_SCHEMA, STYLE_V3_DEFAULTS } from "@launchclip/core/style.mjs";
 import { FONT_REGISTRY } from "@launchclip/core/fonts.mjs";
-import { analyzeRenderMotion, analyzeTransitionsFile, KIND_TRANSITION_TYPES, transitionStats } from "./render_motion_analysis.js";
+import { analyzeEntrancesFile, analyzeRenderMotion, analyzeTransitionsFile, entranceStats, KIND_TRANSITION_TYPES, MODULE_STAGGER_SECONDS, transitionStats } from "./render_motion_analysis.js";
 import { analyzeProductionAudio, analyzeRhythmFile, rhythmSync, SFX_TYPES } from "./render_audio_analysis.js";
 import { combineDrawingNumbers, drawingLimits, drawingTraits, measureDrawing } from "./drawing_traits.js";
 import { mapDrawingTraits } from "./drawing_match.js";
@@ -597,7 +597,7 @@ export function detectLayouts(frames) {
  * Measure one reference video: palette clusters, pacing, energy, captions and
  * sound, and how it is drawn. adapters: {run, motion, audio, rhythm (null
  * skips tempo and SFX), transitions (null skips the transition classifier),
- * changes,
+ * entrances (null skips the per-element entrance pass), changes,
  * refineCase (null skips the caption-case re-read), drawing (null skips the
  * drawing traits)} to replace ffmpeg-backed steps in tests.
  */
@@ -650,6 +650,9 @@ export async function analyzeReference(file, options = {}, adapters = {}) {
       bursts_per_minute: round(Number(motion.motion_bursts_per_minute ?? 0), 2),
       velocity_p75: motion.optical_flow?.velocity_pixels_per_second?.p75 ?? null
     };
+    // Per-element entrances (docs/PLAN_AND_PACE_RFC.md §4.2).
+    const entrances = adapters.entrances === null ? null : await (adapters.entrances ?? ((video) => analyzeEntrancesFile(video)))(resolved);
+    if (entrances) Object.assign(energy, entranceStats(entrances));
     if (info.audio) {
       const audio = await (adapters.audio ?? ((video) => analyzeProductionAudio(video, null)))(resolved);
       const peaks = (audio.output?.peaks ?? []).map((entry) => entry.peak_dbfs).filter(Number.isFinite);
@@ -1045,8 +1048,9 @@ export function draftStyleFromReferences(name, references, { fontHints = [], for
     p75_shot_seconds: round(mean(videos.map((entry) => entry.pacing?.shot_seconds?.p75)), 3),
     ...transitionsAcross(videos)
   } : null;
-  const energyStats = videos.length ? { activity: round(mean(videos.map((entry) => entry.energy?.activity)), 4), bursts_per_minute: round(mean(videos.map((entry) => entry.energy?.bursts_per_minute)), 2) } : null;
+  const energyStats = videos.length ? { activity: round(mean(videos.map((entry) => entry.energy?.activity)), 4), bursts_per_minute: round(mean(videos.map((entry) => entry.energy?.bursts_per_minute)), 2), ...entrancesAcross(videos) } : null;
   const grammar = grammarFromPacing(pacingStats, energyStats);
+  const entering = grammarFromEntrances(energyStats);
   const ambient = ambientFromEnergy(energyStats);
   const sound = soundFromAudio(videos.map((entry) => entry.sound));
   const captions = captionsFromDetection(videos.map((entry) => entry.captions), palette);
@@ -1065,7 +1069,7 @@ export function draftStyleFromReferences(name, references, { fontHints = [], for
     name,
     description: `Drafted from ${references.length} reference${references.length === 1 ? '' : 's'} (${references.map((entry) => entry.name).join(', ')}). Review reference-report.md.`,
     brand: { colors, fonts: fonts.fonts },
-    motion: { grammar: grammar.grammar, transition_preference: grammar.transitions },
+    motion: { grammar: entering ? { base: grammar.grammar, ...entering.overrides } : grammar.grammar, transition_preference: grammar.transitions },
     ambient: { level: ambient.level },
     captions: captions.captions,
     sound: { sfx_density: sound.sfx_density, ...(sound.music ? { music: sound.music } : {}) },
@@ -1089,7 +1093,7 @@ export function draftStyleFromReferences(name, references, { fontHints = [], for
     },
     created_at: new Date().toISOString()
   };
-  const inferred = { palette: roles, grammar, ambient, sound, captions, fonts, layouts, profile, drawing: drawing ? { ...drawing, ...drawn } : null };
+  const inferred = { palette: roles, grammar, entering, ambient, sound, captions, fonts, layouts, profile, drawing: drawing ? { ...drawing, ...drawn } : null };
   return { pack, inferred, report: referenceReport(pack, references, inferred) };
 }
 
@@ -1107,10 +1111,59 @@ function transitionsAcross(videos) {
   };
 }
 
+// Entrance fields across references (each reference weighs the same; the
+// medians over the references that have one); none when none was measured.
+function entrancesAcross(videos) {
+  const measured = videos.filter((entry) => entry.energy?.entrance_ease_mix);
+  if (!measured.length) return {};
+  const mixOf = (key) => {
+    const mix = {};
+    for (const entry of measured) for (const [name, share] of Object.entries(entry.energy[key])) mix[name] = (mix[name] ?? 0) + share / measured.length;
+    return Object.fromEntries(Object.entries(mix).sort((a, b) => b[1] - a[1]).map(([name, share]) => [name, round(share, 3)]));
+  };
+  const middle = (key) => { const values = measured.map((entry) => entry.energy[key]).filter(Number.isFinite).sort((a, b) => a - b); const n = values.length; return n ? round((values[(n - 1) >> 1] + values[n >> 1]) / 2, 3) : null; };
+  return {
+    entrance_seconds: middle('entrance_seconds'),
+    stagger_interval_seconds: middle('stagger_interval_seconds'),
+    entrance_ease_mix: mixOf('entrance_ease_mix'),
+    entrance_kind_mix: mixOf('entrance_kind_mix'),
+    continuous_layer_share: round(mean(measured.map((entry) => entry.energy.continuous_layer_share)), 4)
+  };
+}
+
+// The GSAP ease a measured entrance ease drafts. ease-out keeps the preset's
+// own .out ease; ease-in is the entrance-ease rule's mistake, never copied.
+const ENTRANCE_EASE_DRAFT = Object.freeze({ 'in-out': 'power2.inOut', linear: 'none' });
+
+/**
+ * Grammar overrides from measured entrances (docs/PLAN_AND_PACE_RFC.md
+ * §4.2): duration.enter from entrance_seconds, stagger from
+ * stagger_interval_seconds ÷ MODULE_STAGGER_SECONDS, ease.enter from the
+ * ease most entrances share (at least half). → {overrides, reason} or null.
+ */
+export function grammarFromEntrances(stats) {
+  if (!stats?.entrance_ease_mix) return null;
+  const overrides = {}, reasons = [];
+  if (Number.isFinite(stats.entrance_seconds)) {
+    overrides.duration = { enter: round(Math.min(3, Math.max(0.05, stats.entrance_seconds)), 2) };
+    reasons.push(`entrances take ${stats.entrance_seconds} s`);
+  }
+  if (Number.isFinite(stats.stagger_interval_seconds)) {
+    overrides.stagger = round(Math.min(3, Math.max(0.25, stats.stagger_interval_seconds / MODULE_STAGGER_SECONDS)), 2);
+    reasons.push(`staggers ${stats.stagger_interval_seconds} s apart`);
+  }
+  const [ease, share] = Object.entries(stats.entrance_ease_mix).sort((a, b) => b[1] - a[1])[0] ?? [];
+  if (share >= 0.5 && ENTRANCE_EASE_DRAFT[ease]) {
+    overrides.ease = { enter: ENTRANCE_EASE_DRAFT[ease] };
+    reasons.push(`${ease} entrances (${pct(share)})`);
+  }
+  return Object.keys(overrides).length ? { overrides, reason: reasons.join(', ') } : null;
+}
+
 const pct = (value) => `${Math.round(value * 100)}%`;
 
 export function referenceReport(pack, references, inferred) {
-  const { palette, grammar, ambient, sound, captions, fonts, layouts, profile, drawing } = inferred;
+  const { palette, grammar, entering, ambient, sound, captions, fonts, layouts, profile, drawing } = inferred;
   const lines = [
     `# Reference report: ${pack.name}`,
     '',
@@ -1144,6 +1197,8 @@ export function referenceReport(pack, references, inferred) {
   lines.push('', '## Energy → ambient', '');
   if (pack.reference_stats.energy) lines.push(`Activity (share of frames that are not holds) ${pack.reference_stats.energy.activity}; ${pack.reference_stats.energy.bursts_per_minute} motion bursts/min.`, '', `- ambient.level: **${ambient.level}** (confidence ${ambient.confidence.toFixed(2)}).`);
   else lines.push('No video reference: subtle (confidence 0.20).');
+  const e = pack.reference_stats.energy;
+  if (e?.entrance_ease_mix) lines.push(`- entrances measured (docs/PLAN_AND_PACE_RFC.md §4.2): median ${e.entrance_seconds ?? '–'} s, stagger ${e.stagger_interval_seconds ?? '–'} s, eases ${Object.entries(e.entrance_ease_mix).map(([name, share]) => `${name} ${pct(share)}`).join(', ') || 'none'}, kinds ${Object.entries(e.entrance_kind_mix).map(([name, share]) => `${name} ${pct(share)}`).join(', ') || 'none'}; continuous layer ${pct(e.continuous_layer_share)} of the frame.${entering ? ` Grammar overrides: \`${JSON.stringify(entering.overrides)}\` (${entering.reason}).` : ''}`);
   lines.push('', '## Captions (approximate)', '', 'Text lines are runs of rows dense with edges into bright strokes (in windows a tenth of the frame wide, so short or left-aligned captions count); captions are the height on the frame where a line is present in most samples and its words change between samples in the same layout (a logo, a sign in the room or a kicker holds still). Case is re-read from that band at the source resolution: lowercase starts most letter columns at the x-height, capitals at the cap height. Position, size, highlight colour and case are estimates; the font is not detected.', '', `- captions: \`${JSON.stringify(pack.captions)}\` (confidence ${captions.confidence.toFixed(2)}).`, ...captions.notes.map((note) => `- ${note}`));
   lines.push('', '## Layouts (approximate)', '', 'Per sampled frame (480 px, one every 3 s): a side that is mostly one smooth, even tone (a panel, even with cards and text on it) beside footage is a split, a panel border round footage is framed, anything else is full; a panel counts only when a neighbouring sample shows it too.', '');
   if (layouts?.mix) lines.push(`- layouts: \`${JSON.stringify(pack.layouts)}\` (confidence ${layouts.confidence.toFixed(2)}).`, ...layouts.notes.map((note) => `- ${note}`));
