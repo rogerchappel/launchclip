@@ -32,6 +32,7 @@ import { ACTION_VERBS } from './direction.mjs';
 import { COVER_MAX_WORDS, COVER_SECONDS } from './story.mjs';
 import { clipLedLines } from './clip-led.mjs';
 import { explainerDirectionLines, explainerStoryboardLines } from './explainer.mjs';
+import { DEFAULT_BRAND } from './default-brand.mjs';
 import { CYCLE_KINDS, DARK_PLATE_KINDS, PLATE_KINDS, PLATE_NOTES } from './plates.mjs';
 
 export const PLANNER_TIERS = Object.freeze(['structured', 'guided', 'bespoke']);
@@ -765,10 +766,7 @@ export function exampleStoryboard({ format, brand } = {}) {
   };
 }
 
-export const DEFAULT_BRAND = Object.freeze({
-  colors: Object.freeze({ bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6' }),
-  fonts: Object.freeze({ display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono' })
-});
+export { DEFAULT_BRAND };
 
 function wordLines(words) {
   const list = Array.isArray(words) ? words : Array.isArray(words?.words) ? words.words : [];

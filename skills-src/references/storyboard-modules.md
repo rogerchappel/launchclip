@@ -2718,15 +2718,15 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
   },
   "brand": {
     "colors": {
-      "bg": "#06070d",
-      "primary": "#fdb022",
-      "accent": "#46d4ff",
-      "ink": "#06070d",
-      "paper": "#f2eee6"
+      "bg": "#191714",
+      "primary": "#ff6b3d",
+      "accent": "#ffb08a",
+      "ink": "#191714",
+      "paper": "#f2ede4"
     },
     "fonts": {
       "display": "anton",
-      "body": "space-grotesk",
+      "body": "manrope",
       "meta": "jetbrains-mono"
     }
   },

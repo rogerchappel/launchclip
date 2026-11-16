@@ -28,6 +28,7 @@
 //
 // Pure ESM; imports only kit/core siblings. Canonical copy: kit/core/beat-director.mjs.
 
+import { DEFAULT_BRAND } from './default-brand.mjs';
 import { ENTRY, cameraSummary, planCamera } from './beat-camera.mjs';
 import { cadenceGate, cadenceTarget, eventStats } from './cadence.mjs';
 import { DIRECTION_SCHEMA, classifyIntent, narrationWords } from './direction.mjs';
@@ -62,7 +63,6 @@ const PHRASE_STARTS = new Set(['in', 'on', 'with', 'that', 'who', 'from', 'to', 
 const CONJUNCTIONS = new Set(['and', 'but', 'so', 'because', 'which', 'while', 'then', 'when', 'where', 'until', 'though', 'although', 'as', 'or', 'yet', 'since', 'unless']);
 // The subscribe pill: about 5.5 s on screen, and never under 4 s (the click needs room either side).
 const CTA_SECONDS = 5.5, CTA_MIN_SECONDS = 4;
-const DEFAULT_BRAND = Object.freeze({ colors: Object.freeze({ bg: '#070b14', primary: '#5ee6ff', accent: '#ffb347', ink: '#070b14', paper: '#eef4ff' }), fonts: Object.freeze({ display: 'space-grotesk', body: 'space-grotesk', meta: 'jetbrains-mono' }) });
 
 const finite = (value) => typeof value === 'number' && Number.isFinite(value);
 
