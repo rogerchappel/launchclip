@@ -385,7 +385,12 @@ still lands on the card.
   frame after it, so the last frame is the frozen first state with nothing of
   the outgoing scene left on it. The motion check warns `loop-target` when
   `loop_to` names a scene other than the opener, because replay would jump
-  between the two. The sample is `examples/story/loop-9x16`: node-graph,
+  between the two. Layers that run on story time, such as the ambient blobs
+  and a planned background's drift, fit a whole number of their cycles into
+  the story (`fitAxes`). Without this, the first render of the sample failed
+  `reel check` on the background alone: SSIM 0.93, with the blobs drifting
+  on 19–21 s periods over an 18 s short. GL backgrounds run on a shader
+  clock and are not fitted yet. The sample is `examples/story/loop-9x16`: node-graph,
   then icon-grid, then an item-list with `loop: true`, handing back to the
   opener with a 0.4 s fade. `launchclip reel check` measures the seam of a
   render.
