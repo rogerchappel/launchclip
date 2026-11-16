@@ -271,7 +271,8 @@ timeline functions apply it), so both renderers draw it with no new code.
 **Unproven.** The two scenes must share a coordinate space at the boundary: no
 camera move in either across it, the same canvas, both rendered on the same
 plate. World-camera scenes and typed transitions with motion (push, whip) are
-out until a rect can be mapped through the camera at the boundary frame. Text
+out until a rect can be mapped through the camera at the boundary frame (R&D:
+[rd/carry-moving-camera.md](rd/carry-moving-camera.md)). Text
 that reflows between layouts (a card that grows) is a cross-fade inside the
 moving card, not a morph.
 
@@ -574,7 +575,8 @@ the painter:
 
 ## 12. What is unproven
 
-- Carry through a moving camera or a moving transition (§6).
+- Carry through a moving camera or a moving transition (§6). R&D:
+  [rd/carry-moving-camera.md](rd/carry-moving-camera.md).
 - ~~Whether a container morph (tween only the box's width, height and corner
   radius, cross-fade its contents) reads well enough to join auto-pairing.~~
   **Verdict (2026-11-17): it reads well; wire it in next, not yet.** The R&D
