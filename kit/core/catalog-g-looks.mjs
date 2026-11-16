@@ -81,7 +81,7 @@ export function conceptLookContent(b, ctx, L) {
   const {colors} = b;
   const out = {idle: idleOf(b, ctx, L.height), ruleColor: accentOn(b), shadow: shade(b.unit)};
   if (L.mode === 'scrim') out.pool = colors.bg;
-  if (L.mode === 'glass') Object.assign(out, {glassFill: `${colors.paper}1c`, glassEdge: `${colors.paper}47`});
+  if (L.mode === 'glass') Object.assign(out, {glassFill: `${colors.bg}80`, glassEdge: `${colors.paper}47`});
   if (L.mode === 'sticker') {
     const ink = inkOn(b, colors.paper).color;
     Object.assign(out, {noteFill: colors.paper, noteInk: ink, tape: `${colors.accent}b3`});
@@ -250,7 +250,7 @@ export function iconRowLookContent(b, ctx, L) {
   const {colors} = b;
   const out = {idle: idleOf(b, ctx, L.mode === 'chips' ? L.chipH : L.mode === 'tags' ? L.tagH : L.height), accent: accentOn(b), shadow: shade(b.unit)};
   if (L.mode === 'chips') Object.assign(out, {chipFill: `${colors.bg}a6`});
-  if (L.mode === 'glass') Object.assign(out, {glassFill: `${colors.paper}1c`, glassEdge: `${colors.paper}47`, hairline: `${colors.paper}2e`});
+  if (L.mode === 'glass') Object.assign(out, {glassFill: `${colors.bg}80`, glassEdge: `${colors.paper}47`, hairline: `${colors.paper}2e`});
   if (L.mode === 'tags') Object.assign(out, {tagFill: colors.paper, tagInk: inkOn(b, colors.paper).color, tilts: TAG_TILTS});
   return out;
 }

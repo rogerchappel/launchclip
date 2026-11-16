@@ -11,5 +11,4 @@
     <path d="M60 600 C260 560 760 660 1140 580"/><path d="M60 830 C420 780 820 880 1140 820"/><path d="M60 1070 C340 1120 760 1020 1140 1080"/>
   </g>
   <g fill="#1c110a"><circle cx="110" cy="125" r="16"/><circle cx="1090" cy="125" r="16"/><circle cx="110" cy="595" r="16"/><circle cx="1090" cy="595" r="16"/><circle cx="110" cy="1070" r="16"/><circle cx="1090" cy="1070" r="16"/></g>
-  <circle cx="600" cy="600" r="120" fill="#5fc4c4"/><path d="M545 600 L585 645 L665 555" fill="none" stroke="#0b1116" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

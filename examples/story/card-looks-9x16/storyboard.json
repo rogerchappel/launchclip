@@ -32,7 +32,7 @@
       "end": 12,
       "params": {
         "media": "assets/shots/garden.svg",
-        "move": "push"
+        "move": "push-in"
       }
     },
     {
@@ -42,7 +42,7 @@
       "end": 24,
       "params": {
         "media": "assets/shots/boards.svg",
-        "move": "push"
+        "move": "push-in"
       }
     },
     {
