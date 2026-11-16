@@ -21,6 +21,7 @@
 import {el} from '../catalog-b-view.mjs';
 import {mixColor} from '../catalog-b-base.mjs';
 import {OUTLINE} from './palette.mjs';
+import {HELD_AIDS} from './rig.mjs';
 
 export const SETS = Object.freeze(['desk-laptop', 'phone', 'meeting', 'screen', 'kitchen-counter', 'sofa', 'podium', 'stage', 'car', 'park-bench', 'video-call', 'standing-desk', 'standing']);
 export const SEATED_SETS = Object.freeze(['desk-laptop', 'meeting', 'sofa', 'car', 'park-bench', 'video-call']);
@@ -439,6 +440,9 @@ function newerSet(name, {canvas, c, count, s, floor, scenery, back, front, front
  * at the origin. `upright`: the rotation that stands it up from the
  * forearm's frame (minus the arm's total angle when it is held).
  */
+/** The props a cast member holds as drawCharacter takes them: a phone in the hand away from any mobility aid, or none. */
+export const actorProps = actor => actor.holds === 'phone' ? {[(actor.facing === 'left') !== HELD_AIDS.includes(actor.params.mobility) ? 'r' : 'l']: phoneProp(actor.colors, 98)} : null;
+
 export function phoneProp(c, upright = 0) {
   return [
     el('g', null, null, [

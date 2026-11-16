@@ -35,7 +35,7 @@ import { clipLedLines } from './clip-led.mjs';
 import { explainerDirectionLines, explainerStoryboardLines } from './explainer.mjs';
 import { DEFAULT_BRAND } from './default-brand.mjs';
 import { CYCLE_KINDS, DARK_PLATE_KINDS, PLATE_KINDS, PLATE_NOTES } from './plates.mjs';
-import { VFX_EFFECTS, VFX_MODULES, VFX_TRANSITIONS, VFX_WORDS } from './vfx/catalog.mjs';
+import { VFX_EFFECTS, VFX_MASKED, VFX_MODULES, VFX_TRANSITIONS, VFX_WORDS } from './vfx/catalog.mjs';
 import { VFX_CUE_RULES } from './vfx/plan.mjs';
 
 export const PLANNER_TIERS = Object.freeze(['structured', 'guided', 'bespoke']);
@@ -667,14 +667,16 @@ export function vfxWanted({ artDirection = '', style = null } = {}) {
 export function vfxLines() {
   const words = (name) => (VFX_WORDS[name] ? ` (${Object.keys(VFX_WORDS[name].fields).join(', ')})` : '');
   const loop = (name) => (VFX_MODULES[name].meta.loop ? ', loops to the scene end' : '');
+  const masked = (name) => (VFX_MASKED.includes(name) ? ', on a mask' : '');
   return [
     'Effects are opt-in: add scene.vfx only where the brief or art direction asks for game feel, sparks or celebration, and only on the moments that earn one. Most scenes have none.',
     'scene.vfx: [{effect, at, align?: "peak" (default) | "start", x?, y? (fractions of the frame, default the centre), color? (a brand colour name or #rrggbb), seed?, flip?, angle? (degrees), light? (0–2), sfx?: "auto" (default) | "none" | a sound family, text? / label? / title? (a hit with words, 1–24 characters)}].',
     'Land each effect on a beat: at is "beat:<n>" (on the music) or "word:<text>" (the spoken word it belongs to). With align "peak" the effect starts early so its brightest frame lands there, and its paired sound plays on that frame by itself: do not add a hit or a cue for it.',
     `Rules: at most ${VFX_CUE_RULES.crowd} effects peak within any ${VFX_CUE_RULES.window} s and keep an effect's centre out of the caption band (y above it), or the motion check warns; one hit with words a scene (${Object.keys(VFX_WORDS).join(', ')}). Put the effect on the thing it hits (the number, the card landing, the floor under a slam), not over body text.`,
     `Cover transitions (scene.in.type, track-0 scenes, once or twice a video): ${Object.entries(VFX_TRANSITIONS).map(([type, info]) => `${type} (${info.sfx}${type === 'pixel-dissolve' ? ', retro only' : ''})`).join(', ')}.`,
+    `Effects marked "on a mask" (${VFX_MASKED.join(', ')}) draw round the scene's card (mask: "module") or a cast member of a cast-scene (mask: "cast:<id>") and take no x or y.`,
     'Effects (effect: when, sound):',
-    ...Object.entries(VFX_EFFECTS).map(([name, info]) => `${name}: ${info.use}${words(name)}${loop(name)}; ${info.sfx}`)
+    ...Object.entries(VFX_EFFECTS).map(([name, info]) => `${name}: ${info.use}${words(name)}${masked(name)}${loop(name)}; ${info.sfx}`)
   ];
 }
 

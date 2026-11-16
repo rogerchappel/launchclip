@@ -29,7 +29,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - format: {width, height, fps, duration, platform?} and brand: {colors, fonts} are given; copy them unchanged.
 - audio: {voice?, words?, music?, sfx?}; base: null, or the recording path for footage-led.
 - audio.music: omit it (finish picks ElevenLabs when a key is set, else the synth bed), or "synth", "none", an assets/ path, or {provider: "elevenlabs" | "synth" | "file", prompt?, bpm?, file?, sync?: "auto" | "off" | "cuts" | "hits"}. The music follows scene energy, so set energy honestly: calm intro, "build" before the payoff, 3 on the payoff. A prompt describes style only (no vocals is added for you).
-- scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: cut | fade | push | whip | zoom | iris | morph | pan | pull | orbit | whip-pan | rack-focus | glow-wipe | card-to-card | overview | dot-wipe | light-sweep | push-blur | light-leak | before-after | burn-away | slash-wipe | shatter | crt-off | glitch-wipe | blinds | diamond-wipe | star-iris | pixel-dissolve, dur, direction?, from_object?, color?, cover?, hold? (dot-wipe only), pause?, labels? (before-after only)}, params, hits?, zooms?, ambient?, layer? (footage-led: "behind" draws it behind the presenter)}].
+- scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: cut | fade | push | whip | zoom | iris | morph | pan | pull | orbit | whip-pan | rack-focus | glow-wipe | card-to-card | overview | dot-wipe | light-sweep | push-blur | light-leak | before-after | burn-away | slash-wipe | shatter | crt-off | glitch-wipe | blinds | diamond-wipe | star-iris | pixel-dissolve | wipe | clock-wipe | card-flip, dur, direction?, from_object?, color?, cover?, hold? (dot-wipe only), pause?, labels? (before-after only)}, params, hits?, zooms?, ambient?, layer? (footage-led: "behind" draws it behind the presenter)}].
 - in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus; camera moves (pan, whip-pan, orbit, pull, world push) are under "Motion grammar and camera".
 - before-after (1.2–2 s, track 0) when the next scene is the same thing in another version (a redesign, a filter or grade, a fix, the edited take after the raw one): a handle drags across and reveals the new scene behind it, slow → fast → slow; direction where the handle travels (default left: the after side opens from the right), pause (seconds, at most half the wipe) rests it half-way so both versions sit side by side, labels {before?, after?} a word on each side. For two versions of one shot inside a scene use the before-after module instead (it can rest and reverse). Not between unrelated scenes: it promises a comparison.
 - overlays: [captions]. ending: {loop_to: "<first scene id>"} for a seamless loop (Shorts). For no loop, set ending {loop: false} (or loop_to: null, or omit ending without a looping style pack); the last scene then holds settled to the final frame (ending.final "hold", the default), or use final "fade" to fade it fully to the background by the final frame, or "exit" to play its own exit. ending accepts only loop_to, in, loop and final.
@@ -43,7 +43,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - Recorded product flows (assets/demo/<flow>.mp4 with demo/<flow>.actions.json, from launchclip demo record) play in product-demo scenes. Copy the params the asset inventory gives for each flow (media, viewport, actions, callouts) unchanged: the zooms, outlines and SFX are timed from the real action log, so never invent or move action boxes or times. Time the scene to the clip window (media.sourceStart plus the scene length must stay inside the clip); you may shorten a scene from the end, and drop actions after it.
 - Captured evidence (assets/evidence/<id>.mp4 with <id>.evidence.json, from launchclip evidence capture) plays in evidence-clip scenes. Copy the params the asset inventory gives (media, viewport, source) unchanged; the page's own beats (scroll, selection, focus ring, date pin) are already in the clip, so add focus or cursor only on boxes the sidecar lists, and never retype what the page says.
 - Supplied footage (assets/ videos and stills) plays full frame in clip scenes, cut to the narration: params.media {src, sourceStart?, sourceEnd?} picks the source window (the scene must fit inside it), focus keeps the subject in frame when the source is cropped to the canvas, and 1–3 callouts carry the key words over the footage. Higher-track scenes may sit over a clip.
-- Footage to footage (a clip or photo-scene on track 0 straight after another): use cut, fade, push, whip, zoom or iris (or push-blur, light-sweep, light-leak, glow-wipe, dot-wipe, or before-after when the new shot is the other version of the old one); the new picture arrives over the old one, which stays whole under it, so the frame never drops to the background. In world mode a camera pan, whip-pan, push or pull works too (a push grows the new picture out of the old one). Never card-to-card, rack-focus, morph between footage: they move a card or hand a named object across, footage has neither, and they play as a plain fade there.
+- Footage to footage (a clip or photo-scene on track 0 straight after another): use cut, fade, push, whip, zoom or iris (or push-blur, light-sweep, light-leak, glow-wipe, dot-wipe, or before-after when the new shot is the other version of the old one); the new picture arrives over the old one, which stays whole under it, so the frame never drops to the background. In world mode a camera pan, whip-pan, push or pull works too (a push grows the new picture out of the old one). Never card-to-card, rack-focus, morph, card-flip between footage: they move a card or hand a named object across, footage has neither, and they play as a plain fade there.
 - Vary the modules: a 20–40 s piece uses at least four different modules and never the same module three times in a row.
 
 ## Lane rules
@@ -201,6 +201,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - Land each effect on a beat: at is "beat:<n>" (on the music) or "word:<text>" (the spoken word it belongs to). With align "peak" the effect starts early so its brightest frame lands there, and its paired sound plays on that frame by itself: do not add a hit or a cue for it.
 - Rules: at most 3 effects peak within any 1 s and keep an effect's centre out of the caption band (y above it), or the motion check warns; one hit with words a scene (combo-counter, crit-number, level-up, achievement). Put the effect on the thing it hits (the number, the card landing, the floor under a slam), not over body text.
 - Cover transitions (scene.in.type, track-0 scenes, once or twice a video): burn-away (whoosh), slash-wipe (swipe), shatter (snap), crt-off (tape-stop), glitch-wipe (glitch), blinds (slide), diamond-wipe (swipe), star-iris (sparkle), pixel-dissolve (glitch, retro only).
+- Effects marked "on a mask" (electrified, glitch, scanner, halo, hit-flash, confused, sleep, stunned, charmed, rage, haste, slowed, frozen, burning) draw round the scene's card (mask: "module") or a cast member of a cast-scene (mask: "cast:<id>") and take no x or y.
 - Effects (effect: when, sound):
 - hit-spark: the everyday hit: a number or word landing; impact
 - crit-hit: the biggest hit of a scene: a record, a win; impact
@@ -218,6 +219,20 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - achievement: an unlock toast (title, text); chime
 - confetti: party poppers on a win or the ending; pop
 - firework-rocket: a launch: a rocket climbing and bursting; sparkle
+- electrified: a card or character jolted by current: a shock, a live wire, on a mask, loops to the scene end; glitch
+- glitch: a card or character breaking up: a bug, a bad signal, on a mask, loops to the scene end; glitch
+- scanner: a card or character being scanned and checked, on a mask, loops to the scene end; shimmer
+- halo: a halo over a character: the good choice, the hero, on a mask, loops to the scene end; chime
+- hit-flash: a card or character taking a hit: a loss, a blow, on a mask; impact
+- confused: a character puzzled, on a mask, loops to the scene end; boing
+- sleep: a character asleep: boredom, idle, waiting, on a mask, loops to the scene end; pop
+- stunned: a character seeing stars after a shock, on a mask, loops to the scene end; boing
+- charmed: a character smitten: the one they love, on a mask, loops to the scene end; sparkle
+- rage: a character seething, on a mask, loops to the scene end; thud
+- haste: a card or character sped up, on a mask, loops to the scene end; whoosh
+- slowed: a card or character dragging: slow, stuck, on a mask, loops to the scene end; tape-stop
+- frozen: a card or character frozen: stalled, on ice, on a mask, loops to the scene end; shimmer
+- burning: a card or character on fire: burning money, burnout, on a mask, loops to the scene end; riser
 
 ## Footage layouts (sections)
 

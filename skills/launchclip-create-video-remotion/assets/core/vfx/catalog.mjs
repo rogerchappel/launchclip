@@ -25,6 +25,20 @@ import * as blinds from './vendor/fx/transitions/blinds.js';
 import * as diamondWipe from './vendor/fx/transitions/diamond-wipe.js';
 import * as starIris from './vendor/fx/transitions/star-iris.js';
 import * as pixelDissolve from './vendor/fx/transitions/pixel-dissolve.js';
+import * as mElectrified from './vendor/fx/lightning/electrified.js';
+import * as mGlitch from './vendor/fx/scifi/glitch.js';
+import * as mScanner from './vendor/fx/scifi/scanner.js';
+import * as mHalo from './vendor/fx/holy/halo.js';
+import * as mHitFlash from './vendor/fx/impacts/hit-flash.js';
+import * as mConfused from './vendor/fx/status/confused.js';
+import * as mSleep from './vendor/fx/status/sleep.js';
+import * as mStunned from './vendor/fx/status/stunned.js';
+import * as mCharmed from './vendor/fx/status/charmed.js';
+import * as mRage from './vendor/fx/status/rage.js';
+import * as mHaste from './vendor/fx/status/haste.js';
+import * as mSlowed from './vendor/fx/status/slowed.js';
+import * as mFrozen from './vendor/fx/status/frozen.js';
+import * as mBurning from './vendor/fx/status/burning.js';
 import * as wAurora from './vendor/fx/weather/aurora.js';
 import * as wBlizzard from './vendor/fx/weather/blizzard.js';
 import * as wCherryBlossoms from './vendor/fx/weather/cherry-blossoms.js';
@@ -55,10 +69,32 @@ export const VFX_MODULES = Object.freeze({
   'level-up': levelUp,
   achievement,
   confetti,
-  'firework-rocket': fireworkRocket
+  'firework-rocket': fireworkRocket,
+  electrified: mElectrified,
+  glitch: mGlitch,
+  scanner: mScanner,
+  halo: mHalo,
+  'hit-flash': mHitFlash,
+  confused: mConfused,
+  sleep: mSleep,
+  stunned: mStunned,
+  charmed: mCharmed,
+  rage: mRage,
+  haste: mHaste,
+  slowed: mSlowed,
+  frozen: mFrozen,
+  burning: mBurning
 });
 
 export const VFX_EFFECT_NAMES = Object.freeze(Object.keys(VFX_MODULES));
+
+/**
+ * The silhouette effects, (m) in docs/VFX_LAYER_RFC.md §1: each draws round
+ * o.actor, a module's card or a cast member (a cue's `mask`, built by
+ * kit/core/vfx/mask.mjs). Without one (sheets, peaks, tests) they draw round
+ * a stand-in (kit/core/vfx/silhouette.mjs vfxStandIn).
+ */
+export const VFX_MASKED = Object.freeze(VFX_EFFECT_NAMES.filter(name => VFX_MODULES[name].meta.actor));
 
 /**
  * Per effect: what it is for (the planner's catalogue, kit/core/planning-prompt.mjs
@@ -83,7 +119,21 @@ export const VFX_EFFECTS = Object.freeze({
   'level-up': Object.freeze({use: 'a milestone', sfx: 'success', peak: 0.283}),
   achievement: Object.freeze({use: 'an unlock toast', sfx: 'chime', peak: 0.333}),
   confetti: Object.freeze({use: 'party poppers on a win or the ending', sfx: 'pop', peak: 0.267}),
-  'firework-rocket': Object.freeze({use: 'a launch: a rocket climbing and bursting', sfx: 'sparkle', peak: 1.067})
+  'firework-rocket': Object.freeze({use: 'a launch: a rocket climbing and bursting', sfx: 'sparkle', peak: 1.067}),
+  electrified: Object.freeze({use: 'a card or character jolted by current: a shock, a live wire', sfx: 'glitch', peak: 0.133}),
+  glitch: Object.freeze({use: 'a card or character breaking up: a bug, a bad signal', sfx: 'glitch', peak: 1.7}),
+  scanner: Object.freeze({use: 'a card or character being scanned and checked', sfx: 'shimmer', peak: 1.217}),
+  halo: Object.freeze({use: 'a halo over a character: the good choice, the hero', sfx: 'chime', peak: 0.2}),
+  'hit-flash': Object.freeze({use: 'a card or character taking a hit: a loss, a blow', sfx: 'impact', peak: 0}),
+  confused: Object.freeze({use: 'a character puzzled', sfx: 'boing', peak: 0.817}),
+  sleep: Object.freeze({use: 'a character asleep: boredom, idle, waiting', sfx: 'pop', peak: 0.25}),
+  stunned: Object.freeze({use: 'a character seeing stars after a shock', sfx: 'boing', peak: 1.45}),
+  charmed: Object.freeze({use: 'a character smitten: the one they love', sfx: 'sparkle', peak: 1.25}),
+  rage: Object.freeze({use: 'a character seething', sfx: 'thud', peak: 0.05}),
+  haste: Object.freeze({use: 'a card or character sped up', sfx: 'whoosh', peak: 0.483}),
+  slowed: Object.freeze({use: 'a card or character dragging: slow, stuck', sfx: 'tape-stop', peak: 1.633}),
+  frozen: Object.freeze({use: 'a card or character frozen: stalled, on ice', sfx: 'shimmer', peak: 0}),
+  burning: Object.freeze({use: 'a card or character on fire: burning money, burnout', sfx: 'riser', peak: 0.6})
 });
 
 /**

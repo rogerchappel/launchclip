@@ -44,6 +44,15 @@
 // layer (kit/core/vfx/plan.mjs) draws a pixel effect that covers the frame
 // with its full cover on the midpoint; here, as dot-wipe, only the hard swap.
 //
+// CSS transitions on the plate layers (docs/FINISHING_AND_ELEMENTS_RFC.md
+// E.3): wipe (a soft straight edge at any angle, a linear-gradient mask),
+// clock-wipe (a hand sweeping round the centre, a conic-gradient mask;
+// segments > 1 opens like a fan) and card-flip (the outgoing card turns away
+// edge-on, the incoming one turns in from the other side, CSS 3D rotateY).
+// A mask is one prop, `mask` (progress 0 → 1), with its shape in the tween's
+// `args`; every number in the mask string is linear in the progress, so GSAP
+// interpolating the from and to strings draws what layerStyle draws.
+//
 // light-leak (kit/core/light-leak.mjs adds warm light over the cut, peaking at
 // its middle; here the two plates crossfade under the peak).
 //
@@ -72,7 +81,7 @@ import { grammarEase, resolveGrammar } from './grammar.mjs';
 import { LIGHT_LEAK } from './light-leak.mjs';
 import { BEFORE_AFTER, beforeAfterSteps } from './before-after.mjs';
 
-export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan', 'rack-focus', 'glow-wipe', 'card-to-card', 'overview', 'dot-wipe', 'light-sweep', 'push-blur', 'light-leak', 'before-after', 'burn-away', 'slash-wipe', 'shatter', 'crt-off', 'glitch-wipe', 'blinds', 'diamond-wipe', 'star-iris', 'pixel-dissolve']);
+export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan', 'rack-focus', 'glow-wipe', 'card-to-card', 'overview', 'dot-wipe', 'light-sweep', 'push-blur', 'light-leak', 'before-after', 'burn-away', 'slash-wipe', 'shatter', 'crt-off', 'glitch-wipe', 'blinds', 'diamond-wipe', 'star-iris', 'pixel-dissolve', 'wipe', 'clock-wipe', 'card-flip']);
 /**
  * Transitions the VFX layer draws (kit/core/vfx/catalog.mjs VFX_TRANSITIONS):
  * a pixel effect covers the frame, the plates swap under the full cover at
@@ -145,10 +154,19 @@ export function coveredPlates(plates, mode = 'world') {
  * deviations in px, drawn by an SVG filter on the layer's outer element
  * (smearFilterId), not by the layer's own CSS filter.
  */
-export const LAYER_IDENTITY = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1, blur: 0, iris: null, wipeT: null, wipeR: null, wipeB: null, wipeL: null, glow: 0, rackIn: 0, veil: 0, dip: 0, focus: 0, smearX: 0, smearY: 0 });
+export const LAYER_IDENTITY = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1, blur: 0, mask: null, maskArgs: null, flip: 0, flipArgs: null, iris: null, wipeT: null, wipeR: null, wipeB: null, wipeL: null, glow: 0, rackIn: 0, veil: 0, dip: 0, focus: 0, smearX: 0, smearY: 0 });
 /** Layer props drawn as the directional smear (an SVG feGaussianBlur on the outer element). */
 export const SMEAR_PROPS = Object.freeze(['smearX', 'smearY']);
 const WIPE_PROPS = ['wipeT', 'wipeR', 'wipeB', 'wipeL'];
+/**
+ * The CSS transitions: a wipe's soft edge (% of the gradient line) and a
+ * clock's (degrees); card-flip's perspective (a share of the frame's long
+ * side), how far the card falls back while edge-on and its blur at peak speed
+ * (px at 1080 on the short side).
+ */
+export const CSS_TRANSITION = Object.freeze({ feather: 8, clockFeather: 4, perspective: 1.4, flipScale: 0.9, flipBlur: 8 });
+/** A wipe's angle by direction (CSS degrees, the way the edge travels; "left" = the content travels left, as glow-wipe). */
+export const WIPE_ANGLES = Object.freeze({ left: 270, right: 90, up: 0, down: 180 });
 
 const EPS = 1e-6;
 const ADJACENT = 0.1;
@@ -160,7 +178,7 @@ export const FULL_FRAME_PLATES = Object.freeze(['world', 'photo-scene', 'clip'])
 /** Full-frame plates of supplied footage or photos. */
 export const FOOTAGE_PLATES = Object.freeze(['clip', 'photo-scene']);
 /** Transitions that move a card or hand a named object across: between two footage plates there is neither. */
-export const CARD_TRANSITIONS = Object.freeze(['card-to-card', 'rack-focus', 'morph']);
+export const CARD_TRANSITIONS = Object.freeze(['card-to-card', 'rack-focus', 'morph', 'card-flip']);
 
 /**
  * The transition a plate arrives with: between two footage plates
@@ -339,6 +357,30 @@ function typedTweens(transition, { width, height, grammar = null, mode: cameraMo
         in: [t(side, 100, 0, 'power2.inOut'), t('glow', GLOW_WIPE, 0, 'power2.out', d * 0.35, d * 0.65)],
         out: [t('glow', 0, GLOW_WIPE, 'power2.in', 0, d * 0.6), ...fadeOut] };
     }
+    case 'wipe': case 'clock-wipe': {
+      // The incoming plate opens behind a soft edge: straight at `angle`
+      // (wipe) or a hand sweeping round the centre from `start` (clock-wipe,
+      // `segments` hands at once). The mask comes off when it lands.
+      const args = type === 'wipe'
+        ? { kind: 'wipe', angle: Number.isFinite(transition?.angle) ? transition.angle : WIPE_ANGLES[direction] ?? 270, feather: Number.isFinite(transition?.feather) ? transition.feather : CSS_TRANSITION.feather }
+        : { kind: 'clock', start: Number.isFinite(transition?.start) ? transition.start : 0, segments: Number.isInteger(transition?.segments) ? transition.segments : 1, feather: Number.isFinite(transition?.feather) ? transition.feather : CSS_TRANSITION.clockFeather };
+      return { type, duration: d,
+        in: [{ ...t('mask', 0, 1, 'power2.inOut'), args }, { prop: 'mask', from: 1, to: 1, start: d, duration: 0, ease: 'none', args: { kind: 'none' } }],
+        out: fadeOut };
+    }
+    case 'card-flip': {
+      // The outgoing card turns away to edge-on (speeding up), the incoming
+      // one turns in from the other side (slowing down): slow, fast, slow,
+      // with a little blur and fall-back at the edge-on middle. direction:
+      // the way the cards turn ("left" by default).
+      const half = d / 2, C = CSS_TRANSITION;
+      const turn = direction === 'right' ? -1 : 1;
+      const args = { perspective: Math.round(C.perspective * Math.max(width, height)) };
+      const blur = round(C.flipBlur * Math.min(width, height) / 1080, 3);
+      return { type, duration: d,
+        in: [t('opacity', 0, 0, 'none', 0, half), t('opacity', 0, 1, 'none', half, 0), { ...t('flip', 90 * turn, 0, 'power2.out', half, half), args }, t('scale', C.flipScale, 1, 'power2.out', half, half), t('blur', blur, 0, 'power2.out', half, half)],
+        out: [{ ...t('flip', 0, -90 * turn, 'power2.in', 0, half), args }, t('scale', 1, C.flipScale, 'power2.in', 0, half), t('blur', 0, blur, 'power2.in', 0, half), t('opacity', 1, 0, 'none', half, 0)] };
+    }
     case 'burn-away': case 'slash-wipe': case 'shatter': case 'crt-off': case 'glitch-wipe': case 'blinds': case 'diamond-wipe': case 'star-iris': case 'pixel-dissolve':
     case 'dot-wipe': {
       // A halftone grid covers the frame (kit/core/dot-wipe.mjs draws it over
@@ -432,6 +474,7 @@ export function layerStateAt(t, tweens, getEase) {
     const p = tw.duration > 0 ? Math.min(1, Math.max(0, (t - tw.at) / tw.duration)) : 1;
     const value = tw.from + (tw.to - tw.from) * (p >= 1 ? 1 : getEase(tw.ease)(p));
     state[tw.prop] = value;
+    if (tw.args) state[`${tw.prop}Args`] = tw.args;
     if (tw.prop === 'iris') clipped = p < 1;
     // A wipe that rests part-way (before-after's pause) keeps its clip.
     if (WIPE_PROPS.includes(tw.prop)) wiped = p < 1 || Math.abs(value) > EPS;
@@ -440,13 +483,17 @@ export function layerStateAt(t, tweens, getEase) {
   // layer is identical to an unclipped one.
   if (!clipped) state.iris = null;
   if (!wiped) for (const prop of WIPE_PROPS) state[prop] = null;
+  // A landed mask (args kind "none") is no mask.
+  if (state.maskArgs?.kind === 'none') { state.mask = null; state.maskArgs = null; }
   return state;
 }
 
 /** Layer state → inline CSS values (camelCase, React style keys). */
 export function layerStyle(state) {
   const style = { opacity: state.opacity };
-  if (state.x || state.y || state.scale !== 1) style.transform = `translate(${round(state.x)}px, ${round(state.y)}px) scale(${round(state.scale, 5)})`;
+  if (state.flip) style.transform = `perspective(${state.flipArgs?.perspective ?? 1600}px) translate(${round(state.x)}px, ${round(state.y)}px) rotateY(${round(state.flip, 4)}deg) scale(${round(state.scale, 5)})`;
+  else if (state.x || state.y || state.scale !== 1) style.transform = `translate(${round(state.x)}px, ${round(state.y)}px) scale(${round(state.scale, 5)})`;
+  if (state.mask !== null && state.mask !== undefined && state.maskArgs) style.maskImage = maskCss(state.mask, state.maskArgs);
   const filters = [];
   if (state.blur > 0.001) filters.push(`blur(${round(state.blur, 3)}px)`);
   if (state.rackIn > 0.0001) filters.push(...rackFilter(state.rackIn));
@@ -497,8 +544,51 @@ export function wipeCss(state) {
   return `inset(${edge('wipeT')} ${edge('wipeR')} ${edge('wipeB')} ${edge('wipeL')})`;
 }
 
-/** One tween property → GSAP vars (`blur` and `iris` become filter / clipPath strings). */
-export function gsapVars(prop, value) {
+const MASK_ON = 'rgba(0,0,0,1)', MASK_OFF = 'rgba(0,0,0,0)';
+/**
+ * A CSS mask at progress p (0 hidden → 1 whole) → a mask-image value. Every
+ * number in it is linear in p (CSS clamps out-of-order stops the same way in
+ * both renderers). args: {kind: "wipe", angle, feather} | {kind: "clock",
+ * start, segments, feather} | {kind: "none"}.
+ */
+export function maskCss(p, args) {
+  if (args?.kind === 'wipe') {
+    const f = args.feather;
+    return `linear-gradient(${round(args.angle, 3)}deg, ${MASK_ON} ${round(p * (100 + f) - f, 3)}%, ${MASK_OFF} ${round(p * (100 + f), 3)}%)`;
+  }
+  if (args?.kind === 'clock') {
+    const n = args.segments, seg = 360 / n, f = args.feather, stops = [];
+    for (let k = 0; k < n; k += 1) stops.push(`${MASK_OFF} ${round(k * seg, 3)}deg`, `${MASK_ON} ${round(k * seg, 3)}deg`, `${MASK_ON} ${round(k * seg + p * (seg + f) - f, 3)}deg`, `${MASK_OFF} ${round(k * seg + p * seg, 3)}deg`);
+    return `conic-gradient(from ${round(args.start, 3)}deg at 50% 50%, ${stops.join(', ')})`;
+  }
+  return 'none';
+}
+
+/**
+ * How much of a layer's mask shows at screen point (x, y) of a width × height
+ * frame: 1 inside, 0 outside, the middle of the soft edge at 0.5 (the
+ * transition check reads it; no mask → 1).
+ */
+export function maskCover(state, x, y, width, height) {
+  const args = state?.maskArgs, p = state?.mask;
+  if (p === null || p === undefined || !args || args.kind === 'none') return 1;
+  if (args.kind === 'wipe') {
+    const a = (args.angle * Math.PI) / 180, dx = Math.sin(a), dy = -Math.cos(a);
+    const span = Math.abs(width * dx) + Math.abs(height * dy);
+    const along = (100 * ((x - width / 2) * dx + (y - height / 2) * dy)) / span + 50;
+    const edge = p * (100 + args.feather);
+    return Math.min(1, Math.max(0, (edge - along) / args.feather));
+  }
+  const seg = 360 / args.segments;
+  const angle = (((Math.atan2(x - width / 2, -(y - height / 2)) * 180) / Math.PI - args.start) % 360 + 720) % 360;
+  const local = angle % seg, edge = p * (seg + args.feather);
+  return Math.min(1, Math.max(0, (edge - local) / args.feather));
+}
+
+/** One tween property → GSAP vars (`blur` and `iris` become filter / clipPath strings); args: the tween's (mask, flip). */
+export function gsapVars(prop, value, args) {
+  if (prop === 'mask') return { maskImage: maskCss(value, args) };
+  if (prop === 'flip') return { rotationY: round(value, 4), transformPerspective: args?.perspective ?? 1600 };
   if (prop === 'blur') return { filter: `blur(${round(value, 3)}px)` };
   if (prop === 'iris') return { clipPath: `circle(${round(value, 2)}px at 50% 50%)` };
   if (prop === 'glow') return { filter: `brightness(${round(1 + value, 4)})` };
