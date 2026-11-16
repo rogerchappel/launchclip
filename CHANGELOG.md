@@ -4,6 +4,15 @@
 
 ### Added
 
+- `launchclip reel <project>`: the breakdown reel. A 10 s loop on a 120 BPM
+  grid made from a finished project's own artefacts: a hook on the beat, the
+  finished shot playing, the frame coming apart into labelled layers (bible
+  sheet, animatic, final; or storyboard, style, the hero scene drawn plain,
+  final), a snap back with a shake and a payoff line, ending on its first
+  frame. `launchclip reel check <video>` measures the loop seam. The scene is
+  the new `layer-stack` module, drawn the same in both renderers.
+- Remotion draws catalogue H images with `<Img>`, so a still is on screen
+  from frame 0 (a plain `<img>` could miss the first frame).
 - `node-graph`: 3–8 icon cards (agents, tools, steps) flock out of a hub and
   fan above it on two staggered tiers, glowing wires draw into the hub with
   dots streaming down them, and pulses of light land in the hub on a beat

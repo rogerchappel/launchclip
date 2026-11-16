@@ -91,6 +91,7 @@ export const SAMPLES = Object.freeze({
   'cell-grid': {title: 'Cost of one completed task', legend: '1 cell = $0.01', grids: [{label: 'Atlas 2 Mini', sub: '$5 / 1M output', count: 101, value: '$1.01', tone: 'accent'}, {label: 'Rival Pro', sub: '$20 / 1M output', count: 715, value: '$7.15', tone: 'paper'}], ratio: {text: '≈7×', sub: 'cheaper per completed task'}, source: 'Example benchmark, Oct 2026'},
   'tokenizer': {text: 'Terra continues to advance the cost-intelligence frontier', tokens: ['Ter', 'ra', ' continues', ' to', ' advance', ' the', ' cost', '-int', 'elligence', ' frontier'], encoding: 'o200k_base', source: 'text: example launch post', models: [{label: 'Atlas 2', price: 10}, {label: 'Atlas 2 Mini', price: 5}]},
   'exploded-view': {title: 'Inside one server', object: 'server'},
+  'layer-stack': {hook: 'How this shot was made', payoff: 'One project. Every layer.', layers: [{kind: 'storyboard', label: 'Storyboard', panels: ['The hook', 'The chart', 'The turn', 'The payoff']}, {kind: 'style', label: 'Style'}, {label: 'Final', image: 'assets/screens/dashboard.png', fit: 'contain'}], play: ['assets/testsrc.png', 'assets/screens/dashboard.png']},
   'coin-stack': {title: 'Cost of one finished task', stacks: [{label: 'Nova', value: 1}, {label: 'Atlas', value: 10}], format: {style: 'currency'}, per: 1, highlight: 0, callout: {text: '×10', stack: 1}},
   'rack-shelf': {title: 'The line-up, shelf by shelf', rows: [{label: 'Atlas', value: 10, cells: ['$10', '84 pts'], icon: 'sparkle'}, {label: 'Nova', value: 5, cells: ['$5', '78 pts'], icon: 'sparkle'}, {label: 'Mini', value: 0.5, cells: ['$0.50', '62 pts'], icon: 'sparkle'}], format: {style: 'currency'}, focus: 1},
   'device-box': {title: 'One inference node, live', name: 'INFERENCE NODE 01', readout: {label: 'requests', to: 1284}, clock: {start: '03:17:42'}},
@@ -117,6 +118,9 @@ export const SAMPLES = Object.freeze({
 });
 
 /** Extra parity cases beyond one per variant: {name, module, variant, shape, params}. */
+/** Scene length (s) for a module whose sample cannot fit the default 4 s scene. */
+export const SAMPLE_DURATIONS = Object.freeze({'layer-stack': 10});
+
 export const EXTRA_SAMPLES = Object.freeze([
   {name: 'map-highlight-outline', module: 'map-highlight', variant: 'outline', shape: 'landscape', params: {highlight: [{country: 'Japan', label: 'Japan', value: '¥3,000'}], title: 'Where the price drops first'}},
   {name: 'map-highlight-dots', module: 'map-highlight', variant: 'dots', shape: 'landscape', params: {highlight: [{country: 'USA', value: '$20'}, {country: 'India', value: '$6', badge: '×0.3'}, {country: 'Brazil', value: '$9', badge: '×0.45'}], pins: [{lon: -122.4, lat: 37.8, label: 'San Francisco', sub: 'HQ'}], focus: 'world', title: 'One plan, three prices'}},

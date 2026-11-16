@@ -7008,6 +7008,48 @@ right in portrait).
 Parity fixtures: `test/fixtures/parity/h-exploded-view-*.json` (the server
 in both aspects, the phone in portrait, the battery pack in landscape).
 
+### Catalogue I: layer stack (`catalog-i-layers.mjs`)
+
+`layer-stack` is the breakdown reel's one scene (`launchclip reel`,
+`src/reel.js`). It is timed in beats at `params.bpm` (120 by default: a beat
+every 0.5 s) and is 20 beats long (a longer scene, such as a story's final
+hold, keeps the opening frame after beat 20):
+
+| Beats | At 120 BPM | What happens |
+| --- | --- | --- |
+| 0–3 | 0–1.5 s | The finished shot fills the frame (top layer) under a scrim; the hook's words pop in over beats 0–2 (back.out); the camera eases out of a 6% push |
+| 3–6 | 1.5–3 s | `play` frames show one after another, ending on the top layer's image |
+| 6–7 | 3–3.5 s | Every layer tilts into an isometric plane (45° turn, squashed by tan 30°) with anticipation and a little overshoot; the camera moves the stack aside without overshoot |
+| 7 on | 3.5 s on | The layers lift apart, top first, one per beat (back.out); each label slides in as its layer lands, the bottom one last |
+| hold–15.3 | to 7.65 s | The camera eases in 8% and the layers spread 22%, labels following; labels leave at 14.8 |
+| 16 | 8 s | Every layer winds up (back.in) and lands together; a 0.32 s decaying shake; the planes settle flat |
+| 17–19 | 8.5–9.5 s | The payoff line pops in over the scrim; the camera eases back into the 6% push |
+| 19–20 | 9.5–10 s | Payoff and scrim clear; every element is back in its opening state |
+
+- A layer is three nested full-frame `div`s (screen offset › squash ›
+  rotation): an isometric plane without a CSS 3D context, so both renderers
+  draw the same tree.
+- The root never fades in or out, and the module turns off the ambient drift
+  (`layout.drift: false`), so the last frame is the first. Tests check every
+  element's state on the last frame against frame 0; `launchclip reel check`
+  checks a render (SSIM ≥ 0.97 and PSNR ≥ 35 dB between the first and last
+  frames, which is within encoder noise; a visible jump measures 0.80–0.86).
+- A story that holds a layer stack ends with `{"loop": false, "final":
+  "exit"}`, not `loop_to`: the scene loops itself, and a loop ending would
+  lay a transition over its last frames.
+- `storyboard` and `style` layers are drawn from the project: storyboard
+  panels with their captions, and the brand's swatches and type in its three
+  faces. The text-hold gate counts only the hook and the payoff as reading
+  text.
+
+| Module | Params | Events | Motion |
+| --- | --- | --- | --- |
+| `layer-stack` | `hook` ≤ 48, ≤ 6 words; `payoff` ≤ 48; `layers` 2–5 bottom first `{label ≤ 18, kind? image · storyboard · style, image (assets/…), fit? cover · contain, panels (storyboard) [≤ 40] 2–6}`, the last an image (the finished shot); `play` 2–48 assets/ stills (optional); `bpm` 90–160 | hook, play, explode, snap, payoff | Above. The scene is at least 20 beats |
+
+Parity fixtures: `test/fixtures/parity/h-layer-stack-default-*.json` (a
+storyboard, style and image stack in both aspects, sampled through the hook,
+the play, the explode, the snap and the seam).
+
 ### Motion titles (`catalog-h-text.mjs`)
 
 `motion-title` is a caption-independent title (it hides captions). Its

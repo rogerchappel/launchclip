@@ -1732,6 +1732,13 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip cutdown <project> --to shorts [--section <id> | --lines 23-28 | --range 120-150] [--max 58] [--out <dir>] [--model provider:model] [--force]
   ```
 
+- `reel`: Write a breakdown reel from a finished project: a new project (one layer-stack scene, 20 beats at 120 BPM) where the finished shot plays under a hook, comes apart into labelled layers made from the project's own artefacts (an animation project: the bible's reference sheet, the animatic frame, the final; otherwise the storyboard, the style, the hero scene's module drawn plain, the final), snaps back with a payoff line and ends on its first frame. Render it with launchclip finish; reel check compares a render's first and last frames.
+
+  ```text
+  launchclip reel <project> [--out <dir>] [--at <s>] [--hook "…"] [--payoff "…"] [--bpm 120] [--force] # the breakdown reel: a 10 s loop of the project coming apart into its layers
+  launchclip reel check <video> [--min-ssim 0.97]    # the loop seam: the first and last frames match
+  ```
+
 - `export`: Export an editable timeline for Final Cut Pro, Premiere Pro or Resolve.
 
   ```text

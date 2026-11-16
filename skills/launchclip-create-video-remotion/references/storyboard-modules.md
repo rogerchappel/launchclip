@@ -2198,6 +2198,17 @@ params:
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: explode, snap
 
+### layer-stack (keeps captions)
+The breakdown reel in one 20-beat scene: the finished shot with a hook landing word by word on the beat, the shot playing, then the frame tilting into an isometric stack whose layers (the project's own artefacts, final on top) peel apart one a beat with labels, snap back on a beat with a shake, and settle under a payoff line on the opening frame, so it loops.
+params:
+- hook: string ≤ 48, at most 6 words (lands over beats 0–2)
+- payoff: string ≤ 48 (beats 17–19)
+- layers: [{label ≤ 18, kind?: image | storyboard | style (default image), image (image layers: assets/… still), fit?: cover | contain, panels (storyboard layers: [string ≤ 40] 2–6)}] 2–5, bottom first; the last is the finished shot (an image)
+- play: [assets/… still] 2–48 (optional): frames of the finished shot, played over beats 3–6 and ending on the top layer's image
+- bpm: 90–160 (default 120); the scene is at least 20 beats
+- rect: {x, y, width, height} canvas px inside the safe zone (optional; labels and words keep inside it, the layers fill the frame) [guided and bespoke tiers only]
+events: hook, play, explode, snap, payoff
+
 ### scatter-plot (keeps captions)
 Points or 1–5 series on two axes (linear or log, with ticks), built in beats: series lines draw on in order, one series takes the focus with a glow while the rest dim, and annotations land one at a time (dashed guides from a point to both axes with value pills, a "?" placeholder point, labelled callouts). Two panels compare an official chart with an independent re-run.
 params:
@@ -2668,6 +2679,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | paper-stack | 2 s | 0.5 s | scene − 0.65 s | the stack lands bottom first within about 1.4 s (the folder lands, opens about 0.8 s later and its files rise); statuses pop top to bottom after the build, up to 0.8 s apart |
 | planet-family | 2 s | 0.5 s | scene − 0.65 s | the first body shows with the build; each next body on its cue, at least 0.75 s apart (default: spread to the end of the scene) |
 | exploded-view | 2 s | 0.5 s | scene − 0.65 s | the explode takes about 1.1 s from at, the outermost part first; the snap back takes 0.6 s and ends before the exit; needs a scene of 4 s or more |
+| layer-stack | 2 s | 0.5 s | scene − 0.65 s | the scene is at least 20 beats at params.bpm (10 s at 120); after beat 20 it holds the opening frame; hook 0–3, play 3–6, tilt 6, one layer a beat from 7, snap 16, payoff 17–19, clear by 20 |
 | scatter-plot | 2 s | 0.5 s | scene − 0.65 s | the axes draw in 0.6 s from at; each series line draws in 0.9 s on its cue; default cues follow the build 0.45–0.8 s apart and squeeze to fit the scene |
 | race-bars | 2 s | 0.5 s | scene − 0.65 s | rows land from at, the race starts 0.6 s later; each row finishes in proportion to its time; the badge follows the winner's finish |
 | small-multiples | 2 s | 0.5 s | scene − 0.65 s | panels land up to 0.18 s apart from at, bars grow in 0.6 s; the highlight follows the build |
