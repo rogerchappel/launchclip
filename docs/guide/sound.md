@@ -99,6 +99,14 @@ Add `audio.react` to a story and parts of the picture follow the finished mix:
 
 Each takes `true` or `{bus, series, strength}`: `bus` is `mix`, `music` or `voice`; `series` is `loud`, `sub`, `low`, `mid`, `high`, `air` or `onset`; `strength` runs from 0 to 1. The sound stage measures the mix once into `AUDIO_FEATURES.json`, and both renderers read those numbers, so they draw the same frames. The camera never reacts.
 
+For a scene that is the sound itself, use the `audio-visualizer` module: a spectrum of `bars` (the default), a mirrored `line` or a `ring`, bass to air, following the mix every frame.
+
+```json
+{ "id": "drop", "module": "audio-visualizer", "start": 12, "end": 16, "params": { "variant": "ring", "bus": "music" } }
+```
+
+`bus` picks the sound (`mix` by default), `tone` the colour and `bars` how many (8–128). It reads the same `AUDIO_FEATURES.json`; without it the bars rest flat.
+
 ## Delivery-ready loudness
 
 Every finished video is mastered to −14 LUFS with a −1 dBTP ceiling, the level YouTube, TikTok and Instagram expect. The voice stays clearly above the music.

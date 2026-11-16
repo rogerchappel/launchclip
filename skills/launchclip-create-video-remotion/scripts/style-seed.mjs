@@ -150,7 +150,20 @@ export const SEED_MODULE_VARIANTS = V2_MODULE_VARIANTS;
 // art direction asks for it (kit/core/medium.mjs mediumFromText reads the words).
 // overshoot: true lets entrances and emphasis keep the base grammar's back
 // and elastic eases (off by default: every generated feel is slow-fast-slow).
-export const CONSTRAINT_KEYS = Object.freeze(['tone', 'theme', 'world', 'drawing_style', 'character_set', 'background', 'panel', 'medium', 'look', 'overshoot']);
+export const CONSTRAINT_KEYS = Object.freeze(['tone', 'theme', 'world', 'drawing_style', 'character_set', 'background', 'panel', 'medium', 'look', 'overshoot', 'family']);
+/**
+ * Style families: art direction that sets several dimensions at once, on top
+ * of what the seed draws (the seed still picks palette, worlds and motion).
+ * retro-pixel (docs/VFX_LAYER_RFC.md §3b): the hits keep the VFX layer's
+ * own pixel font (vfx.words "pixel"), a heavy display face over a mono body
+ * (the bundled set has no pixel face), square outlined panels, and the retro
+ * VFX unlocked (pixel-dissolve). The effects are pixel art by themselves, so
+ * the family leaves the picture crisp: the pixel-arcade grade is opt-in
+ * (story.look), since it breaks up card text.
+ */
+export const STYLE_FAMILIES = Object.freeze({
+  'retro-pixel': Object.freeze({ fonts: Object.freeze({ display: 'archivo-black', body: 'jetbrains-mono', meta: 'jetbrains-mono' }), panel: Object.freeze({ treatment: 'outline', radius: 0 }), vfx: Object.freeze({ words: 'pixel' }) })
+});
 
 /**
  * Curated type pairings over the bundled fonts (kit/core/fonts.mjs): display
@@ -528,6 +541,7 @@ export function normalizeConstraints(constraints = {}) {
     if (problems.length) throw new Error(problems[0]);
     if (out.medium === 'none' || out.medium.kind === 'none') delete out.medium;
   }
+  if (out.family !== undefined && !Object.hasOwn(STYLE_FAMILIES, out.family)) throw new Error(`family must be one of ${Object.keys(STYLE_FAMILIES).join(', ')}`);
   if (out.look !== undefined) {
     const problems = lookErrors(out.look);
     if (problems.length) throw new Error(problems[0]);
@@ -596,7 +610,7 @@ export function generateStyle({ seed, brand, tone = null, constraints = {}, avoi
     ...(step ? { stepped: { from: hex, steps: step } } : {}),
     ...(avoidTraits.length ? { avoided: { styles: avoidTraits.length, distance: round(distance, 4) } } : {})
   };
-  const order = ['schema', 'name', 'description', 'generated', 'brand', 'motion', 'camera', 'ambient', 'captions', 'sound', 'layout', 'layouts', 'background', 'plate', 'medium', 'look', 'grade', 'vocabulary', 'variants', 'cast', 'world', 'brand_frame', 'dials'];
+  const order = ['schema', 'name', 'description', 'generated', 'brand', 'motion', 'camera', 'ambient', 'captions', 'sound', 'layout', 'layouts', 'background', 'plate', 'medium', 'look', 'grade', 'vfx', 'vocabulary', 'variants', 'cast', 'world', 'brand_frame', 'dials'];
   const sorted = Object.fromEntries(order.filter((key) => pack[key] !== undefined).map((key) => [key, pack[key]]));
   const validation = validateStylePack(sorted);
   if (!validation.ok) throw new Error(`generated style ${sorted.name} is invalid:\n- ${validation.errors.join('\n- ')}`);
@@ -768,7 +782,10 @@ function buildPack(hex, toneName, t, fixed, attempt, ctx) {
   const genre = choose('genre', fits.genres);
   const spec = GENRE_SPECS[genre];
 
-  const fonts = { display: pairing.display, body: pairing.body, meta: pairing.meta };
+  const family = fixed.family ? STYLE_FAMILIES[fixed.family] : null;
+  // A family's faces stand in for the drawn pairing unless the brand names its own.
+  const fonts = family && !Object.keys(ctx.fonts.fonts ?? {}).length ? { ...family.fonts } : { display: pairing.display, body: pairing.body, meta: pairing.meta };
+  if (family && !panelFixed.treatment) Object.assign(panel, family.panel);
   const look = palette.theme ?? theme;
   const pack = {
     schema: STYLE_SCHEMA,
@@ -795,6 +812,7 @@ function buildPack(hex, toneName, t, fixed, attempt, ctx) {
     ...(world ? { world } : {}),
     ...(fixed.medium ? { medium: JSON.parse(JSON.stringify(fixed.medium)) } : {}),
     ...(fixed.look ? { look: JSON.parse(JSON.stringify(fixed.look)) } : {}),
+    ...(family ? { vfx: { ...family.vfx } } : {}),
     // Grade (grade.mjs): the look's own preset, else the tone's (bleach only on a dark serious style); no draw, so every other draw stays put.
     grade: GRADE_LOOK_DEFAULTS[typeof fixed.look === 'string' ? fixed.look : fixed.look?.name] ?? (toneName === 'serious' && !palette.dark ? 'clean' : GRADE_TONE_DEFAULTS[toneName] ?? 'clean'),
     brand_frame,

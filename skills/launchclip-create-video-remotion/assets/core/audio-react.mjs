@@ -61,11 +61,25 @@ function reactSpecs(story) {
   return AUDIO_REACT_KINDS.filter((kind) => react[kind]).map((kind) => ({ kind, ...AUDIO_REACT_DEFAULTS[kind], ...(isObject(react[kind]) ? react[kind] : {}) }));
 }
 
+const VISUALIZER_BANDS = ['sub', 'low', 'mid', 'high', 'air'];
+
+/**
+ * Every {bus, series} the story reads from AUDIO_FEATURES.json: its
+ * audio.react layers and the bands of each audio-visualizer scene
+ * (kit/core/catalog-h-audio.mjs). Empty when nothing reacts, so finish skips
+ * measuring.
+ */
+export function audioFeatureNeeds(story) {
+  const scenes = (Array.isArray(story?.scenes) ? story.scenes : []).filter((scene) => scene?.module === 'audio-visualizer');
+  const bands = scenes.flatMap((scene) => VISUALIZER_BANDS.map((series) => ({ bus: AUDIO_REACT_BUSES.includes(scene.params?.bus) ? scene.params.bus : 'mix', series })));
+  return [...audioReactNeeds(story), ...bands];
+}
+
 /** Only the series a story reads, from a full AUDIO_FEATURES.json (a missing bus falls back to the mix). */
 export function pickAudioFeatures(story, features) {
   if (!features?.buses?.mix) return null;
   const buses = {};
-  for (const { bus, series } of audioReactNeeds(story)) {
+  for (const { bus, series } of audioFeatureNeeds(story)) {
     const from = features.buses[bus]?.[series] ? bus : 'mix';
     (buses[from] ??= {})[series] = features.buses[from][series];
   }

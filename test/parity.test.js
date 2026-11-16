@@ -3,7 +3,7 @@
 // runs only with LAUNCHCLIP_PARITY=1. Reports land in qa/parity/<fixture>/.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {existsSync, readdirSync} from 'node:fs';
+import {existsSync, readFileSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {mkdtemp, rm} from 'node:fs/promises';
@@ -54,6 +54,12 @@ const STORY_PARITY = Object.freeze([
   {id: 'world-travel-9x16', times: [1.5, 3.5, 5.5]},
   // The VFX layer (kit/core/vfx): crit-hit, hit-spark, ground-slam, collect-burst, poof and firework-burst over real scenes.
   {id: 'vfx-impacts-9x16', times: [0.93, 2.33, 3.3, 3.6, 4.3, 5.4]},
+  // Celebration hits with brand-font words: level-up, firework-rocket, crit-number, combo-counter, confetti, achievement.
+  {id: 'vfx-hits-9x16', times: [1.3, 2.4, 3.25, 4.4, 5.2]},
+  // The nine VFX cover transitions (burn-away … pixel-dissolve), each mid-cover, turned a quarter for portrait.
+  {id: 'vfx-transitions-9x16', times: [1.85, 3.4, 5, 6.75, 8.2, 9.8, 11.4, 13.1, 14.6]},
+  // The round-two sample: hits and cover transitions over crisp scenes.
+  {id: 'vfx-arcade-9x16', times: [1.2, 3.5, 6.45, 10.9]},
   // Interface scenes on signal-ui (the CI smoke's times, scripts/parity-ci.mjs).
   {id: 'ui-parity-9x16', times: [...CI_UI_STORY.times]}
 ]);
@@ -62,6 +68,19 @@ for (const {id, times} of STORY_PARITY) {
   test(`parity: story ${id} (ambient)`, {skip: enabled ? false : 'set LAUNCHCLIP_PARITY=1 to render story parity', timeout: 600_000}, async () => {
     const report = await runStoryParity(path.join(ROOT, 'examples', 'story', id), {times, out: path.join(ROOT, 'qa', 'parity', `story-${id}`)});
     for (const sample of report.samples) assert.ok(sample.pass, `story ${id} t=${sample.time}: ssim ${sample.ssim} < ${report.threshold.ssim}`);
+  });
+}
+
+// Finish passes (src/finish_pass.js): each runs over both renderers' stills of
+// one story, so a pass that is not seek-pure or reads anything but the frame
+// shows up here (test/fixtures/parity-finish/).
+const FINISH_DIR = path.join(ROOT, 'test', 'fixtures', 'parity-finish');
+for (const file of readdirSync(FINISH_DIR).filter(name => name.endsWith('.json')).sort()) {
+  const name = file.replace(/\.json$/, '');
+  test(`parity: finish ${name}`, {skip: enabled ? false : 'set LAUNCHCLIP_PARITY=1 to render finish parity', timeout: 600_000}, async () => {
+    const {story, times, finish} = JSON.parse(readFileSync(path.join(FINISH_DIR, file), 'utf8'));
+    const report = await runStoryParity(path.join(ROOT, 'examples', 'story', story), {times, patch: {finish}, out: path.join(ROOT, 'qa', 'parity', `finish-${name}`)});
+    for (const sample of report.samples) assert.ok(sample.pass, `finish ${name} t=${sample.time}: ssim ${sample.ssim} < ${report.threshold.ssim}`);
   });
 }
 

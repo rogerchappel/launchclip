@@ -93,7 +93,7 @@
    {
     "shot": "short-1-sh3",
     "start": 21.839,
-    "module": "motion-title",
+    "module": "kinetic-words",
     "change": "swap",
     "text": "for high school competitions,"
    },
@@ -114,14 +114,14 @@
    {
     "shot": "short-1-sh4",
     "start": 29.959,
-    "module": "kinetic-words",
+    "module": "motion-title",
     "change": "swap",
     "text": "Northlight mentioned that drop in a footnote."
    },
    {
     "shot": "short-1-sh4",
     "start": 33.329,
-    "module": "motion-title",
+    "module": "kinetic-words",
     "change": "swap",
     "text": "The honest summary is this."
    },
@@ -309,7 +309,7 @@
    {
     "shot": "short-3-sh2",
     "start": 10.705,
-    "module": "motion-title",
+    "module": "kinetic-words",
     "change": "enter",
     "text": "Running it costs real money."
    },
@@ -323,7 +323,7 @@
    {
     "shot": "short-3-sh2",
     "start": 14.923,
-    "module": "motion-title",
+    "module": "kinetic-words",
     "change": "swap",
     "text": "training run alone cost between"
    },
@@ -447,42 +447,42 @@
    {
     "shot": "short-4-sh1",
     "start": 3.151,
-    "module": "motion-title",
+    "module": "kinetic-words",
     "change": "swap",
     "text": "The new cluster uses a newer generation of chips,"
    },
    {
     "shot": "short-4-sh1",
     "start": 6.8,
-    "module": "kinetic-words",
+    "module": "motion-title",
     "change": "swap",
     "text": "and the system card reports"
    },
    {
     "shot": "short-4-sh2",
     "start": 8.756,
-    "module": "motion-title",
+    "module": "kinetic-words",
     "change": "enter",
     "text": "that serving cost per token fell by about half."
    },
    {
     "shot": "short-4-sh2",
     "start": 12.572,
-    "module": "kinetic-words",
+    "module": "motion-title",
     "change": "swap",
     "text": "That accounts for a lot of the cut,"
    },
    {
     "shot": "short-4-sh2",
     "start": 15.523,
-    "module": "kinetic-words",
+    "module": "motion-title",
     "change": "hold",
     "text": "but not all of it."
    },
    {
     "shot": "short-4-sh3",
     "start": 17.534,
-    "module": "motion-title",
+    "module": "kinetic-words",
     "change": "enter",
     "text": "The rest is probably margin,"
    },

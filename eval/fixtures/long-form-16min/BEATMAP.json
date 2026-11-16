@@ -449,7 +449,6 @@
        "change": "enter",
        "params": {
         "text": "A short history of Halcyon",
-        "kicker": "Chapter 2",
         "highlight": "short"
        },
        "why": "title: the chapter title"
@@ -952,7 +951,6 @@
        "change": "enter",
        "params": {
         "text": "Inside the training run",
-        "kicker": "Chapter 3",
         "highlight": "Inside"
        },
        "evidence": {
@@ -1489,7 +1487,6 @@
        "change": "enter",
        "params": {
         "text": "What Northlight actually announced",
-        "kicker": "Chapter 4",
         "highlight": "Northlight"
        },
        "evidence": {
@@ -2001,7 +1998,6 @@
        "change": "enter",
        "params": {
         "text": "Why speed changed everything",
-        "kicker": "Chapter 5",
         "highlight": "speed"
        },
        "why": "title: the chapter title"
@@ -2522,7 +2518,6 @@
        "change": "enter",
        "params": {
         "text": "The context window, doubled",
-        "kicker": "Chapter 6",
         "highlight": "context"
        },
        "evidence": {
@@ -2953,7 +2948,6 @@
        "change": "enter",
        "params": {
         "text": "The price cut and who pays for it",
-        "kicker": "Chapter 7",
         "highlight": "price"
        },
        "evidence": {
@@ -3399,7 +3393,6 @@
        "change": "enter",
        "params": {
         "text": "Reading the benchmarks honestly",
-        "kicker": "Chapter 8",
         "highlight": "Reading"
        },
        "evidence": {
@@ -3869,7 +3862,6 @@
        "change": "enter",
        "params": {
         "text": "What developers found in week one",
-        "kicker": "Chapter 9",
         "highlight": "developers"
        },
        "why": "title: the chapter title"
@@ -4355,7 +4347,6 @@
        "change": "enter",
        "params": {
         "text": "The failure table and what it…",
-        "kicker": "Chapter 10",
         "highlight": "failure"
        },
        "why": "title: the chapter title"
@@ -4872,7 +4863,6 @@
        "change": "enter",
        "params": {
         "text": "How the rivals answered",
-        "kicker": "Chapter 11",
         "highlight": "rivals"
        },
        "evidence": {
@@ -5330,7 +5320,6 @@
        "change": "enter",
        "params": {
         "text": "What this means for the next year",
-        "kicker": "Chapter 12",
         "highlight": "means"
        },
        "why": "title: the chapter title"
@@ -5721,7 +5710,7 @@
    ],
    "start": 0.3,
    "end": 71.663,
-   "key": "97dd0b005f557fa6",
+   "key": "b9b30ca79deb7a01",
    "shots": [
     "the-launch-nobody-saw-coming-1-sh1",
     "the-launch-nobody-saw-coming-1-sh2",
@@ -5770,7 +5759,7 @@
    ],
    "start": 73.327,
    "end": 157.404,
-   "key": "09c015e9c1d79f7f",
+   "key": "ddd4b9883fb1ed2a",
    "shots": [
     "a-short-history-of-halcyon-1-sh1",
     "a-short-history-of-halcyon-1-sh2",
@@ -5830,7 +5819,7 @@
    ],
    "start": 159.059,
    "end": 241.355,
-   "key": "4246af790942c0fb",
+   "key": "9754a8f6e3b1365c",
    "shots": [
     "inside-the-training-run-1-sh1",
     "inside-the-training-run-1-sh2",
@@ -5900,7 +5889,7 @@
    ],
    "start": 242.999,
    "end": 321.23,
-   "key": "57448a8b23f4b235",
+   "key": "b1de94b872c4988e",
    "shots": [
     "what-northlight-actually-announced-1-sh1",
     "what-northlight-actually-announced-1-sh2",
@@ -5977,7 +5966,7 @@
    ],
    "start": 322.888,
    "end": 407.015,
-   "key": "a24f78b900de6ff7",
+   "key": "fc2256d2309a8334",
    "shots": [
     "why-speed-changed-everything-1-sh1",
     "why-speed-changed-everything-1-sh2",
@@ -6061,7 +6050,7 @@
    ],
    "start": 408.665,
    "end": 489.154,
-   "key": "afc3626bdb2def45",
+   "key": "6aba08de31b897b4",
    "shots": [
     "the-context-window-doubled-1-sh1",
     "the-context-window-doubled-1-sh2",
@@ -6151,7 +6140,7 @@
    ],
    "start": 490.818,
    "end": 569.226,
-   "key": "6f917c6fb8be4e3d",
+   "key": "97a77754575e64e6",
    "shots": [
     "the-price-cut-and-who-pays-for-it-1-sh1",
     "the-price-cut-and-who-pays-for-it-1-sh2",
@@ -6246,7 +6235,7 @@
    ],
    "start": 570.872,
    "end": 652.654,
-   "key": "53df6ee22e045194",
+   "key": "5437bdf3d69c9891",
    "shots": [
     "reading-the-benchmarks-honestly-1-sh1",
     "reading-the-benchmarks-honestly-1-sh2",
@@ -6346,7 +6335,7 @@
    ],
    "start": 654.3,
    "end": 734.708,
-   "key": "71d37ad0789183fe",
+   "key": "13d47dd5525332ff",
    "shots": [
     "what-developers-found-in-week-one-1-sh1",
     "what-developers-found-in-week-one-1-sh2",
@@ -6453,7 +6442,7 @@
    ],
    "start": 736.36,
    "end": 812.706,
-   "key": "67387edef5d61f1c",
+   "key": "95e4377b99fb96ad",
    "shots": [
     "the-failure-table-and-what-it-admits-1-sh1",
     "the-failure-table-and-what-it-admits-1-sh2",
@@ -6566,7 +6555,7 @@
    ],
    "start": 814.355,
    "end": 894.442,
-   "key": "64ac62912bd2acbb",
+   "key": "88ef94ceca6c1444",
    "shots": [
     "how-the-rivals-answered-1-sh1",
     "how-the-rivals-answered-1-sh2",
@@ -6685,7 +6674,7 @@
    ],
    "start": 896.088,
    "end": 975.877,
-   "key": "05947379367777eb",
+   "key": "7309ec8884bd4e3e",
    "shots": [
     "what-this-means-for-the-next-year-1-sh1",
     "what-this-means-for-the-next-year-1-sh2",

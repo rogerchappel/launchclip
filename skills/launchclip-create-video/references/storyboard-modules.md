@@ -14,13 +14,22 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 | guided | the above plus enum variants and `rect`, `theme`, `accent`, `motion`, `presentation`, `track` | `custom` |
 | bespoke | the above plus `custom` modules (pure functions of time with a catalogue fallback) | bypassing gates |
 
+## Art direction (write it before any scene)
+
+- Write the direction block first, before any scene: direction {product: what the subject is and who the video is for, one sentence; character: two or three concrete words ("exact, a little warm"); world: the place or material the subject belongs to, which sets the plate, the neutral tint and the accent (a note app lives near paper and ink); moments: one or two scene ids where colour and detail may be rich, everywhere else is quiet; signature: {detail, element}, one small detail only this video has, drawn on at least three scenes under the same element id}.
+- Never describe the character as clean, modern, sleek, minimal, premium, dynamic, engaging, vibrant, stunning, professional or bold: they describe every template, and validate refuses them.
+- Template check: if you swapped the subject for another, would the video still fit? If yes, push the copy, the world and the signature harder.
+- One bright element, quiet chrome: each scene names its one hero element in scene.hero (an element id, like "s2.price"). It carries the colour and the biggest move; captions, labels and panels stay in the neutrals. Use the accent once or twice a frame, outside the moments.
+- Motion thesis, before scenes: motion.thesis {focal: the one focal moment of the video, from this subject; continuity: what carries between scenes; emphasis: which words get a beat; budget: what is expensive and how often}.
+- Refuse: eyebrows and kickers above headlines, gradient text, glass and glow as decoration, identical card grids, a bare big number as the hero, sparklines standing in for content, emoji as icons, mono type as costume, and one identical entrance on every scene. Each may be earned by the brief's own words, except the kicker.
+
 ## Contract
 
 - schema: "launchclip.story.v1" (exactly). lane: one of motion, voiceover-motion, footage-led (given; never change it).
 - format: {width, height, fps, duration, platform?} and brand: {colors, fonts} are given; copy them unchanged.
 - audio: {voice?, words?, music?, sfx?}; base: null, or the recording path for footage-led.
 - audio.music: omit it (finish picks ElevenLabs when a key is set, else the synth bed), or "synth", "none", an assets/ path, or {provider: "elevenlabs" | "synth" | "file", prompt?, bpm?, file?, sync?: "auto" | "off" | "cuts" | "hits"}. The music follows scene energy, so set energy honestly: calm intro, "build" before the payoff, 3 on the payoff. A prompt describes style only (no vocals is added for you).
-- scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: cut | fade | push | whip | zoom | iris | morph | pan | pull | orbit | whip-pan | rack-focus | glow-wipe | card-to-card | overview | dot-wipe | light-sweep | push-blur | light-leak | before-after, dur, direction?, from_object?, color?, cover?, hold? (dot-wipe only), pause?, labels? (before-after only)}, params, hits?, zooms?, ambient?, layer? (footage-led: "behind" draws it behind the presenter)}].
+- scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: cut | fade | push | whip | zoom | iris | morph | pan | pull | orbit | whip-pan | rack-focus | glow-wipe | card-to-card | overview | dot-wipe | light-sweep | push-blur | light-leak | before-after | burn-away | slash-wipe | shatter | crt-off | glitch-wipe | blinds | diamond-wipe | star-iris | pixel-dissolve, dur, direction?, from_object?, color?, cover?, hold? (dot-wipe only), pause?, labels? (before-after only)}, params, hits?, zooms?, ambient?, layer? (footage-led: "behind" draws it behind the presenter)}].
 - in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus; camera moves (pan, whip-pan, orbit, pull, world push) are under "Motion grammar and camera".
 - before-after (1.2–2 s, track 0) when the next scene is the same thing in another version (a redesign, a filter or grade, a fix, the edited take after the raw one): a handle drags across and reveals the new scene behind it, slow → fast → slow; direction where the handle travels (default left: the after side opens from the right), pause (seconds, at most half the wipe) rests it half-way so both versions sit side by side, labels {before?, after?} a word on each side. For two versions of one shot inside a scene use the before-after module instead (it can rest and reverse). Not between unrelated scenes: it promises a comparison.
 - overlays: [captions]. ending: {loop_to: "<first scene id>"} for a seamless loop (Shorts). For no loop, set ending {loop: false} (or loop_to: null, or omit ending without a looping style pack); the last scene then holds settled to the final frame (ending.final "hold", the default), or use final "fade" to fade it fully to the background by the final frame, or "exit" to play its own exit. ending accepts only loop_to, in, loop and final.
@@ -2485,6 +2494,17 @@ params:
 events: item-<i>, tick-<i>
 variants: pills (default), stack, fan, scatter, orbit
 
+### audio-visualizer (keeps captions)
+The finished sound drawn live: a spectrum of bars, a mirrored line or a ring of bars, bass to air, moving with the mix (or the music or voice bus) frame by frame. Reads AUDIO_FEATURES.json, which `launchclip finish` writes for any story that uses this module.
+params:
+- bus: which sound: mix | music | voice (default mix)
+- tone: the bars: good | bad | neutral | primary | accent | paper | #rrggbb (default accent)
+- bars: how many bars, 8–128 (default 28 portrait, 48 landscape, 72 ring)
+- at: bars grow in: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+events: build
+variants: bars (default), line, ring
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), framed wide, medium or close, acting on cues: named poses and expressions at times or narration words, mouths moving on their lines, cuts in on a character. The screen set plays a real capture.
 params:
@@ -2698,6 +2718,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | live-bars | 2 s | 0.5 s | scene − 0.65 s | the bars climb from at until just before the exit |
 | ui-scene | 2 s | 0 s | scene − 0.65 s | the first element enters by 0.6 s; a scene that opens on a whip-pan or opens the video enters its hero panel with enter "cut" at 0, so it is built when the move lands; every time is seconds from the scene start, inside the scene; a child enters no earlier than its parent |
 | item-list | 2 s | 0.5 s | scene − 0.65 s | items enter in order from at, stagger apart; a tick lands after its item enters |
+| audio-visualizer | 2 s | 0.5 s | scene − 0.65 s | the bars grow in over 0.5 s from at, then follow the sound every frame |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | sprite-scene | 2 s | 0 s | scene − 0.4 s | cue, prop and card times sit at least 0.4 s before the scene ends; a pose cue swaps the sprite; a character speaking its says ranges shows its talk sprite (or a jaw bounce) on each word |
@@ -2731,6 +2752,26 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
       "meta": "jetbrains-mono"
     }
   },
+  "direction": {
+    "product": "A build cache for small teams whose CI runs take most of an hour.",
+    "character": "exact, impatient",
+    "world": "a CI log scrolling in a dark terminal",
+    "moments": [
+      "s2"
+    ],
+    "signature": {
+      "detail": "every figure is read in CI minutes",
+      "element": "min"
+    }
+  },
+  "motion": {
+    "thesis": {
+      "focal": "The run time dropping from 40 to 12 minutes in s2.",
+      "continuity": "The minute figure stays in one place across s1 and s2.",
+      "emphasis": "Beats on \"40\", \"12\" and each change ticked off.",
+      "budget": "One big count in s2; everything else enters quietly."
+    }
+  },
   "audio": {
     "music": {
       "provider": "synth",
@@ -2747,6 +2788,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
       "start": 0,
       "end": 3,
       "energy": 1,
+      "hero": "s1.value",
       "params": {
         "value": 40,
         "suffix": " min",
@@ -2766,6 +2808,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
       "start": 3,
       "end": 6.5,
       "energy": 2,
+      "hero": "s2.value",
       "in": {
         "type": "push",
         "dur": 0.4,
@@ -2790,13 +2833,14 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
       "start": 6.5,
       "end": 11,
       "energy": 2,
+      "hero": "s3.rows",
       "in": {
         "type": "whip",
         "dur": 0.3,
         "direction": "up"
       },
       "params": {
-        "title": "Three changes",
+        "title": "Three changes, 28 min saved",
         "rows": [
           {
             "label": "Cache dependencies",
@@ -2822,6 +2866,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
       "start": 11,
       "end": 14,
       "energy": 1,
+      "hero": "s4.action",
       "in": {
         "type": "fade",
         "dur": 0.3

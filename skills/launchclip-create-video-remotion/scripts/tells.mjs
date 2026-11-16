@@ -41,7 +41,9 @@ export const TELLS = Object.freeze({
   headlineWords: 6, displayShare: 0.05, capsWords: 12,
   glowSaturation: 0.25, chromaSaturation: 0.3,
   stragglerLines: 3, organicPoints: 12, pulseShare: 0.02,
-  heroMetrics: 1
+  heroMetrics: 1, signatureScenes: 3,
+  // Frame rules (frameTells): shares of the sampled frame, colour distances in RGB.
+  accentShare: 0.1, accentDistance: 48, rasterDim: 0.85, edgeStep: 60, blackStep: 12, edgeSides: 3
 });
 
 const D = '2026-11-16';
@@ -62,7 +64,7 @@ export const TELL_REGISTRY = Object.freeze([
   tell('radial-wash', 'slop', 'warning', 'plan', 'radialWash', 'A plate from the world, or a neutral one.', 'impeccable'),
   tell('glass-default', 'slop', 'warning', 'plan', 'glassDefault', 'A solid panel, unless the world has glass.', 'impeccable, unslop'),
   tell('grid-stripes', 'slop', 'warning', 'plan', 'gridStripes', 'A plain plate, unless the world is a map, a blueprint or an instrument.', 'impeccable'),
-  tell('accent-everywhere', 'slop', 'warning', 'frame', null, 'One accent, once or twice a frame.', 'unslop'),
+  tell('accent-everywhere', 'slop', 'warning', 'frame', 'accentEverywhere', 'One accent, once or twice a frame.', 'unslop'),
   tell('chart-shades', 'slop', 'warning', 'plan', 'chartShades', 'Neutral steps for the other series, the accent on the one value the line names.', 'unslop'),
   tell('gray-on-color', 'quality', 'warning', 'plan', 'grayOnColor', 'Set the text in a darker shade of the panel\'s own hue.', 'impeccable'),
   tell('ghost-card', 'slop', 'warning', 'plan', 'ghostCard', 'One of the two: a border or a shadow.', 'impeccable'),
@@ -94,9 +96,12 @@ export const TELL_REGISTRY = Object.freeze([
   tell('clipart', 'slop', 'advisory', 'plan', 'clipart', 'A real asset, a photo, or a drawn world.', 'impeccable, unslop'),
   tell('ai-stock-imagery', 'slop', 'warning', 'plan', 'aiStockImagery', 'Show what the software produces.', 'unslop'),
   tell('baked-text', 'slop', 'advisory', 'plan', 'bakedText', 'Real text over a clean image.', 'unslop'),
-  tell('buried-raster', 'quality', 'warning', 'frame', null, 'Less dim, or no photo.', 'impeccable'),
-  tell('unblended-media', 'quality', 'advisory', 'frame', null, 'Match the ground and soften the edge.', 'unslop'),
-  tell('organic-mask', 'slop', 'warning', 'plan', 'organicMask', 'A real matte from subject matting.', 'impeccable')
+  tell('buried-raster', 'quality', 'warning', 'frame', 'buriedRaster', 'Less dim, or no photo.', 'impeccable'),
+  tell('unblended-media', 'quality', 'advisory', 'frame', 'unblendedMedia', 'Match the ground and soften the edge.', 'unslop'),
+  tell('organic-mask', 'slop', 'warning', 'plan', 'organicMask', 'A real matte from subject matting.', 'impeccable'),
+  // The art direction (RFC §3): read only when the plan has a direction block.
+  tell('hero-missing', 'quality', 'warning', 'plan', 'heroMissing', 'Mark each scene\'s one bright element as scene.hero; it carries the colour and the biggest move.', 'unslop'),
+  tell('signature-thin', 'quality', 'warning', 'plan', 'signatureThin', 'Draw the signature detail, by its element id, on at least three scenes.', 'unslop')
 ]);
 
 // ---------------------------------------------------------------------------
@@ -415,6 +420,18 @@ const DETECTORS = {
     return hits.length ? `an asset asks for ${JSON.stringify(AI_STOCK.exec(hits[0])[0])}` : null;
   }),
   bakedText: (input) => perScene(input, (s) => (stringsUnder(s.scene?.params ?? {}, (key) => /prompt/i.test(key)).some((v) => /["“][^"”]{2,}["”]/.test(v)) ? `${s.id} asks a generated image for quoted text` : null)),
+  heroMissing(input) {
+    if (!input.story?.direction || typeof input.story.direction !== 'object') return [];
+    const bare = input.scenes.filter((s) => !s.track && !(typeof s.scene?.hero === 'string' && s.scene.hero.trim()));
+    return bare.length ? [{ at: bare[0].start, ids: bare.map((s) => s.id), detail: `${bare.length} scene${bare.length > 1 ? 's name' : ' names'} no hero (${bare.slice(0, 4).map((s) => s.id).join(', ')})` }] : [];
+  },
+  signatureThin(input) {
+    const element = input.story?.direction?.signature?.element;
+    if (typeof element !== 'string' || !element.trim()) return [];
+    const token = new RegExp(`(^|[^a-z0-9_-])${element.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z0-9_-])`, 'i');
+    const on = input.scenes.filter((s) => token.test(JSON.stringify(s.scene?.params ?? {})) || token.test(String(s.scene?.hero ?? '')) || (s.view && viewNodes(s.view).some(({ node }) => token.test(String(node.id ?? '')))));
+    return on.length < TELLS.signatureScenes ? [{ at: 0, ids: on.map((s) => s.id), detail: `the signature "${element}" is on ${on.length} scene${on.length === 1 ? '' : 's'}` }] : [];
+  },
   organicMask: (input) => perScene(input, (s) => {
     const hits = s.view ? viewNodes(s.view).filter(({ node }) => /polygon\(/.test(String(node.style?.clipPath ?? '')) && String(node.style.clipPath).split(',').length > TELLS.organicPoints) : [];
     return hits.length ? `${hits.length} clip path${hits.length > 1 ? 's' : ''} with more than ${TELLS.organicPoints} points` : null;
@@ -440,4 +457,93 @@ export function planTells(input) {
   return findings;
 }
 
-export { DETECTORS as TELL_DETECTORS };
+// ---------------------------------------------------------------------------
+// Frame rules: judged on pixels the caller samples from the render and the
+// assets (src/frame_tells.js). An image is {width, height, pixels} (RGBA).
+
+const rgbOf = (hex) => { const m = /^#?([0-9a-f]{6})/i.exec(String(hex ?? '')); return m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : null; };
+const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+const luma = (p) => 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
+const px = (image, x, y) => { const o = (y * image.width + x) * 4; return [image.pixels[o], image.pixels[o + 1], image.pixels[o + 2]]; };
+
+/** The share of an image's pixels within `within` (RGB distance) of a colour. */
+export function colorShare(image, rgb, within = TELLS.accentDistance) {
+  let near = 0;
+  for (let y = 0; y < image.height; y += 1) for (let x = 0; x < image.width; x += 1) if (dist(px(image, x, y), rgb) <= within) near += 1;
+  return near / (image.width * image.height || 1);
+}
+
+/**
+ * How a media rect sits on what is around it: per side, the mean colour step
+ * across the edge (a 3 px strip inside against a 3 px strip outside, a pixel
+ * clear of the edge itself), and the black levels (the darkest tenth of the
+ * luma) inside the rect and in a ring around it. Sides at the frame edge are
+ * skipped. → {sides: [step | null ×4], blackIn, blackOut}
+ */
+export function mediaEdge(image, rect, strip = 3) {
+  const W = image.width, H = image.height;
+  const x0 = Math.round(rect.x), y0 = Math.round(rect.y), x1 = Math.round(rect.x + rect.width), y1 = Math.round(rect.y + rect.height);
+  const mean = (xa, ya, xb, yb) => {
+    const sum = [0, 0, 0]; let n = 0;
+    for (let y = Math.max(0, ya); y < Math.min(H, yb); y += 1) for (let x = Math.max(0, xa); x < Math.min(W, xb); x += 1) { const p = px(image, x, y); sum[0] += p[0]; sum[1] += p[1]; sum[2] += p[2]; n += 1; }
+    return n ? sum.map((v) => v / n) : null;
+  };
+  const step = (inside, outside) => (inside && outside ? dist(inside, outside) : null);
+  const g = strip + 1;
+  const sides = [
+    y0 - g >= 0 ? step(mean(x0, y0 + 1, x1, y0 + g), mean(x0, y0 - g, x1, y0 - 1)) : null,
+    x1 + g <= W ? step(mean(x1 - g, y0, x1 - 1, y1), mean(x1 + 1, y0, x1 + g, y1)) : null,
+    y1 + g <= H ? step(mean(x0, y1 - g, x1, y1 - 1), mean(x0, y1 + 1, x1, y1 + g)) : null,
+    x0 - g >= 0 ? step(mean(x0 + 1, y0, x0 + g, y1), mean(x0 - g, y0, x0 - 1, y1)) : null
+  ];
+  const ring = 4 * strip, inner = [], outer = [];
+  for (let y = Math.max(0, y0 - ring); y < Math.min(H, y1 + ring); y += 1) for (let x = Math.max(0, x0 - ring); x < Math.min(W, x1 + ring); x += 1) {
+    const isIn = x >= x0 && x < x1 && y >= y0 && y < y1;
+    (isIn ? inner : outer).push(luma(px(image, x, y)));
+  }
+  const dark = (list) => { if (!list.length) return null; const sorted = list.sort((a, b) => a - b); return sorted[Math.floor(sorted.length * 0.1)]; };
+  return { sides, blackIn: dark(inner), blackOut: dark(outer) };
+}
+
+const FRAME_DETECTORS = {
+  // frames: [{id, at, image}], one per main-track scene, mid-hold.
+  accentEverywhere(input) {
+    const colors = input.story?.brand?.colors ?? {};
+    const accent = rgbOf(colors.accent ?? colors.primary);
+    // An accent that is the ground (or close to it) would read as everywhere on every frame.
+    if (!accent || ['bg', 'background', 'paper'].some((key) => rgbOf(colors[key]) && dist(rgbOf(colors[key]), accent) <= TELLS.accentDistance)) return [];
+    const moments = new Set(Array.isArray(input.story?.direction?.moments) ? input.story.direction.moments : []);
+    return (input.frames ?? []).filter((f) => !moments.has(f.id)).flatMap((f) => {
+      const share = colorShare(f.image, accent);
+      return share > TELLS.accentShare ? [{ at: f.at, ids: [f.id], detail: `${Math.round(share * 100)}% of ${f.id}'s frame is the accent (over ${Math.round(TELLS.accentShare * 100)}%, outside a direction moment)` }] : [];
+    });
+  },
+  // plates: [{id, at, path, dim, raw, dimmed}]: an image or video plate's edge share as the asset is (raw) and under its dim (dimmed).
+  buriedRaster: (input) => (input.plates ?? []).filter((p) => p.dim > TELLS.rasterDim && p.raw >= p.minimum && p.dimmed < p.minimum)
+    .map((p) => ({ at: p.at ?? 0, ids: [p.id], detail: `the picture on ${p.path} has detail (${round(p.raw * 100)}% edges) that its ${p.dim} dim washes out (${round(p.dimmed * 100)}%)` })),
+  // media: [{id, at, rect, image}]: a media window (not full frame) on the frame it plays in.
+  unblendedMedia: (input) => (input.media ?? []).flatMap((m) => {
+    const edge = mediaEdge(m.image, m.rect);
+    const measured = edge.sides.filter((v) => v !== null), hard = measured.filter((v) => v >= TELLS.edgeStep);
+    const black = edge.blackIn !== null && edge.blackOut !== null ? Math.abs(edge.blackIn - edge.blackOut) : 0;
+    return measured.length && hard.length >= Math.min(TELLS.edgeSides, measured.length) && black >= TELLS.blackStep
+      ? [{ at: m.at, ids: [m.id], detail: `${m.id} meets the plate with a hard edge on ${hard.length} of ${measured.length} sides and a black ${Math.round(black)} levels apart` }] : [];
+  })
+};
+
+/** The registry's live frame rules. */
+export const FRAME_TELLS = Object.freeze(TELL_REGISTRY.filter((t) => t.applies === 'frame' && !t.retired && t.detector));
+
+/** Every live frame rule on sampled pixels → findings in the gate shape (as planTells). */
+export function frameTells(input) {
+  const data = { story: input?.story ?? {}, frames: input?.frames ?? [], media: input?.media ?? [], plates: input?.plates ?? [] };
+  const findings = [];
+  for (const t of FRAME_TELLS) {
+    let hits = [];
+    try { hits = FRAME_DETECTORS[t.detector](data) ?? []; } catch { hits = []; }
+    for (const hit of hits) findings.push({ rule: t.id, severity: t.severity, at: hit.at ?? 0, ids: hit.ids ?? [], detail: `${hit.detail}; ${t.fix.charAt(0).toLowerCase()}${t.fix.slice(1)}`, added: t.added });
+  }
+  return findings;
+}
+
+export { DETECTORS as TELL_DETECTORS, FRAME_DETECTORS };

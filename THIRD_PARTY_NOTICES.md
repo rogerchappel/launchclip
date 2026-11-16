@@ -293,6 +293,18 @@ under the Apache License, Version 2.0
 (<http://www.apache.org/licenses/LICENSE-2.0>). Changes: rewritten in our own
 words for video, with detectors and thresholds of our own.
 
+## rea-video (SFX type classifier)
+
+The SFX type rules in `src/sfx/classify.js` (the 120 ms spectrum measures,
+the decay to −15 dB, the six types in order and the typing run) are ported
+from rea-video, Copyright 2026 JuneYaooo
+(<https://github.com/JuneYaooo/rea-video>), licensed under the Apache
+License, Version 2.0 (<http://www.apache.org/licenses/LICENSE-2.0>).
+Changes: ported from Python to JavaScript on our own FFT at 48 kHz with the
+source's bin width, the onset taken from the whole spectrum for one isolated
+sound, our effect families mapped to each type, and the typing run taking
+events. rea-video is not relicensed under LaunchClip's MIT License.
+
 ## AI model providers (optional, paid)
 
 Planning, scripts, the headless critic and some assets can call OpenAI,

@@ -653,6 +653,34 @@ hits to measured words; reach for bespoke code only when no module carries the
 idea. `launchclip story plan` sends the same reference to a model when you
 want a first draft from a brief.
 
+Write the art direction into `storyboard.json` before any scene, as a
+`direction` block:
+
+- `product`: what the subject is and who the video is for, one sentence.
+- `character`: two or three concrete words ("exact, a little warm"). Never
+  clean, modern, sleek, minimal, premium, dynamic, engaging, vibrant,
+  stunning, professional or bold: they describe every template, and
+  `launchclip story validate` refuses them.
+- `world`: the place or material the subject belongs to. It sets the plate,
+  the neutral tint and the accent; a note app lives near paper and ink.
+- `moments`: one or two scene ids where colour and detail may be rich.
+  Everywhere else is quiet.
+- `signature`: `{detail, element}`, one small detail only this video has,
+  drawn on at least three scenes under the same element id.
+
+Then work to it. If you swapped the subject for another and the video still
+fit, push the copy, the world and the signature harder. Give each scene one
+bright element and name it in `scene.hero`: it carries the colour and the
+biggest move, while captions, labels and panels stay in the neutrals. Use the
+accent once or twice a frame outside the moments; finish measures it on the
+render (`accent-everywhere`). Before the scenes, write `motion.thesis`
+`{focal, continuity, emphasis, budget}`: the one focal moment, what carries
+between scenes, which words get a beat, and what is expensive and how often.
+Refuse eyebrows and kickers, gradient text, decorative glass and glow,
+identical card grids, a bare big number as the hero, sparklines standing in
+for content, emoji as icons and mono type as costume, unless the brief's own
+words earn one (never the kicker).
+
 Build one visual idea that develops across the whole piece rather than a stack
 of unrelated title cards. For every scene:
 
