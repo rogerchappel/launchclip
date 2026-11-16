@@ -291,6 +291,39 @@ build plays the data:
 - It replaces `tally` on that scene, ducks under the voice like the bed, and
   counts against the cue budget as one cue.
 
+**Shipped (phase 4).** `karplusStrong()` in `kit/core/sound/music.mjs` is the
+voice, in place of the FM plonk: a seeded noise burst through a one-period
+delay line, rendered in JS because a feedback loop cannot be an `aevalsrc`
+expression. Velocity sets the peak and the brightness; the loop loss makes
+the string fall 60 dB over the note. `kit/core/sound/sonify.mjs` reads each
+chart's resolved model (`chartNotes`) and plays every point on the frame it
+draws: bar, stack, slice and radar-dot tween starts, and for area, line
+sparklines and the ring the frame the eased reveal passes the point. Sparklines
+and long areas keep at most 16 notes. Radar's arpeggio uses the dots variant's
+times in every variant. `renderSonification` mixes the notes and glides at
+−6 dBFS. `finish` renders one file per chart scene under
+`assets/audio/sonify/`, places it as a `sonify` cue on its first note and drops
+that scene's `build` tally.
+
+Differences from the plan above, all open:
+
+- **Off by default.** It plays only when the story or style sets
+  `sound.sonify: true`; there is no "data-heavy scene" default yet.
+- **Not ducked.** The cue sits at a fixed level (0.3) like other cues and
+  skips the bed's sidechain. Route it through the bed's duck if it masks
+  narration.
+- **Scale.** The bed's key is used, but always its major pentatonic, not the
+  palette's scale. The detuned "shadow" for outliers and the sampled mallet
+  (phase 5) are not built.
+- **Budget.** It is placed after cue pacing, so it never competes for the
+  10-second window; it simply replaces the tally the build would have had.
+
+Tests (`test/sound_sonify.test.js`): the pluck is byte-identical for its
+arguments and in tune within 10 cents; every note of every chart, variant and
+aspect lands within one frame of its point; the rendered file is
+deterministic for a seed; a mix carrying three sonified charts masters to
+−14 ± 1 LUFS and ≤ −1 dBTP after AAC.
+
 ## 6. Mastering
 
 What we already do (`src/finish.js` `masterDelivery`, `src/scripts/master-loudness.mjs`):

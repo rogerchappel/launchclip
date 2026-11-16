@@ -1,12 +1,16 @@
 // Critic-driven repair for `launchclip make` (src/make/index.js stageCritic).
 //
 // The headless critic (src/make/critic.js) reviews the render and asks to
-// ship, repair or replan. With rounds left (--critic-repairs, default 3),
+// ship, repair, replan or recapture. With rounds left (--critic-repairs, default 3),
 // make turns its findings into known problems for the planner, re-plans
 // (a targeted repair of the scenes named, or one whole new plan), renders
 // again (only the changed scenes when the timeline held) and asks the
-// critic again. A round that does not lower the blocking and major findings
-// is undone: make never ships a worse cut than the one it had.
+// critic again: a verdict pass that scores the earlier findings and names at
+// most three regressions (src/make/critic.js, `prior`). A recapture round
+// rebuilds the evidence and leaves the video alone. A round that does not
+// lower the blocking and major findings is undone: make never ships a worse
+// cut than the one it had. The critic's `keep` list goes to the planner with
+// the problems, so a repair does not flatten what works.
 //
 // The pure parts live here; the stage wiring lives in src/make/index.js.
 
@@ -30,9 +34,11 @@ export function criticScore(critique) {
   return { verdict: critique?.verdict ?? null, blocking: count("blocking"), major: count("major"), minor: count("minor"), total: findings.length };
 }
 
-/** Whether `after` is a better cut than `before`: it ships where before did not, or it has fewer blocking + major findings. */
+/** Whether `after` is a better cut than `before`: it ships where before did not, it was judged where before was a recapture, or it has fewer blocking + major findings. */
 export function criticImproved(before, after) {
-  if (!after?.verdict) return false;
+  if (!after?.verdict || after.verdict === "recapture") return false;
+  // Evidence the critic could not judge is no score to beat.
+  if (before?.verdict === "recapture") return true;
   if (after.verdict === "ship" && before?.verdict !== "ship") return true;
   return after.blocking + after.major < before.blocking + before.major;
 }
@@ -63,11 +69,13 @@ export function findingScenes(findings, manifestEntries, resolvedScenes) {
 }
 
 /**
+ * "recapture" when the critic said the evidence is bad: rebuild the sheets, never the video.
  * "replan" when the critic asked for one, or a blocking or major narrative
  * finding sits on the opening scene (the hook): a whole new plan. Otherwise
  * "repair": the planner fixes the scenes named and keeps the rest.
  */
 export function criticRepairRoute(critique, findings, openingSceneId) {
+  if (critique?.verdict === "recapture") return "recapture";
   if (critique?.verdict === "replan") return "replan";
   const hookProblem = (findings ?? []).some((finding) => finding.category === "narrative" && ["blocking", "major"].includes(finding.severity) && openingSceneId && finding.scenes?.includes(openingSceneId));
   return hookProblem ? "replan" : "repair";
@@ -86,9 +94,15 @@ export function criticProblems(findings) {
     .map((finding) => `critic (${finding.severity} ${finding.category}${finding.scenes?.length ? `, scene${finding.scenes.length === 1 ? "" : "s"} ${finding.scenes.join(", ")}` : ""}): ${String(finding.message ?? "").trim()}`);
 }
 
-/** The brief section a replan round adds: what the critic saw in the last cut. */
-export function criticBriefSection(problems) {
-  return ["", "## A reviewer watched the last cut", "", "Plan again so none of these happen:", "", ...problems.map((line) => `- ${line}`), ""].join("\n");
+/** The critic's `keep` list as lines for the planner: what works and must survive the fix. */
+export function criticKeepLines(keep) {
+  return (Array.isArray(keep) ? keep : []).map((line) => String(line).trim()).filter(Boolean).map((line) => `keep (it works; do not lose it): ${line}`);
+}
+
+/** The brief section a replan round adds: what the critic saw in the last cut, and what to keep. */
+export function criticBriefSection(problems, keep = []) {
+  const kept = (Array.isArray(keep) ? keep : []).map((line) => String(line).trim()).filter(Boolean);
+  return ["", "## A reviewer watched the last cut", "", "Plan again so none of these happen:", "", ...problems.map((line) => `- ${line}`), ...(kept.length ? ["", "Keep these, they work:", "", ...kept.map((line) => `- ${line}`)] : []), ""].join("\n");
 }
 
 /**
