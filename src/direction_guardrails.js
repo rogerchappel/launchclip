@@ -444,6 +444,7 @@ function shotOf(model) {
  * different world) — an error; the same set and cast more than three times
  * in a video is a warning. A video of 15 s or more whose five or more scenes
  * are all line diagrams, step rows and text cards (abstract-only) is an error.
+ * A checklist card (checkbox rows in one box) is a boxed-list warning.
  */
 export function varietyGate(story) {
   const { entries } = renderedModels(story);
@@ -456,6 +457,8 @@ export function varietyGate(story) {
   const counts = new Map();
   for (const shot of shots) counts.set(`${shot.set}|${shot.cast}`, [...(counts.get(`${shot.set}|${shot.cast}`) ?? []), shot.id]);
   for (const [key, ids] of counts) if (ids.length > 3) findings.push({ rule: "same-setup", severity: "warning", at: shots.find((shot) => shot.id === ids[3]).start, ids, detail: `${key.replace("|", " with ")} appears ${ids.length} times; vary the set or the cast` });
+  // boxed-list: a checklist card (checkbox rows with status labels in one box) reads as a template, not a design.
+  for (const { entry, model } of entries.values()) if (model.module === "checklist") findings.push({ rule: "boxed-list", severity: "warning", at: entry.start, ids: [entry.id], detail: `${entry.id} draws its list as checkbox rows inside one card (${model.content.rows.length} rows), a tell of templated video; use item-list (each item its own element: stack, fan, scatter or orbit, ticks one at a time)` });
   // abstract-only (kit/core/explainer.mjs): nothing but line diagrams, step rows and text cards, with nothing pictured.
   const abstract = abstractFindings(story);
   if (abstract.abstract) findings.push({ rule: "abstract-only", severity: "error", at: 0, ids: [], detail: `all ${abstract.scenes} scenes are line diagrams, step rows and text cards (${abstract.modules.join(", ")}), with nothing pictured; show the subject: a character acting the line, an object, a photo, a chart of real figures or an interface, and keep diagrams as support` });
