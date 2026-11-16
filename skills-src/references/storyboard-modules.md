@@ -342,6 +342,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | counts a run of days ("28 days", "every day for a month", "a daily release"): a month calendar whose day cells fill in sequence, with marks on the days that matter | month-grid |
 | introduces a real person by name and role in an explainer ("Professor X at Y", "the paper's author", "her advisor"): their photo with a glowing name pill and role | person-id |
 | traces who taught or worked with whom ("his doctoral advisor", "her student", "trained under"): photos linked by dashed connectors with role labels | lineage-graph |
+| describes a team, agents or tools working together under one lead ("seven agents", "a director hands out the work", "every tool reports back to one model", "a pipeline of specialists"): icon cards flock out of a hub and fan above it, glowing wires carry pulses of light into the hub on the beat, then every wire fires at once | node-graph |
 | shows or changes a formula ("the equation", "a sign error", "this term"): typeset LaTeX that reveals term by term, boxes the term in question and diffs red to green | equation |
 | unpacks a paper or report title word by word ("the paper's title", "in plain English that means"): the title as word chips, each key term linked to an icon and a gloss | title-decompose |
 | describes particle interactions or loop corrections ("one loop", "exchanges a photon", "self-energy"): a Feynman diagram that draws itself line by line; particle physics only (any other line sketch is a line-diagram) | feynman-diagram |
@@ -2354,6 +2355,20 @@ params:
 events: build, line-<i>
 variants: blueprint (default), plain
 
+### node-graph (keeps captions)
+A team at work: 3–8 nodes (agents, tools, steps) with icons and short labels flock out of a hub ("director", "the model") and fan above it, glowing wires draw into the hub and pulses of light run down them on the beat, lighting the hub as they land; at converge every wire fires at once and the hub takes the hit. Every element keeps moving.
+params:
+- nodes: [label ≤ 14 | {label ≤ 14, icon? (kit/core/icons.mjs, default bot), id? (a reveal id; default n<i>)}] 3–8 (events node-<id>)
+- hub: the lead node: a label ≤ 16, or {label ≤ 16, icon? (default sparkles)}
+- tone: the hub and its pill: primary | accent (default) | paper | #rrggbb
+- title: string ≤ 60 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- converge: every wire fires at once: seconds from scene start (optional; else a matching hit, else a default)
+- bpm: beats per minute for default timing, 60–200 (default 120): landings and pulses land on beats, converge on a bar line
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, node-<id>, converge
+
 ### drop-grid (keeps captions)
 Things pile up as they are said: 1–40 cards, coins or tiles drop into a grid one by one ("10 times a day": ten cards land), each with a weighted fall, a squash on contact, a contact shadow and a puff of dust, over faint empty slots; an optional counter climbs with every landing, and confetti bursts when the grid fills. Time each drop to its word with params.times.
 params:
@@ -2617,6 +2632,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | title-decompose | 2 s | 0.5 s | scene − 0.65 s | the words pop in reading order within about 0.9 s from at; terms follow 0.7 s apart (squeezed to fit) |
 | feynman-diagram | 2 s | 0.5 s | scene − 0.65 s | lines draw in 0.6 s each, about 0.55 s apart from at; both compress so every label stays up 1 s plus 0.3 s a word before the exit, and a label the scene has no time for is dropped; vertices pop as the first line reaches them; the caption shows with the build |
 | line-diagram | 2 s | 0.5 s | scene − 0.65 s | strokes draw in 0.6 s, 0.5 s apart from at; both compress so every label stays up 1 s plus 0.3 s a word before the exit, and a label the scene still has no time for is dropped (keep labels few and short, or lengthen the scene); an explicit line at must leave its label that read |
+| node-graph | 2 s | 0.5 s | scene − 0.65 s | the hub pops on the first beat after 0.5 s; nodes flock out from the middle of the fan outwards a quarter beat apart; a pulse lands on every beat once the wires are drawn; converge falls on the first bar line two beats after the last wire, or the last beat before the exit |
 | drop-grid | 2 s | 0.5 s | scene − 0.65 s | each item lands TACTILE.fall s after its drop time; time drops to the words that count them; the last item lands before the exit |
 | live-counter | 2 s | 0.5 s | scene − 0.65 s | the count runs from at until just before the exit, so the figure is moving whenever it is on screen |
 | live-bars | 2 s | 0.5 s | scene − 0.65 s | the bars climb from at until just before the exit |
