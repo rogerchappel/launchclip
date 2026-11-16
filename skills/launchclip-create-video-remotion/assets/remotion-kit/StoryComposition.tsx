@@ -64,6 +64,7 @@ import type { CalculateMetadataFunction } from "remotion";
 import { placeholderModel, resolveModule } from "../core/modules.mjs";
 // @ts-ignore plain ESM from kit/core
 import { behaviourTransform, sceneBehaviour } from "../core/behaviours.mjs";
+// @ts-ignore plain ESM from kit/core
 import { holdTime, layerStateAt, layerStyle, sceneWindows, smearFilterId, smearFilterSvg } from "../core/transitions.mjs";
 // @ts-ignore plain ESM from kit/core
 import { getEase } from "../core/motion.mjs";
