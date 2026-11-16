@@ -154,13 +154,15 @@ export const CONSTRAINT_KEYS = Object.freeze(['tone', 'theme', 'world', 'drawing
 /**
  * Style families: art direction that sets several dimensions at once, on top
  * of what the seed draws (the seed still picks palette, worlds and motion).
- * retro-pixel (docs/VFX_LAYER_RFC.md §3b): the pixel-arcade look, a heavy
- * display face over a mono body (the bundled set has no pixel face; the hits'
- * words keep the VFX layer's own pixel font, vfx.words "pixel"), square
- * outlined panels, and the retro VFX unlocked (pixel-dissolve).
+ * retro-pixel (docs/VFX_LAYER_RFC.md §3b): the hits keep the VFX layer's
+ * own pixel font (vfx.words "pixel"), a heavy display face over a mono body
+ * (the bundled set has no pixel face), square outlined panels, and the retro
+ * VFX unlocked (pixel-dissolve). The effects are pixel art by themselves, so
+ * the family leaves the picture crisp: the pixel-arcade grade is opt-in
+ * (story.look), since it breaks up card text.
  */
 export const STYLE_FAMILIES = Object.freeze({
-  'retro-pixel': Object.freeze({ look: 'pixel-arcade', fonts: Object.freeze({ display: 'archivo-black', body: 'jetbrains-mono', meta: 'jetbrains-mono' }), panel: Object.freeze({ treatment: 'outline', radius: 0 }), vfx: Object.freeze({ words: 'pixel' }) })
+  'retro-pixel': Object.freeze({ fonts: Object.freeze({ display: 'archivo-black', body: 'jetbrains-mono', meta: 'jetbrains-mono' }), panel: Object.freeze({ treatment: 'outline', radius: 0 }), vfx: Object.freeze({ words: 'pixel' }) })
 });
 
 /**
@@ -809,10 +811,10 @@ function buildPack(hex, toneName, t, fixed, attempt, ctx) {
     cast,
     ...(world ? { world } : {}),
     ...(fixed.medium ? { medium: JSON.parse(JSON.stringify(fixed.medium)) } : {}),
-    ...(fixed.look ? { look: JSON.parse(JSON.stringify(fixed.look)) } : family ? { look: family.look } : {}),
+    ...(fixed.look ? { look: JSON.parse(JSON.stringify(fixed.look)) } : {}),
     ...(family ? { vfx: { ...family.vfx } } : {}),
     // Grade (grade.mjs): the look's own preset, else the tone's (bleach only on a dark serious style); no draw, so every other draw stays put.
-    grade: GRADE_LOOK_DEFAULTS[typeof fixed.look === 'string' ? fixed.look : fixed.look?.name ?? family?.look] ?? (toneName === 'serious' && !palette.dark ? 'clean' : GRADE_TONE_DEFAULTS[toneName] ?? 'clean'),
+    grade: GRADE_LOOK_DEFAULTS[typeof fixed.look === 'string' ? fixed.look : fixed.look?.name] ?? (toneName === 'serious' && !palette.dark ? 'clean' : GRADE_TONE_DEFAULTS[toneName] ?? 'clean'),
     brand_frame,
     dials,
     generated: {

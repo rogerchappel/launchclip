@@ -194,7 +194,7 @@ test('the plates swap at the midpoint, under a full cover drawn the same by the 
   assert.deepEqual(vfxSounds(story).filter(sound => sound.effect === 'shatter').map(sound => [sound.at, sound.cue]), [[story.scenes[3].start, 'snap']]);
 });
 
-test('pixel-dissolve is retro only; the retro-pixel family sets the pixel-arcade look and pixel words', async () => {
+test('pixel-dissolve is retro only; the retro-pixel family keeps pixel words and a crisp picture', async () => {
   const raw = JSON.parse(readFileSync(new URL('storyboard.json', TRANSITIONS), 'utf8'));
   delete raw.vfx;
   assert.match(validateStory(raw).errors.join('\n'), /"pixel-dissolve" is retro only/);
@@ -202,7 +202,7 @@ test('pixel-dissolve is retro only; the retro-pixel family sets the pixel-arcade
   const {generateStyle} = await import('@launchclip/core/style-seed.mjs');
   const {applyStyle, validateStylePack} = await import('@launchclip/core/style.mjs');
   const pack = generateStyle({seed: '1a2b3c4d', constraints: {family: 'retro-pixel'}});
-  assert.deepEqual([pack.look, pack.vfx, pack.brand.fonts.body, pack.layouts.panel], ['pixel-arcade', {words: 'pixel'}, 'jetbrains-mono', {...pack.layouts.panel, treatment: 'outline', radius: 0}]);
+  assert.deepEqual([pack.look, pack.vfx, pack.brand.fonts.body, pack.layouts.panel], [undefined, {words: 'pixel'}, 'jetbrains-mono', {...pack.layouts.panel, treatment: 'outline', radius: 0}]);
   assert.deepEqual(validateStylePack(pack).errors, []);
   const styled = applyStyle({...raw, look: undefined}, pack);
   assert.equal((styled.story ?? styled).vfx.words, 'pixel');

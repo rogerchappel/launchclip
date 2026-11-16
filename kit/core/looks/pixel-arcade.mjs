@@ -14,7 +14,10 @@
 // picture share one pixel size.
 // Furniture: scanlines one art row apart.
 //
-// What it costs: text smaller than about four cells breaks up. Captions sit
+// Opt-in only (story.look): the VFX effects are pixel art by themselves over
+// a crisp picture; this grade turns the whole frame retro.
+// What it costs: text smaller than about four cells breaks up (card body
+// text at 1080p does). Captions sit
 // above the look and stay crisp. It posterises per channel (64 colours), not
 // to a fixed 16-colour palette: a filter cannot pick the nearest of 16.
 
@@ -30,7 +33,7 @@ export function arcadeCell(unit) {
 }
 
 export const LOOK = {
-  describe: 'the whole frame as a retro game screen: cut to big square pixels on the VFX art grid, posterised with ordered dither, under faint scanlines',
+  describe: 'the whole frame as a retro game screen: cut to big square pixels on the VFX art grid, posterised with ordered dither, under faint scanlines; small card text breaks up, so keep type large',
   words: ['\\bpixel[- ]?art\\b', '\\b(?:8|16)[- ]?bit\\b', '\\bretro[- ](?:game|arcade|pixel)\\b', '\\barcade (?:look|style|screen)\\b', '\\bpixel[- ]arcade\\b'],
   defaults: { strength: 1, step: 0 },
   // A dark arcade cabinet: deep violet ground, a gold and a cyan that survive four levels a channel.

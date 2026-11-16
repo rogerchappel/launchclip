@@ -1,6 +1,6 @@
 {
   "schema": "launchclip.story.v1",
-  "title": "VFX arcade sample",
+  "title": "VFX sample: hits and cover transitions",
   "lane": "motion",
   "format": {
     "width": 1080,
@@ -22,9 +22,6 @@
       "body": "space-grotesk",
       "meta": "jetbrains-mono"
     }
-  },
-  "look": {
-    "name": "pixel-arcade"
   },
   "audio": {
     "music": "synth"

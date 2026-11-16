@@ -322,8 +322,10 @@ effect here draws in `pixel` mode, which is what the retro look wants anyway.
   4 × 4 Bayer tile of cells, then snap each channel to four levels. That is
   64 colours by ordered dither, not a 16-colour palette quantise, because a
   filter cannot pick the nearest of 16 colours. Scanlines sit one art row
-  apart. `retro-pixel` is a seed constraint (`family`), not a drawn
-  dimension. It sets the look, a heavy display face over a mono body (the
+  apart. The grade is opt-in only: the effects already read as pixel art
+  over a crisp picture, and the grade breaks up card body text. `retro-pixel`
+  is a seed constraint (`family`), not a drawn dimension. It leaves the
+  picture crisp and sets a heavy display face over a mono body (the
   bundled fonts have no pixel face, so the hits keep the VFX core's own
   pixel font via `vfx.words`), square outlined panels, and unlocks
   `pixel-dissolve`, which validation refuses outside a retro story.

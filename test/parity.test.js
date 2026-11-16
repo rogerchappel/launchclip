@@ -58,7 +58,7 @@ const STORY_PARITY = Object.freeze([
   {id: 'vfx-hits-9x16', times: [1.3, 2.4, 3.25, 4.4, 5.2]},
   // The nine VFX cover transitions (burn-away … pixel-dissolve), each mid-cover, turned a quarter for portrait.
   {id: 'vfx-transitions-9x16', times: [1.85, 3.4, 5, 6.75, 8.2, 9.8, 11.4, 13.1, 14.6]},
-  // The pixel-arcade look over hits and cover transitions (the round-two sample).
+  // The round-two sample: hits and cover transitions over crisp scenes.
   {id: 'vfx-arcade-9x16', times: [1.2, 3.5, 6.45, 10.9]},
   // Interface scenes on signal-ui (the CI smoke's times, scripts/parity-ci.mjs).
   {id: 'ui-parity-9x16', times: [...CI_UI_STORY.times]}
