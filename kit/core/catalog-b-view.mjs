@@ -46,7 +46,9 @@ export function rootNode(model, children) {
 //   {type:'tween', target, start, duration, ease, from, to}
 //   {type:'loop',  target, start, cycle, repeats, from:{x}, to:{x}}  linear, wraps
 //
-// Props: opacity, x, y, scaleX, scaleY, rotation (deg), strokeDashoffset, text.
+// Props: opacity, x, y, scaleX, scaleY, rotation (deg), strokeDashoffset, text,
+// clipT, clipR, clipB, clipL (an inset() clip, % of the element per edge;
+// one edge per element, the others 0).
 // The HyperFrames emitter turns these into tl.set / tl.fromTo (loop → fromTo
 // with repeat) on a paused GSAP timeline. Remotion evaluates them with
 // frameState(), which reproduces GSAP's timeline semantics for these ops:
@@ -103,6 +105,11 @@ export function propsToStyle(props) {
   if (props.opacity !== undefined) style.opacity = props.opacity;
   if (TRANSFORM_PROPS.some(key => props[key] !== undefined)) style.transform = transformString(props);
   if (props.strokeDashoffset !== undefined) style.strokeDashoffset = props.strokeDashoffset;
+  if (CLIP_PROPS.some(key => props[key] !== undefined)) style.clipPath = clipInset(props);
   return style;
 }
+
+export const CLIP_PROPS = ['clipT', 'clipR', 'clipB', 'clipL'];
+/** The clip props as a CSS inset() (GSAP tweens the same string number by number). */
+export const clipInset = props => `inset(${CLIP_PROPS.map(key => `${Math.round((props[key] ?? 0) * 1000) / 1000}%`).join(' ')})`;
 

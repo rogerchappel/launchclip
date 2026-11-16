@@ -31,7 +31,7 @@ function renderNode(node: ViewNode | string, state: Map<string, FrameProps>, key
   if (node.tag === 'img') return <Img key={key} id={node.id} src={assetUrl(String(node.attrs?.src))} alt={String(node.attrs?.alt ?? '')} style={style} />;
   const props = node.id ? state.get(node.id) : undefined;
   const children = props && props.text !== undefined ? [String(props.text)] : node.children ?? [];
-  return React.createElement(node.tag, {key, id: node.id, style}, ...children.map((child, index) => renderNode(child, state, index)));
+  return React.createElement(node.tag, {key, id: node.id, style, ...(node.attrs ?? {})}, ...children.map((child, index) => renderNode(child, state, index)));
 }
 
 export const MediaLayout: React.FC<{model: any}> = ({model}) => {
@@ -65,4 +65,4 @@ const typed = (id: string): React.FC<{model: any}> => {
 
 /** One component per media layout, keyed by module id. */
 export const MEDIA_LAYOUT_COMPONENTS: Record<string, React.FC<{model: any}>> = Object.fromEntries(
-  ['split-screen', 'landscape-card', 'picture-in-picture', 'media-compare', 'media-stat', 'media-list', 'media-grid'].map(id => [id, typed(id)]));
+  ['split-screen', 'landscape-card', 'picture-in-picture', 'media-compare', 'media-stat', 'media-list', 'media-grid', 'before-after'].map(id => [id, typed(id)]));

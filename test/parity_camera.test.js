@@ -62,6 +62,11 @@ export const CAMERA_PARITY = Object.freeze([
   // full), mid-zoom, through the pull, mid-iris and mid-fade. Every sample
   // has a picture edge to edge: no background shows.
   {id: 'footage-transitions-9x16', threshold: 0.95, times: [1.5, 3.1, 3.2, 3.3, 3.4, 3.5, 6.1, 6.25, 9.1, 9.3, 9.5, 12.25, 15.25]},
+  // The before-and-after wipe (kit/core/before-after.mjs): the transition
+  // mid-leg, resting half-way and mid-leg again (the incoming clip opens at
+  // the handle, labels on both sides), then the in-scene compare on one
+  // graded source, through its three stops (out, rest, back, rest, across).
+  {id: 'before-after-9x16', threshold: 0.95, times: [3.3, 3.8, 4.3, 7.9, 8.8, 9.8, 10.7, 12.5]},
   {id: 'evidence-world-16x9', threshold: 0.9, times: [3.5, 4.6, 6.6, 11.3, 11.9, 15.8, 16.6, 17.4],
     files: {'assets/evidence-static.mp4': {from: 'test/fixtures/parity/assets/evidence-static.mp4'}}}
 ]);

@@ -14,6 +14,13 @@
   `kit/core/fluid-motion.mjs` (flock, wave, idle, impact shake, beat grid);
   docs/FLUID_MOTION_RFC.md is the plan for the rest. The motion check now
   reads an element that flashes on every beat as a flash, not an entrance.
+- A before-and-after wipe: a handle drags across the shot and the other
+  version is revealed behind it, slow → fast → slow with no overshoot. As a
+  transition (`before-after`, with an optional rest half-way and a label on
+  each side) and as a media layout inside one scene (`before-after`: two
+  sources, or one with a grade on one side, the handle resting and reversing
+  at its stops). The planner reaches for it for redesigns, filters and grades
+  and raw-versus-edited takes.
 - `exploded-view`: one object as an isometric drawing of solid parts, in
   four tones with a single lit part and ink outlines, that comes apart along
   its axes, holds with its labels beside it and snaps back. Three built-in
@@ -152,6 +159,11 @@
 
 ### Changed
 
+- `picture-in-picture` is drawn as a `split-screen` on a 9:16 or square
+  frame (footage across the top for a top corner, the bottom for a bottom
+  one). A corner card there shrank the footage to a thumbnail and left the
+  panel beside it empty. The planner is told it is for 16:9; on 16:9 nothing
+  changes, and a stored portrait plan that names it still builds.
 - HyperFrames moves from 0.7.58 to 0.7.111, which clears its `adm-zip` and
   `@hono/node-server` advisories. That release copies a mono sound to both
   sides at full level, 3 dB above what Remotion renders, so the HyperFrames
