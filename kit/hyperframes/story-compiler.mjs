@@ -16,7 +16,7 @@
 // Canonical copy: kit/hyperframes/story-compiler.mjs. Skills ship a copy whose
 // ../core/ imports point at ./ (scripts/sync-skills.mjs).
 
-import { copyFile, cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { copyFile, cp, mkdir, open, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
@@ -1039,17 +1039,62 @@ async function videoDurations(story, sourceDir) {
   return durations;
 }
 
-// The sources in sourceDir whose audio is mono (ffprobe; one it cannot read
-// is left out). → Set of src
+// A WAV file's channel count from its fmt chunk (in the first 4 KB), or null.
+// Read directly, so a WAV mix is judged the same on a machine without ffprobe.
+export async function wavChannels(file) {
+  let handle;
+  try {
+    handle = await open(file, 'r');
+    const buf = Buffer.alloc(4096);
+    const {bytesRead} = await handle.read(buf, 0, buf.length, 0);
+    if (bytesRead < 12 || buf.toString('ascii', 0, 4) !== 'RIFF' || buf.toString('ascii', 8, 12) !== 'WAVE') return null;
+    for (let at = 12; at + 8 <= bytesRead;) {
+      const size = buf.readUInt32LE(at + 4);
+      if (buf.toString('ascii', at, at + 4) === 'fmt ') return at + 12 <= bytesRead ? buf.readUInt16LE(at + 10) : null;
+      at += 8 + size + (size % 2);
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    await handle?.close();
+  }
+}
+
+// An MP4-family file's first AAC track channel count, from its mp4a sample
+// entry (channelcount sits 16 bytes into the entry's body), or null. Files
+// over 64 MB are left to ffprobe.
+export async function mp4aChannels(file) {
+  try {
+    const {size} = await stat(file);
+    if (size > 64 * 1024 * 1024) return null;
+    const buf = await readFile(file);
+    // The entry that follows an stsd header (type, version/flags, count, entry size), not a stray match in the media data.
+    for (let at = buf.indexOf('mp4a'); at >= 16; at = buf.indexOf('mp4a', at + 4)) {
+      if (buf.toString('ascii', at - 16, at - 12) === 'stsd' && at + 22 <= buf.length) return buf.readUInt16BE(at + 20) || null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// The sources in sourceDir whose audio is mono (a WAV or MP4 header, else ffprobe;
+// one neither can read is left out). → Set of src
 async function monoSources(sourceDir, sources) {
   const mono = new Set();
   if (!sourceDir) return mono;
-  await Promise.all([...new Set(sources.filter((src) => typeof src === 'string'))].map((src) => new Promise((resolve) => {
-    execFile('ffprobe', ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=channels', '-of', 'csv=p=0', path.join(sourceDir, src)], (error, stdout) => {
-      if (!error && Number(String(stdout).trim()) === 1) mono.add(src);
-      resolve();
+  await Promise.all([...new Set(sources.filter((src) => typeof src === 'string'))].map(async (src) => {
+    const file = path.join(sourceDir, src);
+    const channels = /\.wav$/i.test(src) ? await wavChannels(file) : /\.(m4a|mp4|mov|m4v)$/i.test(src) ? await mp4aChannels(file) : null;
+    if (channels !== null) { if (channels === 1) mono.add(src); return; }
+    await new Promise((resolve) => {
+      execFile('ffprobe', ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=channels', '-of', 'csv=p=0', file], (error, stdout) => {
+        if (!error && Number(String(stdout).trim()) === 1) mono.add(src);
+        resolve();
+      });
     });
-  })));
+  }));
   return mono;
 }
 
