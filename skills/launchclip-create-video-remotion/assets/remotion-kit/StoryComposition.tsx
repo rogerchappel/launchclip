@@ -235,6 +235,8 @@ const LightOver: React.FC<{ plan: any; zIndex: number }> = ({ plan, zIndex }) =>
 export const PlateLayer: React.FC<{ layer: any; t: number; from?: number }> = ({ layer, t, from = 0 }) => {
   const { fps } = useVideoConfig();
   const style = backgroundLayerStyle(layer, t) as React.CSSProperties;
+  // a weather loop: the VFX painter's canvas pair in the layer's box
+  if (layer.vfx) return <div style={style}><VfxCanvas plan={layer.vfx} t={t} zIndex={0} /></div>;
   if (!layer.video) return <div style={style} dangerouslySetInnerHTML={layer.svg ? { __html: layerSvg(layer, assetUrl) } : undefined} />;
   return (
     <div style={{ ...style, overflow: "hidden" }}>
@@ -655,7 +657,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
   // Story lighting: the under group on every plate that draws a background, as the HyperFrames compiler.
   const light = React.useMemo(() => lightPlan(story), [story]);
   // The VFX layer (kit/core/vfx): effect cues over every scene and the light, under the wipes and captions.
-  const vfx = React.useMemo(() => vfxPlan(story), [story]);
+  const vfx = React.useMemo(() => vfxPlan(story, { resolve: (scene: any) => resolveModule(scene, story) }), [story]);
   const audioReact = React.useMemo(() => audioReactPlan(story), [story]);
   const lightFor = (scene: any) => (light?.under.length && (scenePlatePlan(story, scene) || sceneBackground(story, scene)) ? light.under : null);
   const plan = React.useMemo(() => cameraPlan(story, { windows, objects: sceneObjectLookup(story, (scene: any, value: any) => resolveModule(scene, value)) }), [story, windows]);

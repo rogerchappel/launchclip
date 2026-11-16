@@ -26,7 +26,9 @@ export const STORY_CAMERA_LAYOUTS = ["row", "column", "grid", "path", "auto"];
 // story.motion.grammar presets (kit/core/grammar.mjs GRAMMAR_NAMES).
 // What a scene hit's moment asks the sound score for (kit/core/sound/options.mjs SCORE_MOMENTS; kept in step by test/sound_score.test.js).
 /** Effects a scene's vfx cues may name (kit/core/vfx/catalog.mjs VFX_EFFECT_NAMES, kept here so this file stays import-free). */
-export const STORY_VFX_EFFECTS = ["hit-spark", "crit-hit", "impact-frame", "ground-slam", "small-explosion", "smoke-bomb", "firework-burst", "poof", "sunburst", "collect-burst", "combo-counter", "crit-number", "level-up", "achievement", "confetti", "firework-rocket"];
+export const STORY_VFX_EFFECTS = ["hit-spark", "crit-hit", "impact-frame", "ground-slam", "small-explosion", "smoke-bomb", "firework-burst", "poof", "sunburst", "collect-burst", "combo-counter", "crit-number", "level-up", "achievement", "confetti", "firework-rocket", "electrified", "glitch", "scanner", "halo", "hit-flash", "confused", "sleep", "stunned", "charmed", "rage", "haste", "slowed", "frozen", "burning"];
+/** The silhouette effects among them (kit/core/vfx/catalog.mjs VFX_MASKED): each draws round a cue's mask, "module" or "cast:<id>". */
+export const STORY_VFX_MASKED = ["electrified", "glitch", "scanner", "halo", "hit-flash", "confused", "sleep", "stunned", "charmed", "rage", "haste", "slowed", "frozen", "burning"];
 export const STORY_MOMENTS = ["letdown", "promise", "reveal", "impact", "crystallise", "wonder", "miss", "resolve"];
 export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "documentary", "cinematic"];
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
@@ -63,19 +65,21 @@ export const STORY_BACKGROUND_PARAMS = Object.freeze({
   "icon-scatter": { scale: BG_SCALE, density: BG_UNIT, jitter: BG_UNIT, opacity: [0.04, 0.2], stroke: [1, 3], speed: BG_SPEED },
   "logo-pattern": { scale: BG_SCALE, spacing: BG_SCALE, offset: BG_UNIT, opacity: [0.04, 0.2], speed: BG_SPEED },
   motif: { scale: BG_SCALE, weight: [0.5, 3], opacity: [0.04, 0.3], angle: [0, 180], speed: BG_SPEED },
-  texture: { amount: BG_UNIT, scale: BG_SCALE }
+  texture: { amount: BG_UNIT, scale: BG_SCALE },
+  weather: { intensity: BG_UNIT, speed: BG_SPEED }
 });
 export const STORY_BACKGROUND_KINDS = Object.keys(STORY_BACKGROUND_PARAMS);
 export const STORY_BACKGROUND_COLORS = ["primary", "accent", "paper"];
 // Option params per kind (kit/core/backgrounds.mjs BACKGROUND_OPTIONS): color
 // on patterned kinds, fade on every kind but blobs, a motif's shape, a
-// texture's type. Icon kinds also take icons: "auto" or 1–8 icon names.
+// texture's or weather's type. Icon kinds also take icons: "auto" or 1–8 icon names.
 const BG_PLAIN = ["flat", "paper", "mesh", "blobs", "logo-pattern", "texture"];
 export const STORY_BACKGROUND_OPTIONS = Object.freeze(Object.fromEntries(STORY_BACKGROUND_KINDS.map((kind) => [kind, {
   ...(BG_PLAIN.includes(kind) ? {} : { color: STORY_BACKGROUND_COLORS }),
   ...(kind === "blobs" ? {} : { fade: ["none", "center", "top", "bottom", "left", "right"] }),
   ...(kind === "motif" ? { shape: ["plus", "circle", "chevron", "wave", "hatch", "crosshatch"] } : {}),
-  ...(kind === "texture" ? { type: ["noise", "fibre", "canvas", "linen"] } : {})
+  ...(kind === "texture" ? { type: ["noise", "fibre", "canvas", "linen"] } : {}),
+  ...(kind === "weather" ? { type: ["aurora", "blizzard", "cherry-blossoms", "clouds", "falling-leaves", "fireflies", "fog", "god-rays", "rain", "shooting-stars", "snow", "storm"] } : {})
 }])));
 export const STORY_PANEL_TREATMENTS = ["solid", "glass", "paper", "outline", "soft-shadow", "rim-glass"];
 // story.medium kinds and keys (kit/core/medium.mjs MEDIUM_KINDS, MEDIUM_KEYS;
@@ -817,6 +821,12 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (cue.angle !== undefined && !(typeof cue.angle === "number" && cue.angle >= -180 && cue.angle <= 180)) err(`${cuePath}.angle must be degrees between -180 and 180`);
         if (cue.light !== undefined && !(typeof cue.light === "number" && cue.light >= 0 && cue.light <= 2)) err(`${cuePath}.light must be a number between 0 and 2`);
         if (cue.sfx !== undefined && !nonEmpty(cue.sfx)) err(`${cuePath}.sfx must be "auto" (the effect's paired sound, the default), "none" or a sound family`);
+        // A silhouette effect (kit/core/vfx/mask.mjs) sits on its mask: the scene's card or a cast member.
+        if (STORY_VFX_MASKED.includes(cue.effect)) {
+          if (cue.mask !== undefined && !(cue.mask === "module" || (typeof cue.mask === "string" && /^cast:\S+$/.test(cue.mask)))) err(`${cuePath}.mask must be "module" (the scene's card) or "cast:<id>" (a cast member of this scene)`);
+          else if (typeof cue.mask === "string" && cue.mask.startsWith("cast:") && scene.module !== "cast-scene") err(`${cuePath}.mask "${cue.mask}" needs a cast-scene; ${scene.module} has no cast`);
+          for (const axis of ["x", "y"]) if (cue[axis] !== undefined) err(`${cuePath}.${axis} does not apply: ${cue.effect} sits on its mask`);
+        } else if (cue.mask !== undefined) err(`${cuePath}.mask applies only to the silhouette effects (${STORY_VFX_MASKED.join(", ")})`);
         // A hit's words (kit/core/vfx/catalog.mjs VFX_WORDS): short, so they read in one glance.
         for (const key of ["text", "label", "title"]) if (cue[key] !== undefined && !(nonEmpty(cue[key]) && cue[key].length <= 24)) err(`${cuePath}.${key} must be a word or two (1–24 characters)`);
       }

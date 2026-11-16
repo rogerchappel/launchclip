@@ -9,7 +9,9 @@
 import {hashUnit} from '../fluid-motion.mjs';
 import {brandFontStacks} from '../fonts.mjs';
 import {VFX_COVER_TRANSITIONS, sceneWindows} from '../transitions.mjs';
-import {VFX_EFFECTS, VFX_MODULES, VFX_TRANSITIONS, VFX_WORDS} from './catalog.mjs';
+import {VFX_EFFECTS, VFX_MASKED, VFX_MODULES, VFX_TRANSITIONS, VFX_WORDS} from './catalog.mjs';
+import {cueSilhouette} from './mask.mjs';
+import {vfxActorWire} from './silhouette.mjs';
 
 /** Stacking: over the scenes and the light's over group, under the dot wipes, light sweeps, frame and captions. */
 export const VFX_Z = Object.freeze({hyperframes: 78500, remotion: 47});
@@ -17,6 +19,8 @@ export const VFX_Z = Object.freeze({hyperframes: 78500, remotion: 47});
 export const VFX_ART_SHORT = 180;
 
 const r3 = value => Math.round(value * 1000) / 1000;
+// A cue's alignment: its own, else a silhouette loop (a status) starts on its moment and any other effect peaks there.
+const alignOf = cue => cue.align ?? (VFX_MASKED.includes(cue.effect) && VFX_MODULES[cue.effect].meta.loop ? 'start' : 'peak');
 const HEX6 = /^#[0-9a-fA-F]{6}$/;
 const rgbOf = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
 const hexOf = rgb => `#${rgb.map(v => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
@@ -41,8 +45,13 @@ export function rampOf(color, bg = '#000000') {
  * "pixel"), `words: false` tells the painter to leave the pixel word out and
  * each of its lines joins `words`: {text, x, y, size (art pixels), start,
  * enter, exit, in, out, shake?, seed, color, shadow, font}.
+ *
+ * A silhouette effect (VFX_MASKED) sits on its mask's feet and carries it as
+ * `opts.actor` (silhouette.mjs vfxActorWire); resolve(scene) → the scene's
+ * resolved module model (modules.mjs resolveModule), which the renderers pass
+ * in because this file cannot import modules.mjs without a cycle.
  */
-export function vfxPlan(story) {
+export function vfxPlan(story, {resolve = null} = {}) {
   const width = Number(story?.format?.width), height = Number(story?.format?.height);
   const grid = Math.max(1, Math.round(Math.min(width, height) / VFX_ART_SHORT));
   const aw = Math.ceil(width / grid), ah = Math.ceil(height / grid);
@@ -55,7 +64,7 @@ export function vfxPlan(story) {
       const info = VFX_EFFECTS[cue.effect], mod = VFX_MODULES[cue.effect];
       if (!info) throw new Error(`${scene.id}: unknown vfx effect ${JSON.stringify(cue.effect)}`);
       if (typeof cue.at !== 'number') throw new Error(`vfxPlan needs a resolved story; ${scene.id} has an unresolved vfx at ${JSON.stringify(cue.at)}`);
-      const start = r3(cue.at - (cue.align === 'start' ? 0 : info.peak));
+      const start = r3(cue.at - (alignOf(cue) === 'start' ? 0 : info.peak));
       const entry = {
         effect: cue.effect,
         start,
@@ -68,6 +77,12 @@ export function vfxPlan(story) {
         const color = HEX6.test(cue.color) ? cue.color : colors[cue.color];
         if (!HEX6.test(String(color))) throw new Error(`${scene.id}: vfx color ${JSON.stringify(cue.color)} is not a brand colour or #rrggbb`);
         entry.palette = rampOf(color, HEX6.test(String(colors.bg)) ? colors.bg : '#000000');
+      }
+      if (VFX_MASKED.includes(cue.effect)) {
+        if (!resolve) throw new Error(`${scene.id}: vfx ${cue.effect} draws round a silhouette; vfxPlan needs {resolve}`);
+        const sil = cueSilhouette(scene, cue, resolve(scene), grid);
+        [entry.x, entry.y] = sil.at;
+        entry.opts = {...entry.opts, actor: vfxActorWire(sil)};
       }
       if (cue.flip) entry.flip = true;
       if (cue.angle) entry.angle = r3((cue.angle * Math.PI) / 180);
@@ -153,6 +168,7 @@ export function vfxSounds(story) {
     for (const cue of Array.isArray(scene?.vfx) ? scene.vfx : []) {
       const info = VFX_EFFECTS[cue?.effect];
       if (!info || typeof cue.at !== 'number' || cue.sfx === 'none') continue;
+      // a status (a silhouette loop) sounds as it begins, on its moment
       sounds.push({scene_id: scene.id, at: r3(cue.align === 'start' ? cue.at + info.peak : cue.at), cue: cue.sfx === undefined || cue.sfx === 'auto' ? info.sfx : cue.sfx, effect: cue.effect});
     }
     // a VFX cover transition: its paired sound as it starts to cover

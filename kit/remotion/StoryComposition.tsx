@@ -235,6 +235,8 @@ const LightOver: React.FC<{ plan: any; zIndex: number }> = ({ plan, zIndex }) =>
 export const PlateLayer: React.FC<{ layer: any; t: number; from?: number }> = ({ layer, t, from = 0 }) => {
   const { fps } = useVideoConfig();
   const style = backgroundLayerStyle(layer, t) as React.CSSProperties;
+  // a weather loop: the VFX painter's canvas pair in the layer's box
+  if (layer.vfx) return <div style={style}><VfxCanvas plan={layer.vfx} t={t} zIndex={0} /></div>;
   if (!layer.video) return <div style={style} dangerouslySetInnerHTML={layer.svg ? { __html: layerSvg(layer, assetUrl) } : undefined} />;
   return (
     <div style={{ ...style, overflow: "hidden" }}>

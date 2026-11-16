@@ -25,6 +25,32 @@ import * as blinds from './vendor/fx/transitions/blinds.js';
 import * as diamondWipe from './vendor/fx/transitions/diamond-wipe.js';
 import * as starIris from './vendor/fx/transitions/star-iris.js';
 import * as pixelDissolve from './vendor/fx/transitions/pixel-dissolve.js';
+import * as mElectrified from './vendor/fx/lightning/electrified.js';
+import * as mGlitch from './vendor/fx/scifi/glitch.js';
+import * as mScanner from './vendor/fx/scifi/scanner.js';
+import * as mHalo from './vendor/fx/holy/halo.js';
+import * as mHitFlash from './vendor/fx/impacts/hit-flash.js';
+import * as mConfused from './vendor/fx/status/confused.js';
+import * as mSleep from './vendor/fx/status/sleep.js';
+import * as mStunned from './vendor/fx/status/stunned.js';
+import * as mCharmed from './vendor/fx/status/charmed.js';
+import * as mRage from './vendor/fx/status/rage.js';
+import * as mHaste from './vendor/fx/status/haste.js';
+import * as mSlowed from './vendor/fx/status/slowed.js';
+import * as mFrozen from './vendor/fx/status/frozen.js';
+import * as mBurning from './vendor/fx/status/burning.js';
+import * as wAurora from './vendor/fx/weather/aurora.js';
+import * as wBlizzard from './vendor/fx/weather/blizzard.js';
+import * as wCherryBlossoms from './vendor/fx/weather/cherry-blossoms.js';
+import * as wClouds from './vendor/fx/weather/clouds.js';
+import * as wFallingLeaves from './vendor/fx/weather/falling-leaves.js';
+import * as wFireflies from './vendor/fx/weather/fireflies.js';
+import * as wFog from './vendor/fx/weather/fog.js';
+import * as wGodRays from './vendor/fx/weather/god-rays.js';
+import * as wRain from './vendor/fx/weather/rain.js';
+import * as wShootingStars from './vendor/fx/weather/shooting-stars.js';
+import * as wSnow from './vendor/fx/weather/snow.js';
+import * as wStorm from './vendor/fx/weather/storm.js';
 
 /** Effect name → its vendored module ({meta, create?} or {meta, draw}). */
 export const VFX_MODULES = Object.freeze({
@@ -43,10 +69,32 @@ export const VFX_MODULES = Object.freeze({
   'level-up': levelUp,
   achievement,
   confetti,
-  'firework-rocket': fireworkRocket
+  'firework-rocket': fireworkRocket,
+  electrified: mElectrified,
+  glitch: mGlitch,
+  scanner: mScanner,
+  halo: mHalo,
+  'hit-flash': mHitFlash,
+  confused: mConfused,
+  sleep: mSleep,
+  stunned: mStunned,
+  charmed: mCharmed,
+  rage: mRage,
+  haste: mHaste,
+  slowed: mSlowed,
+  frozen: mFrozen,
+  burning: mBurning
 });
 
 export const VFX_EFFECT_NAMES = Object.freeze(Object.keys(VFX_MODULES));
+
+/**
+ * The silhouette effects, (m) in docs/VFX_LAYER_RFC.md §1: each draws round
+ * o.actor, a module's card or a cast member (a cue's `mask`, built by
+ * kit/core/vfx/mask.mjs). Without one (sheets, peaks, tests) they draw round
+ * a stand-in (kit/core/vfx/silhouette.mjs vfxStandIn).
+ */
+export const VFX_MASKED = Object.freeze(VFX_EFFECT_NAMES.filter(name => VFX_MODULES[name].meta.actor));
 
 /**
  * Per effect: the SFX family a cue with sfx "auto" plays (kit/core/sound),
@@ -70,7 +118,21 @@ export const VFX_EFFECTS = Object.freeze({
   'level-up': Object.freeze({sfx: 'success', peak: 0.283}),
   achievement: Object.freeze({sfx: 'chime', peak: 0.333}),
   confetti: Object.freeze({sfx: 'pop', peak: 0.267}),
-  'firework-rocket': Object.freeze({sfx: 'sparkle', peak: 1.067})
+  'firework-rocket': Object.freeze({sfx: 'sparkle', peak: 1.067}),
+  electrified: Object.freeze({sfx: 'glitch', peak: 0.133}),
+  glitch: Object.freeze({sfx: 'glitch', peak: 1.7}),
+  scanner: Object.freeze({sfx: 'shimmer', peak: 1.217}),
+  halo: Object.freeze({sfx: 'chime', peak: 0.2}),
+  'hit-flash': Object.freeze({sfx: 'impact', peak: 0}),
+  confused: Object.freeze({sfx: 'boing', peak: 0.817}),
+  sleep: Object.freeze({sfx: 'pop', peak: 0.25}),
+  stunned: Object.freeze({sfx: 'boing', peak: 1.45}),
+  charmed: Object.freeze({sfx: 'sparkle', peak: 1.25}),
+  rage: Object.freeze({sfx: 'thud', peak: 0.05}),
+  haste: Object.freeze({sfx: 'whoosh', peak: 0.483}),
+  slowed: Object.freeze({sfx: 'tape-stop', peak: 1.633}),
+  frozen: Object.freeze({sfx: 'shimmer', peak: 0}),
+  burning: Object.freeze({sfx: 'riser', peak: 0.6})
 });
 
 /**
@@ -142,5 +204,25 @@ export const VFX_TRANSITIONS = Object.freeze({
   'pixel-dissolve': Object.freeze({module: pixelDissolve, sfx: 'glitch', cover: [0.842, 1.175], brand: true})
 });
 
-/** Every module the painter may draw, by plan name: the cue effects and the transitions. */
-export const VFX_DRAWABLE = Object.freeze({...VFX_MODULES, ...Object.fromEntries(Object.entries(VFX_TRANSITIONS).map(([type, info]) => [type, info.module]))});
+/**
+ * The weather loops (docs/VFX_LAYER_RFC.md §3e), by name: the `weather`
+ * background kind (kit/core/backgrounds.mjs) draws one behind every plate.
+ * Each fills a 320 × 180 screen edge to edge, is pure and loops seamlessly.
+ */
+export const VFX_WEATHER = Object.freeze({
+  aurora: wAurora,
+  blizzard: wBlizzard,
+  'cherry-blossoms': wCherryBlossoms,
+  clouds: wClouds,
+  'falling-leaves': wFallingLeaves,
+  fireflies: wFireflies,
+  fog: wFog,
+  'god-rays': wGodRays,
+  rain: wRain,
+  'shooting-stars': wShootingStars,
+  snow: wSnow,
+  storm: wStorm
+});
+
+/** Every module the painter may draw, by plan name: the cue effects, the weather loops and the transitions. */
+export const VFX_DRAWABLE = Object.freeze({...VFX_MODULES, ...VFX_WEATHER, ...Object.fromEntries(Object.entries(VFX_TRANSITIONS).map(([type, info]) => [type, info.module]))});
