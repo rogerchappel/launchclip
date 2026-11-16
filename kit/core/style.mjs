@@ -76,14 +76,15 @@ export const STYLE_DIALS = Object.freeze(['energy', 'density', 'playfulness', 'p
 /**
  * The story motion keys a pack's motion sets, or null: the grammar, a story
  * feel named by a string ("kinetic"; a seeded pack's feel object is the
- * planners' summary, kit/core/style-feel.mjs, and stays in the pack) and
- * motion blur.
+ * planners' summary, kit/core/style-feel.mjs, and stays in the pack), motion
+ * blur and flow (carry and pins across still cuts, kit/core/flow.mjs).
  */
 function storyMotionOf(motion) {
   const out = {};
   if (motion.grammar !== undefined) out.grammar = motion.grammar;
   if (typeof motion.feel === 'string') out.feel = motion.feel;
   if (motion.blur !== undefined) out.blur = motion.blur;
+  if (motion.flow !== undefined) out.flow = motion.flow;
   return Object.keys(out).length ? out : null;
 }
 
@@ -286,7 +287,8 @@ export function validateStylePack(pack, { modules } = {}) {
   }
   if (pack.motion !== undefined) {
     if (!isObject(pack.motion)) err('motion must be an object');
-    else if (pack.motion.grammar !== undefined) {
+    else if (pack.motion.flow !== undefined && typeof pack.motion.flow !== 'boolean' && !(isObject(pack.motion.flow) && Object.keys(pack.motion.flow).every((key) => ['carry', 'pin'].includes(key)) && [undefined, 'auto', false].includes(pack.motion.flow.carry) && [undefined, true, false].includes(pack.motion.flow.pin))) err('motion.flow must be true, false or {carry: "auto" | false, pin: true | false}');
+    if (isObject(pack.motion) && pack.motion.grammar !== undefined) {
       const grammar = pack.motion.grammar;
       if (typeof grammar === 'string') { if (!nonEmpty(grammar)) err('motion.grammar must be a grammar name'); else if (!STYLE_GRAMMARS.includes(grammar)) warnings.push(`motion.grammar "${grammar}" is not one of ${STYLE_GRAMMARS.join(', ')}`); }
       else if (!isObject(grammar) || !nonEmpty(grammar.base)) err('motion.grammar must be a name or {base, ...overrides}');
