@@ -15,7 +15,8 @@ const NUMBER = "(one|two|three|four|five|six|seven|[1-7])";
 // "number three", "option 2", "material three", "step 4", "#3", "No. 3"
 const NAMED = new RegExp(`(?:\\b(?:number|no\\.?|option|material|step|tip|item|pick|choice|mistake|reason|rule|way)\\s+${NUMBER}\\b|#\\s?([1-7])\\b)`, "i");
 // "First · Treated pine", "Third: composite", a line that opens "Two, hardwood"
-const LEAD = /^\s*(?:and\s+)?(first|second|third|fourth|fifth|one|two|three|four|five)\b\s*[,:·.—-]/i;
+// A hyphen joined to the next word ("Two-minute setup") is a compound, not a lead.
+const LEAD = /^\s*(?:and\s+)?(first|second|third|fourth|fifth|one|two|three|four|five)\b\s*(?:[,:·.—]|-(?!\w))/i;
 const TEASER = /\b(?:coming up|up next|later|at the end|by the end|till the end|until the end|stay for|stick around|wait for|keep watching|saved? (?:the best|it) for last|teaser|i'?ll (?:get to|show you|give you))\b/i;
 
 const value = (raw) => { const key = String(raw).toLowerCase(); return WORDS[key] ?? (/^\d$/.test(key) ? Number(key) : null); };

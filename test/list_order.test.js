@@ -10,6 +10,8 @@ test("listOrdinal reads labels and spoken list items", () => {
   assert.equal(listOrdinal("First · Treated pine"), 1);
   assert.equal(listOrdinal("And number three catches bare feet"), 3);
   assert.equal(listOrdinal("Real deck cost shows up in upkeep"), null);
+  assert.equal(listOrdinal("Two-minute setup"), null);
+  assert.equal(listOrdinal("Two - Dense hardwoods"), 2);
   assert.equal(listOrdinal("Three boards sorted"), null);
   assert.ok(isTeaser("Coming up: number three burns bare feet"));
 });
