@@ -13,7 +13,7 @@ import {timingRules} from './catalog-b-base.mjs';
 import {grammarStagger} from './grammar.mjs';
 import {VARIANT_PARAM, createHBase, fitText, inkOn, mixColor, r2, rt, textWidth, toneColor} from './catalog-h-base.mjs';
 import {chromeNodes, chromeOps, drawOps, el, label, set, strokePath, tw} from './catalog-h-view.mjs';
-import {idleAmplitude, idleOps} from './fluid-motion.mjs';
+import {idleAmplitude, idleFor, idleOps} from './fluid-motion.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
 const rect = '{x, y, width, height} canvas px inside the safe zone (optional)';
@@ -97,7 +97,7 @@ function listResolve(params, ctx) {
   const content = {variant: layout, pill: layout === 'pills' ? {...pill, fill: mixColor(color, b.colors.bg, 0.14), border: mixColor(color, b.colors.bg, 0.45), discInk: inkOn(b.colors, color)} : null, title: titleFit ? {text: title, size: titleFit.size, lines: titleFit.lines} : null, source: null, align: centred ? 'center' : 'left',
     items, size, detailSize, marker, showMarker, numbered, ticks, centred, color, ink: b.theme.foreground, muted: b.theme.muted,
     subject: subjectFit ? {text: subject, size: subjectFit.size, lines: subjectFit.lines, x: r2(W / 2), y: r2(top + H0 / 2), time: rt(Math.max(b.motion.enterEnd - 0.2, items[0].time - 0.35))} : null,
-    buildEnd: rt(Math.max(...items.map(item => (item.tickTime ?? item.time) + ENTER))), idle: (a => ({bob: a.bob, tilt: r2(a.tilt * LIST_TILT)}))(idleAmplitude(ctx?.grammar ?? null, b.unit))};
+    buildEnd: rt(Math.max(...items.map(item => (item.tickTime ?? item.time) + ENTER))), idle: (a => ({bob: a.bob, tilt: r2(a.tilt * LIST_TILT)}))(idleFor(idleAmplitude(ctx?.grammar ?? null, b.unit), Math.min(...items.map(item => item.height))))};
   return b.finish(content, {minTextPx: Math.min(size, titleFit ? titleFit.size : Infinity, subjectFit ? subjectFit.size : Infinity)});
 }
 

@@ -7,7 +7,7 @@ import {timingRules} from './catalog-b-base.mjs';
 import {VARIANT_PARAM, createHBase, fitText, mixColor, r2, rt, toneColor} from './catalog-h-base.mjs';
 import {chromeNodes, chromeOps, el, label} from './catalog-h-view.mjs';
 import {iconNode, isIcon} from './icons.mjs';
-import {flockOps, idleAmplitude, idleOps} from './fluid-motion.mjs';
+import {flockOps, idleAmplitude, idleFor, idleOps} from './fluid-motion.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
 const rect = '{x, y, width, height} canvas px inside the safe zone (optional)';
@@ -54,7 +54,7 @@ function gridResolve(params, ctx) {
   // The flock leaves from the middle of the grid.
   const origin = {x: r2(W / 2), y: r2(y0 + gridH / 2)};
   const content = {variant: b.variant, title: titleFit ? {text: title, size: titleFit.size, lines: titleFit.lines} : null, source: null, align: 'center', cells, cellW: r2(cellW), cellH: r2(cellH), iconSize, labelSize, color,
-    tile: mixColor(color, b.colors.bg, 0.16), ink: b.theme.foreground, buildAt: t0, origin, idle: idleAmplitude(ctx?.grammar ?? null, b.unit)};
+    tile: mixColor(color, b.colors.bg, 0.16), ink: b.theme.foreground, buildAt: t0, origin, idle: idleFor(idleAmplitude(ctx?.grammar ?? null, b.unit), iconSize * box)};
   return b.finish(content, {minTextPx: titleFit ? titleFit.size : b.min.key});
 }
 
