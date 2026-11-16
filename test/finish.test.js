@@ -1421,7 +1421,7 @@ test("finish --prototype renders only the opening 20–30 s, cut at a scene end,
   }
 });
 
-test("finish plates every caption line instead of failing when fixed white captions lose contrast on a light background", async () => {
+test("finish gives white captions on a light background surface colours instead of plates or a failed gate", async () => {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-contrast-"));
   try {
     await cp(MINIMAL, project, { recursive: true });
@@ -1433,9 +1433,12 @@ test("finish plates every caption line instead of failing when fixed white capti
     await writeFile(file, JSON.stringify(story));
     const report = await runFinish(project, {}, fakeAdapters());
     assert.equal(report.gates.layout.status, "passed", JSON.stringify(report.gates.layout.findings));
-    assert.ok(report.warnings.some((line) => /^layout: tooling plated every caption line: caption words \(#ffffff, preset kinetic-hierarchy\)/.test(line)), JSON.stringify(report.warnings));
+    assert.ok(!report.warnings.some((line) => /tooling plated every caption line/.test(line)), JSON.stringify(report.warnings));
     const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
-    assert.equal(resolved.overlays.find((entry) => entry.type === "captions").plates, "all");
+    const captions = resolved.overlays.find((entry) => entry.type === "captions");
+    // No media under the band: every line is on the surface, and none is plated.
+    assert.ok(captions.surface.length > 0, JSON.stringify(captions));
+    assert.deepEqual(captions.plates, []);
   } finally {
     await rm(project, { recursive: true, force: true });
   }

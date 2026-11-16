@@ -1,0 +1,31 @@
+{
+  "preset": "kinetic-hierarchy",
+  "name": "kinetic-hierarchy-surface",
+  "brand": {
+    "colors": {
+      "bg": "#e5fcfc",
+      "primary": "#0f766e",
+      "accent": "#b45309",
+      "ink": "#0b2b2a",
+      "paper": "#14201f"
+    }
+  },
+  "overlay": {
+    "colors": {
+      "idle": "#ffffff"
+    },
+    "surface": "all",
+    "position": "lower-third"
+  },
+  "times": [
+    0.3,
+    0.7,
+    1.0,
+    1.467,
+    2.1,
+    2.333,
+    3.233,
+    3.6,
+    4.2
+  ]
+}

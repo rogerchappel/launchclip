@@ -42,18 +42,18 @@ function paramSets(kind) {
   return sets;
 }
 
-test("background core is plain ESM that imports only ambient.mjs, panels.mjs, icons.mjs and lighting.mjs, and keeps no clock", async () => {
+test("background core is plain ESM that imports only ambient.mjs, panels.mjs, icons.mjs, lighting.mjs and the VFX catalogue and ramps, and keeps no clock", async () => {
   for (const file of ["backgrounds.mjs", "panels.mjs"]) {
     const source = await readFile(path.join(ROOT, "kit/core", file), "utf8");
     const imports = [...source.matchAll(/^import .* from ['"]([^'"]+)['"]/gm)].map((match) => match[1]);
-    assert.ok(imports.every((name) => ["./ambient.mjs", "./panels.mjs", "./icons.mjs", "./lighting.mjs"].includes(name)), `${file} imports ${imports}`);
+    assert.ok(imports.every((name) => ["./ambient.mjs", "./panels.mjs", "./icons.mjs", "./lighting.mjs", "./vfx/catalog.mjs", "./vfx/plan.mjs"].includes(name)), `${file} imports ${imports}`);
     assert.doesNotMatch(source, /\brequire\(|Date\.now|performance\.now|Math\.random/);
   }
 });
 
 test("story.mjs keeps the kinds, param ranges, colours and treatments in step", () => {
   assert.deepEqual(STORY_BACKGROUND_KINDS, [...BACKGROUND_KINDS]);
-  assert.equal(BACKGROUND_KINDS.length, 17);
+  assert.equal(BACKGROUND_KINDS.length, 20);
   for (const kind of BACKGROUND_KINDS) {
     assert.deepEqual(STORY_BACKGROUND_PARAMS[kind], Object.fromEntries(Object.entries(BACKGROUND_PARAMS[kind]).map(([key, value]) => [key, [value.min, value.max]])), kind);
     assert.deepEqual(STORY_BACKGROUND_OPTIONS[kind], Object.fromEntries(Object.entries(BACKGROUND_OPTIONS[kind]).map(([key, value]) => [key, [...value.values]])), kind);
@@ -200,7 +200,11 @@ test("the gate flags captions and panels that lose contrast on the background", 
   // Grey captions without an outline on a light background.
   const s = story({ background: { kind: "mesh", params: { intensity: 1 } }, overlays: [{ type: "captions", preset: "minimal-line", colors: { idle: "#bbbbbb" } }] }, LIGHT);
   const captions = captionOptions(s.overlays[0], { brand: s.brand, format: s.format, story: s });
-  const findings = backgroundContrastFindings(s, { captions });
+  // The pinned grey is a preference: lines on the surface take a colour that reads there, so the gate passes.
+  assert.notEqual(captions.surfaceIdle, "#bbbbbb");
+  assert.deepEqual(backgroundContrastFindings(s, { captions }), []);
+  // Only a surface no caption colour reads on fails.
+  const findings = backgroundContrastFindings(s, { captions: { ...captions, surfaceIdle: "#bbbbbb" } });
   assert.equal(findings.length, 1);
   assert.equal(findings[0].rule, "background-contrast");
   assert.match(findings[0].detail, /caption words \(#bbbbbb, preset minimal-line\)/);
@@ -343,4 +347,20 @@ test("seeded patterns are visible: the strongest pattern tone stands off bg, and
       for (const tone of plan.tones) assert.ok(contrast(paper, tone) >= Math.min(4.5, contrast(paper, bg) - 0.01), `${kind} ${seed}: text on ${tone}`);
     }
   }
+});
+
+test("rings leave the centre one beat apart and wrap past the corners; still rings rest concentric", () => {
+  const base = story({ background: { kind: "rings", params: { bpm: 120 } } });
+  const plan = backgroundPlan(base);
+  const rings = plan.layers.filter((layer) => layer.id.startsWith("ring-"));
+  assert.ok(rings.length >= 4);
+  const { width: W, height: H } = base.format;
+  for (const [i, ring] of rings.entries()) {
+    assert.equal(ring.axes.scale.kind, "glide");
+    assert.equal(ring.axes.scale.offset, 0.5 * i, "one beat (0.5 s at 120 bpm) apart");
+    assert.ok((ring.box.width / 2) * ring.axes.scale.to > Math.hypot(W, H) / 2, "past the corners when it wraps");
+  }
+  const still = backgroundPlan(story({ background: { kind: "rings", params: { speed: 0 } } })).layers;
+  assert.ok(still.every((layer) => Object.keys(layer.axes).length === 0));
+  assert.deepEqual(still.map((layer) => layer.box.width), [...still.map((layer) => layer.box.width)].sort((a, b) => a - b));
 });

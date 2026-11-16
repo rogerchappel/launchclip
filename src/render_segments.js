@@ -356,6 +356,18 @@ export function defaultSegmentTools() {
     async sideBySide(left, right, output) {
       await ffmpeg(["-i", left, "-i", right, "-filter_complex", "[0][1]hstack=inputs=2,scale=iw/2:-2", "-frames:v", "1", output]);
     },
+    // A whole render's own soundtrack can run past its last frame (the
+    // renderer muxes it at its own length), and a player shows black there:
+    // cut it at the last frame, as the segment mux does. A file with no audio,
+    // or one ffprobe cannot read, is copied as it is. → the frame count | null
+    async lastFrame(video, output, { fps }) {
+      let streams = [];
+      try { streams = JSON.parse((await execFileAsync("ffprobe", ["-v", "error", "-count_packets", "-show_entries", "stream=codec_type,nb_read_packets", "-of", "json", video])).stdout).streams ?? []; } catch { streams = []; }
+      const frames = Number(streams.find((stream) => stream.codec_type === "video")?.nb_read_packets);
+      if (!streams.some((stream) => stream.codec_type === "audio") || !(frames > 0)) { await copyFile(video, output); return null; }
+      await ffmpeg(muxArgs({ video, audio: video, output, frames, fps }));
+      return frames;
+    },
     async trim(video, startFrame, endFrame, output, { fps }) {
       await ffmpeg(["-i", video, "-vf", `trim=start_frame=${startFrame}:end_frame=${endFrame},setpts=PTS-STARTPTS`, "-af", `atrim=start=${startFrame / fps}:end=${endFrame / fps},asetpts=PTS-STARTPTS`, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-c:a", "aac", "-b:a", "320k", output]);
     }
@@ -627,7 +639,7 @@ async function renderWhole({ project, story, renderer, quality, output, previewS
     frames = { start: scope[0].startFrame, end: scope.at(-1).endFrame, count: scope.at(-1).endFrame - scope[0].startFrame };
     await tools.trim(file, frames.start, frames.end, out, { fps: plan.fps });
   } else {
-    await copyFile(file, out);
+    await tools.lastFrame(file, out, { fps: plan.fps });
   }
   const record = index.segments?.[hash];
   index.segments[hash] = { id: "whole", frames: [0, plan.frames], scenes: (story.scenes ?? []).map((scene) => scene.id), seconds: took ?? record?.seconds ?? null, used_at: new Date().toISOString() };

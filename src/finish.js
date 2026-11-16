@@ -77,6 +77,8 @@ import { hookGate } from "./short_form_checks.js";
 import { applyDensity, densityAmount, densityTyping, eventKey, familySource, kitLibrary, libraryFallbacks, resolveCueFile, resolveLibraries, unitHash, userLibraryDir } from "./sfx/library.js";
 import { AMBIENCE_BEDS, GENRE_SPECS, HISTORIC_SFX_FAMILIES, MUSIC_GENRES, SOUND_PALETTES, TALLY_LANDS_AT, ambienceForWorld } from "@launchclip/core/sound/options.mjs";
 import { musicChoice } from "@launchclip/core/sound/music.mjs";
+import { SONIFY_MODULES, chartNotes, renderSonification } from "@launchclip/core/sound/sonify.mjs";
+import { writeWavFile } from "./sfx/process.js";
 import { clipShare } from "@launchclip/core/clip-led.mjs";
 import { collectTyping, renderTypingTrack, typingSchedule } from "./sfx/typing.js";
 import { getMusicProvider, parseMusicDuck, parseMusicPrompt, parseMusicSpec, parseMusicVolume, resolveMusicChoice, MUSIC_FLAG_VALUES } from "./music/index.js";
@@ -144,6 +146,7 @@ export const PATHS = Object.freeze({
   mix: "assets/audio/mix.wav",
   cues: "assets/audio/cues.json",
   typing: "assets/audio/typing.wav",
+  sonify: "assets/audio/sonify",
   sfxManifest: "qa/sfx.json",
   music: "assets/audio/music.mp3",
   musicPrepared: "assets/audio/music.prepared.wav",
@@ -271,9 +274,10 @@ function modelEventFor(model, event) {
  * A hit replaces the module event it names (cue "none" silences it).
  * Risers end on their moment. Cues of the same kind closer than 0.12 s merge,
  * and a long cue repeats no sooner than its gap and no more than its budget
- * allows (CUE_REPEAT_GAPS, CUE_BUDGETS; hits win). Returns {cues: [{cue, at, volume, shot, intent, source, event}], warnings}.
+ * allows (CUE_REPEAT_GAPS, CUE_BUDGETS; hits win). sonify: a chart's build
+ * event cues nothing (its sonification plays instead). Returns {cues: [{cue, at, volume, shot, intent, source, event}], warnings}.
  */
-export function bindCues(story, { models, palette = false } = {}) {
+export function bindCues(story, { models, palette = false, sonify = false } = {}) {
   const warnings = [];
   const duration = Number(story?.resolved?.duration ?? story?.format?.duration);
   const scenes = Array.isArray(story?.scenes) ? story.scenes : [];
@@ -301,6 +305,8 @@ export function bindCues(story, { models, palette = false } = {}) {
     for (const sound of vfxSounds({ scenes: [scene] })) raw.push({ name: sound.cue, at: sound.at, source: "hit", shot: scene.id, event: `vfx ${sound.effect}`, explicit: true });
     for (const event of Array.isArray(model?.events) ? model.events : []) {
       if (!event?.cue || !Number.isFinite(Number(event.time)) || silenced.has(event)) continue;
+      // A sonified chart plays its data in place of the build's tally.
+      if (sonify && event.name === "build" && SONIFY_MODULES.includes(model.module)) continue;
       raw.push({ name: event.cue, at: Number(event.time), end: Number.isFinite(Number(event.endTime)) ? Number(event.endTime) : undefined, source: "module-event", shot: scene.id, event: eventName(model, event) || event.role || "event" });
     }
     if (scene.in && WHOOSH_TRANSITIONS.has(scene.in.type)) {
@@ -469,6 +475,30 @@ export function resolveCueFiles(cues, { libraries = [], kit = null, storyId = ""
   });
 }
 
+// The sonification's level in the mix (its file peaks at -6 dBFS), a little over a tally's.
+const SONIFY_VOLUME = 0.3;
+
+/**
+ * audio.sound.sonify: one file per chart scene (kit/core/sound/sonify.mjs) in
+ * the bed's key, placed as a cue on its first note.
+ * shortcut: the cue is not ducked under the voice like the bed; route it through the bed's sidechain if it masks speech.
+ */
+async function sonifyCues(ctx, { key, seed }) {
+  const models = sceneModels(ctx.resolved);
+  const cues = [];
+  for (const scene of ctx.resolved.scenes ?? []) {
+    const model = models(scene);
+    const notes = model ? chartNotes(model, scene.params ?? {}, { key }) : null;
+    const rendered = notes?.notes.length ? renderSonification(notes, { seed: `${seed}|${scene.id}` }) : null;
+    if (!rendered) continue;
+    const file = path.join(ctx.project, PATHS.sonify, `${scene.id}.wav`);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeWavFile(file, rendered.channels);
+    cues.push({ cue: "sonify", at: round3(rendered.start), volume: SONIFY_VOLUME, shot: scene.id, intent: `sonify ${model.module} (${notes.notes.length} notes)`, source: "sonify", file, sfx_source: "sonify", sfx_origin: "procedural" });
+  }
+  return cues;
+}
+
 /** Keystroke banks for the typing track: {key, space, enter, word} → [{file, measurements}]. */
 export function typingBanks(libraries, kit) {
   const bank = (family) => {
@@ -587,6 +617,7 @@ export function soundSettings(pack, story) {
   else if (wanted !== undefined && wanted !== "none") ambience = known(wanted, AMBIENCE_BEDS, "ambience");
   return {
     ...(sound.score === true ? { score: true } : {}),
+    ...(sound.sonify === true ? { sonify: true } : {}),
     active: Boolean(palette || genre || ambience),
     palette,
     seed: String(sound.seed ?? pack?.generated?.seed ?? pack?.name ?? story?.id ?? "launchclip"),
@@ -778,7 +809,7 @@ export function defaultAdapters() {
     motion: (video, out, options) => writeMotionReport(video, out, options),
     audio: (video, manifest, options) => analyzeProductionAudio(video, manifest, options),
     // The style gate's measurements (loudness has its own gate, so no audio pass).
-    styleReference: (video) => analyzeReference(video, {}, { audio: async () => ({ output: {} }), rhythm: null }),
+    styleReference: (video) => analyzeReference(video, {}, { audio: async () => ({ output: {} }), rhythm: null, transitions: null }),
     resolveStyle: (request, options) => resolveStyleV2(request, options)
   };
 }
@@ -1286,7 +1317,7 @@ const STAGES = [
       const models = sceneModels(ctx.resolved);
       const scoreFor = (story) => planScore({ ...story, words: ctx.words ?? [] }, { seed: storyId, key: sound.key ?? "A", density: densityAmount(density) });
       const score = scored ? scoreFor(ctx.resolved) : null;
-      const bound = score ? { cues: score.cues, warnings: [] } : sfxOn ? bindCues(ctx.resolved, { models, palette: Boolean(sound.palette) }) : { cues: [], warnings: [] };
+      const bound = score ? { cues: score.cues, warnings: [] } : sfxOn ? bindCues(ctx.resolved, { models, palette: Boolean(sound.palette), sonify: Boolean(sound.sonify) }) : { cues: [], warnings: [] };
       if (!score) bound.cues = paceCues(applyDensity(bound.cues, density, storyId), density, storyId);
       if (sfxOn && !score) ctx.warnings.push(...cuePairNotes(ctx.resolved, bound.cues, models));
       const typing = sfxOn ? typingSchedule(collectTyping(ctx.resolved, { models }), { seed: storyId, ...densityTyping(density) }) : [];
@@ -1357,6 +1388,7 @@ const STAGES = [
         scripts: [await fileHash(SCRIPT.synth), await treeFingerprint(SOUND_DIR), await fileHash(SCRIPT.mix), await fileHash(SCRIPT.features), await fileHash(path.join(ROOT, "src", "music", "beats.js")), await fileHash(path.join(ROOT, "src", "music", "beat_sync.js"))],
         ...(score ? { score: { room: score.room, earshot: Boolean(findEarshot(ctx.adapters.env ?? process.env)), sounds: [await fileHash(path.join(ROOT, "src", "sfx", "score.js")), await fileHash(path.join(ROOT, "src", "sfx", "score_sounds.js"))] } } : {}),
         kit: kit ?? undefined,
+        ...(sound.sonify ? { sonify: true } : {}),
         sfx: { mode: sfxMode, ...(sfxMode === "earshot" ? { earshot: await fileHash(path.join(ROOT, "src", "sfx", "earshot.js")) } : {}), density, typing, libraries: libraries.map((library) => ({ scope: library.scope, dir: library.dir, families: hashValue(library.manifest.families) })) }
       });
       const outputs = [PATHS.mix, PATHS.audioManifest, PATHS.sfxManifest, ...(audioFeatureNeeds(ctx.copy).length ? [PATHS.audioFeatures] : []), ...(typing.length ? [PATHS.typing] : [])];
@@ -1402,7 +1434,7 @@ const STAGES = [
       if (synced?.changed && plan.sfxOn) {
         const models = sceneModels(ctx.resolved);
         if (scorePlan) scorePlan = plan.scoreFor(ctx.resolved);
-        boundCues = scorePlan ? scorePlan.cues : paceCues(applyDensity(bindCues(ctx.resolved, { models, palette: Boolean(plan.sound.palette) }).cues, plan.density, plan.storyId), plan.density, plan.storyId);
+        boundCues = scorePlan ? scorePlan.cues : paceCues(applyDensity(bindCues(ctx.resolved, { models, palette: Boolean(plan.sound.palette), sonify: Boolean(plan.sound.sonify) }).cues, plan.density, plan.storyId), plan.density, plan.storyId);
         typingPlan = typingSchedule(collectTyping(ctx.resolved, { models }), { seed: plan.storyId, ...densityTyping(plan.density) });
       }
       const mixFile = path.join(ctx.project, PATHS.mix);
@@ -1441,6 +1473,7 @@ const STAGES = [
         cues = earshot.cues;
         ctx.warnings.push(...earshot.warnings);
       }
+      if (plan.sound.sonify) cues.push(...await sonifyCues(ctx, { key: plan.bed?.key ?? plan.sound.key ?? "C", seed: plan.storyId }));
       let typing = null;
       if (typingPlan.length) {
         const rendered = await ctx.adapters.renderTyping(typingPlan, typingBanks(plan.libraries, kit), { out: path.join(ctx.project, PATHS.typing), duration });
@@ -1909,15 +1942,19 @@ async function runRender(ctx) {
   // its plates for the next full pass).
   const legibility = await measureCaptions(ctx);
   if (legibility?.failed.length && !scenes.length && !ctx.chapter) {
-    const added = legibility.failed.filter((id) => !(ctx.captionPlates ?? []).includes(id));
-    if (added.length) {
-      await writeCaptionPlates(ctx, legibility, added);
+    // A line on a flat backdrop (the brand surface) takes colours picked for
+    // it; a line on footage gets a plate.
+    const surface = legibility.surface ?? [];
+    const added = legibility.failed.filter((id) => !surface.includes(id) && !(ctx.captionPlates ?? []).includes(id));
+    if (added.length || surface.length) {
+      await writeCaptionPlates(ctx, legibility, added, surface);
       await applyCaptionPlates(ctx);
       ctx.resolved = withAudioFeatures(resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null }), ctx.audioFeatures);
       await writeResolvedCopy(ctx);
       details.segments_first_pass = segments ?? null;
       await renderStory(ctx, adapter, { output: ctx.raw, scenes, range: null });
       details.captions_replated = added;
+      if (surface.length) details.captions_on_surface = surface;
       ctx.captionLegibility = await measureCaptions(ctx);
     }
   }
@@ -2609,17 +2646,22 @@ async function applyCaptionPlates(ctx) {
   const overlay = captionsOverlay(ctx.copy);
   const chunks = overlay ? await captionChunks(ctx) : null;
   if (!overlay || !chunks) { ctx.captionPlates = []; return; }
-  const { predictCaptionPlates, captionLines, mergePlates } = await import("./caption_legibility.js");
+  const { predictCaptionPlates, predictCaptionSurfaces, captionLines, mergePlates } = await import("./caption_legibility.js");
   const probe = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null });
   const predicted = predictCaptionPlates(probe, chunks, ctx.layout?.rects ?? []);
   const saved = await readOptionalJson(path.join(ctx.project, PATHS.captionLegibility));
   const ids = new Set(captionLines(probe, chunks).lines.map((line) => line.id));
-  const measured = (Array.isArray(saved?.measured_plates) ? saved.measured_plates : []).filter((id) => ids.has(id));
+  const kept = (list) => (Array.isArray(list) ? list : []).filter((id) => ids.has(id));
+  const measured = kept(saved?.measured_plates);
   // "all" (repairLayout's contrast repair, or the author's) plates every line; predictions only add to a list.
   const plates = overlay.plates === "all" ? "all" : mergePlates(predicted, measured);
   ctx.captionPlates = plates === "all" ? [...ids].sort() : plates;
   ctx.captionPredicted = predicted;
-  ctx.copy = { ...ctx.copy, overlays: ctx.copy.overlays.map((entry) => (entry === overlay ? { ...entry, plates } : entry)) };
+  // Lines on the brand surface, where the idle colour does not read: predicted
+  // (no media under them) and measured (a flat backdrop in a render).
+  const surface = overlay.surface === "all" ? "all" : mergePlates(kept(overlay.surface), predictCaptionSurfaces(probe, chunks, ctx.layout?.rects ?? []), kept(saved?.measured_surface));
+  const entryOf = (entry) => ({ ...entry, plates, ...(surface === "all" || surface.length ? { surface } : {}) });
+  ctx.copy = { ...ctx.copy, overlays: ctx.copy.overlays.map((entry) => (entry === overlay ? entryOf(entry) : entry)) };
 }
 
 async function measureCaptions(ctx) {
@@ -2632,11 +2674,11 @@ async function measureCaptions(ctx) {
   return result;
 }
 
-async function writeCaptionPlates(ctx, legibility, added) {
+async function writeCaptionPlates(ctx, legibility, added, surface = []) {
   const file = path.join(ctx.project, PATHS.captionLegibility);
   const saved = await readOptionalJson(file);
-  const measured = [...new Set([...(Array.isArray(saved?.measured_plates) ? saved.measured_plates : []), ...added])].sort();
-  await writeJson(file, { schema: "launchclip.caption-legibility.v1", thresholds: (await import("./caption_legibility.js")).CAPTION_LEGIBILITY, predicted_plates: ctx.captionPredicted ?? [], measured_plates: measured, plates: ctx.captionPlates ?? [], lines: legibility?.lines ?? [], failed: legibility?.failed ?? [] });
+  const merged = (list, more) => [...new Set([...(Array.isArray(list) ? list : []), ...more])].sort();
+  await writeJson(file, { schema: "launchclip.caption-legibility.v1", thresholds: (await import("./caption_legibility.js")).CAPTION_LEGIBILITY, predicted_plates: ctx.captionPredicted ?? [], measured_plates: merged(saved?.measured_plates, added), measured_surface: merged(saved?.measured_surface, surface), plates: ctx.captionPlates ?? [], lines: legibility?.lines ?? [], failed: legibility?.failed ?? [] });
 }
 
 function captionSummary(ctx) {

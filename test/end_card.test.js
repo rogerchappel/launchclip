@@ -88,3 +88,27 @@ test('end-card on a footage backdrop of its own picks a layout drawn on footage,
   // With no footage under it, a solid ground is still allowed.
   assert.ok(endCardCandidates({action: 'save', fields: {headline: FIELDS.headline}}).some(entry => !END_CARD_LAYOUTS.find(layout => layout.id === entry.id).grounds.includes('footage')));
 });
+
+test('end-card: a URL is never broken mid-word: the fit counts its tracking and it shrinks, else breaks after a "/"', async () => {
+  const {fitText, textLines, textWidth} = await import('@launchclip/core/catalog-b-base.mjs');
+  const brand = BRANDS.charcoal;
+  const url = 'example.com/custom-decks-guide';
+  const model = MODULES['end-card'].resolve({layout: 'sign-off', headline: 'Save this before you ask for a deck quote', emphasis: 'deck quote', url}, ctx(brand, '9:16'));
+  const ask = model.content.nodes.find(node => node.id === 'end-ask');
+  // One line, set by the engine (a block per measured row, no browser wrap), and wide enough with its 0.3 em tracking.
+  assert.deepEqual(ask.children.map(row => row.children[0]), [url.toUpperCase()]);
+  assert.equal(ask.style.whiteSpace, 'nowrap');
+  assert.ok(textWidth(url, ask.style.fontSize, 'meta', 0.3) <= ask.style.width, `${ask.style.fontSize} px with tracking overruns ${ask.style.width} px`);
+  // Shrinking comes first: a narrow width takes a smaller size on one line before any break.
+  const check = {fail: (path, message) => { throw new Error(`${path} ${message}`); }};
+  const shrunk = fitText(check, 'url', url, {family: 'meta', width: 600, preferred: 60, min: 20, maxLines: 2, spacing: 0.3});
+  assert.equal(shrunk.lines, 1);
+  // Only when no size fits does it break, and only after a "/", never at the hyphen.
+  const broken = fitText(check, 'url', url, {family: 'meta', width: 400, preferred: 40, min: 24, maxLines: 1, spacing: 0.3});
+  assert.deepEqual(broken.rows, ['example.com/', 'custom-decks-guide']);
+  assert.ok(!broken.rows.some(row => row.endsWith('-')));
+  // A piece too wide even broken at "/" fails rather than splitting a word.
+  assert.throws(() => fitText(check, 'url', 'example.com/a-very-long-path-segment-name', {family: 'meta', width: 300, preferred: 40, min: 24, maxLines: 1}), /too long/);
+  // Plain words wrap as before.
+  assert.deepEqual(textLines('three short words', 40, 'meta', 300), ['three short', 'words']);
+});

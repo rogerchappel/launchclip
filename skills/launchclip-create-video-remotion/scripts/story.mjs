@@ -12,7 +12,7 @@ export const STORY_SCHEMA = "launchclip.story.v1";
 export const STORY_REVISION = 0;
 
 export const STORY_LANES = ["motion", "voiceover-motion", "footage-led"];
-export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe", "light-sweep", "push-blur", "light-leak", "before-after", "burn-away", "slash-wipe", "shatter", "crt-off", "glitch-wipe", "blinds", "diamond-wipe", "star-iris", "pixel-dissolve"];
+export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe", "light-sweep", "push-blur", "light-leak", "before-after", "burn-away", "slash-wipe", "shatter", "crt-off", "glitch-wipe", "blinds", "diamond-wipe", "star-iris", "pixel-dissolve", "wipe", "clock-wipe", "card-flip"];
 /** Transitions the VFX layer draws as a pixel cover (kit/core/transitions.mjs VFX_COVER_TRANSITIONS); color names the cover's colour. */
 export const STORY_VFX_TRANSITIONS = ["burn-away", "slash-wipe", "shatter", "crt-off", "glitch-wipe", "blinds", "diamond-wipe", "star-iris", "pixel-dissolve"];
 export const STORY_ENDING_KEYS = Object.freeze(["loop_to", "in", "loop", "final"]);
@@ -33,7 +33,7 @@ export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
 // Caption presets (kit/core/captions.mjs CAPTION_PRESETS; kept in step by test/caption_presets.test.js).
 export const STORY_CAPTION_PRESETS = ["word-highlight", "karaoke-fill", "pop-word", "seam-word", "bounce", "typewriter", "box-highlight", "underline-sweep", "kinetic-stack", "minimal-line", "glow", "outline-heavy", "split-color", "lower-band", "word-chip", "bubble", "quiet-accent", "kinetic-hierarchy", "soft-card", "tag-chips", "serif-accent"];
-const CAPTION_OPTION_ENUMS = { position: ["bottom", "middle", "low", "top", "auto", "seam", "chest"], case: ["as-is", "upper", "title", "lower"], plate_style: ["box", "scrim"], font: ["display", "body", "meta"], entrance: ["pop", "fade", "slide-up", "slide-left", "scale", "none"], exit: ["fade-up", "fade", "slide-down", "shrink", "none"] };
+const CAPTION_OPTION_ENUMS = { position: ["bottom", "lower-third", "middle", "low", "top", "auto", "seam", "chest"], case: ["as-is", "upper", "title", "lower"], plate_style: ["box", "scrim"], font: ["display", "body", "meta"], entrance: ["pop", "fade", "slide-up", "slide-left", "scale", "none"], exit: ["fade-up", "fade", "slide-down", "shrink", "none"] };
 const CAPTION_COLOR_KEYS = ["idle", "active", "spoken", "accent", "box", "boxText", "plate", "band", "bandEdge", "chip"];
 // audio.narration.provider: voice providers `launchclip finish` can synthesise with.
 export const STORY_VOICE_PROVIDERS = ["kokoro", "elevenlabs", "supplied", "test"];
@@ -58,24 +58,28 @@ export const STORY_BACKGROUND_PARAMS = Object.freeze({
   stripes: { angle: [0, 180], scale: BG_SCALE, density: [0.15, 0.6], intensity: BG_UNIT, speed: BG_SPEED },
   topographic: { density: BG_UNIT, scale: BG_SCALE, intensity: BG_UNIT, speed: BG_SPEED },
   halftone: { angle: BG_ANGLE, scale: BG_SCALE, intensity: BG_UNIT, speed: BG_SPEED },
-  "light-rays": { angle: [-60, 60], density: BG_UNIT, intensity: BG_UNIT, speed: BG_SPEED },
+  "light-rays": { angle: [-60, 60], density: BG_UNIT, intensity: BG_UNIT, speed: BG_SPEED, sweep: BG_UNIT },
   "icon-pattern": { scale: BG_SCALE, spacing: BG_SCALE, rotation: [-45, 45], offset: BG_UNIT, opacity: [0.04, 0.2], stroke: [1, 3], speed: BG_SPEED },
   "icon-scatter": { scale: BG_SCALE, density: BG_UNIT, jitter: BG_UNIT, opacity: [0.04, 0.2], stroke: [1, 3], speed: BG_SPEED },
   "logo-pattern": { scale: BG_SCALE, spacing: BG_SCALE, offset: BG_UNIT, opacity: [0.04, 0.2], speed: BG_SPEED },
   motif: { scale: BG_SCALE, weight: [0.5, 3], opacity: [0.04, 0.3], angle: [0, 180], speed: BG_SPEED },
-  texture: { amount: BG_UNIT, scale: BG_SCALE }
+  texture: { amount: BG_UNIT, scale: BG_SCALE },
+  weather: { intensity: BG_UNIT, speed: BG_SPEED },
+  rings: { density: BG_UNIT, intensity: BG_UNIT, weight: [0.5, 3], bpm: [40, 200], speed: BG_SPEED },
+  bokeh: { density: BG_UNIT, intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED }
 });
 export const STORY_BACKGROUND_KINDS = Object.keys(STORY_BACKGROUND_PARAMS);
 export const STORY_BACKGROUND_COLORS = ["primary", "accent", "paper"];
 // Option params per kind (kit/core/backgrounds.mjs BACKGROUND_OPTIONS): color
 // on patterned kinds, fade on every kind but blobs, a motif's shape, a
-// texture's type. Icon kinds also take icons: "auto" or 1–8 icon names.
+// texture's or weather's type. Icon kinds also take icons: "auto" or 1–8 icon names.
 const BG_PLAIN = ["flat", "paper", "mesh", "blobs", "logo-pattern", "texture"];
 export const STORY_BACKGROUND_OPTIONS = Object.freeze(Object.fromEntries(STORY_BACKGROUND_KINDS.map((kind) => [kind, {
   ...(BG_PLAIN.includes(kind) ? {} : { color: STORY_BACKGROUND_COLORS }),
   ...(kind === "blobs" ? {} : { fade: ["none", "center", "top", "bottom", "left", "right"] }),
-  ...(kind === "motif" ? { shape: ["plus", "circle", "chevron", "wave", "hatch", "crosshatch"] } : {}),
-  ...(kind === "texture" ? { type: ["noise", "fibre", "canvas", "linen"] } : {})
+  ...(kind === "motif" ? { shape: ["plus", "circle", "chevron", "wave", "hatch", "crosshatch", "checker", "grid"] } : {}),
+  ...(kind === "texture" ? { type: ["noise", "fibre", "canvas", "linen"] } : {}),
+  ...(kind === "weather" ? { type: ["aurora", "blizzard", "cherry-blossoms", "clouds", "falling-leaves", "fireflies", "fog", "god-rays", "rain", "shooting-stars", "snow", "storm"] } : {})
 }])));
 export const STORY_PANEL_TREATMENTS = ["solid", "glass", "paper", "outline", "soft-shadow", "rim-glass"];
 // story.medium kinds and keys (kit/core/medium.mjs MEDIUM_KINDS, MEDIUM_KEYS;
@@ -309,7 +313,9 @@ export function samePlaceCuts(story) {
 // CARD_TRANSITIONS, kept here so this file stays import-free (kept in step by
 // test/transition_frames.test.js).
 export const STORY_FOOTAGE_PLATES = ["clip", "photo-scene"];
-export const STORY_CARD_TRANSITIONS = ["card-to-card", "rack-focus", "morph"];
+// Behaviour kinds (kit/core/behaviours.mjs BEHAVIOUR_KINDS), kept here so this file stays import-free.
+export const STORY_BEHAVIOURS = ["wiggle", "jitter", "orbit", "lissajous", "drift", "pendulum", "wobble", "spin", "pulse", "heartbeat", "breathe", "squash", "flicker", "fade-pulse"];
+export const STORY_CARD_TRANSITIONS = ["card-to-card", "rack-focus", "morph", "card-flip"];
 
 /**
  * Track-0 footage plates (a clip, a photo plate) that arrive from another
@@ -375,7 +381,7 @@ const LIGHT_SWEEP_ANGLE = [20, 80];
 function lightSweepOptionErrors(transition, path) {
   const errors = [];
   if (transition.type !== "light-sweep") {
-    for (const key of ["streaks", "angle"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a light-sweep option; ${JSON.stringify(transition.type)} does not take it`);
+    for (const key of transition.type === "wipe" ? ["streaks"] : ["streaks", "angle"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a light-sweep option; ${JSON.stringify(transition.type)} does not take it`);
     return errors;
   }
   const { color, streaks, angle } = transition;
@@ -384,6 +390,19 @@ function lightSweepOptionErrors(transition, path) {
   if (streaks !== undefined && !(Number.isInteger(streaks) && streaks >= slo && streaks <= shi)) errors.push(`${path}.streaks must be a whole number of light streaks from ${slo} to ${shi}; got ${JSON.stringify(streaks)}`);
   if (angle !== undefined && !(typeof angle === "number" && angle >= alo && angle <= ahi)) errors.push(`${path}.angle must be the streaks' tilt from the horizontal, ${alo} to ${ahi} degrees; got ${JSON.stringify(angle)}`);
   for (const key of ["cover", "hold"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a dot-wipe option; "light-sweep" does not take it`);
+  return errors;
+}
+
+/** Validation messages for the CSS transitions' options (wipe: angle, feather; clock-wipe: start, segments, feather). */
+function cssTransitionOptionErrors(transition, path) {
+  const errors = [];
+  const own = { wipe: ["angle", "feather"], "clock-wipe": ["start", "segments", "feather"] }[transition.type] ?? [];
+  for (const key of ["feather", "start", "segments"]) if (transition[key] !== undefined && !own.includes(key)) errors.push(`${path}.${key} is a ${key === "feather" ? "wipe or clock-wipe" : "clock-wipe"} option; ${JSON.stringify(transition.type)} does not take it`);
+  const { angle, feather, start, segments } = transition;
+  if (own.includes("angle") && angle !== undefined && !(typeof angle === "number" && Number.isFinite(angle))) errors.push(`${path}.angle must be the way the edge travels in degrees (0 up, 90 right); got ${JSON.stringify(angle)}`);
+  if (own.includes("start") && start !== undefined && !(typeof start === "number" && Number.isFinite(start))) errors.push(`${path}.start must be where the hand starts in degrees (0 at 12 o'clock); got ${JSON.stringify(start)}`);
+  if (own.includes("segments") && segments !== undefined && !(Number.isInteger(segments) && segments >= 1 && segments <= 8)) errors.push(`${path}.segments must be a whole number of hands from 1 to 8 (more than 1 opens like a fan); got ${JSON.stringify(segments)}`);
+  if (own.includes("feather") && feather !== undefined && !(typeof feather === "number" && feather >= 0 && feather <= 40)) errors.push(`${path}.feather must be the soft edge, 0 to 40 (% of the frame for a wipe, degrees for a clock); got ${JSON.stringify(feather)}`);
   return errors;
 }
 
@@ -762,6 +781,20 @@ export function validateStory(story, { modules, moduleParams } = {}) {
 
     validateAmbient(scene.ambient, `${path}.ambient`, err);
 
+    // An opt-in idle motion on the scene's content (kit/core/behaviours.mjs).
+    if (scene.behaviour !== undefined) {
+      const b = scene.behaviour;
+      if (!isObject(b) || !STORY_BEHAVIOURS.includes(b.kind)) err(`${path}.behaviour must be {kind, amount?, period?, angle?, bpm?, direction?} with kind one of ${STORY_BEHAVIOURS.join(", ")}`);
+      else {
+        for (const key of Object.keys(b)) if (!["kind", "amount", "period", "angle", "bpm", "direction"].includes(key)) err(`${path}.behaviour.${key} is not supported (allowed: kind, amount, period, angle, bpm, direction)`);
+        if (b.amount !== undefined && !(typeof b.amount === "number" && b.amount >= 0 && b.amount <= 2)) err(`${path}.behaviour.amount must be 0 to 2 (1 is the grammar's idle size)`);
+        if (b.period !== undefined && !(typeof b.period === "number" && b.period >= 0.1 && b.period <= 20)) err(`${path}.behaviour.period must be 0.1 to 20 seconds`);
+        if (b.angle !== undefined && (b.kind !== "drift" || !(typeof b.angle === "number" && Number.isFinite(b.angle)))) err(`${path}.behaviour.angle is the drift's direction in degrees (0 up, 90 right); only drift takes it`);
+        if (b.bpm !== undefined && (!["pulse", "heartbeat"].includes(b.kind) || !(typeof b.bpm === "number" && b.bpm >= 30 && b.bpm <= 240))) err(`${path}.behaviour.bpm is the beat of a pulse or heartbeat, 30 to 240`);
+        if (b.direction !== undefined && (b.kind !== "spin" || !["left", "right"].includes(b.direction))) err(`${path}.behaviour.direction is a spin's way round, left or right; only spin takes it`);
+      }
+    }
+
     if (scene.in !== undefined && scene.in !== null) {
       const transition = scene.in;
       if (!isObject(transition)) err(`${path}.in must be an object`);
@@ -778,6 +811,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (transition.type === "pixel-dissolve" && !retroStory(story)) err(`${path}.in.type "pixel-dissolve" is retro only: set look "pixel-arcade" or vfx.words "pixel" (the retro-pixel style family sets both)`);
         for (const message of lightSweepOptionErrors(transition, `${path}.in`)) err(message);
         for (const message of beforeAfterOptionErrors(transition, `${path}.in`)) err(message);
+        for (const message of cssTransitionOptionErrors(transition, `${path}.in`)) err(message);
         if (transition.type === "overview") overviews.push({ index, path: `${path}.in`, label, transition, start, track });
       }
     }
@@ -964,6 +998,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
           for (const message of dotWipeOptionErrors(transition, "ending.in", storyFps(story))) err(message);
           for (const message of lightSweepOptionErrors(transition, "ending.in")) err(message);
           for (const message of beforeAfterOptionErrors(transition, "ending.in")) err(message);
+          for (const message of cssTransitionOptionErrors(transition, "ending.in")) err(message);
           if (transition.from_object !== undefined) {
             const sceneId = typeof transition.from_object === "string" ? transition.from_object.split(".")[0] : null;
             if (!sceneId || !ids.has(sceneId)) err(`ending.in.from_object references unknown scene "${sceneId ?? transition.from_object}"`);

@@ -27,6 +27,7 @@ import { SMEAR_PROPS, gsapVars, holdTime, layerStateAt, sceneWindows, smearFilte
 import { LIGHT_SWEEP, lightSweepCss, lightSweepDipHtml, lightSweepGsap, lightSweepHtml, lightSweeps } from '../core/light-sweep.mjs';
 import { CAMERA_STACK, resolveCamera, rideWorldPlates, backgroundFieldTiles, backgroundLayer, cameraPlan, captionDipWindows, overlayOps, placementTransform, sceneObjectLookup } from '../core/camera-world.mjs';
 import { getEase } from '../core/motion.mjs';
+import { sceneBehaviour } from '../core/behaviours.mjs';
 import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTweens, driftGsap, sceneDrift } from '../core/ambient.mjs';
 import { backgroundPlan, fieldStyle, layerCss, layerSvg, layerTweens, layoutFillClip, panelFillPlan, sceneBackground } from '../core/backgrounds.mjs';
 import { scenePlatePlan, scenePlateSpec, storyPlatePlan } from '../core/plates.mjs';
@@ -177,6 +178,13 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   const backdropLayer = (key, from, to, backdrop) => {
     const html = backdrop.layers.map((layer) => plateLayerHtml(layer, `lc-bg-${key}-${layer.id}`, from, to, allocate)).join('');
     const lines = backdrop.layers.flatMap((layer) => layerTweens(layer, from, to).map((tw) => `tl.fromTo(${js(`#lc-bg-${key}-${layer.id}`)}, ${js({ [tw.prop]: tw.from, force3D: false })}, ${js({ [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false, force3D: false })}, ${num(tw.at)});`));
+    // a weather loop: the inlined VFX painter draws its canvases from a proxy tween, as Remotion's VfxCanvas does per frame
+    for (const layer of backdrop.layers.filter((layer) => layer.vfx)) lines.push(`(function () {
+  var id = ${js(`lc-bg-${key}-${layer.id}`)}, color = document.getElementById(id + '-color').getContext('2d'), light = document.getElementById(id + '-light').getContext('2d'), plan = ${JSON.stringify(layer.vfx)}, clock = {t: ${num(from)}};
+  var paint = function (t) { window.lcVfx.paint(color, light, plan, t); };
+  paint(${num(from)});
+  tl.fromTo(clock, {t: ${num(from)}}, {t: ${num(to)}, duration: ${num(Math.max(0, to - from))}, ease: 'none', immediateRender: false, onUpdate: function () { paint(clock.t); }}, ${num(from)});
+})();`);
     const mask = Object.entries(fieldStyle(backdrop)).map(([prop, value]) => `${prop === 'WebkitMaskImage' ? '-webkit-mask-image' : 'mask-image'}:${value}`).join(';');
     return { html: `<div id="lc-bg-field-${key}" class="lc-ambient-field" data-launchclip-background="${backdrop.kind}" aria-hidden="true"${mask ? ` style="${mask}"` : ''}>${html}</div>`, motion: lines };
   };
@@ -352,7 +360,10 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     // field is the camera's depth layer (#lc-world-bg) instead, tiled across the world.
     const ambient = entry.plate && !worldMode && drawsBackground(entry.scene) ? plateField(id, entry.start, entry.renderEnd, entry.scene) : { html: '', motion: [] };
     const drift = isolate ? null : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry });
-    const content = drift ? `<div id="lc-drift-${id}" class="lc-drift" style="transform-origin:${num(drift.origin.x)}px ${num(drift.origin.y)}px">${media.html}</div>` : media.html;
+    // An opt-in behaviour (kit/core/behaviours.mjs) inside the drift, as the Remotion SceneLayer.
+    const behave = isolate ? null : sceneBehaviour(story, entry.scene, model, { start: entry.start, end: entry.renderEnd });
+    const behaved = behave ? `<div id="lc-behave-${id}" class="lc-drift" style="transform-origin:${num(behave.pivot.x)}px ${num(behave.pivot.y)}px">${media.html}</div>` : media.html;
+    const content = drift ? `<div id="lc-drift-${id}" class="lc-drift" style="transform-origin:${num(drift.origin.x)}px ${num(drift.origin.y)}px">${behaved}</div>` : behaved;
     // Overlays slide 1.15× the camera's travel (parallax) inside a wrapper.
     const parallax = plan && !entry.plate && !entry.rides ? overlayOps(plan, { start: entry.start, end: entry.renderEnd }) : [];
     // Zooms inside the shot (kit/core/zooms.mjs): in world mode they are
@@ -383,6 +394,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       const { from, to, position } = driftGsap(drift);
       motion.push(`tl.fromTo(${js(`#lc-drift-${id}`)}, ${js(from)}, ${js(to)}, ${num(position)});`);
     }
+    if (behave) motion.push(...opsGsap(behave.ops, { behave: `#lc-behave-${id}` }));
     if (out.motion) motion.push(`{\n${out.motion}\n}`);
     if (tail) motion.push(tail.toggle);
     motion.push(...mediaMotion);
@@ -706,7 +718,7 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     ${audio}
     ${feelLines.length ? '<div id="lc-feel" class="lc-feel">' : ''}${plan ? cameraMarkup(plan, story.brand, world, worldField.html, !worldBackdrop && !covered, stack?.html ?? '') : ''}
     ${hoisted.join('\n    ')}
-    ${markup.join('\n    ')}${feelLines.length ? '\n    </div>' : ''}${lightOver ? `\n    <div id="${LIGHT_OVER_ID}" data-launchclip-light="over" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:${LIGHT_Z.hyperframes}">${lightOver.html}</div>` : ''}${audioReactHtml ? `\n    ${audioReactHtml}` : ''}${vfx ? `\n    ${vfxCanvas('color')}${vfxCanvas('light')}${vfxWords}\n    <script>\n${VFX_RUNTIME}\n    </script>` : ''}${wipeMarkup.length ? `\n    ${wipeMarkup.join('\n    ')}` : ''}
+    ${markup.join('\n    ')}${feelLines.length ? '\n    </div>' : ''}${lightOver ? `\n    <div id="${LIGHT_OVER_ID}" data-launchclip-light="over" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:${LIGHT_Z.hyperframes}">${lightOver.html}</div>` : ''}${audioReactHtml ? `\n    ${audioReactHtml}` : ''}${vfx ? `\n    ${vfxCanvas('color')}${vfxCanvas('light')}${vfxWords}` : ''}${vfx || backdrop?.layers.some((layer) => layer.vfx) ? `\n    <script>\n${VFX_RUNTIME}\n    </script>` : ''}${wipeMarkup.length ? `\n    ${wipeMarkup.join('\n    ')}` : ''}
     ${look?.under ? `${lookGradeMarkup(look)}\n    ` : ''}${medium ? `${mediumDefs(medium)}<div id="${MEDIUM_LAYER_ID}" data-launchclip-medium="${medium.kind}" aria-hidden="true"></div>\n    ` : ''}${look && (look.furniture || (look.grade && !look.under)) ? `${look.under ? '' : lookGradeMarkup(look)}${lookFurnitureMarkup(look)}\n    ` : ''}${frame ? `<div id="lc-frame-root" aria-hidden="true"></div>\n    <script>\n${brandFrameRuntime(frame)}</script>\n    ` : ''}${captions ? '<div id="lc-captions" class="lc-captions"></div>' : ''}
     ${captions ? `<script>\n${captionPlanRuntime(captions.plan)}</script>` : ''}
     <script>
@@ -994,7 +1006,7 @@ function smearLayer(tweens, id, outer) {
 }
 
 function tweenCode(selector, tw) {
-  const from = gsapVars(tw.prop, tw.from), to = gsapVars(tw.prop, tw.to);
+  const from = gsapVars(tw.prop, tw.from, tw.args), to = gsapVars(tw.prop, tw.to, tw.args);
   return `tl.fromTo(${js(selector)}, ${js(from)}, ${js({ ...to, duration: round(tw.duration, 4), ease: tw.ease, immediateRender: false })}, ${num(tw.at)});`;
 }
 
@@ -1013,6 +1025,7 @@ function boundaryAttrs(boundary) {
 // track of its own. HyperFrames seeks it where it sits: no wrapper above it
 // is timed. Matches the Remotion PlateLayer.
 function plateLayerHtml(layer, id, from, to, allocate) {
+  if (layer.vfx) return `<div id="${id}" class="lc-bg-layer" style="${layerCss(layer, from)}">${['color', 'light'].map((part) => `<canvas id="${id}-${part}" data-launchclip-vfx="${part}" width="${layer.vfx.aw}" height="${layer.vfx.ah}" style="position:absolute;left:0;top:0;width:${layer.vfx.aw * layer.vfx.grid}px;height:${layer.vfx.ah * layer.vfx.grid}px;image-rendering:pixelated${part === 'light' ? ';mix-blend-mode:plus-lighter' : ''}"></canvas>`).join('')}</div>`;
   if (!layer.video) return `<div id="${id}" class="lc-bg-layer" style="${layerCss(layer, from)}">${layerSvg(layer) ?? ''}</div>`;
   const timing = `data-start="${num(from)}" data-duration="${num(Math.max(0, to - from))}" data-media-start="${num(Number(layer.video.start) || 0)}" data-track-index="${allocate(from, to)}"`;
   return `<div id="${id}" class="lc-bg-layer" style="${layerCss(layer, from)};overflow:hidden"><video id="${id}-clip" class="clip lc-plate-video" src="${attr(layer.video.src)}" ${timing} muted playsinline style="width:100%;height:100%;object-fit:cover"></video></div>`;

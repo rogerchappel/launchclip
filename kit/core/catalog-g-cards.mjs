@@ -113,8 +113,7 @@ function conceptView(model) {
     const glyph = c.icon ? flow(`${id}-icon`, L.iconSize, L.iconSize, {...hidden, marginBottom: L.gap, transformOrigin: '50% 50%'}, [iconNode(c.icon, {size: L.iconSize, color: c.iconColor})]) : null;
     return [column(B.x, B.y, B.width, L.height, [glyph, word, sub].filter(Boolean))];
   }
-  const tile = iconTile(`${id}-icon`, c.icon, L.iconSize, c.iconColor, unit, {glyph: 0.58});
-  tile.style.opacity = 0;
+  const tile = flow(`${id}-icon`, L.iconSize, L.iconSize, {...hidden, transformOrigin: '50% 50%'}, [iconNode(c.icon, {size: L.iconSize, color: c.iconColor})]);
   return [row(B.x, B.y, B.width, L.height, [tile, flow(null, L.textW, undefined, {display: 'flex', flexDirection: 'column'}, [word, sub].filter(Boolean))], {gap: L.gap})];
 }
 
@@ -123,7 +122,8 @@ const CONCEPT_VIEWS = {
     const {id, fonts, unit} = model;
     const c = model.content, L = c.layout, B = c.box;
     const lead = c.icon
-      ? flow(`${id}-icon`, L.tile, L.tile, {...hidden, borderRadius: r2(L.tile * 0.26), background: c.tileFill, transformOrigin: '50% 50%'}, [iconNode(c.icon, {x: r2(L.tile * 0.2), y: r2(L.tile * 0.2), size: r2(L.tile * 0.6), color: c.tileInk})])
+      // The bare glyph in the brand colour beside the word: no tile behind it (the icon-tile tell).
+      ? flow(`${id}-icon`, L.tile, L.tile, {...hidden, transformOrigin: '50% 50%'}, [iconNode(c.icon, {x: r2(L.tile * 0.08), y: r2(L.tile * 0.08), size: r2(L.tile * 0.84), color: c.iconColor, stroke: 1.6})])
       : flow(`${id}-bar`, L.tile, L.textH, {borderRadius: L.tile, background: c.tileFill, transformOrigin: '50% 0%', transform: 'scale(1, 0)'}, []);
     const text = flow(null, L.textW, undefined, {display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}, [
       flowText(`${id}-word`, L.textW, {...hidden, fontFamily: fonts.display, fontSize: L.word.size, lineHeight: '1.02', color: c.wordColor}, c.text),

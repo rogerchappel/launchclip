@@ -1616,7 +1616,9 @@ each element with `captionElementStateAt` (GSAP forward-seek semantics) and
 timeline to every frame against the evaluator; `scripts/parity-captions.mjs`
 compares rendered stills per preset (`test/fixtures/parity-captions/`, SSIM ≥
 0.97, `LAUNCHCLIP_PARITY=1`). The layout check moves the caption band for
-`position: top|middle|low` (`captionBandAt`; `low` centres it 58% down).
+`position: top|middle|low|lower-third|bottom` (`captionBandAt`, from `CAPTION_POSITION_CENTRE` in `layout-check.mjs`, which `captionBandTop` reads too: `middle` centres it at 0.5, `low` at 0.58, `lower-third` and portrait `bottom` at 0.73; see `docs/guide/caption-positions.md`).
+
+Surface colours: `overlay.surface` (`"all"` or line ids, written by finish) marks the lines on the brand surface. Such a line, when the idle colour does not reach 3:1 on the brand background, is drawn as `lc-cap-on-surface` in the colours `captionColorsOn(colors, bg, brandColors)` picks: idle, highlight (`active`, the hierarchy hero) and accent, with no halo or drop shadow.
 
 Placed zones: `zones: [{start, end, rect, scale?}]` (seconds, canvas px,
 `scale` 0.7–1). A line mostly spoken inside a zone is drawn in its rect
@@ -2087,12 +2089,15 @@ imports only `./ambient.mjs`, `./panels.mjs` and `./icons.mjs`, and
 | `stripes` | angle 0–180 (45), scale, density 0.15–0.6 (0.35), intensity (0.35), speed, color | the bands sway across |
 | `topographic` | density, scale, intensity, speed, color | contours drift and turn ±1° |
 | `halftone` | angle 0–360 (135), scale, intensity, speed, color | the screen sways |
-| `light-rays` | angle −60–60 (0), density, intensity, speed, color | the rays swing ±3° |
+| `light-rays` | angle −60–60 (0), density, intensity, speed, sweep 0–1 (0), color | the rays swing ±3°; sweep widens the swing to ±25° and quickens it, a beam sweeping the frame |
 | `icon-pattern` | icons, scale, spacing 0.5–2 (1), rotation −45–45 (0), offset 0–1 (0.5), opacity 0.02–0.12 (0.06), stroke 1–3 (1.75), speed, color | the tile sways |
 | `icon-scatter` | icons, scale, density, jitter 0–1 (0.5), opacity, stroke, speed, color | the scatter drifts |
 | `logo-pattern` | scale, spacing, offset, opacity, speed | the tile sways |
 | `motif` | shape, scale, weight 0.5–3 (1.5), opacity 0.02–0.2 (0.08), angle 0–180 (45, hatch only), speed, color | the motif sways |
 | `texture` | type, amount 0–1 (0.5), scale | still |
+| `weather` | type, intensity 0–1 (0.6), speed, color (primary) | a pixel weather loop plays (rain, snow, fog …); still at level off |
+| `rings` | density, intensity, weight 0.5–3 (1.5), bpm 40–200 (100), speed, color (primary) | a ring leaves the centre on every beat and grows past the corners (a scale glide per ring, a beat apart); speed 0 rests them concentric |
+| `bokeh` | density, intensity, scale, speed, color (accent) | soft discs with a hot core (light-sweep's falloff), a few white, drift slowly |
 
 `color` is `primary`, `accent` or `paper` (each kind has its own default).
 Density, intensity and grain default to 0.5 unless the table says otherwise.
@@ -2103,9 +2108,20 @@ Option params:
   field container takes a mask that is transparent there and opaque away from
   it (`fieldStyle(plan)`), so the content area stays quiet. A fade never
   raises a tone, so the gate checks the pattern's peak.
-- **`shape`** (`motif`): `plus`, `circle`, `chevron`, `wave`, `hatch` or
-  `crosshatch`.
+- **`shape`** (`motif`): `plus`, `circle`, `chevron`, `wave`, `hatch`,
+  `crosshatch`, `checker` (a conic-gradient checkerboard of two cells) or
+  `grid` (lines at 0° and 90°).
 - **`type`** (`texture`): `noise`, `fibre`, `canvas` or `linen`.
+- **`type`** (`weather`): `aurora`, `blizzard`, `cherry-blossoms`, `clouds`,
+  `falling-leaves`, `fireflies`, `fog`, `god-rays`, `rain` (the default),
+  `shooting-stars`, `snow` or `storm`: the VFX layer's weather loops
+  (`kit/core/vfx/catalog.mjs` `VFX_WEATHER`, docs/VFX_LAYER_RFC.md §3e). The
+  layer carries a one-cue VFX plan (`layer.vfx`) that both renderers paint
+  on a colour and a light canvas (`plus-lighter`) with `paintVfx`, at
+  absolute time × speed, in a ramp of `color` from the background. The
+  320 × 180 art screen scales up by a whole number to cover the frame,
+  centred, so a portrait frame crops its sides. Its opacity is `intensity`,
+  clamped by the text-contrast rule like any layer. It cannot be a panel fill.
 - **`icons`** (`icon-pattern`, `icon-scatter`): `"auto"` (the default) or 1–8
   icon names from `kit/core/icons.mjs`. `patternIcons(story, icons)` resolves
   `"auto"` to the icons the scenes name, at most 6, else

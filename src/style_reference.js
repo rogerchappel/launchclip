@@ -43,7 +43,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { assignPaletteRoles, CADENCE_PROFILE_SCHEMA, colorDistance, contrastRatio, hexToHsl, nearestBundledFont, rgbToHex, STYLE_SCHEMA, STYLE_V3_DEFAULTS } from "@launchclip/core/style.mjs";
 import { FONT_REGISTRY } from "@launchclip/core/fonts.mjs";
-import { analyzeRenderMotion } from "./render_motion_analysis.js";
+import { analyzeRenderMotion, analyzeTransitionsFile, KIND_TRANSITION_TYPES, transitionStats } from "./render_motion_analysis.js";
 import { analyzeProductionAudio, analyzeRhythmFile, rhythmSync, SFX_TYPES } from "./render_audio_analysis.js";
 import { combineDrawingNumbers, drawingLimits, drawingTraits, measureDrawing } from "./drawing_traits.js";
 import { mapDrawingTraits } from "./drawing_match.js";
@@ -596,7 +596,8 @@ export function detectLayouts(frames) {
 /**
  * Measure one reference video: palette clusters, pacing, energy, captions and
  * sound, and how it is drawn. adapters: {run, motion, audio, rhythm (null
- * skips tempo and SFX), changes,
+ * skips tempo and SFX), transitions (null skips the transition classifier),
+ * changes,
  * refineCase (null skips the caption-case re-read), drawing (null skips the
  * drawing traits)} to replace ffmpeg-backed steps in tests.
  */
@@ -639,6 +640,9 @@ export async function analyzeReference(file, options = {}, adapters = {}) {
       cut_rate_per_minute: round((boundaries.length / Math.max(1, duration)) * 60, 2),
       shot_seconds: shots
     };
+    // Transition kinds (docs/PLAN_AND_PACE_RFC.md §4.1).
+    const classified = adapters.transitions === null ? null : await (adapters.transitions ?? ((video) => analyzeTransitionsFile(video)))(resolved);
+    if (classified) Object.assign(pacing, transitionStats(classified.transitions, duration), { transitions: classified.transitions.map(({ at, kind, seconds }) => ({ at, kind, seconds })) });
     const hold = Number(motion.motion?.hold_ratio ?? 1);
     energy = {
       activity: round(1 - hold, 4),
@@ -823,8 +827,21 @@ export function combinePalettes(palettes) {
   return merged.sort((a, b) => b.weight - a.weight).map((entry) => ({ hex: entry.hex, weight: round(entry.weight, 4) }));
 }
 
-/** Motion grammar and transition preference from shot length and activity. */
+/**
+ * Motion grammar from shot length and activity. The transition preference
+ * comes from the measured transition_mix when there is one (each kind's
+ * types from KIND_TRANSITION_TYPES, kinds with at least a tenth of the
+ * transitions, most common first), else from shot length.
+ */
 export function grammarFromPacing(pacing, energy) {
+  const guessed = grammarFromShots(pacing, energy);
+  const mix = Object.entries(pacing?.transition_mix ?? {}).filter(([kind, share]) => share >= 0.1 && kind !== 'other').sort((a, b) => b[1] - a[1]);
+  const types = [...new Set(mix.flatMap(([kind]) => KIND_TRANSITION_TYPES[kind] ?? []))].slice(0, 3);
+  if (!types.length) return guessed;
+  return { ...guessed, transitions: types, reason: `${guessed.reason}; transitions measured: ${mix.map(([kind, share]) => `${kind} ${Math.round(share * 100)}%`).join(', ')}` };
+}
+
+function grammarFromShots(pacing, energy) {
   const median = Number(pacing?.median_shot_seconds ?? pacing?.shot_seconds?.median);
   const activity = Number(energy?.activity ?? 0.3);
   if (!Number.isFinite(median)) return { grammar: 'editorial', transitions: ['fade', 'push'], confidence: 0.2, reason: 'no shot lengths measured' };
@@ -1025,7 +1042,8 @@ export function draftStyleFromReferences(name, references, { fontHints = [], for
     cut_rate_per_minute: round(mean(videos.map((entry) => entry.pacing?.cut_rate_per_minute)), 2),
     median_shot_seconds: round(mean(videos.map((entry) => entry.pacing?.shot_seconds?.median)), 3),
     p25_shot_seconds: round(mean(videos.map((entry) => entry.pacing?.shot_seconds?.p25)), 3),
-    p75_shot_seconds: round(mean(videos.map((entry) => entry.pacing?.shot_seconds?.p75)), 3)
+    p75_shot_seconds: round(mean(videos.map((entry) => entry.pacing?.shot_seconds?.p75)), 3),
+    ...transitionsAcross(videos)
   } : null;
   const energyStats = videos.length ? { activity: round(mean(videos.map((entry) => entry.energy?.activity)), 4), bursts_per_minute: round(mean(videos.map((entry) => entry.energy?.bursts_per_minute)), 2) } : null;
   const grammar = grammarFromPacing(pacingStats, energyStats);
@@ -1075,6 +1093,20 @@ export function draftStyleFromReferences(name, references, { fontHints = [], for
   return { pack, inferred, report: referenceReport(pack, references, inferred) };
 }
 
+// Transition fields across references (each reference weighs the same);
+// none when no reference was classified.
+function transitionsAcross(videos) {
+  const measured = videos.filter((entry) => entry.pacing?.transition_mix);
+  if (!measured.length) return {};
+  const mix = {};
+  for (const entry of measured) for (const [kind, share] of Object.entries(entry.pacing.transition_mix)) mix[kind] = (mix[kind] ?? 0) + share / measured.length;
+  return {
+    transitions_per_min: round(mean(measured.map((entry) => entry.pacing.transitions_per_min)), 2),
+    transition_mix: Object.fromEntries(Object.entries(mix).sort((a, b) => b[1] - a[1]).map(([kind, share]) => [kind, round(share, 3)])),
+    transition_seconds: round(mean(measured.map((entry) => entry.pacing.transition_seconds)), 3)
+  };
+}
+
 const pct = (value) => `${Math.round(value * 100)}%`;
 
 export function referenceReport(pack, references, inferred) {
@@ -1107,6 +1139,7 @@ export function referenceReport(pack, references, inferred) {
   if (pack.reference_stats.pacing) {
     const p = pack.reference_stats.pacing;
     lines.push(`Visual changes ${p.cut_rate_per_minute}/min; shot length median ${p.median_shot_seconds} s (p25 ${p.p25_shot_seconds} s, p75 ${p.p75_shot_seconds} s). A visual change is a hard cut (ffmpeg scene scores, src/render_motion_analysis.js), a structural scene change, or a graphic appearing or leaving over held footage (blocks of the frame stepping from one steady state to another), as a storyboard counts scene starts and ends.`, '', `- motion.grammar: **${grammar.grammar}** (confidence ${grammar.confidence.toFixed(2)}): ${grammar.reason}.`, `- transition preference: ${grammar.transitions.join(', ')}.`);
+    if (p.transition_mix) lines.push(`- transitions measured (docs/PLAN_AND_PACE_RFC.md §4.1): ${p.transitions_per_min}/min, ${Object.entries(p.transition_mix).map(([kind, share]) => `${kind} ${pct(share)}`).join(', ')}${p.transition_seconds != null ? `; median span ${p.transition_seconds} s` : ''}.`);
   } else lines.push('No video reference: the grammar is the editorial default (confidence 0.20).');
   lines.push('', '## Energy → ambient', '');
   if (pack.reference_stats.energy) lines.push(`Activity (share of frames that are not holds) ${pack.reference_stats.energy.activity}; ${pack.reference_stats.energy.bursts_per_minute} motion bursts/min.`, '', `- ambient.level: **${ambient.level}** (confidence ${ambient.confidence.toFixed(2)}).`);
