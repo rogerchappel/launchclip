@@ -69,8 +69,9 @@ export function duckSettings(depth) {
   return Object.freeze({ threshold, ratio: DUCK_RATIO, attack: MUSIC_DUCK.attack, release: MUSIC_DUCK.release });
 }
 
-export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.42, musicDuck = null, hasAmbience = false, ambienceVolume = 0.5, hasKey = false, keySegments = null, mono = [] }) {
+export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.42, musicDuck = null, hasAmbience = false, ambienceVolume = 0.5, hasKey = false, keySegments = null, mono = [], direct = null }) {
   const parts = [];
+  const { beds, gate, wet } = directFilters(direct);
   const mixInputs = [];
   let index = 0;
   const keys = (hasMusic ? 1 : 0) + (hasAmbience ? 1 : 0);
@@ -89,7 +90,7 @@ export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.4
     index += 1;
   }
   if (hasMusic) {
-    parts.push(`[${index}]volume=${musicVolume}[bedraw]`);
+    parts.push(`[${index}]volume=${musicVolume}${beds}[bedraw]`);
     // Duck the bed under speech; with no voice the bed plays as is. The key is
     // padded to the full duration because sidechaincompress stops when its
     // sidechain ends, which would cut the bed off after the last word.
@@ -101,16 +102,23 @@ export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.4
   }
   if (hasAmbience) {
     // The loop arrives endless (-stream_loop -1): cut it to length first.
-    parts.push(`[${index}]atrim=0:${duration},asetpts=PTS-STARTPTS,afade=t=in:d=1,volume=${ambienceVolume}[ambraw]`);
+    parts.push(`[${index}]atrim=0:${duration},asetpts=PTS-STARTPTS,afade=t=in:d=1,volume=${ambienceVolume}${beds}[ambraw]`);
     parts.push(keyed ? `[akey]apad=whole_dur=${duration}[akeypad];[ambraw][akeypad]${duck(AMBIENCE_DUCK)}[amb]` : '[ambraw]anull[amb]');
     mixInputs.push({ label: '[amb]', input: index });
     index += 1;
   }
   cues.forEach((cue, i) => {
     const trim = cue.offset > 0 ? `atrim=start=${cue.offset},asetpts=PTS-STARTPTS,afade=t=in:d=0.004,` : '';
-    parts.push(`[${index + i}]${trim}adelay=${Math.round(cue.at * 1000)}:all=1,volume=${cue.volume}[s${i}]`);
-    mixInputs.push({ label: `[s${i}]`, input: index + i });
+    parts.push(`[${index + i}]${trim}adelay=${Math.round(cue.at * 1000)}:all=1,volume=${cue.volume}${gate}[s${i}]`);
+    if (!wet) mixInputs.push({ label: `[s${i}]`, input: index + i });
   });
+  // A hall (sound.space) adds the room the kit's cues lack: the cues share one reverb send.
+  // shortcut: "dry" can't strip the room a palette bakes into its files; it only adds none.
+  if (wet && cues.length) {
+    cues.forEach((_, i) => parts.push(`[s${i}]${mono.includes(index + i) ? 'pan=stereo|c0=c0|c1=c0' : 'aformat=channel_layouts=stereo'}[st${i}]`));
+    parts.push(`${cues.map((_, i) => `[st${i}]`).join('')}amix=inputs=${cues.length}:normalize=0,asplit=2[cuedry][cuewetin]`, ...roomIr('cue'), `[cuewetin][cueir]afir=dry=0:wet=1:gtype=none,volume='0.07*max(0,${wet}-1)':eval=frame[cuewet]`);
+    mixInputs.push({ label: '[cuedry]', input: -1 }, { label: '[cuewet]', input: -1 });
+  }
   if (!mixInputs.length) throw new Error('nothing to mix: pass --voice, --music or cues');
   const fadeStart = Math.max(0, duration - 0.25);
   // amix settles on one channel layout, and a mono input (a narration, usually)
@@ -120,6 +128,21 @@ export function mixGraph({ cues, duration, hasVoice, hasMusic, musicVolume = 0.4
   mixInputs.forEach(({ label, input }, i) => parts.push(`${label}${mono.includes(input) ? 'pan=stereo|c0=c0|c1=c0' : 'aformat=channel_layouts=stereo'}[mix${i}]`));
   parts.push(`${mixInputs.map((_, i) => `[mix${i}]`).join('')}amix=inputs=${mixInputs.length}:normalize=0,apad=whole_dur=${duration},atrim=0:${duration},afade=t=out:st=${fadeStart}:d=0.25,alimiter=limit=0.89:level=0[out]`);
   return parts.join(';');
+}
+
+/** A short decaying stereo room (two noise tails), labelled [<tag>ir]. */
+function roomIr(tag) {
+  return [...[[3, 'l'], [5, 'r']].map(([seed, side]) => `anoisesrc=d=1.4:c=pink:r=48000:s=${seed},afade=t=out:st=0:d=1.4:curve=exp,highpass=f=200,lowpass=f=9000[${tag}ir${side}]`), `[${tag}irl][${tag}irr]join=inputs=2:channel_layout=stereo[${tag}ir]`];
+}
+
+/**
+ * Sound directing (kit/core/sound/directing.mjs) as filter pieces: beds, a
+ * volume to append to the bed, ambience and room; gate, one to append to each
+ * cue (an into: silence); wet, the reverb send's multiplier expression (null: unchanged).
+ */
+export function directFilters(direct) {
+  const level = (points) => (points?.length ? `,volume='${levelExpression(points)}':eval=frame` : '');
+  return { beds: level(direct?.levels), gate: level(direct?.gate), wet: direct?.wet?.length ? `(${levelExpression(direct.wet)})` : null };
 }
 
 /** A level over time as an ffmpeg expression: straight lines between [seconds, level] points. */
@@ -142,8 +165,9 @@ export function levelExpression(points) {
  * different noise in each ear follows the score's levels. The voice stays
  * centred and on top: it ducks everything but never moves.
  */
-export function scoreGraph({ cues, duration, hasVoice, hasMusic = false, musicVolume = 0.42, room = [], mono = [] }) {
+export function scoreGraph({ cues, duration, hasVoice, hasMusic = false, musicVolume = 0.42, room = [], mono = [], direct = null }) {
   const parts = [];
+  const { beds, gate, wet } = directFilters(direct);
   let index = 0;
   const voiceInput = hasVoice ? index++ : null;
   const musicInput = hasMusic ? index++ : null;
@@ -175,12 +199,11 @@ export function scoreGraph({ cues, duration, hasVoice, hasMusic = false, musicVo
   parts.push('[ra][rb]join=inputs=2:channel_layout=stereo[low]');
   for (const [seed, tag] of [[31, 'aa'], [37, 'ab']]) parts.push(`anoisesrc=d=${duration}:c=pink:r=48000:s=${seed}:a=0.5,highpass=f=7000,lowpass=f=17000,tremolo=f=0.23:d=0.6,volume=0.018[${tag}]`);
   parts.push('[aa][ab]join=inputs=2:channel_layout=stereo[air]');
-  parts.push(`[low][air]amix=inputs=2:normalize=0,volume='${levelExpression(room)}':eval=frame[roomraw]`);
-  for (const [seed, tag] of [[3, 'irl'], [5, 'irr']]) parts.push(`anoisesrc=d=1.4:c=pink:r=48000:s=${seed},afade=t=out:st=0:d=1.4:curve=exp,highpass=f=200,lowpass=f=9000[${tag}]`);
-  parts.push('[irl][irr]join=inputs=2:channel_layout=stereo[ir]');
+  parts.push(`[low][air]amix=inputs=2:normalize=0,volume='${levelExpression(room)}':eval=frame${beds}[roomraw]`);
+  parts.push(...roomIr(''));
   parts.push(`${labels.join('')}amix=inputs=${labels.length}:normalize=0,asplit=2[dry][wetin]`);
-  parts.push('[wetin][ir]afir=dry=0:wet=1:gtype=none,volume=0.07[wet]');
-  parts.push('[dry][wet]amix=inputs=2:normalize=0,alimiter=limit=0.85:level=0[fxraw]');
+  parts.push(`[wetin][ir]afir=dry=0:wet=1:gtype=none,volume=${wet ? `'0.07*${wet}':eval=frame` : '0.07'}[wet]`);
+  parts.push(`[dry][wet]amix=inputs=2:normalize=0,alimiter=limit=0.85:level=0${gate}[fxraw]`);
   const mixed = [];
   if (hasVoice) {
     const voice = mono.includes(voiceInput) ? 'pan=stereo|c0=c0|c1=c0' : 'aformat=channel_layouts=stereo';
@@ -195,7 +218,7 @@ export function scoreGraph({ cues, duration, hasVoice, hasMusic = false, musicVo
     mixed.push('[fx]', '[room]');
   }
   if (hasMusic) {
-    parts.push(`[${musicInput}]aformat=channel_layouts=stereo,volume=${musicVolume}[bedraw]`);
+    parts.push(`[${musicInput}]aformat=channel_layouts=stereo,volume=${musicVolume}${beds}[bedraw]`);
     parts.push(hasVoice ? `[bedraw][k2]${duck(duckSettings(null))}[bed]` : '[bedraw]anull[bed]');
     mixed.push('[bed]');
   }
@@ -211,13 +234,13 @@ export function scoreGraph({ cues, duration, hasVoice, hasMusic = false, musicVo
  * -filter_complex_script, not its newer -/filter_complex spelling: that needs ffmpeg 7, and distro
  * packages are often older.
  */
-function buildScoreMix({ voice, music, cues, duration, out, musicVolume, room }) {
+function buildScoreMix({ voice, music, cues, duration, out, musicVolume, room, direct }) {
   const inputs = [];
   if (voice) inputs.push('-i', voice);
   if (music) inputs.push('-i', music);
   for (const cue of cues) inputs.push('-i', cue.file);
   const files = inputs.flatMap((value, i) => (inputs[i - 1] === '-i' ? [value] : []));
-  const filter = scoreGraph({ cues, duration, hasVoice: Boolean(voice), hasMusic: Boolean(music), musicVolume, room, mono: monoInputs(files) });
+  const filter = scoreGraph({ cues, duration, hasVoice: Boolean(voice), hasMusic: Boolean(music), musicVolume, room, mono: monoInputs(files), direct });
   mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
   const dir = mkdtempSync(path.join(os.tmpdir(), 'score-mix-'));
   try {
@@ -245,8 +268,8 @@ function monoInputs(files) {
   return files.flatMap((file, index) => (channelsOf(file) === 1 ? [index] : []));
 }
 
-export function buildMix({ voice, music, ambience = null, cues = [], duration, out, musicVolume = 0.42, musicDuck = null, ambienceVolume = 0.5, key = null, keySegments = null, score = null }) {
-  if (score) return buildScoreMix({ voice, music, cues, duration, out, musicVolume, room: score.room ?? [] });
+export function buildMix({ voice, music, ambience = null, cues = [], duration, out, musicVolume = 0.42, musicDuck = null, ambienceVolume = 0.5, key = null, keySegments = null, score = null, direct = null }) {
+  if (score) return buildScoreMix({ voice, music, cues, duration, out, musicVolume, room: score.room ?? [], direct });
   const inputs = [];
   const useKey = Boolean(key) && !voice && Boolean(music || ambience);
   if (voice) inputs.push('-i', voice);
@@ -255,7 +278,7 @@ export function buildMix({ voice, music, ambience = null, cues = [], duration, o
   if (ambience) inputs.push('-stream_loop', '-1', '-i', ambience);
   for (const cue of cues) inputs.push('-i', cue.file);
   const files = inputs.flatMap((value, i) => (inputs[i - 1] === '-i' ? [value] : []));
-  const filter = mixGraph({ mono: monoInputs(files), cues, duration, hasVoice: Boolean(voice), hasMusic: Boolean(music), musicVolume, musicDuck, hasAmbience: Boolean(ambience), ambienceVolume, hasKey: useKey, keySegments });
+  const filter = mixGraph({ mono: monoInputs(files), cues, duration, hasVoice: Boolean(voice), hasMusic: Boolean(music), musicVolume, musicDuck, hasAmbience: Boolean(ambience), ambienceVolume, hasKey: useKey, keySegments, direct });
   mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...inputs, '-filter_complex', filter, '-map', '[out]', '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s16le', out]);
 }
