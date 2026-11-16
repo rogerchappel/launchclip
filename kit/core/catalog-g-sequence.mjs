@@ -178,13 +178,13 @@ const COMPARE_VIEWS = {
     const c = model.content, L = c.layout, B = c.box;
     const columns = c.sides.map((s_, i) => {
       const tone = c.tones[i], before = c.mode === 'before-after' && i === 0;
-      const pill = flow(`${id}-side-${i}`, undefined, L.pillH, {...hidden, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: r2(10 * unit), padding: `0 ${r2(20 * unit)}px`, marginBottom: L.pillGap,
-        borderRadius: r2(L.pillH / 2), border: `${r2(2 * unit)}px solid ${before ? c.border : c.arrow}`, transformOrigin: '0% 50%'}, [
+      const pill = flow(`${id}-side-${i}`, undefined, L.pillH, {...hidden, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: r2(10 * unit), marginBottom: L.pillGap,
+        borderBottom: `${r2(3 * unit)}px solid ${before ? c.mutedText : c.arrow}`, transformOrigin: '0% 50%'}, [
         s_.icon ? flow(null, r2(L.pillH * 0.55), r2(L.pillH * 0.55), {}, [iconNode(s_.icon, {size: r2(L.pillH * 0.55), color: tone.color})]) : null,
         el('div', null, {margin: 0, whiteSpace: 'nowrap', fontFamily: fonts.meta, fontSize: L.heads[i].size, lineHeight: '1.3', letterSpacing: '0.12em', color: before ? c.mutedText : c.arrow}, [s_.title.toUpperCase()])
       ].filter(Boolean));
       const items = s_.items.map((item, j) => flow(`${id}-item-${i}-${j}`, L.colW, L.columns[i][j], {...hidden, boxSizing: 'border-box', marginTop: j ? L.gap : 0, padding: `0 ${L.pad}px`, display: 'flex', alignItems: 'center', gap: L.markGap,
-        borderRadius: r2(18 * unit), background: before ? 'transparent' : c.panel, border: before ? `${r2(2 * unit)}px dashed ${c.border}` : `${r2(2 * unit)}px solid ${c.arrow}`, transformOrigin: '50% 50%'}, [
+        borderLeft: `${r2(4 * unit)}px ${before ? 'dashed' : 'solid'} ${before ? c.mutedText : c.arrow}`, transformOrigin: '50% 50%'}, [
         flow(null, L.mark, L.mark, {}, [markNode(tone, L.mark)]),
         flowText(null, L.textW, {fontFamily: fonts.body, fontWeight: 500, fontSize: L.size, lineHeight: '1.2', color: before ? c.mutedText : c.textColor}, item.text)
       ]));
@@ -209,17 +209,21 @@ function compareView(model) {
       s.icon ? flow(null, r2(48 * unit), r2(48 * unit), {}, [iconNode(s.icon, {size: r2(48 * unit), color: tone.color})]) : null,
       flowText(null, r2(L.inner - (s.icon ? 64 * unit : 0)), {fontFamily: fonts.display, fontSize: part.head.size, lineHeight: '1.1', color: before ? c.mutedText : c.textColor, whiteSpace: 'nowrap'}, s.title)
     ].filter(Boolean));
-    return flow(`${id}-side-${i}`, L.colW, L.heights[i], {...hidden, boxSizing: 'border-box', padding: L.pad, borderRadius: r2(28 * unit), background: c.panel, border: `${r2((i && c.mode === 'before-after' ? 3 : 2) * unit)}px solid ${tone.border}`,
-      display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', transformOrigin: '50% 50%'}, [title, ...items]);
+    // Free type, no panel: the title over a short rule in the side's tone, then the items.
+    const rule = flow(null, r2(Math.min(L.inner * 0.3, 140 * unit)), r2(4 * unit), {marginTop: r2(-part.headGap * 0.5), marginBottom: r2(part.headGap * 0.5), borderRadius: r2(2 * unit), background: before ? c.mutedText : c.arrow}, []);
+    return flow(`${id}-side-${i}`, L.colW, L.heights[i], {...hidden, boxSizing: 'border-box', padding: L.pad,
+      display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', transformOrigin: '50% 50%'}, [title, rule, ...items]);
   });
   // The arrow between the panels, turned down when they stack.
   const arrowSize = r2(Math.min(L.between - 8 * unit, 56 * unit));
   const columns = L.layout === 'columns';
   const arrow = c.mode === 'before-after' ? el('div', `${id}-arrow`, abs(0, 0, arrowSize, arrowSize, {...hidden, position: 'relative', flex: 'none', margin: columns ? `0 ${r2((L.between - arrowSize) / 2)}px` : `${r2((L.between - arrowSize) / 2)}px 0`}),
     [iconNode(columns ? 'arrow-right' : 'arrow-down', {size: arrowSize, color: c.arrow, stroke: 2.6})]) : null;
-  const gap = c.mode === 'before-after' ? 0 : L.between;
-  const group = el('div', null, abs(B.x, B.y, B.width, L.height, {display: 'flex', flexDirection: columns ? 'row' : 'column', alignItems: 'center', justifyContent: 'center', gap}),
-    arrow ? [panels[0], arrow, panels[1]] : panels);
+  // Two neutral columns split by a hairline in the brand colour instead of two boxes.
+  const line = r2(2 * unit);
+  const divider = arrow ? null : el('div', `${id}-arrow`, {...hidden, flex: 'none', position: 'relative', alignSelf: 'stretch', background: c.arrow, ...(columns ? {width: line, margin: `0 ${r2((L.between - line) / 2)}px`} : {height: line, margin: `${r2((L.between - line) / 2)}px 0`})});
+  const group = el('div', null, abs(B.x, B.y, B.width, L.height, {display: 'flex', flexDirection: columns ? 'row' : 'column', alignItems: 'center', justifyContent: 'center'}),
+    [panels[0], arrow ?? divider, panels[1]]);
   return [group];
 }
 
@@ -274,6 +278,7 @@ function compareTimeline(model, ops) {
     for (const item of s.items) rise(ops, model, `${id}-item-${s.index}-${item.index}`, item.time, {distance: 12, duration: 0.35});
   }
   if (c.mode === 'before-after') pop(ops, model, `${id}-arrow`, rt(c.rightAt - 0.15), {scale: 0.4});
+  else rise(ops, model, `${id}-arrow`, rt(c.rightAt - 0.15), {distance: 0, duration: 0.4});
 }
 
 export const compare = {
