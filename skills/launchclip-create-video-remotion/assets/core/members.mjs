@@ -23,9 +23,12 @@
 
 import {GRAPHIC_PARAM, cardHeight, fitGraphic, graphicNodes, graphicSpec, graphicWidth} from './graphic.mjs';
 import {r2} from './catalog-h-base.mjs';
+import {subCard} from './member-sub-card.mjs';
 
 // One line per member module; each member session appends its own.
-const LIST = [];
+const LIST = [
+  subCard,
+];
 
 // Not frozen: a test may register a stand-in member.
 export const MEMBERS = Object.fromEntries(LIST.map(m => [m.id, m]));
