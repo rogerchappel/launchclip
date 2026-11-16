@@ -626,6 +626,23 @@ member. Graphics draw byte for byte as before. `test/members.test.js` proves
 the path with a stand-in member; each member module brings its own parity
 fixture, tests and 9:16 sample.
 
+**Member: a person (`person`).** `kit/core/member-person.mjs`. A person is
+`{member: {module: "person", name, image?, shape?}}`: their photo
+(`shape: "photo"`, a 4:5 portrait with rounded corners) or avatar (the default,
+a circle) from a project file (`assets/…`, never fetched), or, with no image,
+an initials tile: up to two initials from the name, in the display face, ink
+on a gradient of the member's colour, so a mixed set stays in the brand
+palette. The face carries a rim in the member's colour with its glow, and the
+name sits under it on a plate of the panel (a wire running under it stays
+hidden), like a badge's label. Its face is `glow`: a round or portrait face
+lights from behind. It takes a card's height, so the face grows into the room
+a card's icon and label would take. Proof: parity fixtures
+`h-node-graph-people-portrait` and `h-icon-grid-people-portrait` (drawn SVG
+avatars, no real people; min SSIM 0.9952), `test/member-person.test.js`, and
+the sample `examples/story/people-9x16` (seven people sign off a release:
+avatars, portrait photos and initials tiles wired into a Release hub). Seven
+fit the golden rect where five or six do not, as with graphics.
+
 ## 11. Phases
 
 1. **`node-graph` and `fluid-motion.mjs`** (this PR): flock, wave, idle, impact
