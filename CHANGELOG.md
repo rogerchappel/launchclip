@@ -4,6 +4,13 @@
 
 ### Added
 
+- A before-and-after wipe: a handle drags across the shot and the other
+  version is revealed behind it, slow → fast → slow with no overshoot. As a
+  transition (`before-after`, with an optional rest half-way and a label on
+  each side) and as a media layout inside one scene (`before-after`: two
+  sources, or one with a grade on one side, the handle resting and reversing
+  at its stops). The planner reaches for it for redesigns, filters and grades
+  and raw-versus-edited takes.
 - `exploded-view`: one object as an isometric drawing of solid parts, in
   four tones with a single lit part and ink outlines, that comes apart along
   its axes, holds with its labels beside it and snaps back. Three built-in

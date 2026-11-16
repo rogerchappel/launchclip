@@ -15,7 +15,7 @@
 
 import {gsapText} from '../core/motion.mjs';
 import {catalogBView, catalogBTimeline} from '../core/catalog-b.mjs';
-import {UNITLESS} from '../core/catalog-b-view.mjs';
+import {CLIP_PROPS, UNITLESS, clipInset} from '../core/catalog-b-view.mjs';
 
 const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch]));
 const js = value => JSON.stringify(value).replace(/</g, '\\u003c');
@@ -44,7 +44,8 @@ export function renderNode(node, rootAttrs = '') {
 
 const gsapProps = props => {
   const out = {};
-  for (const [key, value] of Object.entries(props)) out[key === 'text' ? 'textContent' : key] = key === 'text' ? gsapText(value) : value;
+  for (const [key, value] of Object.entries(props)) if (!CLIP_PROPS.includes(key)) out[key === 'text' ? 'textContent' : key] = key === 'text' ? gsapText(value) : value;
+  if (CLIP_PROPS.some(key => key in props)) out.clipPath = clipInset(props);
   if ('strokeDashoffset' in out) out.autoRound = false;
   return out;
 };
