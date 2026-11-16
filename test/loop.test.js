@@ -59,3 +59,11 @@ test('a short that loops: the hand-back lands on the last frame, and a loop to a
   assert.deepEqual(storyLoopFindings(story), []);
   assert.deepEqual(storyLoopFindings({...story, ending: {loop_to: 'b'}}).map(f => [f.rule, f.severity, f.ids]), [['loop-target', 'warning', ['b', 'a']]]);
 });
+
+test('a short that loops onto its opener fits the ambient field to whole cycles, so it ends where it began', async () => {
+  const {ambientField, axisValue} = await import('@launchclip/core/ambient.mjs');
+  const story = {format: {width: 1080, height: 1920, fps: 30, duration: 18}, brand, scenes: [{id: 'a', module: 'node-graph', start: 0, end: 18, params: SAMPLES['node-graph']}], ending: {loop_to: 'a'}};
+  for (const blob of ambientField(story).blobs) for (const key of ['x', 'y', 'scale']) assert.ok(Math.abs(axisValue(blob[key], 0) - axisValue(blob[key], 18)) < 1e-6, `${blob.id} ${key}`);
+  const plain = ambientField({...story, ending: undefined});
+  assert.ok(plain.blobs.some(blob => Math.abs(axisValue(blob.x, 0) - axisValue(blob.x, 18)) > 1), 'without a loop the field drifts on its own periods');
+});
