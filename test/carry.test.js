@@ -277,8 +277,12 @@ for (const [name, transition, camera] of [
     assert.equal(Boolean(ride), ['push', 'pull'].includes(transition.type) && (camera.mode === 'world' || transition.type === 'pull'));
     if (ride) {
       const plan = cameraPlan(story, {windows: sceneWindows(story), objects: sceneObjectLookup(story, (scene, value) => resolveModule(scene, value))});
-      const zoomAt = t => (({zoom}) => zoom)(cameraStateAt(plan, t)) * plan.placements[b.id].scale;
-      for (const [t, value] of ride.scale) assert.ok(Math.abs(value * zoomAt(t) - 1) < 1e-4, `ride scale at ${t}`);
+      const P = plan.placements[b.id];
+      for (const [t, , , scale, rotation] of ride.samples) {
+        const cam = cameraStateAt(plan, t);
+        assert.ok(Math.abs(scale * cam.zoom * P.scale - 1) < 1e-4, `ride scale at ${t}`);
+        assert.ok(Math.abs(rotation + cam.rotation + P.rotation) < 1e-3, `ride rotation at ${t}`);
+      }
     }
     // A hides its handed copies on the boundary; it is drawn on through the move.
     assert.ok(a.end > 4);
