@@ -42,18 +42,18 @@ function paramSets(kind) {
   return sets;
 }
 
-test("background core is plain ESM that imports only ambient.mjs, panels.mjs, icons.mjs, lighting.mjs and the VFX catalogue and ramps, and keeps no clock", async () => {
+test("background core is plain ESM that imports only ambient.mjs, panels.mjs, icons.mjs, lighting.mjs, the VFX catalogue and ramps and the GL generator list, and keeps no clock", async () => {
   for (const file of ["backgrounds.mjs", "panels.mjs"]) {
     const source = await readFile(path.join(ROOT, "kit/core", file), "utf8");
     const imports = [...source.matchAll(/^import .* from ['"]([^'"]+)['"]/gm)].map((match) => match[1]);
-    assert.ok(imports.every((name) => ["./ambient.mjs", "./panels.mjs", "./icons.mjs", "./lighting.mjs", "./vfx/catalog.mjs", "./vfx/plan.mjs"].includes(name)), `${file} imports ${imports}`);
+    assert.ok(imports.every((name) => ["./ambient.mjs", "./panels.mjs", "./icons.mjs", "./lighting.mjs", "./vfx/catalog.mjs", "./vfx/plan.mjs", "./gl-backgrounds.mjs"].includes(name)), `${file} imports ${imports}`);
     assert.doesNotMatch(source, /\brequire\(|Date\.now|performance\.now|Math\.random/);
   }
 });
 
 test("story.mjs keeps the kinds, param ranges, colours and treatments in step", () => {
   assert.deepEqual(STORY_BACKGROUND_KINDS, [...BACKGROUND_KINDS]);
-  assert.equal(BACKGROUND_KINDS.length, 18);
+  assert.equal(BACKGROUND_KINDS.length, 23);
   for (const kind of BACKGROUND_KINDS) {
     assert.deepEqual(STORY_BACKGROUND_PARAMS[kind], Object.fromEntries(Object.entries(BACKGROUND_PARAMS[kind]).map(([key, value]) => [key, [value.min, value.max]])), kind);
     assert.deepEqual(STORY_BACKGROUND_OPTIONS[kind], Object.fromEntries(Object.entries(BACKGROUND_OPTIONS[kind]).map(([key, value]) => [key, [...value.values]])), kind);
@@ -377,4 +377,37 @@ test("weather draws a VFX loop on a canvas pair that covers the frame, off unles
   assert.match(html, /window\.lcVfx = window\.lcVfx/, "the painter is inlined for the weather alone");
   const source = await readFile(path.join(ROOT, "kit", "remotion", "StoryComposition.tsx"), "utf8");
   assert.match(source, /if \(layer\.vfx\) return <div style=\{style\}><VfxCanvas plan=\{layer\.vfx\}/);
+});
+
+test("GL generators: one half-size canvas the shared painter draws, refused as a panel fill, inlined once", async () => {
+  const { GL_BACKGROUND_KINDS, GL_BACKGROUND_VARIANTS, installGl } = await import("@launchclip/core/gl-backgrounds.mjs");
+  assert.deepEqual(GL_BACKGROUND_KINDS, ["aurora", "fog", "plasma", "cells", "caustics"]);
+  for (const kind of GL_BACKGROUND_KINDS) {
+    assert.ok(STORY_BACKGROUND_KINDS.includes(kind), kind);
+    assert.deepEqual(STORY_BACKGROUND_OPTIONS[kind].type ?? null, GL_BACKGROUND_VARIANTS[kind] ?? null, kind);
+    const plan = backgroundPlan(story({ background: { kind, params: { intensity: 1 } } }));
+    assert.equal(plan.layers.length, 1);
+    const [layer] = plan.layers;
+    assert.equal(layer.gl.kind, kind);
+    assert.deepEqual([layer.gl.w, layer.gl.h], [Math.ceil(plan.layers[0].box.width / 2), Math.ceil(plan.layers[0].box.height / 2)]);
+    assert.ok(layer.style.opacity > 0 && layer.style.opacity <= 0.85);
+    assert.deepEqual(backgroundPlan(story({ background: { kind } })).layers[0].gl, backgroundPlan(story({ background: { kind } })).layers[0].gl, "seeded, so deterministic");
+    assert.equal(backgroundPlan(story({ background: { kind }, ambient: { level: "off" } })).layers[0].gl.speed, 0);
+    assert.match(panelFillErrors({ kind }).join(), new RegExp(`cannot be ${kind}`));
+  }
+  assert.equal(backgroundPlan(story({ background: { kind: "fog", params: { type: "ember" } } })).layers[0].gl.variant, "ember");
+  // The painter is self-contained: its source alone installs it (HyperFrames inlines it), and it reports no WebGL2 off a page.
+  const root = {};
+  new Function("root", `(${installGl.toString()})(root);`)(root);
+  assert.equal(root.lcGl.paint({ getContext: () => null }, backgroundPlan(story({ background: { kind: "aurora" } })).layers[0].gl, 1), false);
+  const base = JSON.parse(await readFile(path.join(MINIMAL, "storyboard.json"), "utf8"));
+  const words = JSON.parse(await readFile(path.join(MINIMAL, "NARRATION.json"), "utf8")).words;
+  const { html } = await compileStoryToHyperFrames(resolveStory({ ...base, background: { kind: "caustics" } }, { words }), { write: false, sourceDir: MINIMAL });
+  assert.match(html, /<canvas id="lc-bg-[^"]+-gl" data-launchclip-gl="caustics"/);
+  assert.equal((html.match(/root\.lcGl = \{/g) ?? []).length, 1, "the painter is inlined once");
+  assert.match(html, /window\.lcGl\.paint\(canvas, plan, t\)/);
+  const plain = await compileStoryToHyperFrames(resolveStory(base, { words }), { write: false, sourceDir: MINIMAL });
+  assert.doesNotMatch(plain.html, /lcGl/, "nothing without a GL background");
+  const source = await readFile(path.join(ROOT, "kit", "remotion", "StoryComposition.tsx"), "utf8");
+  assert.match(source, /if \(layer\.gl\) return <div style=\{style\}><GlCanvas plan=\{layer\.gl\}/);
 });
