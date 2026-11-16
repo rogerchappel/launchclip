@@ -38,6 +38,7 @@ import { checkStorage, interruptedByStorage } from "./storage_check.js";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
 import { actingGate, densityGate, ghostingGate, physicsGate, tellsGate, varietyGate } from "./direction_guardrails.js";
+import { visualDensityGate } from "./visual_density.js";
 import { choreographyGate, holdGate, stateGate } from "./movement_guardrails.js";
 import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, lipSyncGate, paceGate, prototypeCut, renderPaceGate, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
@@ -2079,6 +2080,9 @@ async function runGates(ctx, { pixels = true } = {}) {
   try {
     const density = densityGate(ctx.resolved, { rects: ctx.layout?.rects ?? [], profile: ctx.layout?.profile });
     if (density.status !== "skipped") gates.density = density;
+    // Filled frame and footage share over the whole timeline, to the last second (src/visual_density.js).
+    const visual = visualDensityGate(ctx.resolved, { rects: ctx.layout?.rects ?? [] });
+    if (visual.status !== "skipped") gates.visual_density = visual;
     gates.variety = varietyGate(ctx.resolved);
   } catch (error) {
     gates.density ??= { status: "failed", error: error.message };

@@ -35,6 +35,8 @@
 //   sentence-length   a sentence over 25 words
 //   buzzword          two or more stock marketing phrases, or one in the hook
 //   aphorism          three or more stock cadences ("Not X. Y.", "nobody checks")
+//   loop-order        a list item said before the earlier ones without marking
+//                     it as a teaser ("And number three…" right after the hook)
 //   options-unexplained  a list of three or more options ("timber, composite
 //                     and aluminium") whose items no other sentence comes back
 //                     to: the script names them and teaches nothing (derived)
@@ -61,6 +63,7 @@
 
 import { readScreenplay, screenplayNarration, spokenLines, validateScreenplay } from "@launchclip/core/screenplay.mjs";
 import { AWARENESS_LEVELS, DEFAULT_PACE, MAX_WORDS_PER_SECOND, PACES, PACE_IDS, SCRIPT_FORMAT_IDS, SCRIPT_FORMATS as FORMAT_SPECS, SCRIPT_GOALS, SHORT_VIDEO_SECONDS } from "@launchclip/core/script-formats.mjs";
+import { orderFindings } from "./list_order.js";
 
 export const SCRIPT_CHECK_VERSION = "launchclip.script-check.v1";
 // The format, goal and awareness ids are the planning pass's own (kit/core/script-formats.mjs).
@@ -337,6 +340,10 @@ export function checkScript(input = {}) {
     const missing = choices.filter((choice) => !new RegExp(`\\b${escapeRegExp(choice)}\\b`, "i").test(endText));
     if (!/\bcomment\b/i.test(endText) || missing.length) add(errors, "cta-choice", `The ending does not ask viewers to comment one of ${choices.join(", ")}${missing.length ? ` (missing ${missing.join(", ")})` : ""}.`, `End on "Comment ${choices.join(", ")}. One word." and say the most-picked one happens next.`, spanOf(sentences[sentences.length - 1]));
   }
+
+  // --- A list said in order: a later item before item one is a teaser that says so ("stay for number three"), never bare.
+  const outOfOrder = orderFindings(sentences.map((sentence) => ({ text: sentence.text })))[0];
+  if (outOfOrder) add(errors, "loop-order", `"${sentences[outOfOrder.index].text}" names item ${outOfOrder.ordinal} of the list before item ${outOfOrder.before}, so the list sounds out of order.`, "If it is the open loop, mark it as later (\"stay for number three: …\", \"…at the end\"); otherwise say the items in order.", spanOf(sentences[outOfOrder.index]));
 
   // --- Short videos: specifics over hedging (hard at two, soft at one), an open loop and a re-hook (soft).
   if (short) {
