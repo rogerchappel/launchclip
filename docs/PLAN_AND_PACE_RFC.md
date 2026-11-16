@@ -1,6 +1,6 @@
 # RFC: Sharper plans, faster pace, measured references
 
-Status: phase 1 and the plan side of phase 2 built (see "Built so far" at the end of §2); the rest is a draft open for review
+Status: phase 1, the plan side of phase 2 and the audio port of phase 3 built (see "Built so far" at the end of §2 and §4.3); the rest is a draft open for review
 Date: 2026-11-16
 Roadmap entry: "Sharper plans and a faster hook" ([ROADMAP.md](ROADMAP.md))
 
@@ -186,6 +186,8 @@ What shipped, and where it departs from the text above:
   `qa/finish/gates.json`. The profile fields (`hook_rate_ratio`,
   `max_event_gap_seconds`, `cuts_on_beat_ratio`), cuts on beat, bar timing
   and the pace change rule wait for the beat data of §4.3.
+  Phase 3 now measures tempo, beats and cuts on beat on references; the
+  gate does not read them yet.
 
 ## 3. Techniques catalogue
 
@@ -349,6 +351,56 @@ our renders, `src/render_audio_analysis.js` already knows every planned cue:
 each must be detected within 0.05 s with the planned type in ≥ 70% of cues,
 and silences and pre-laps from the treatment are measured where they were
 planned.
+
+#### Built so far (phase 3, audio port)
+
+What shipped, and where it departs from the text above:
+
+- **Code.** `analyzeRhythm`, `analyzeRhythmFile`, `speechSpans`, `sfxType`
+  and `rhythmSync` in `src/render_audio_analysis.js`, with every threshold
+  in `AUDIO_RHYTHM` and `SFX_TYPE_RULES`. The FFT and the median-filter
+  split are not a new `kit/core/sound/dsp.mjs`: they are the ones
+  `AUDIO_FEATURES.json` already uses (`fft` and the newly exported
+  `percussiveSpectra` in `src/scripts/audio-features.mjs`). Decoding reuses
+  `decodeAudio` from `src/music/beats.js`.
+- **Grid.** The comb searches the period within ±2% of the autocorrelation
+  lag (0.05% steps) as well as the phase, because one onset hop is 1.3% of a
+  150 BPM beat. An onset frame's time is its window start plus 37.5 ms,
+  measured on clicks.
+- **No beat** when the 90th-percentile percussive share is under 0.045
+  **or** the strength is under 0.3 (the text says "and", at 0.2). Speech has
+  a percussive share near 0.8, so "and" gave narration a beat, and a dozen
+  irregular keystrokes in silence reach 0.22. Click tracks sit at 0.55–0.65.
+- **Speech** for "outside speech" comes from the caller (`options.speech`)
+  or from `speechSpans`: voiced frames (80–400 Hz autocorrelation ≥ 0.5 with
+  the window's own autocorrelation divided out, half the energy under 1 kHz)
+  merged into phrases of ≥ 3 runs, ≥ 0.6 s and ≥ 30% voiced, padded 0.2 s
+  for consonants. On two narration files it leaves 13 and 6 false SFX per
+  minute (from about 100); an SFX under the voice is not counted, as the
+  rule says, so a narrated reference under-reports its SFX.
+- **Types.** Our kit is band limited (most families keep under 5% of their
+  energy above 4 kHz), so rea-video's brightness tests never fired on our
+  whooshes and clicks. Click is tested first and also accepts a centroid
+  over 550 Hz, with decay under 0.08 s; whoosh also accepts "noisy and
+  sustained" (decay > 0.18 s, tonality < 15); ding's centroid floor is
+  1 kHz. Tonality is max/mean of the magnitude, not the power, spectrum.
+  `SFX_FAMILY_TYPES` gives each family its expected type (null for riser,
+  tally, tape-stop, glitch, error-buzz and pen-scribble). Measured on each
+  variant alone: default kit 86% (the test), minimal 78%, glassy 77%,
+  organic 55% (its dings and keys are marimba-like, under 1 kHz). Boing
+  measures as impact and a space bar as impact in every palette.
+- **Profile fields** land in each reference's `sound` and in
+  `reference_stats.sound`: all eight from the list above plus
+  `beat_synced`. `soundFromAudio` sets `sfx_density` from `sfx_per_min`
+  when measured, split at 15 and 24 per minute (the midpoints of `finish`'s
+  cue pace: 12, 18, 30), and a measured tempo sets `sound.music.bpm_range`
+  (±3 BPM) and counts as music present. `finish`'s own style check skips
+  the rhythm pass.
+- **Not yet built:** sections and the drop candidate, planned-vs-measured
+  cue checks on our renders (phase 7), and the `bar:` anchors and cuts-on-
+  beat pace rules that consume this (phase 2's render side). With a voice
+  over the music the beat is usually lost (strength 0.11–0.17 on our
+  example mixes); a music stem, when there is one, measures cleanly.
 
 ### 4.4 Calm-moment cut scoring
 
