@@ -2,8 +2,14 @@
 // RGB frames with known eases, kinds and staggers, the profile stats, and
 // the grammar the style drafter writes from them.
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
-import { classifyEntrances, ENTRANCE_EASE_ROLES, entranceStats, MODULE_STAGGER_SECONDS } from "../src/render_motion_analysis.js";
+import { analyzeEntrancesFile, classifyEntrances, ENTRANCE_EASE_ROLES, entranceStats, MODULE_STAGGER_SECONDS } from "../src/render_motion_analysis.js";
+import { getRenderer } from "../src/renderers/index.js";
+import { compileStoryCommand } from "../src/story_cli.js";
+import { mediaSkip } from "./helpers/media.js";
 import { grammarFromEntrances } from "../src/style_reference.js";
 import { easeRole, grammarErrors } from "@launchclip/core/grammar.mjs";
 
@@ -114,4 +120,51 @@ test("entrance stats and the grammar drafted from them", () => {
   assert.equal(grammarFromEntrances({ entrance_ease_mix: { "ease-out": 1 }, entrance_seconds: 0.3 }).overrides.ease, undefined);
   assert.equal(grammarFromEntrances({ entrance_ease_mix: { "ease-in": 1 }, entrance_seconds: null, stagger_interval_seconds: null }), null);
   assert.equal(grammarFromEntrances({}), null);
+});
+
+// The RFC's test: kinetic-words beats (the scale entrance: opacity, scale
+// and blur on one ease) at three known staggers, with the grammar's enter
+// ease set to each role, rendered by both renderers at 360×640. The
+// measured ease's role must match the planned one for at least 85% of the
+// beats, and each scene's stagger interval must come back within a frame.
+test("both renderers: entrance eases and stagger intervals from our own ops", { skip: mediaSkip(), timeout: 1_800_000 }, async (t) => {
+  const work = await mkdtemp(path.join(os.tmpdir(), "launchclip-entrances-"));
+  const staggers = [0.3, 0.45, 0.6], words = ["ONE", "TWO", "SIX", "TEN"];
+  let at = 0;
+  const scenes = staggers.map((gap, i) => {
+    const length = 0.5 + gap * 3 + 0.42 + 0.9;
+    const scene = { id: `s${i}`, module: "kinetic-words", start: +at.toFixed(3), end: +(at + length).toFixed(3), energy: 1, params: { layout: "stack", variant: "scale", words: words.map((text, k) => ({ text, at: +(0.5 + k * gap).toFixed(3), emphasis: true })) } };
+    at += length;
+    return scene;
+  });
+  const planned = scenes.flatMap((scene) => scene.params.words.map((word) => scene.start + word.at));
+  try {
+    for (const name of ["hyperframes", "remotion"]) {
+      let right = 0, total = 0;
+      for (const ease of Object.keys(EASES)) {
+        const project = path.join(work, `${name}-${ease}`);
+        await mkdir(project, { recursive: true });
+        await writeFile(path.join(project, "storyboard.json"), JSON.stringify({
+          schema: "launchclip.story.v1", title: "Entrances", lane: "motion", format: { width: 360, height: 640, fps: 30, duration: +at.toFixed(3), platform: "youtube-shorts" },
+          brand: { colors: { bg: "#06070d", primary: "#fdb022", accent: "#46d4ff", ink: "#06070d", paper: "#f2eee6" }, fonts: { display: "anton", body: "space-grotesk", meta: "jetbrains-mono" } },
+          motion: { grammar: { base: "editorial", ease: { enter: ease } } }, scenes
+        }));
+        await compileStoryCommand(project, { renderer: name, ...(name === "hyperframes" ? { out: path.join(project, "hyperframes") } : {}) });
+        const video = path.join(work, `${name}-${ease}.mp4`);
+        await getRenderer(name).render(name === "hyperframes" ? path.join(project, "hyperframes") : project, video, { quality: "draft" });
+        const { entrances, sequences } = await analyzeEntrancesFile(video);
+        await rm(video, { force: true });
+        const roles = planned.map((time) => { const found = entrances.find((entry) => Math.abs(entry.at - time) <= 0.15); return found ? ENTRANCE_EASE_ROLES[found.ease] : "missed"; });
+        right += roles.filter((role) => role === easeRole(ease)).length;
+        total += planned.length;
+        const intervals = scenes.map((scene, i) => sequences.find((entry) => Math.abs(entry.at - (scene.start + 0.5)) <= 0.15)?.interval ?? null);
+        t.diagnostic(`${name} ${ease}: roles ${roles.map((role) => role ?? "linear").join(" ")}; intervals ${intervals.join(", ")} (planned ${staggers.join(", ")})`);
+        intervals.forEach((interval, i) => assert.ok(interval !== null && Math.abs(interval - staggers[i]) <= 1 / 30, `${name} ${ease}: scene ${i} interval ${interval} vs ${staggers[i]}`));
+      }
+      t.diagnostic(`${name}: ease role right for ${right}/${total}`);
+      assert.ok(right >= 0.85 * total, `${name}: ${right}/${total}`);
+    }
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
 });
