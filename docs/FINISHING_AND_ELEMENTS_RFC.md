@@ -63,6 +63,13 @@ Each pass mixes back to the clean pixel inside it.
 | `grade` | `.cube` file or preset, strength | effectcraft `fx_lut.wgsl` `fxl_lut_3d` (interpolation) | see E.2 |
 | `grain` | amount, size, mono, seed | effectcraft `fx_generate.wgsl` `gen_grain_planes`/`apply` | after the grade, so grain is not graded; luma-weighted |
 
+Built (phase 1): `src/finish_pass.js` with `aberration`, `grade` and
+`grain`, and the protect mask. Frames come back from the page over a
+WebSocket: Chrome uploads an 8 MB fetch body about 8× slower. Measured on an
+M4 at 1080×1920: about 4 s to start, then about 86 ms a frame for three
+passes. The shaders are written fresh. Contract:
+[KIT_CONTRACTS.md](KIT_CONTRACTS.md), "Finish passes".
+
 WGSL to GLSL is mechanical (compute entry points become fragment shaders).
 We take the maths and constants, not the compatibility plumbing (`P.u`/`P.f`
 slots, premultiply round trips). `story.finish = [{pass, ...params}]`, at
@@ -103,8 +110,11 @@ preset name, or `{preset | cube, strength}`; `launchclip finish` grades the
 render with ffmpeg `lut3d` (`src/grade.js`) before the caption legibility
 pass, so captions are measured on the graded frames, and warns when the
 grade pushes a brand colour pair under 4.5:1. The seeded style generator
-(`style-seed.mjs`) sets the look's preset, else the tone's. When the GL path
-lands, the grade moves into `story.finish` as `{pass: "grade", …}`.
+(`style-seed.mjs`) sets the look's preset, else the tone's. With another
+`story.finish` pass, the grade runs in the GL chain (a `{pass: "grade", …}`
+entry, else `story.grade`), truncated to 8 bits as `lut3d` is; the chart test
+holds ΔE2000 under 1. `tint` (`"brand"` or `#rrggbb`) re-tints a preset's
+split tone.
 
 ## E.3 Gap checklist against a mature preset library
 
