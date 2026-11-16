@@ -4,6 +4,14 @@
 
 ### Added
 
+- **Sets that arrive together and breathe.** `icon-grid` cells flock out of
+  the middle of the grid; `drop-grid` items rock on their base once landed
+  and the grid ripples when full; `social-wall`'s field arrives as one wave
+  along its drift and the pulled posts breathe; `item-list` items breathe
+  once in. The idle bob is capped at 4% of an element's height
+  (`idleFor` in `kit/core/fluid-motion.mjs`). Both renderers, with long
+  parity fixtures (`h-*-idle-portrait`) and the sample
+  `examples/story/group-idle-9x16`.
 - **A treatment block in the direction map.** `DIRECTION.json` may carry
   `treatment`: the film in one sentence, the one object that carries it,
   what it must never do, the brief's locked words and claims, a worked
