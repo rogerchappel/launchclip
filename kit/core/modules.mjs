@@ -34,7 +34,7 @@ import { sceneLayoutAt, storySections } from './footage-layout.mjs';
 import { resolveShotStates, stateSpec, stateTargetRect } from './shot-states.mjs';
 import { scenePassage } from './media-passage.mjs';
 import { publishAnchors } from './anchors.mjs';
-import { applyFlow } from './flow.mjs';
+import { applyFlow, carrySource } from './flow.mjs';
 
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
@@ -587,8 +587,10 @@ function resolveModuleInner(scene, story, { track, end }) {
 
 /**
  * The anchors a scene publishes (kit/core/anchors.mjs; docs/FLUID_MOTION_RFC.md
- * §7): its module's declared points on the plate with the time each lands.
- * → {name: {x, y, time}}. Throws a message when the scene is not in the story
+ * §7): its module's declared points on the plate with the time each lands,
+ * and until when each stays on screen (§6.4: the scene's end, or a later one
+ * an explicit pin hands it on to). → {name: {x, y, width, height, element,
+ * time, until}}. Throws a message when the scene is not in the story
  * or its module publishes none.
  */
 export function sceneAnchors(story, sceneId) {
@@ -601,7 +603,21 @@ export function sceneAnchors(story, sceneId) {
   }
   const model = resolveModule(scene, story);
   // shortcut: measured at rest, so a camera push inside the module (node-graph's 1 → 1.05) is not followed; map through it when one grows large.
-  return publishAnchors(model, modelView(model), definition.anchors(model));
+  const anchors = publishAnchors(model, modelView(model), definition.anchors(model));
+  for (const anchor of Object.values(anchors)) anchor.until = heldUntil(story, scene, anchor.element);
+  return anchors;
+}
+
+// When an element leaves: its scene's end, followed through explicit pins (scene.carry.map) to later scenes.
+// shortcut: explicit maps only; follow the automatic pairing (motion.flow) here once it resolves pairs.
+function heldUntil(story, scene, element) {
+  let until = Number(scene.end), from = scene, id = element;
+  for (let hops = 0; hops < story.scenes.length; hops++) {
+    const next = story.scenes.find((other) => other !== from && typeof other?.carry?.map?.[id] === 'string' && carrySource(story, other)?.id === from.id);
+    if (!next) break;
+    [from, id, until] = [next, next.carry.map[id], Number(next.end)];
+  }
+  return until;
 }
 
 // A scene's ctx.anchorsOf: each referenced scene resolves once per resolve.

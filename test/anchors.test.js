@@ -46,7 +46,7 @@ test('a cast cue aimed at an anchor plays as it lands and looks at it; an explic
 test('anchor targets: unknown anchor, unknown scene, a scene without anchors and an anchor outside the scene are errors', () => {
   assert.throws(() => castModel(withCues([{action: 'gaze-at', target: {scene: 'team', anchor: 'node-n9'}}])), /cues\[0\]\.target scene "team" has no anchor "node-n9" \(anchors: hub, converge, node-n0/);
   assert.throws(() => castModel(withCues([{action: 'gaze-at', target: {scene: 'nope', anchor: 'hub'}}])), /cues\[0\]\.target scene "nope" is not in the story/);
-  assert.throws(() => castModel(withCues([{action: 'gaze-at', target: {scene: 'room', anchor: 'hub'}}])), /scene "room" \(cast-scene\) publishes no anchors \(modules with anchors: node-graph/);
+  assert.throws(() => castModel(withCues([{action: 'gaze-at', target: {scene: 'room', anchor: 'hub'}}])), /scene "room" \(cast-scene\) publishes no anchors \(modules with anchors: concept-card, node-graph/);
   // The graph starts after the cast scene's cues end: a defaulted time falls outside it.
   assert.throws(() => castModel(withCues([{pose: 'cheer', target: {scene: 'team', anchor: 'converge'}}], story => { story.scenes[0].end = 3; return story; })), /cues\[0\]\.at defaults to anchor "converge" of scene "team" at 4\.5 s, outside this scene's cues/);
   assert.equal(targetError({scene: 'team', anchor: 'hub'}), null);
@@ -61,4 +61,25 @@ test('the anchors sample looks at each card as it lands, left to right, from the
   assert.ok(looks.every(state => state && state.view === 'front'), 'a plate graphic is looked at from the front');
   for (let i = 1; i < looks.length; i++) assert.ok(looks[i].gaze.x > looks[i - 1].gaze.x + 5, `the face moves on to card ${i}`);
   assert.equal(states.find(state => state.time === anchors.converge.time)?.pose, 'cheer');
+});
+
+// A concept card on a plate, then the same card pinned across a cut (RFC §6.4).
+const cardStory = (pin = true) => resolveStory({
+  schema: 'launchclip.story.v1', title: 'card', lane: 'motion', format: {width: 1080, height: 1920, fps: 30, duration: 6},
+  brand: {colors: {bg: '#0b0d1a', primary: '#ffb547', accent: '#46d4ff', ink: '#0b0d1a', paper: '#f6f3ee'}},
+  camera: {mode: 'cuts'},
+  scenes: ['ad', 'ad2'].map((id, i) => ({id, module: 'concept-card', start: i * 3, end: i * 3 + 3,
+    ...(i && pin ? {carry: {map: {'ad-card': 'ad2-card', 'ad-icon': 'ad2-icon', 'ad-word': 'ad2-word'}}} : {}),
+    params: {text: 'Your ad', icon: 'megaphone', surface: 'card', rect: {x: 140, y: 420, width: 800, height: 520}}}))
+});
+
+test('concept-card publishes its card (with its box) and icon; an anchor stays until its scene ends or the last pin', () => {
+  const story = cardStory();
+  const model = resolveModule(story.scenes[0], story);
+  const {card, icon} = sceneAnchors(story, 'ad');
+  assert.deepEqual([card.x, card.y, card.width, card.height, card.element], [540, 680, 800, 520, 'ad-card']);
+  assert.equal(card.time, model.events.find(event => event.name === 'word').time);
+  assert.equal(icon.time, model.events.find(event => event.name === 'icon').time);
+  assert.equal(card.until, 6, 'pinned into ad2, which ends at 6 s');
+  assert.equal(sceneAnchors(cardStory(false), 'ad').card.until, 3);
 });
