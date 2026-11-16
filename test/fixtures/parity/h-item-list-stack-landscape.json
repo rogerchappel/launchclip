@@ -7,7 +7,7 @@
       "width": 1920,
       "height": 1080,
       "fps": 30,
-      "duration": 5,
+      "duration": 4,
       "platform": "youtube"
     },
     "brand": {
@@ -30,9 +30,10 @@
         "id": "el",
         "module": "item-list",
         "start": 0,
-        "end": 5,
+        "end": 4,
         "params": {
           "title": "Before you post",
+          "subject": "Your Short",
           "ticks": true,
           "items": [
             {

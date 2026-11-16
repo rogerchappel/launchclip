@@ -32,9 +32,10 @@ function listResolve(params, ctx) {
   const title = p.title === undefined ? null : check.str(p.title, 'params.title', 48);
   const titleFit = title ? fitText(check, 'params.title', title, {family: 'body', width: W, preferred: u(56), min: b.min.key, maxLines: 2}) : null;
   const top = titleFit ? r2(titleFit.size * 1.15 * titleFit.lines + u(48)) : 0;
-  const subject = p.subject === undefined ? null : check.str(p.subject, 'params.subject', 24);
+  // Only orbit draws the subject; the other layouts ignore it, so a style can switch variants freely.
+  const subjectIn = p.subject === undefined ? null : check.str(p.subject, 'params.subject', 24);
+  const subject = layout === 'orbit' ? subjectIn : null;
   if (layout === 'orbit' && !subject) check.fail('params.subject', 'orbit needs a subject the items circle (≤ 24 chars)');
-  if (layout !== 'orbit' && subject) check.fail('params.subject', 'is only for the orbit variant');
   const n = p.items.length;
   const stagger = p.stagger === undefined ? grammarStagger(ctx.grammar, Math.min(0.35, 1.6 / n), {min: 0.08, max: 0.6}) : check.num(p.stagger, 'params.stagger', 0.08, 0.6);
   const first = b.timeOf('item-0', p.at, 'params.at', 0.5) - start;
@@ -46,7 +47,7 @@ function listResolve(params, ctx) {
   // Cell size each layout gives an item's text.
   const cols = layout === 'scatter' ? (portrait ? 2 : Math.min(3, n)) : 1;
   const rows = layout === 'scatter' ? Math.ceil(n / cols) : n;
-  const orbitW = r2(W * (portrait ? 0.46 : 0.3));
+  const orbitW = r2(W * (portrait ? 0.44 : 0.28));
   const textW = layout === 'orbit' ? orbitW : layout === 'scatter' ? r2(W / cols - u(56)) : r2(W - (showMarker ? marker + u(32) : 0) - (layout === 'fan' ? u(80) : 0));
   const preferred = u(layout === 'stack' || layout === 'fan' ? (portrait ? 72 : 64) : 56);
   const detailSize = r2(Math.max(b.min.meta, u(34)));
@@ -125,7 +126,7 @@ function placeScatter({items, W, top, H0, cols, rows}) {
   }
 }
 
-// Items on an ellipse round the subject, clockwise.
+// Items round the subject, clockwise.
 function placeOrbit({items, W, top, H0, subjectFit, subject, check, u}) {
   const cx = W / 2, cy = top + H0 / 2, n = items.length;
   const tallest = Math.max(...items.map(item => item.height));
@@ -134,15 +135,18 @@ function placeOrbit({items, W, top, H0, subjectFit, subject, check, u}) {
   // Two phases: the first item at the top, or half a step round; keep the first where nothing covers the subject.
   const tryPhase = offset => items.map(item => {
     const a = -Math.PI / 2 + offset + item.index * 2 * Math.PI / n;
-    const x = cx + rx * Math.cos(a), y = cy + ry * Math.sin(a);
+    // A squircle, not an ellipse: corner items sit further out, so wider labels fit between them.
+    const sq = v => Math.sign(v) * Math.sqrt(Math.abs(v));
+    const x = cx + rx * sq(Math.cos(a)), y = cy + ry * sq(Math.sin(a));
     const box = {x: r2(x - item.width / 2), y: r2(y - item.height / 2), rotation: 0, from: {x: r2(cx - x), y: r2(cy - y)}};
     // A centred label covers only its own text width inside the box.
     const half = Math.min(item.width, textWidth(item.label, item.size, 'body') / item.lines) / 2;
-    return {...box, clear: x - half > cx + sw || x + half < cx - sw || box.y > cy + sh || box.y + item.height < cy - sh};
-  });
+    return {...box, cx: x, half, height: item.height, clear: x - half > cx + sw || x + half < cx - sw || box.y > cy + sh || box.y + item.height < cy - sh};
+  }).map((box, i, all) => ({...box, clear: box.clear && all.every((other, j) => j === i
+    || Math.abs(box.cx - other.cx) > box.half + other.half + u(24) || box.y + box.height + u(16) < other.y || other.y + other.height + u(16) < box.y)}));
   const placed = [0, Math.PI / n].map(tryPhase).find(boxes => boxes.every(box => box.clear));
   if (!placed) check.fail('params.items', 'would cover the subject; use a taller rect, shorter labels, a shorter subject or the stack variant');
-  items.forEach((item, i) => { const {clear, ...box} = placed[i]; Object.assign(item, box); });
+  items.forEach((item, i) => { const {x, y, rotation, from} = placed[i]; Object.assign(item, {x, y, rotation, from}); });
 }
 
 function listView(model) {
@@ -202,7 +206,7 @@ function listTimeline(model, ops) {
 export const itemList = {
   id: 'item-list',
   describe: 'A list (steps, features, a checklist) as separate free-type items, each with its own entrance: stacked down the frame, fanned out from a pile, scattered with a tilt, or orbiting a subject. Ticks draw on one item at a time. Use this, not a boxed checklist card, for any list.',
-  params: {items: '[string | {label ≤ 40, detail? ≤ 60, at?, tickAt?}] 2–6', title: 'string ≤ 48 (optional)', subject: 'string ≤ 24, the centre the items circle (orbit only, required there)',
+  params: {items: '[string | {label ≤ 40, detail? ≤ 60, at?, tickAt?}] 2–6', title: 'string ≤ 48 (optional)', subject: 'string ≤ 24, the centre the items circle (required for orbit, ignored by the others)',
     ticks: 'boolean: each item gets a tick that draws on at tickAt (default: just after it enters)', numbered: 'boolean (default true without ticks)', tone: 'primary | accent | paper | #rrggbb (numbers and ticks)',
     stagger: 'seconds between entrances (default min(0.35, 1.6 / count))', at: `first item: ${at}`, variant: VARIANT_PARAM, rect},
   events: ['item-<i>', 'tick-<i>'], timing: timingRules({rules: ['items enter in order from at, stagger apart; a tick lands after its item enters']}), variants: LIST_VARIANTS,
