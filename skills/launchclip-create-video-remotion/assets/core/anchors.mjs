@@ -16,7 +16,8 @@ const r2 = value => Math.round(value * 100) / 100;
 
 /**
  * A module's anchors from its view tree (root at model.rect, as
- * catalogHView returns it). → {name: {x, y, time}}. Throws on an element or
+ * catalogHView returns it). → {name: {x, y, width, height, element, time}}
+ * (x, y the centre; width, height the element's box at rest). Throws on an element or
  * event the module does not have (a bug in its declaration).
  */
 export function publishAnchors(model, tree, declared) {
@@ -27,7 +28,7 @@ export function publishAnchors(model, tree, declared) {
     if (!entry) throw new Error(`anchor "${name}": element "${element}" is not in the ${model.module} view`);
     const time = model.events?.find(item => item.name === event)?.time;
     if (!Number.isFinite(time)) throw new Error(`anchor "${name}": event "${event}" is not in the ${model.module} model`);
-    out[name] = {x: r2(entry.ax + (entry.width ?? 0) / 2), y: r2(entry.ay + (entry.height ?? 0) / 2), time};
+    out[name] = {x: r2(entry.ax + (entry.width ?? 0) / 2), y: r2(entry.ay + (entry.height ?? 0) / 2), width: r2(entry.width ?? 0), height: r2(entry.height ?? 0), element, time};
   }
   return out;
 }

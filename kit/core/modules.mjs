@@ -34,7 +34,7 @@ import { sceneLayoutAt, storySections } from './footage-layout.mjs';
 import { resolveShotStates, stateSpec, stateTargetRect } from './shot-states.mjs';
 import { scenePassage } from './media-passage.mjs';
 import { publishAnchors } from './anchors.mjs';
-import { applyFlow, carrySource } from './flow.mjs';
+import { applyFlow, pinnedInto } from './flow.mjs';
 
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
@@ -608,16 +608,22 @@ export function sceneAnchors(story, sceneId) {
   return anchors;
 }
 
-// When an element leaves: its scene's end, followed through explicit pins (scene.carry.map) to later scenes.
-// shortcut: explicit maps only; follow the automatic pairing (motion.flow) here once it resolves pairs.
+// When an element leaves: its scene's end, followed through pins (explicit or automatic) to later scenes.
+// A moved carry stops it: a wire end does not follow a FLIP yet (FLUID_MOTION_RFC §6.4).
 function heldUntil(story, scene, element) {
   // As the compilers draw it: through a transition overlap and the final hold.
   const drawnEnd = (s) => endingEnd(s, story, windowEnds(story).get(s.id) ?? Number(s.end)) ?? Number(s.end);
+  const bare = (other) => resolveModule(other, story, { end: sceneRenderEnd(story, other), carry: false });
   let until = drawnEnd(scene), from = scene, id = element;
   for (let hops = 0; hops < story.scenes.length; hops++) {
-    const next = story.scenes.find((other) => other !== from && typeof other?.carry?.map?.[id] === 'string' && carrySource(story, other)?.id === from.id);
+    let next = null, to = null;
+    for (const other of story.scenes) {
+      if (other === from || !(Number(other?.start) >= Number(from.start))) continue;
+      to = pinnedInto(story, other, bare)[id];
+      if (to) { next = other; break; }
+    }
     if (!next) break;
-    [from, id, until] = [next, next.carry.map[id], drawnEnd(next)];
+    [from, id, until] = [next, to, drawnEnd(next)];
   }
   return until;
 }

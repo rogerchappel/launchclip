@@ -64,13 +64,13 @@ test('the anchors sample looks at each card as it lands, left to right, from the
 });
 
 // A concept card on a plate, then the same card pinned across a cut (RFC §6.4).
-const cardStory = (pin = true) => resolveStory({
+const cardStory = (pin = true, {flow, moveY = 0} = {}) => resolveStory({
   schema: 'launchclip.story.v1', title: 'card', lane: 'motion', format: {width: 1080, height: 1920, fps: 30, duration: 6},
   brand: {colors: {bg: '#0b0d1a', primary: '#ffb547', accent: '#46d4ff', ink: '#0b0d1a', paper: '#f6f3ee'}},
-  camera: {mode: 'cuts'},
+  camera: {mode: 'cuts'}, ...(flow ? {motion: {flow}} : {}),
   scenes: ['ad', 'ad2'].map((id, i) => ({id, module: 'concept-card', start: i * 3, end: i * 3 + 3,
     ...(i && pin ? {carry: {map: {'ad-card': 'ad2-card', 'ad-icon': 'ad2-icon', 'ad-word': 'ad2-word'}}} : {}),
-    params: {text: 'Your ad', icon: 'megaphone', surface: 'card', rect: {x: 140, y: 420, width: 800, height: 520}}}))
+    params: {text: 'Your ad', icon: 'megaphone', surface: 'card', rect: {x: 140, y: 420 + i * moveY, width: 800, height: 520}}}))
 });
 
 test('concept-card publishes its card (with its box) and icon; an anchor stays until its scene ends or the last pin', () => {
@@ -82,4 +82,6 @@ test('concept-card publishes its card (with its box) and icon; an anchor stays u
   assert.equal(icon.time, model.events.find(event => event.name === 'icon').time);
   assert.equal(card.until, 8, 'pinned into ad2, drawn to 8 s with the final hold');
   assert.equal(sceneAnchors(cardStory(false), 'ad').card.until, 3);
+  assert.equal(sceneAnchors(cardStory(false, {flow: true}), 'ad').card.until, 8, 'motion.flow pins the identical card too');
+  assert.equal(sceneAnchors(cardStory(true, {moveY: 200}), 'ad').card.until, 3, 'a card that moves (a FLIP) is not held: a wire end does not follow it');
 });

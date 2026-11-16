@@ -332,8 +332,9 @@ aimed at another scene's anchor (§7):
   publishes `card` (its rect, at `word`) and `icon` (at `icon`).
 - **The source must be on screen** for the sprout's whole run. In one scene:
   the anchor's scene covers it. Across scenes on a shared still plate: the
-  anchor's element is pinned (§6.2, an explicit `carry.map` entry) into the
-  next scene, and the chain of pins covers it. An anchor that is published
+  anchor's element is pinned (§6.2, by an explicit `carry.map` or by
+  `motion.flow`) into the next scene, and the chain of pins covers it. A
+  carry that moves the element (the FLIP) ends the chain. An anchor that is published
   with an `until` before the sprout ends is a validation error that names the
   time it leaves.
 - **Errors** name the param: an unknown scene, a scene that publishes no
