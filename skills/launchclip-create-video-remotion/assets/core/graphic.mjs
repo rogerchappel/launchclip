@@ -43,13 +43,20 @@ export const BEYOND = Object.freeze({
   color: null, colour: null, emoji: null, shape: null, circle: null, rect: null, svg: null, path: null, html: null, style: null, css: null,
   x: null, y: null, left: null, top: null, width: null, height: null, size: null, position: null, layout: null, align: null, rotate: null, scale: null, offset: null
 });
+// Words past the list that a member module draws (kit/core/members.mjs): the item takes {member} instead.
+export const BEYOND_MEMBER = Object.freeze({
+  value: 'value-card', figure: 'value-card', multiplier: 'value-card', price: 'value-card', amount: 'value-card'
+});
 const NESTED = new Set(['graphic', 'children', 'item', 'member', 'group', 'node']);
 const LAYOUT = new Set(['x', 'y', 'left', 'top', 'width', 'height', 'size', 'position', 'layout', 'align', 'rotate', 'scale', 'offset']);
 
 /** Where a request past the closed list belongs: one clause naming the nearest catalogue module, or that none draws it yet. */
 export function beyondGraphic(word) {
   const words = String(word).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-  const hit = words.flatMap(w => [w, w.replace(/s$/, ''), w.replace(/es$/, '')]).find(w => w in BEYOND);
+  const forms = words.flatMap(w => [w, w.replace(/s$/, ''), w.replace(/es$/, '')]);
+  const member = forms.find(w => w in BEYOND_MEMBER);
+  if (member) return `that is the ${BEYOND_MEMBER[member]} member's job: give the item {member: {module: "${BEYOND_MEMBER[member]}", …}} in place of the graphic`;
+  const hit = forms.find(w => w in BEYOND);
   if (!hit) return 'no catalogue module draws that yet; leave it out, or add a module (docs/ROADMAP.md)';
   if (NESTED.has(hit)) return `graphics do not nest; a set of graphics is a module's members (${BEYOND[hit]}, ${hit === 'node' || hit === 'group' ? 'icon-grid' : 'node-graph'})`;
   if (LAYOUT.has(hit)) return 'the module lays out its members; no module takes free positions or sizes';
@@ -86,6 +93,7 @@ export function graphicSpec(check, raw, path, {labelMax = 14} = {}) {
     if (!PROP_STATES[raw.prop]) check.fail(`${path}.state`, `${raw.prop} has no states (props with states: ${Object.keys(PROP_STATES).join(', ')})`);
     check.oneOf(raw.state, `${path}.state`, PROP_STATES[raw.prop]);
   }
+  for (const key of ['badge', 'text']) if (raw[key] !== undefined && String(raw[key]).length > SHORT) check.fail(`${path}.${key}`, `must be a string of 1–${SHORT} characters; ${beyondGraphic('value')}`);
   return {
     kind, icon: raw.icon ?? null,
     label: raw.label === undefined ? null : check.str(raw.label, `${path}.label`, labelMax),

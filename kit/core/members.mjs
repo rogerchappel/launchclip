@@ -25,11 +25,13 @@ import {GRAPHIC_PARAM, cardHeight, fitGraphic, graphicNodes, graphicSpec, graphi
 import {r2} from './catalog-h-base.mjs';
 import {statusMember} from './member-status.mjs';
 import {toneMember} from './member-tone.mjs';
+import {valueCard} from './member-value-card.mjs';
 
 // One line per member module; each member session appends its own.
 const LIST = [
   toneMember,
-  statusMember
+  statusMember,
+  valueCard,
 ];
 
 // Not frozen: a test may register a stand-in member.
