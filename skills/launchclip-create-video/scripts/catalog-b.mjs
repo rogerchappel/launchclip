@@ -39,6 +39,7 @@
 import {rootNode, rootOps} from './catalog-b-view.mjs';
 import {grammarTweens} from './grammar.mjs';
 import {applyShotStates, shotStateView} from './shot-states.mjs';
+import {applyCarry, carryView} from './carry.mjs';
 import {logoRow} from './catalog-b-logo-row.mjs';
 import {archiveCard} from './catalog-b-archive-card.mjs';
 import {processSteps} from './catalog-b-process-steps.mjs';
@@ -67,7 +68,7 @@ function definition(model) {
 /** Static element tree for a catalogue B model (initial state at scene start). */
 export function catalogBView(model) {
   const def = definition(model);
-  return rootNode(model, shotStateView(model, def.view(model), stateHooks(def)));
+  return rootNode(model, carryView(model, shotStateView(model, def.view(model), stateHooks(def))));
 }
 
 /** Renderer-neutral animation ops for a catalogue B model, root first. */
@@ -80,5 +81,7 @@ export function catalogBTimeline(model) {
   if (model.shotStates) applyShotStates(model, ops, stateHooks(def));
   // Motion grammar: pops (back/elastic eases) follow the story's grammar.
   if (model.grammar) grammarTweens(ops, model.grammar, {roles: ['emphasis']});
+  // Elements carried across scenes (kit/core/carry.mjs): lift the root's motion, hold, skip entrances.
+  if (model.carry) applyCarry(model, ops, shotStateView(model, def.view(model), stateHooks(def)));
   return ops;
 }

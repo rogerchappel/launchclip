@@ -69,6 +69,8 @@ const STORY_PARITY = Object.freeze([
   {id: 'vfx-batch1-9x16', times: [0.8, 1.8, 2.8, 3.8, 4.6, 5.8, 6.8, 7.8, 8.8, 9.6, 10.8, 11.8, 12.8, 13.8, 14.6, 15.8, 16.8, 17.8, 18.9, 19.4]},
   // Silhouette effects: scanner and hit-flash on a card, frozen, electrified, stunned and halo on two cast members.
   {id: 'vfx-masks-9x16', times: [1.2, 2.3, 4.2, 6.5]},
+  // Flow across scenes (docs/FLUID_MOTION_RFC.md §6): the pinned title held while the rest exits, the first frame after the cut, the rest arriving.
+  {id: 'flow-carry-9x16', times: [4.3, 4.5, 4.8]},
   // Interface scenes on signal-ui (the CI smoke's times, scripts/parity-ci.mjs).
   {id: 'ui-parity-9x16', times: [...CI_UI_STORY.times]}
 ]);

@@ -964,6 +964,8 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         }
       }
     }
+    // Elements carried across scenes (kit/core/flow.mjs checks the source and the elements).
+    if (scene.carry !== undefined) validateCarry(scene.carry, `${path}.carry`, err);
     // Zooms inside the shot (the same rules as kit/core/zooms.mjs).
     if (scene.zooms !== undefined) validateZooms(scene, { path, label, start, end, track, err, anchorField, format: story.format });
     timing.push({ index, id: scene.id, label, start, end, track: Number.isInteger(track) ? track : 0 });
@@ -1813,6 +1815,22 @@ function validateOverviews(overviews, { err, camera, timing }) {
 // or object zoom is measured on the module, so its safe-area check runs when
 // the compilers resolve it (dropped with a warning).
 export const STORY_ZOOM = Object.freeze({ min: 1.15, max: 3, fill: 0.7, move: 0.8, hold: 1.2, safe: 0.05, count: 8 });
+
+// scene.carry (docs/FLUID_MOTION_RFC.md §6): false, or {from?, map} of full
+// element ids, the source's on the left and this scene's on the right.
+const ELEMENT_ID = /^[a-z0-9][a-z0-9_-]*$/i;
+function validateCarry(carry, path, err) {
+  if (carry === false) return;
+  if (!isObject(carry) || !isObject(carry.map) || !Object.keys(carry.map).length) { err(`${path} must be false or {from?, map: {"<from element id>": "<element id>"}}`); return; }
+  for (const key of Object.keys(carry)) if (!["from", "map"].includes(key)) err(`${path}.${key} is not supported (allowed: from, map)`);
+  if (carry.from !== undefined && !nonEmpty(carry.from)) err(`${path}.from must be a scene id`);
+  const seen = new Set();
+  for (const [from, to] of Object.entries(carry.map)) {
+    if (!ELEMENT_ID.test(from) || typeof to !== "string" || !ELEMENT_ID.test(to)) err(`${path}.map must map element ids to element ids (got ${JSON.stringify(from)}: ${JSON.stringify(to)})`);
+    else if (seen.has(to)) err(`${path}.map receives ${to} twice`);
+    seen.add(to);
+  }
+}
 
 function validateZooms(scene, { path, label, start, end, track, err, anchorField, format }) {
   const zooms = scene.zooms;
