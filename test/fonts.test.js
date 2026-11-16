@@ -61,11 +61,11 @@ test("slugs and spellings resolve to the canonical registered family", () => {
 });
 
 test("stacks name only bundled families before one generic family", () => {
-  assert.equal(fontStack("space-grotesk", "body"), "'Space Grotesk', 'Inter', 'STIX Two Math', sans-serif");
+  assert.equal(fontStack("space-grotesk", "body"), "'Space Grotesk', 'Manrope', 'Inter', 'STIX Two Math', sans-serif");
   assert.equal(fontStack(null, "display"), "'Anton', 'STIX Two Math', sans-serif");
   assert.equal(fontStack(null, "meta"), "'JetBrains Mono', 'STIX Two Math', monospace");
   assert.equal(fontStack(null, "math"), "'STIX Two Text', 'STIX Two Math', serif");
-  assert.equal(fontStack("poppins", "body"), "'Poppins', 'Inter', 'STIX Two Math', sans-serif", "an unregistered family degrades to the role's bundled family");
+  assert.equal(fontStack("poppins", "body"), "'Poppins', 'Manrope', 'Inter', 'STIX Two Math', sans-serif", "an unregistered family degrades to the role's bundled family");
   assert.throws(() => fontStack("Inter", "caption"), /unknown font role/);
   const stacks = brandFontStacks({ fonts: { display: "anton", body: "space-grotesk" } });
   assert.deepEqual(stacks.families, ["Anton", "Space Grotesk"]);
@@ -79,7 +79,7 @@ test("stacks name only bundled families before one generic family", () => {
 });
 
 test("a project loads the role defaults, the symbol fallback and the brand families", () => {
-  assert.deepEqual(projectFontFamilies({ fonts: { display: "unbounded", body: "inter" } }), ["Anton", "Inter", "JetBrains Mono", "STIX Two Text", "Instrument Serif", "STIX Two Math", "Unbounded"]);
+  assert.deepEqual(projectFontFamilies({ fonts: { display: "unbounded", body: "inter" } }), ["Anton", "Manrope", "JetBrains Mono", "STIX Two Text", "Instrument Serif", "Inter", "STIX Two Math", "Unbounded"]);
   const faces = registryFontFaces(["Instrument Serif", "Poppins"]);
   assert.deepEqual(faces.map((face) => [face.file, face.style]), [["instrument-serif-latin-400-normal.woff2", "normal"], ["instrument-serif-latin-400-italic.woff2", "italic"]]);
   assert.equal(faces[0].module, "@fontsource/instrument-serif/files/instrument-serif-latin-400-normal.woff2");
@@ -87,6 +87,8 @@ test("a project loads the role defaults, the symbol fallback and the brand famil
 
 test("width scales compare a family with its role default", () => {
   assert.equal(fontWidthScale("Anton", "display"), 1);
+  assert.equal(fontWidthScale("Inter", "body"), 1, "body fits stay calibrated on Inter");
+  assert.equal(fontWidthScale(null, "body"), 1);
   assert.equal(fontWidthScale(null, "display"), 1);
   assert.equal(fontWidthScale("poppins", "display"), 1, "unregistered families keep the role calibration");
   assert.equal(fontWidthScale("Instrument Serif", "body"), 1, "narrower families never scale below 1");

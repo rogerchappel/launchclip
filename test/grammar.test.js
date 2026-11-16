@@ -59,17 +59,19 @@ const sha = (value) => createHash("sha256").update(value).digest("hex");
 // All six re-pinned when default motion lost its overshoot: back.out eases
 // became power3.out and the footage punch-in spring is critically damped
 // (lc-base-media samples); nothing else changed.
+// All six re-pinned when the default body face moved from Inter to Manrope
+// (Inter stays second in the stack): font stacks and @font-face lines only.
 const PRE_GRAMMAR_HTML_SHA256 = {
-  cooling: "c64e3f09aed31e8a909b7766d5ef7218842d97590b1cbb327dce535bc9e265bf",
-  minimal: "fa2a756a53823ea2ed0c0f4d53b2ce8239ca6bd368a7692ae7e3b8c5a0572cf8",
-  "promo-16x9": "eaad3142a6780a4da86408ccafbac3ba6dcb8b544ccf2b3fc5cac478eecd19fe",
-  "explainer-9x16": "1564efb0bfc099da5964b457b084e8ee29529e5b821aea2cf6094ce298f79a3c",
-  "data-story-9x16": "a03f02f31be02f50316f19a6c318608f06c9b2d3303c41fe4e9100f0a657f9d3",
-  footage: "cc05a0ac6f78b44f791b2708556b9964ef06e9ef6bcafb2686a84bbfb7cf2bb6"
+  cooling: "0b4ab88a4855504dc7631e0d3c825d71be8c8ce663b436dc57c6b2c57e3a7ddf",
+  minimal: "6800a10989c206d7ed761faa3251bdcc606d150da1c81bde2307c374c061463e",
+  "promo-16x9": "ea6059e90363e9301b6180d6aa27805794ebf22092baa0dca377b345e575e31d",
+  "explainer-9x16": "ee69a5bdf5f287ccdd670c5dc7f69382ba7f0916b4bd11cc9129dcc264449a4e",
+  "data-story-9x16": "2abcc1e359cecf29e3c6a447efe79e619b935dfe85c8f1c157aabc324318a98f",
+  footage: "b4730f4b3d838d2daa12830c6d7335e6bffb14d420bb27ee65131d5d64f308df"
 };
 // test/editorial_core.test.js: the explicit-rect 16:9 corpus subset (re-pinned
 // with it when bound messages moved to 2-decimal bounds; error strings only).
-const EXPLICIT_16X9_SHA256 = "45c528200fb88850369afee5518317015f2fc7992261c1c473e0555b803a7fd7";
+const EXPLICIT_16X9_SHA256 = "fe9ef44645faaa6e7cae0e289b889428587e51c27e374336bec1abef3e6ffe56";
 
 async function goldenStory(id) {
   let dir = path.join(STORY, id), cleanup = async () => {};
