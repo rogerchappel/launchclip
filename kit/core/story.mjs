@@ -1514,7 +1514,7 @@ function validateKicks(kicks, { err, lane, anchorField }) {
 // brandFrameErrors (story.mjs has no imports); here only what a story adds:
 // it is an object or false, and its section labels and source notes point
 // at real scenes.
-const FRAME_KEYS = ["enabled", "logo", "logo_mark", "kicker", "sections", "progress", "show", "labels", "color", "sources", "counter"];
+const FRAME_KEYS = ["enabled", "logo", "logo_mark", "kicker", "sections", "progress", "show", "labels", "color", "sources", "counter", "figure"];
 const FRAME_COUNTER_KEYS = ["label", "steps", "format", "position", "color"];
 const FRAME_COUNTER_FORMAT_KEYS = ["prefix", "suffix", "pad", "decimals", "separator"];
 // Modules that show study, survey or benchmark data; each needs a source on screen.
@@ -1541,6 +1541,9 @@ function validateFrame(frame, { err, warn, scenes }) {
   }
   if (isObject(frame.progress) && frame.progress.style !== undefined && !["line", "scrubber"].includes(frame.progress.style)) err('frame.progress.style must be "line" or "scrubber" (a knob that travels with the fill)');
   if (frame.counter !== undefined) validateFrameCounter(frame.counter, { err, warn, ids });
+  // figure: a "FIG. 03" label top left and a "03 / 12" count top right per track-0 scene (kit/core/brand-frame.mjs).
+  if (frame.figure !== undefined && frame.figure !== false && frame.figure !== true && !(isObject(frame.figure) && Object.keys(frame.figure).every((key) => key === "label") && (frame.figure.label === undefined || (nonEmpty(frame.figure.label) && frame.figure.label.length <= 12)))) err('frame.figure must be true, false or {label?} (the prefix, 1-12 characters, default "FIG.")');
+  if (frame.figure && (frame.labels !== undefined || frame.counter !== undefined)) warn("frame.figure draws the section labels and the counter itself; frame.labels and frame.counter are ignored");
   if (frame.labels === undefined) return;
   if (!Array.isArray(frame.labels)) { err("frame.labels must be a list of {start | scene, label}"); return; }
   frame.labels.forEach((entry, i) => {
