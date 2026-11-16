@@ -7,6 +7,7 @@
 | [Make it look like you](styles.md) | Style packs, built-in styles, matching your previous videos, captions, motion and camera |
 | [Caption positions and colours](caption-positions.md) | Where captions sit (`top`, `middle`, `low`, `lower-third`, `bottom`) and how their colours follow the background |
 | [Voice, music and sound effects](sound.md) | The free built-in audio, ElevenLabs upgrades, your own SFX library, beat sync |
+| [Local generation with ComfyUI](comfyui.md) | Optional sound effects from a ComfyUI on your own machine; licences, setup and fallback |
 | [Demo autopilot](demo-autopilot.md) | Point it at your SaaS codebase: it starts the app, records the key flows and edits them in |
 | [Effects around you on camera](effects.md) | Graphics behind and around you in a talking-head recording, and `launchclip fx` for one effect on a clip |
 | [Raw footage](raw-footage.md) | The base edit: silences, bad takes and filler words removed, audio cleaned up |

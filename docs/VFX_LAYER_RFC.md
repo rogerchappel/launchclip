@@ -248,6 +248,8 @@ places the plan changed once it met the code:
   effects: hit-spark, crit-hit, impact-frame, ground-slam, small-explosion,
   smoke-bomb, firework-burst, poof, sunburst, collect-burst
   (`kit/core/vfx/vendor/`, licence verbatim, a source header on every file).
+  The catalogue has grown since: 16 cue effects after round two, 30 with the
+  masks, 50 with phase 9 batch 1 (§4e), plus the transitions and weather.
 - **Driver:** `kit/core/vfx/driver.mjs`, measured above. The painter also
   snaps story time to the 1/120 s grid, so float noise in a renderer's clock
   never decides whether a cue has started.
@@ -282,8 +284,9 @@ places the plan changed once it met the code:
   and `scripts/vfx-sheet.mjs` (every effect at six times in three palettes).
   Golden sheet hashes, the effect check and the motion-check findings are
   not built.
-- **Later rounds:** §4b (hits, cover transitions, retro pack) and §4c
-  (weather, masks) record what came after and where it differs.
+- **Later rounds:** §4b (hits, cover transitions, retro pack), §4c
+  (weather, masks) and §4d–4e (phase 9: planner text, cue rules, effect
+  batches) record what came after and where it differs.
 
 ## 4b. Built in round two (hits, transitions, retro pack) and where it differs
 
@@ -395,6 +398,69 @@ effect here draws in `pixel` mode, which is what the retro look wants anyway.
   runtime byte for byte, page) and story parity on `vfx-masks-9x16`. The
   contact sheet draws the new rows round the stand-in.
 
+## 4d. Phase 9: the planner's catalogue and cue rules
+
+- **Opt-in.** The planner sees the effects only when the art direction asks
+  for them (effects, sparks, explosions, game feel, arcade, retro, pixel,
+  confetti, fireworks) or the style pack sets `vfx`
+  (`kit/core/planning-prompt.mjs` `vfxWanted`). Without that, the prompt has
+  no VFX section and a plan has no cues. The skill reference always carries it.
+- **Catalogue text** (`vfxLines`) is built from the catalogue, so it never
+  drifts: each effect's `use` line (a new field on `VFX_EFFECTS`), whether it
+  takes words or loops to the scene end, and its paired sound; then the
+  cover transitions with their sounds, the cue schema, and the rules.
+- **On the beat.** Cues are written on `"beat:<n>"` or `"word:<text>"`, and
+  `align: "peak"` puts the brightest frame there with its paired sound
+  (§3f, the #648 pairs table). The prompt tells the planner not to add a
+  separate hit for it.
+- **Cue rules** are motion-check warnings (`vfxCueFindings` in
+  `kit/core/vfx/plan.mjs`, run by `choreographyGate`): `vfx-crowd` (more
+  than three peaks within 1 s) and `vfx-over-caption` (an effect centred in
+  the default caption band of a captioned story). One hit with words a
+  scene (§3d) is a planner rule only: the hits showcase story packs two a
+  scene on purpose. `vfx-off-beat` is not built: the resolved
+  story no longer knows which `at` was a beat, and the gate has no beat
+  grid. Finish could check it once the music grid is known.
+
+## 4e. Phase 9, batch 1: twenty effects with no mask and no words
+
+- **The batch:** blunt-hit, plasma-explosion, implosion, spark-arc, zap-hit,
+  ball-lightning, holy-pillar, feather-burst, heal-aoe, mana-burst,
+  star-fall, chest-open, power-star, key-glint, gem-spin, quake,
+  earth-spike, spawn-portal, coin-drop and splash. The arcane, nature and
+  water libs come with them (`kit/core/vfx/vendor/fx/`), copied from
+  upstream commit `044e12a` (0.3.1) with the usual two-line header above
+  upstream's own credit lines. All are T in §1. None needs a silhouette, a
+  baked word or the hero rig.
+- **Differs from §1:** parry draws two blades and loot-beam a sword, so both
+  move to the weapons rule (retro, by name only). big-explosion runs 7.2 s,
+  past the 6 s cap for simulated effects; it waits for batch 2, which
+  either trims its smoke tail or raises the cap for it alone.
+  cartoon-pow bakes its word, so it goes with the other word hits.
+- **Loops:** spark-arc, ball-lightning, power-star, key-glint and gem-spin
+  loop until the scene ends, like sunburst. Cue them with `align: "start"`.
+- **Sound:** every effect is in the pairs table (`kit/core/sound/pairs.mjs`).
+  The table gains a `cash` row (chest-open, coin-drop), and the impact row
+  takes `subdrop` for implosion's cave-in. mana-burst pairs with `riser`,
+  next to burning.
+- **Checks:** purity covers all twenty, and peaks are measured
+  (`scripts/vfx-peaks.mjs`). Story parity gains `vfx-batch1-9x16`, which
+  samples each effect at its peak (a loop just after it starts), 20 frames
+  in all. `scripts/vfx-sheet.mjs --effects … --label batch1` draws the batch's
+  three palette sheets.
+- **Runtime:** `VFX_RUNTIME` is now 424 KB with every effect. Trimming it to
+  the effects a story uses (§4a) matters more with each batch.
+
+**Next batches** (what is left of §1's T column, about 19 each):
+
+| Batch | Effects |
+|---|---|
+| 2: words, UI and shadow | cartoon-pow, coin-collect, countdown, damage-number, health-bar-hit, heart-lost, quest-complete (all with DOM words, `VFX_WORDS`), exclamation (m), coin-spin, xp-orb, heart-pickup, black-hole, eclipse, void-orb, dark-explosion, big-explosion (cap), sword-slash, double-slash, claw-swipe (strike marks over a word) |
+| 3: fire, water, ice | candle, campfire, fireball, flame-pillar, meteor, spirit-flame, ripples, drip, bubbles, rain-splash, wave-crash, whirlpool, water-orb, geyser, snowflake-burst, ice-shatter, ice-crystal |
+| 4: energy and arcane | plasma-ball, lightning-strike, storm-cloud, hologram, energy-core, emp-blast, teleporter-pad, laser-grid, portal, rune-circle, magic-circle-cast, time-stop, arcane-orb, healing-bloom, spore-burst, boulder, flare, rocket, egg-hatch, butterfly, bird, fish-school |
+| 5: silhouettes (m) | fire-ring, frost-nova, freeze, charge-up, force-field, warp-in, warp-out, heavy-landing, shield-block, respawn-beam, disintegrate, dissolve-burn, shatter-death, blink-in, blink-out, divine-shield, blessing, leaf-storm |
+| 6–9: retro pack | §1's R column (about 77 with parry and loot-beam), gated like pixel-dissolve |
+
 ## 5. Phases
 
 | # | Step (one PR each) | Effort |
@@ -408,7 +474,7 @@ effect here draws in `pixel` mode, which is what the retro look wants anyway.
 | 6 | Weather background kind | 2 d |
 | 7 | `pixel-arcade` look + `retro-pixel` style family | 3 d |
 | 8 | Mask input: module and cast silhouettes for (m) effects and status | 4 d |
-| 9 | Planner catalogue text and cue rules, then the remaining effects in batches of about 20 (contact sheet per batch) | 1 d per batch, 7 batches |
+| 9 | Planner catalogue text and cue rules (§4d), then the remaining effects in batches of about 20 (contact sheet per batch; batch 1 in §4e, the rest listed there) | 1 d per batch, 9 batches |
 
 About 33 days in all; phases 0–2 alone give a usable impact layer.
 

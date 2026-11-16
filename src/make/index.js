@@ -19,6 +19,7 @@ import path from "node:path";
 import { DEFAULT_BRAND, suggestMotion } from "@launchclip/core/planning-prompt.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
 import { SHOTS_DIR, shotRequestLimit } from "../asset_provider.js";
+import { createComfyAssetProvider } from "../comfy/asset_provider.js";
 import { MAX_ASSET_PROVIDER_CONCURRENCY, assetProviderConcurrency, assetProviderTimeoutMs, createCommandAssetProvider } from "../asset_provider_cmd.js";
 import { CONSTRAINTS_FILE, PROJECT_CONSTRAINTS_FILE, constrainProvider, constraintsDocument, hasConstraints, loadConstraints, neverUseMatcher, storySrc } from "../constraints.js";
 import { mediaNotesLine } from "../inventory_notes.js";
@@ -1564,7 +1565,7 @@ async function planStage(ctx) {
   if (lane === "footage-led" && ctx.base) {
     try { subjectTrack = await readStoryTrack(project, { base: ctx.base.src }); } catch (error) { report.warnings.push(`${TRACK_FILE} not used for placement (${String(error?.message ?? error).split("\n")[0]})`); }
   }
-  const hasProvider = Boolean(ctx.adapters.assets || ctx.options.assetProviderCmd);
+  const hasProvider = Boolean(ctx.adapters.assets || ctx.options.assetProviderCmd || ctx.options.assetProvider);
   const shotLimit = shotRequestLimit(ctx.format?.duration);
   const minShots = hasProvider ? Math.min(Number(options.minShots ?? 0), shotLimit) : 0;
   const cardBackdrops = hasProvider && String(options.cardBackdrops ?? "off").toLowerCase() === "footage" ? "footage" : null;
@@ -1573,7 +1574,7 @@ async function planStage(ctx) {
   const laidOut = layout !== "full" && lane === "footage-led" ? layout : null;
   if (layout !== "full" && !laidOut) report.warnings.push(`--layout ${layout} ignored: it lays out a talking head, and this video is ${lane} (no recording with speech is the base)`);
   if (laidOut === "stacked" && !(ctx.format.height > ctx.format.width)) report.warnings.push("--layout stacked ignored: it is for 9:16; this video is not portrait");
-  const planHash = hashValue({ brief, lane, format: ctx.format, ...(drafting ? { draft: 1, direction_ms: ctx.draft.waits.directionMs } : {}), ...(explainer ? { explainer: 1 } : {}), ...(visual ? { visual: 1 } : {}), ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(laidOut ? { layout: laidOut } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}), ...(subjectTrack ? { face_track: hashValue(subjectTrack.frames) } : {}), ...(pinned ? { bible: pinned.bible.hash } : {}) });
+  const planHash = hashValue({ brief, lane, format: ctx.format, ...(drafting ? { draft: 1, direction_ms: ctx.draft.waits.directionMs } : {}), ...(explainer ? { explainer: 1 } : {}), ...(visual ? { visual: 1 } : {}), ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? ctx.options.assetProvider ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(laidOut ? { layout: laidOut } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}), ...(subjectTrack ? { face_track: hashValue(subjectTrack.frames) } : {}), ...(pinned ? { bible: pinned.bible.hash } : {}) });
   // --min-shots: only an asset provider can supply shots; above what a plan of this length may ask for it is clamped.
   if (Number(options.minShots) > 0 && !hasProvider) report.warnings.push(`--min-shots ${options.minShots} ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for shots`);
   if (String(options.cardBackdrops ?? "off").toLowerCase() === "footage" && !hasProvider) report.warnings.push("--card-backdrops footage ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for footage");
@@ -1612,7 +1613,10 @@ async function planStage(ctx) {
   // The app's asset provider (adapters.assets, or --asset-provider-cmd): the
   // planner may ask it for shots, filed under assets/shots/.
   // A draft sends every request at once (the command takes up to its limit together) and waits a short time for each.
-  const provider = ctx.adapters.assets ?? (ctx.options.assetProviderCmd ? createCommandAssetProvider(ctx.options.assetProviderCmd, { timeoutMs: drafting ? Math.min(assetProviderTimeoutMs(ctx.env), ctx.draft.waits.shotMs + 1000) : assetProviderTimeoutMs(ctx.env), concurrency: drafting ? Math.max(assetProviderConcurrency(ctx.env), MAX_ASSET_PROVIDER_CONCURRENCY) : assetProviderConcurrency(ctx.env), notice: ctx.say, env: ctx.env, cwd: ctx.project }) : null);
+  // --asset-provider comfy: plates and draft clips from a local ComfyUI; any failure is "no shot".
+  if (ctx.options.assetProvider && ctx.options.assetProvider !== "comfy") throw new Error(`--asset-provider must be comfy; got ${ctx.options.assetProvider} (for your own command, use --asset-provider-cmd)`);
+  const comfyAssets = !ctx.adapters.assets && ctx.options.assetProvider === "comfy" ? await createComfyAssetProvider({ project: ctx.project, url: ctx.options.comfyUrl, env: ctx.env, allowRemote: Boolean(ctx.options.comfyAllowRemote), allowLicences: String(ctx.options.allowModelLicence ?? "").split(",").map((id) => id.trim()).filter(Boolean), ...(ctx.options.comfyPlate ? { plate: ctx.options.comfyPlate } : {}), notice: ctx.say }) : null;
+  const provider = ctx.adapters.assets ?? comfyAssets ?? (ctx.options.assetProviderCmd ? createCommandAssetProvider(ctx.options.assetProviderCmd, { timeoutMs: drafting ? Math.min(assetProviderTimeoutMs(ctx.env), ctx.draft.waits.shotMs + 1000) : assetProviderTimeoutMs(ctx.env), concurrency: drafting ? Math.max(assetProviderConcurrency(ctx.env), MAX_ASSET_PROVIDER_CONCURRENCY) : assetProviderConcurrency(ctx.env), notice: ctx.say, env: ctx.env, cwd: ctx.project }) : null);
   // never_use: the provider is told, and a shot that is one is refused.
   const constrained = provider && constraints?.never_use.length ? constrainProvider(provider, constraints, { assetsDir: ctx.assetsDir, notice: ctx.say }) : provider;
   const assets = constrained && drafting ? deadlineProvider(constrained, ctx.draft.waits.shotMs) : constrained;
@@ -2958,7 +2962,7 @@ function visualContentOf(ctx) {
 
 // Whether this video's content calls for a character-led explainer (src/make/explainer.js), whatever its style.
 function explainerContentOf(ctx) {
-  return explainerContent({ lane: ctx.routing.lane, format: ctx.scriptPlan?.format ?? null, bible: ctx.bible ?? null, animation: Boolean(ctx.options.animation), media: assetManifestLines(ctx).filter((item) => item.src).length, provider: Boolean(ctx.adapters.assets || ctx.options.assetProviderCmd), skeleton: ctx.skeleton ?? null, longForm: Boolean(ctx.longForm) });
+  return explainerContent({ lane: ctx.routing.lane, format: ctx.scriptPlan?.format ?? null, bible: ctx.bible ?? null, animation: Boolean(ctx.options.animation), media: assetManifestLines(ctx).filter((item) => item.src).length, provider: Boolean(ctx.adapters.assets || ctx.options.assetProviderCmd || ctx.options.assetProvider), skeleton: ctx.skeleton ?? null, longForm: Boolean(ctx.longForm) });
 }
 
 async function loadBrand(ctx) {

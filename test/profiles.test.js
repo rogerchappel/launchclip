@@ -196,8 +196,9 @@ test("the reference coverage heuristic tells flat designed fills from footage no
   assert.equal(isDesignedFrame(noisyFrame()), false);
 });
 
-function standIns({ cuts = [2, 4, 6], frames }) {
+function standIns({ cuts = [2, 4, 6], frames, rhythm = null }) {
   return {
+    rhythm: async () => rhythm,
     motion: async () => ({ duration_seconds: 8, width: 1920, height: 1080, cuts, motion: { hold_ratio: 0.9, change_energy: { p50: 0.2 }, bursts: [{ start_seconds: 0.5 }, { start_seconds: 3 }] }, motion_bursts_per_minute: 15, optical_flow: { velocity_pixels_per_second: { p90: 1.2 } } }),
     frames: async () => ({ fps: 1, duration: 8, frames }),
     face: async () => 0.7
@@ -222,6 +223,10 @@ test("profile measure turns a folder of references into a measured profile with 
   assert.equal(references[0].measures.longest_undressed_seconds, 3);
   assert.equal(profile.measures.face_time.p50, 0.7);
   assert.equal(profile.measures.shot_seconds.p50, 2);
+  // The pace fields: three events in the opening 4 s against two in the 4 s after, gaps of 2 s.
+  assert.equal(references[0].measures.hook_rate_ratio, 1.5);
+  assert.equal(references[0].measures.max_event_gap_seconds, 2);
+  assert.equal(references[0].measures.cuts_on_beat_ratio, undefined, "no beat, no cuts-on-beat");
   // Nothing but numbers and source descriptions is stored.
   const text = JSON.stringify(profile);
   assert.doesNotMatch(text, /reference a|"frames"|"data"/);
@@ -286,4 +291,16 @@ test("launchclip profile list and show run from the CLI", async () => {
   await runCli(["profile", "show", "short-talking-head"], { stdout: { write: (text) => { out += text; } } });
   assert.equal(JSON.parse(out).profile.id, "short-talking-head");
   await assert.rejects(runCli(["profile", "explode"], { stdout: { write() {} } }), /Unknown profile action: explode/);
+});
+
+test("profile measure reads cuts on the beat when the reference's beat is strong", async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-profile-beat-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  await writeFile(path.join(dir, "a.mp4"), "reference a");
+  const frames = Array.from({ length: 8 }, () => flatFrame());
+  const beats = Array.from({ length: 16 }, (_, i) => i * 0.5);
+  const strong = await measureProfile(dir, { id: "beat", rights: "own" }, standIns({ cuts: [1, 2, 3.25, 5], frames, rhythm: { beat_strength: 0.6, beats } }));
+  assert.equal(strong.references[0].measures.cuts_on_beat_ratio, 0.75);
+  const weak = await measureProfile(dir, { id: "beat", rights: "own" }, standIns({ cuts: [1, 2, 3.25, 5], frames, rhythm: { beat_strength: 0.1, beats } }));
+  assert.equal(weak.references[0].measures.cuts_on_beat_ratio, undefined);
 });

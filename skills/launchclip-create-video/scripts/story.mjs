@@ -1,8 +1,11 @@
 // story.json v1: validate, resolve time anchors, derive boundaries.
 //
-// Plain ESM with no imports, so it can be bundled into Remotion and copied
-// into skills unchanged. The canonical copy lives in kit/core/; see
-// docs/KIT_CONTRACTS.md ("story.json v1") for the binding contract.
+// Plain ESM that imports only import-free siblings (palette.mjs, oklch.mjs),
+// so it can be bundled into Remotion and copied into skills unchanged. The
+// canonical copy lives in kit/core/; see docs/KIT_CONTRACTS.md
+// ("story.json v1") for the binding contract.
+
+import { BRAND_PALETTE_MODES, workingBrand } from "./palette.mjs";
 
 export const STORY_SCHEMA = "launchclip.story.v1";
 // Non-additive changes made inside STORY_SCHEMA so far: a story's
@@ -26,10 +29,60 @@ export const STORY_CAMERA_LAYOUTS = ["row", "column", "grid", "path", "auto"];
 // story.motion.grammar presets (kit/core/grammar.mjs GRAMMAR_NAMES).
 // What a scene hit's moment asks the sound score for (kit/core/sound/options.mjs SCORE_MOMENTS; kept in step by test/sound_score.test.js).
 /** Effects a scene's vfx cues may name (kit/core/vfx/catalog.mjs VFX_EFFECT_NAMES, kept here so this file stays import-free). */
-export const STORY_VFX_EFFECTS = ["hit-spark", "crit-hit", "impact-frame", "ground-slam", "small-explosion", "smoke-bomb", "firework-burst", "poof", "sunburst", "collect-burst", "combo-counter", "crit-number", "level-up", "achievement", "confetti", "firework-rocket", "electrified", "glitch", "scanner", "halo", "hit-flash", "confused", "sleep", "stunned", "charmed", "rage", "haste", "slowed", "frozen", "burning"];
+export const STORY_VFX_EFFECTS = ["hit-spark", "crit-hit", "impact-frame", "ground-slam", "small-explosion", "smoke-bomb", "firework-burst", "poof", "sunburst", "collect-burst", "combo-counter", "crit-number", "level-up", "achievement", "confetti", "firework-rocket", "electrified", "glitch", "scanner", "halo", "hit-flash", "confused", "sleep", "stunned", "charmed", "rage", "haste", "slowed", "frozen", "burning", "blunt-hit", "plasma-explosion", "implosion", "spark-arc", "zap-hit", "ball-lightning", "holy-pillar", "feather-burst", "heal-aoe", "mana-burst", "star-fall", "chest-open", "power-star", "key-glint", "gem-spin", "quake", "earth-spike", "spawn-portal", "coin-drop", "splash"];
 /** The silhouette effects among them (kit/core/vfx/catalog.mjs VFX_MASKED): each draws round a cue's mask, "module" or "cast:<id>". */
 export const STORY_VFX_MASKED = ["electrified", "glitch", "scanner", "halo", "hit-flash", "confused", "sleep", "stunned", "charmed", "rage", "haste", "slowed", "frozen", "burning"];
 export const STORY_MOMENTS = ["letdown", "promise", "reveal", "impact", "crystallise", "wonder", "miss", "resolve"];
+
+// A scene's sound block (docs/IMMERSIVE_SOUND_RFC.md §2): kit/core/sound/directing.mjs carries it out.
+export const SCENE_SOUND_FIELDS = ["hush", "prelap", "tail", "into", "space", "focus"];
+export const SOUND_INTO = ["riser", "swell", "tape-stop", "hit", "silence"];
+export const SOUND_SPACES = ["dry", "room", "hall"];
+export const SOUND_FOCUSES = ["voice", "music", "fx"];
+export const SOUND_HUSH_FOR = [0.2, 0.8];
+export const SOUND_LEAD = [0.15, 1];
+const soundRange = (value, [lo, hi]) => typeof value === "number" && Number.isFinite(value) && value >= lo - 1e-9 && value <= hi + 1e-9;
+
+/**
+ * Problems with one scene's sound block: {errors, warnings}. hushAt: hush.at
+ * resolved to story seconds (null when it could not be). first, last: the
+ * scene's place among the track-0 scenes; prevTail: the scene before's tail.
+ */
+export function sceneSoundProblems(sound, { path = "sound", first = false, last = false, start = null, end = null, hushAt = null, prevTail = undefined } = {}) {
+  const errors = [], warnings = [];
+  const err = (message) => errors.push(`${path}${message}`);
+  if (sound === undefined) return { errors, warnings };
+  if (!isObject(sound)) return { errors: [`${path} must be an object`], warnings };
+  for (const key of Object.keys(sound)) if (!SCENE_SOUND_FIELDS.includes(key)) err(`.${key} is not a sound field (${SCENE_SOUND_FIELDS.join(", ")})`);
+  if (sound.hush !== undefined) {
+    const hush = sound.hush;
+    if (!isObject(hush)) err(".hush must be {at, for}: the moment it sets up and how long the quiet before it lasts");
+    else {
+      if (hush.at === undefined) err(".hush.at is required (the line or hit the hush leads into)");
+      if (!soundRange(hush.for, SOUND_HUSH_FOR)) err(`.hush.for must be ${SOUND_HUSH_FOR[0]}–${SOUND_HUSH_FOR[1]} s`);
+      if (hushAt !== null && start !== null && end !== null && (hushAt < start - 1e-9 || hushAt > end + 1e-9)) err(`.hush.at (${hushAt}) falls outside the scene [${start}, ${end}]`);
+      else if (hushAt !== null && typeof hush.for === "number" && hushAt - hush.for < 0) err(".hush starts before the video does");
+    }
+  }
+  for (const field of ["prelap", "tail"]) {
+    if (sound[field] === undefined) continue;
+    if (!soundRange(sound[field], SOUND_LEAD)) err(`.${field} must be ${SOUND_LEAD[0]}–${SOUND_LEAD[1]} s`);
+    else if (start !== null && end !== null && sound[field] >= end - start) err(`.${field} (${sound[field]}) must be shorter than the scene`);
+  }
+  if (sound.prelap !== undefined && first) err(".prelap: the first scene has no cut to arrive before");
+  if (sound.tail !== undefined && last) err(".tail: the last scene has no cut to ring past");
+  if (sound.prelap !== undefined && prevTail !== undefined) err(".prelap: the scene before has a tail on the same cut; a cut is a J or an L, not both");
+  if (sound.into !== undefined) {
+    if (!SOUND_INTO.includes(sound.into)) err(`.into must be one of ${SOUND_INTO.join(", ")}`);
+    else if (first) err(".into: the first scene has no cut into it");
+    else if (sound.into === "silence" && prevTail !== undefined) err(".into \"silence\" drops to nothing on the cut, so the scene before cannot ring over it (tail)");
+    else if (sound.into === "silence" && sound.prelap !== undefined) err(".into \"silence\" drops to nothing on the cut, so the scene cannot also arrive early (prelap)");
+  }
+  if (sound.space !== undefined && !SOUND_SPACES.includes(sound.space)) err(`.space must be one of ${SOUND_SPACES.join(", ")}`);
+  if (sound.focus !== undefined && !SOUND_FOCUSES.includes(sound.focus)) err(`.focus must be one of ${SOUND_FOCUSES.join(", ")}`);
+  return { errors, warnings };
+}
+
 export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "documentary", "cinematic"];
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
@@ -68,7 +121,8 @@ export const STORY_BACKGROUND_PARAMS = Object.freeze({
   texture: { amount: BG_UNIT, scale: BG_SCALE },
   weather: { intensity: BG_UNIT, speed: BG_SPEED },
   rings: { density: BG_UNIT, intensity: BG_UNIT, weight: [0.5, 3], bpm: [40, 200], speed: BG_SPEED },
-  bokeh: { density: BG_UNIT, intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED }
+  bokeh: { density: BG_UNIT, intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED },
+  "flow-field": { seed: [0, 99999], lines: [80, 400], scale: BG_SCALE, octaves: [1, 4], intensity: BG_UNIT, speed: BG_SPEED }
 });
 export const STORY_BACKGROUND_KINDS = Object.keys(STORY_BACKGROUND_PARAMS);
 export const STORY_BACKGROUND_COLORS = ["primary", "accent", "paper"];
@@ -550,6 +604,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
   else {
     if (!isObject(story.brand.colors) || !Object.keys(story.brand.colors).length) err("brand.colors must be an object of named six-digit hex colors");
     else for (const [name, value] of Object.entries(story.brand.colors)) if (typeof value !== "string" || !HEX.test(value)) err(`brand.colors.${name} must be a six-digit hex color like #1a2b3c`);
+    if (story.brand.palette !== undefined && !BRAND_PALETTE_MODES.includes(story.brand.palette)) err(`brand.palette must be one of ${BRAND_PALETTE_MODES.join(", ")}`);
     if (!isObject(story.brand.fonts) || !Object.keys(story.brand.fonts).length) err("brand.fonts must be an object of named font families");
     else for (const [name, value] of Object.entries(story.brand.fonts)) if (!nonEmpty(value)) err(`brand.fonts.${name} must be a non-empty font family name`);
   }
@@ -782,6 +837,17 @@ export function validateStory(story, { modules, moduleParams } = {}) {
     }
 
     validateAmbient(scene.ambient, `${path}.ambient`, err);
+
+    // Sound directing (kit/core/sound/directing.mjs): first, last and the tail before count among track-0 scenes, in order.
+    if (scene.sound !== undefined) {
+      const cutting = (scenes ?? []).filter((other) => isObject(other) && (other.track ?? 0) === 0);
+      const place = cutting.indexOf(scene);
+      const hushAt = isObject(scene.sound) && isObject(scene.sound.hush) && scene.sound.hush.at !== undefined ? anchorField(scene.sound.hush.at, `${path}.sound.hush.at`) : null;
+      const prevTail = place > 0 && isObject(cutting[place - 1].sound) ? cutting[place - 1].sound.tail : undefined;
+      const problems = sceneSoundProblems(scene.sound, { path: `${path}.sound`, first: place === 0, last: place === cutting.length - 1, start, end, hushAt, prevTail });
+      problems.errors.forEach(err);
+      problems.warnings.forEach(warn);
+    }
 
     // An opt-in idle motion on the scene's content (kit/core/behaviours.mjs).
     if (scene.behaviour !== undefined) {
@@ -1140,6 +1206,7 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
     if (Array.isArray(scene.vfx)) scene.vfx.forEach((cue, v) => {
       if (isObject(cue) && cue.at !== undefined) cue.at = resolve(cue.at, `${path}.vfx[${v}].at`);
     });
+    if (isObject(scene.sound) && isObject(scene.sound.hush) && scene.sound.hush.at !== undefined) scene.sound = { ...scene.sound, hush: { ...scene.sound.hush, at: resolve(scene.sound.hush.at, `${path}.sound.hush.at`) } };
     if (Array.isArray(scene.states)) scene.states.forEach((state, s) => {
       if (isObject(state) && state.at !== undefined) state.at = resolve(state.at, `${path}.states[${s}].at`);
     });
@@ -1173,6 +1240,8 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
     .map((scene, index) => ({ scene, index }))
     .sort((a, b) => (Number(a.scene?.start) - Number(b.scene?.start)) || ((a.scene?.track ?? 0) - (b.scene?.track ?? 0)) || a.index - b.index)
     .map((entry) => entry.scene);
+  // Brand colours → the working palette (kit/core/palette.mjs): a pale ground moves to paper over a deep one.
+  if (isObject(copy.brand)) copy.brand = workingBrand(copy.brand);
   const format = storyFormat(copy);
   copy.resolved = { duration: format.duration, fps: format.fps, frames: Math.round(format.duration * format.fps) };
   // The whole-video head track (the loader's readStoryTrack): {source, fps,
@@ -1555,7 +1624,7 @@ function validateKicks(kicks, { err, lane, anchorField }) {
 // brandFrameErrors (story.mjs has no imports); here only what a story adds:
 // it is an object or false, and its section labels and source notes point
 // at real scenes.
-const FRAME_KEYS = ["enabled", "logo", "logo_mark", "kicker", "sections", "progress", "show", "labels", "color", "sources", "counter"];
+const FRAME_KEYS = ["enabled", "logo", "logo_mark", "kicker", "sections", "progress", "show", "labels", "color", "sources", "counter", "figure"];
 const FRAME_COUNTER_KEYS = ["label", "steps", "format", "position", "color"];
 const FRAME_COUNTER_FORMAT_KEYS = ["prefix", "suffix", "pad", "decimals", "separator"];
 // Modules that show study, survey or benchmark data; each needs a source on screen.
@@ -1582,6 +1651,9 @@ function validateFrame(frame, { err, warn, scenes }) {
   }
   if (isObject(frame.progress) && frame.progress.style !== undefined && !["line", "scrubber"].includes(frame.progress.style)) err('frame.progress.style must be "line" or "scrubber" (a knob that travels with the fill)');
   if (frame.counter !== undefined) validateFrameCounter(frame.counter, { err, warn, ids });
+  // figure: a "FIG. 03" label top left and a "03 / 12" count top right per track-0 scene (kit/core/brand-frame.mjs).
+  if (frame.figure !== undefined && frame.figure !== false && frame.figure !== true && !(isObject(frame.figure) && Object.keys(frame.figure).every((key) => key === "label") && (frame.figure.label === undefined || (nonEmpty(frame.figure.label) && frame.figure.label.length <= 12)))) err('frame.figure must be true, false or {label?} (the prefix, 1-12 characters, default "FIG.")');
+  if (frame.figure && (frame.labels !== undefined || frame.counter !== undefined)) warn("frame.figure draws the section labels and the counter itself; frame.labels and frame.counter are ignored");
   if (frame.labels === undefined) return;
   if (!Array.isArray(frame.labels)) { err("frame.labels must be a list of {start | scene, label}"); return; }
   frame.labels.forEach((entry, i) => {

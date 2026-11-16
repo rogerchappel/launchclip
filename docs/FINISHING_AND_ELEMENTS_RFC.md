@@ -349,6 +349,30 @@ it did not template (custom nodes run arbitrary Python), pins model files by
 hash, takes output filenames only from `/history`, caps download size and
 job time, and sends nothing but the brief's text and the frames it renders.
 
+**Shipped (phase 8).** `launchclip make --asset-provider comfy`
+(`src/comfy/asset_provider.js`) answers the planner's shot requests on the
+base shared with the SFX adapter (`src/comfy/`: loopback client and health,
+templates with a licence allowlist, a cache keyed by the bound workflow, a
+ledger line per generation in `qa/generation-log.jsonl`). Setup is in
+`docs/guide/comfyui.md`. Stills come from `plate-flux-schnell` (default) or
+`plate-sdxl` (`--comfy-plate`), video from `draft-wan-5b` (text to video,
+about 480p, 4n + 1 frames at 24 fps, at most 121). Any failure is "no shot",
+so the scene is drawn in code. Templates live in `src/comfy/templates/`.
+Differences from the plan above, all open:
+
+- **The asset-provider hook, not the generation adapter.** There is no
+  `quote`/`submit`/`poll`/`fetch` adapter yet (the generation RFC's phase 2
+  is not built), so ComfyUI answers `findShot` directly. Its cost is 0 and
+  its time is in the ledger; the seconds-per-step quote table needs runs on
+  real machines first.
+- **Text only.** Nothing is uploaded: no start frame, no references, so no
+  `/upload/image`. `draft-wan-i2v`, `draft-ltx` (its licence is off the
+  allowlist) and `upscale` are not shipped.
+- **Polling, not the socket.** `/history` is polled; `/ws` progress is open.
+- **No hash pin.** The API exposes model file names, not hashes; health
+  checks that each file a template needs is listed by its loader.
+- **Not yet run on a real server**: tests use a fake ComfyUI API.
+
 ## E.8 Skill quality
 
 - **The description is over the limit.** The built
@@ -386,7 +410,7 @@ job time, and sends nothing but the brief's text and the frames it renders.
 | 5 | Scramble, chrome, flow-field (S–M); Lottie, morph, three inks (M); word-architecture, proof-mechanism (L) | L |
 | 6 | Looks: risograph, one-bit, pen-plotter (SVG); lidar; stained-glass and silkscreen after phase 2 | M |
 | 7 | GL generators (aurora, fog, plasma, cells, caustics) | M |
-| 8 | ComfyUI adapter and templates | L |
+| 8 | ComfyUI adapter and templates (shipped: plates and Wan drafts) | L |
 
 Tests: **seek purity** (frame N alone equals frame N in sequence) for every
 new pass, kind, effect and module; **parity** (`parity.test.js`, SSIM ≥
@@ -398,6 +422,45 @@ the camera never overshoots; **Lottie** stills at frames 0, mid and last,
 and rejection of expressions and external images; **ComfyUI** against a
 recorded fake server (no model in CI), refusing non-loopback hosts and
 failing health on a missing node class; the **skill length** test.
+
+### Phase 5 notes
+
+Built (first PR):
+
+- **Glyph scramble** is a `motion-title` variant (`scramble`, a character
+  effect) with `params.charset` (`latin`, `hex`, `binary`). The glyph sits
+  absolutely over the letter's own box and is clipped to it, so the line
+  never reflows and a wide `M` over an `i` never spills onto its neighbours
+  (the advance model gives every display glyph one width, so glyphs cannot
+  be picked by width). A glyph changes every 3
+  frames, chosen by `hashUnit(id|i|floor(t / cycle))`, as `text` set ops.
+- **Persistent chrome**: `frame.figure` (`true` or `{label}`) only. It is
+  turned into plain `labels` and `counter` by `storyFrame`, so it adds no
+  drawing code. The `player-bar` overlay is not built (below).
+- **Flow-field** is background kind `flow-field {seed, lines, scale,
+  octaves, intensity, speed, color, fade}`. Streamlines run through fbm value
+  noise at plan time; the dashes move by a `--flow` CSS variable on the
+  layer (a `glide` axis, 0 → −1), which each path's `stroke-dashoffset`
+  multiplies by a whole number of its own dash periods, so the loop has no
+  seam. GSAP tweens the variable; Remotion sets it per frame.
+
+Not built yet, each its own follow-up:
+
+- `player-bar` overlay `{thumb, title, sub, controls, progress: 'story'}`
+  kept across scenes by `carry` (S–M).
+- **Lottie import** (M): needs lottie-web's light build vendored (MIT, with
+  its notice) or added as a dependency, one painter shared by both
+  renderers, and the frame 0 / mid / last stills plus the rejection tests
+  for expressions and external images.
+- **Through-line morph** (M): one object kept across scenes, which needs a
+  cross-scene layer like `carry`. Note §E.6 asks for a "tiny overshoot";
+  the motion rule (slow → fast → slow, no overshoot) wins, so use a
+  critically damped ease.
+- **Three inks** (M): `story.inks` touches every module's palette lookup;
+  start with the `ink-promote` transition and the per-scene ink index.
+- **`word-architecture`** and **`proof-mechanism`** (L): new catalogue H
+  modules; proof-mechanism computes its values in `resolve` so the frame
+  cannot disagree with the maths.
 
 ## E.10 Provenance
 

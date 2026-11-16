@@ -154,7 +154,7 @@ test("without a key the default provider is the procedural kit", async () => {
     const manifest = JSON.parse(await readFile(path.join(dir, "library.json"), "utf8"));
     assert.equal(manifest.families.whoosh.source, "procedural");
     assert.equal(manifest.families.whoosh.variants[0].kit_file, "whoosh.wav");
-    await assert.rejects(seedLibrary({ dir, provider: "freesound", prompts, env: {} }), /--provider must be elevenlabs or synth/);
+    await assert.rejects(seedLibrary({ dir, provider: "freesound", prompts, env: {} }), /--provider must be elevenlabs, comfy, synth/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

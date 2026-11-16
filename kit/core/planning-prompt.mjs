@@ -35,6 +35,8 @@ import { clipLedLines } from './clip-led.mjs';
 import { explainerDirectionLines, explainerStoryboardLines } from './explainer.mjs';
 import { DEFAULT_BRAND } from './default-brand.mjs';
 import { CYCLE_KINDS, DARK_PLATE_KINDS, PLATE_KINDS, PLATE_NOTES } from './plates.mjs';
+import { VFX_EFFECTS, VFX_MASKED, VFX_MODULES, VFX_TRANSITIONS, VFX_WORDS } from './vfx/catalog.mjs';
+import { VFX_CUE_RULES } from './vfx/plan.mjs';
 
 export const PLANNER_TIERS = Object.freeze(['structured', 'guided', 'bespoke']);
 
@@ -545,6 +547,7 @@ export function satisfyingLines() {
     'Make the words physical. When the line counts things ("10 times a day"), drop-grid drops one card per word: set params.times to the word times so each landing hits its word. When a number is still growing, live-counter or live-bars keep it ticking for the whole scene instead of landing and stopping.',
     'Weight beats fades: drops fall, squash and settle with a contact shadow and a puff of dust; milestones and deltas stamp in. One tactile hero per beat; keep a still beat after a big landing so it reads.',
     'A progress frame holds the video together: frame.counter {label? ≤ 24 ("DAY", "LIABILITY"), format? {prefix?, suffix?, pad?}, steps: [{scene | start, value | text}]} climbs in a top corner on the words that move it (day 1 → day 14, $0 → $261,118), and frame.progress {style: "scrubber"} carries a knob along the bottom. Values come from the script only.',
+    'A documentary or lab-notebook explainer can number its scenes as figures: frame.figure: true (or {label: "PLATE"}) puts "FIG. 03" top left and "03 / 12" top right on every main scene; leave it off otherwise.',
     'Caption presets for this look: tag-chips (the sentence builds word by word; key phrases land in ink chips) or serif-accent (one key word per line turns serif italic in the brand colour). Mark the key phrases in captions.emphasis.'
   ];
 }
@@ -622,7 +625,8 @@ function contractLines() {
     'format: {width, height, fps, duration, platform?} and brand: {colors, fonts} are given; copy them unchanged.',
     'audio: {voice?, words?, music?, sfx?}; base: null, or the recording path for footage-led.',
     'audio.music: omit it (finish picks ElevenLabs when a key is set, else the synth bed), or "synth", "none", an assets/ path, or {provider: "elevenlabs" | "synth" | "file", prompt?, bpm?, file?, sync?: "auto" | "off" | "cuts" | "hits"}. The music follows scene energy, so set energy honestly: calm intro, "build" before the payoff, 3 on the payoff. A prompt describes style only (no vocals is added for you).',
-    `scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: ${STORY_TRANSITIONS.join(' | ')}, dur, direction?, from_object?, color?, cover?, hold? (dot-wipe only), pause?, labels? (before-after only)}, params, hits?, zooms?, ambient?, layer? (footage-led: "behind" draws it behind the presenter)}].`,
+    `scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: ${STORY_TRANSITIONS.join(' | ')}, dur, direction?, from_object?, color?, cover?, hold? (dot-wipe only), pause?, labels? (before-after only)}, params, hits?, zooms?, ambient?, layer? (footage-led: "behind" draws it behind the presenter), sound?}].`,
+    'scenes[i].sound directs what the viewer hears around the scene: hush {at, for: 0.2–0.8} (a near-silence ending on the line or hit it sets up, in a pause of the voice), prelap (0.15–1 s: this scene\'s sound arrives before its cut), tail (0.15–1 s: it rings past the next cut), into: riser | swell | tape-stop | hit | silence (the cut into this scene made of sound; silence drops to nothing for two frames), space: dry | room | hall, focus: voice | music | fx (what leads). Plan one hush for 20 s and two for 45 s, one of them 0.4 s or longer (the held breath), and in a piece of 30 s or more at least one prelap or tail. Use them where the story turns, not everywhere.',
     'in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus; camera moves (pan, whip-pan, orbit, pull, world push) are under "Motion grammar and camera".',
     'before-after (1.2–2 s, track 0) when the next scene is the same thing in another version (a redesign, a filter or grade, a fix, the edited take after the raw one): a handle drags across and reveals the new scene behind it, slow → fast → slow; direction where the handle travels (default left: the after side opens from the right), pause (seconds, at most half the wipe) rests it half-way so both versions sit side by side, labels {before?, after?} a word on each side. For two versions of one shot inside a scene use the before-after module instead (it can rest and reverse). Not between unrelated scenes: it promises a comparison.',
     'overlays: [captions]. ending: {loop_to: "<first scene id>"} for a seamless loop (Shorts). For no loop, set ending {loop: false} (or loop_to: null, or omit ending without a looping style pack); the last scene then holds settled to the final frame (ending.final "hold", the default), or use final "fade" to fade it fully to the background by the final frame, or "exit" to play its own exit. ending accepts only loop_to, in, loop and final.',
@@ -652,6 +656,32 @@ function worldLines() {
  * The script was planned first (kit/core/script-formats.mjs): its beats are
  * the video's structure, so the storyboard follows them.
  */
+// The VFX layer is opt-in (docs/VFX_LAYER_RFC.md §5 phase 9): the planner
+// sees its catalogue only when the direction or the style pack asks for effects.
+const VFX_WORDS_IN_DIRECTION = ['\\bvfx\\b', '\\beffects?\\b', '\\bsparks?\\b', '\\bexplosions?\\b', '\\bgame(y| feel)?\\b', '\\barcade\\b', '\\bretro\\b', '\\bpixel', '\\bconfetti\\b', '\\bfireworks?\\b'];
+
+/** Whether a story may carry VFX cues: the art direction asks for effects, or the style pack sets vfx. */
+export function vfxWanted({ artDirection = '', style = null } = {}) {
+  return Boolean(style?.vfx) || VFX_WORDS_IN_DIRECTION.some((source) => new RegExp(source, 'i').test(String(artDirection ?? '')));
+}
+
+/** The VFX catalogue and cue rules for the planner (kit/core/vfx/catalog.mjs, plan.mjs vfxCueFindings). */
+export function vfxLines() {
+  const words = (name) => (VFX_WORDS[name] ? ` (${Object.keys(VFX_WORDS[name].fields).join(', ')})` : '');
+  const loop = (name) => (VFX_MODULES[name].meta.loop ? ', loops to the scene end' : '');
+  const masked = (name) => (VFX_MASKED.includes(name) ? ', on a mask' : '');
+  return [
+    'Effects are opt-in: add scene.vfx only where the brief or art direction asks for game feel, sparks or celebration, and only on the moments that earn one. Most scenes have none.',
+    'scene.vfx: [{effect, at, align?: "peak" (default) | "start", x?, y? (fractions of the frame, default the centre), color? (a brand colour name or #rrggbb), seed?, flip?, angle? (degrees), light? (0–2), sfx?: "auto" (default) | "none" | a sound family, text? / label? / title? (a hit with words, 1–24 characters)}].',
+    'Land each effect on a beat: at is "beat:<n>" (on the music) or "word:<text>" (the spoken word it belongs to). With align "peak" the effect starts early so its brightest frame lands there, and its paired sound plays on that frame by itself: do not add a hit or a cue for it.',
+    `Rules: at most ${VFX_CUE_RULES.crowd} effects peak within any ${VFX_CUE_RULES.window} s and keep an effect's centre out of the caption band (y above it), or the motion check warns; one hit with words a scene (${Object.keys(VFX_WORDS).join(', ')}). Put the effect on the thing it hits (the number, the card landing, the floor under a slam), not over body text.`,
+    `Cover transitions (scene.in.type, track-0 scenes, once or twice a video): ${Object.entries(VFX_TRANSITIONS).map(([type, info]) => `${type} (${info.sfx}${type === 'pixel-dissolve' ? ', retro only' : ''})`).join(', ')}.`,
+    `Effects marked "on a mask" (${VFX_MASKED.join(', ')}) draw round the scene's card (mask: "module") or a cast member of a cast-scene (mask: "cast:<id>") and take no x or y.`,
+    'Effects (effect: when, sound):',
+    ...Object.entries(VFX_EFFECTS).map(([name, info]) => `${name}: ${info.use}${words(name)}${masked(name)}${loop(name)}; ${info.sfx}`)
+  ];
+}
+
 export function scriptBeatLines() {
   return [
     'The script was written against a beat skeleton (hook, problem, proof, CTA and so on). When the brief lists "Script beats", follow them in order: each beat gets its own scene or group of scenes, and no scene spans two beats.',
@@ -1056,6 +1086,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...(explainer?.cast ? section('Characters carry the explainer', explainerStoryboardLines(explainer).map((line) => `- ${line}`)) : []),
     ...section('Script beats', scriptBeatLines().map((line) => `- ${line}`)),
     ...section('Motion grammar and camera', motionLines({ lane, artDirection, style }).map((line) => `- ${line}`)),
+    ...(vfxWanted({ artDirection, style }) ? section('Effects (VFX layer)', vfxLines().map((line) => `- ${line}`)) : []),
     ...section('Direction guardrails (finish gates fail these)', guardrailLines().map((line) => `- ${line}`)),
     ...section(`Tier rules (${tier})`, tierRules(tier).map((line) => `- ${line}`)),
     ...section('Time anchors', anchorLines().map((line) => `- ${line}`)),
@@ -1173,6 +1204,7 @@ export function storyboardModulesReference() {
     ...section('3D data objects', objectLines().map((line) => `- ${line}`)),
     ...section('Satisfying motion (weight, piles and live numbers)', satisfyingLines().map((line) => `- ${line}`)),
     ...section('Interface scenes (ui-scene)', interfaceLines().map((line) => `- ${line}`)),
+    ...section('Effects (VFX layer, opt-in)', vfxLines().map((line) => `- ${line}`)),
     ...section('Footage layouts (sections)', layoutLines()),
     ...section('Phrase → module', ['| The script… | Module |', '| --- | --- |', ...phraseLines()]),
     ...section('Modules', moduleLines('guided')),

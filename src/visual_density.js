@@ -21,6 +21,7 @@
 // shortcut: a module that paints an opaque ground over its own footage plate
 // (an end-card layout named with a solid ground) still counts the plate; read
 // the model's ground here if plans start naming such layouts over footage.
+import { CHARACTER_SCENE_MODULES } from "@launchclip/core/explainer.mjs";
 import { platePlan, scenePlateSpec } from "@launchclip/core/plates.mjs";
 
 export const VISUAL_DENSITY = Object.freeze({
@@ -43,6 +44,7 @@ export const VISUAL_DENSITY = Object.freeze({
 });
 
 const FILLING = new Set(["media", "text", "hero"]);
+const DRAWN_MODULES = [...CHARACTER_SCENE_MODULES, "ui-scene"];
 const FOOTAGE = new Set(["video", "image"]);
 const round = (value, digits = 3) => Math.round(value * 10 ** digits) / 10 ** digits;
 
@@ -70,6 +72,9 @@ export function visualDensity(story, rects = [], options = {}) {
   const plates = (story.scenes ?? []).filter((scene) => (scene?.track ?? 0) === 0 && Number(scene.end) > Number(scene.start))
     .map((scene) => ({ start: Number(scene.start), end: Number(scene.end), footage: plateFootage(story, scene) })).filter((entry) => entry.footage > 0);
   if (story.base) plates.push({ start: 0, end: duration, footage: 1 });
+  // A drawn character or UI mock fills the frame but is not footage, so a story of only those is not a footage short.
+  const drawnIds = (story.scenes ?? []).filter((scene) => DRAWN_MODULES.includes(scene?.module)).map((scene) => String(scene.id));
+  const isFootage = (entry) => entry.role === "media" && !DRAWN_MODULES.includes(entry.module) && !drawnIds.some((id) => entry.id === id || String(entry.id).startsWith(`${id}-`));
   const live = (entry, t) => entry.start <= t + 1e-6 && entry.end > t + 1e-6 && !(entry.hide ?? []).some(([a, b]) => a <= t + 1e-6 && b > t + 1e-6);
   const samples = [];
   for (let t = 0; t < duration - 1e-6; t += k.step) {
@@ -80,7 +85,7 @@ export function visualDensity(story, rects = [], options = {}) {
     for (let r = 0; r < rows; r += 1) for (let c = 0; c < cols; c += 1) {
       const x = ((c + 0.5) / cols) * W, y = ((r + 0.5) / rows) * H;
       const over = active.filter(({ rect }) => x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height);
-      footage += over.some((entry) => entry.role === "media") ? 1 : plate;
+      footage += over.some(isFootage) ? 1 : plate;
       fill += over.length || plate >= k.seen ? 1 : 0;
     }
     samples.push({ t: at, fill: round(fill / (rows * cols)), footage: round(footage / (rows * cols)) });
