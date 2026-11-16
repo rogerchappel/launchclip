@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {resolveStory} from '@launchclip/core/story.mjs';
 import {resolveModule, sceneAnchors} from '@launchclip/core/modules.mjs';
+import {targetError} from '@launchclip/core/characters/actions.mjs';
 
 const golden = () => JSON.parse(readFileSync(new URL('../examples/story/node-graph-9x16/storyboard.json', import.meta.url), 'utf8'));
 const withCues = (cues, edit = story => story) => {
@@ -30,3 +31,24 @@ test('node-graph publishes hub, converge and node-<id> at their events, centred 
     assert.ok(Math.abs(anchor.x - (graph.rect.x + n.cx)) < 0.02 && Math.abs(anchor.y - (graph.rect.y + n.cy)) < 0.02, `node-${n.id} at its card centre`);
     assert.equal(anchor.time, eventTime(`node-${n.id}`));
   }
+});
+
+test('a cast cue aimed at an anchor plays as it lands and looks at it; an explicit at is honoured', () => {
+  const story = withCues([{action: 'gaze-at', target: {scene: 'team', anchor: 'node-n3'}}, {pose: 'cheer', target: {scene: 'team', anchor: 'converge'}}, {at: 6.2, pose: 'look', target: {scene: 'team', anchor: 'hub'}}]);
+  const anchors = sceneAnchors(story, 'team');
+  const states = castModel(story).content.actors[0].states;
+  assert.deepEqual(states.slice(1).map(state => state.time), [anchors['node-n3'].time, anchors.converge.time, 6.2]);
+  assert.deepEqual(states[1].point, {x: anchors['node-n3'].x, y: anchors['node-n3'].y, far: false});
+  assert.equal(states[2].pose, 'cheer');
+  assert.ok(states[1].gaze.x !== 0, 'the face turns toward the card');
+});
+
+test('anchor targets: unknown anchor, unknown scene, a scene without anchors and an anchor outside the scene are errors', () => {
+  assert.throws(() => castModel(withCues([{action: 'gaze-at', target: {scene: 'team', anchor: 'node-n9'}}])), /cues\[0\]\.target scene "team" has no anchor "node-n9" \(anchors: hub, converge, node-n0/);
+  assert.throws(() => castModel(withCues([{action: 'gaze-at', target: {scene: 'nope', anchor: 'hub'}}])), /cues\[0\]\.target scene "nope" is not in the story/);
+  assert.throws(() => castModel(withCues([{action: 'gaze-at', target: {scene: 'room', anchor: 'hub'}}])), /scene "room" \(cast-scene\) publishes no anchors \(modules with anchors: node-graph/);
+  // The graph starts after the cast scene's cues end: a defaulted time falls outside it.
+  assert.throws(() => castModel(withCues([{pose: 'cheer', target: {scene: 'team', anchor: 'converge'}}], story => { story.scenes[0].end = 3; return story; })), /cues\[0\]\.at defaults to anchor "converge" of scene "team" at 4\.5 s, outside this scene's cues/);
+  assert.equal(targetError({scene: 'team', anchor: 'hub'}), null);
+  assert.match(targetError({scene: 'team'}), /\{scene: id, anchor: name\}/);
+});

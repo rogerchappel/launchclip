@@ -9,8 +9,13 @@
 //           stand-up | stretch
 //   target: far | window | horizon | street | skyline (world focus points)
 //           | left | right | {prop: id} | {character: id} | {x, y} (canvas px)
+//           | {scene: id, anchor: name} (a point another scene on the plate
+//             publishes, kit/core/anchors.mjs; the cue's `at` defaults to
+//             the time it lands)
 //
 // Imports only sibling kit/core files.
+
+import {anchorOf, isAnchorTarget} from '../anchors.mjs';
 
 export const ACTIONS = Object.freeze(['look-far', 'turn-to-look', 'gaze-at', 'point-at', 'walk-to', 'stand-up', 'stretch']);
 // Actions whose point is that the character looks at something.
@@ -67,14 +72,16 @@ export function targetError(target) {
   if (keys.length === 1 && typeof target.prop === 'string') return null;
   if (keys.length === 1 && typeof target.character === 'string') return null;
   if (keys.every(key => ['x', 'y'].includes(key)) && Number.isFinite(target.x) && (target.y === undefined || Number.isFinite(target.y))) return null;
-  return 'must be {prop: id}, {character: id} or {x, y} (canvas px)';
+  if (keys.length === 2 && isAnchorTarget(target)) return null;
+  return 'must be {prop: id}, {character: id}, {scene: id, anchor: name} or {x, y} (canvas px)';
 }
 
 /**
  * A target as a canvas point: {x, y, far} (x null = no side given; the
  * looker turns away from the frame centre). scene: {focus (worlds/index.mjs
- * worldFocus | null), actors: [{id, x, floor, scale, height}], canvas}.
- * Throws a message on an unknown prop or character.
+ * worldFocus | null), actors: [{id, x, floor, scale, height}], canvas,
+ * anchorsOf? (sceneId → anchors, kit/core/anchors.mjs)}.
+ * Throws a message on an unknown prop, character or anchor.
  */
 export function targetPoint(target, scene) {
   const {focus, canvas} = scene;
@@ -85,6 +92,10 @@ export function targetPoint(target, scene) {
     if (point) return point;
     // No world: far things sit up and to the side.
     return {x: null, y: Math.round(canvas.height * 0.35), far: true};
+  }
+  if (isAnchorTarget(target)) {
+    const anchor = anchorOf(target, scene.anchorsOf);
+    return {x: anchor.x, y: anchor.y, far: false};
   }
   if (target.prop !== undefined) {
     const prop = focus?.props?.find(entry => entry.id === target.prop);
@@ -134,7 +145,7 @@ export function walkDistance(seconds, scale) {
 export function actingPromptLines() {
   return [
     `Acting cues (cast-scene cues[].action): ${ACTIONS.map(name => `${name} (${ACTION_INFO[name].describe})`).join('; ')}.`,
-    `Targets (cue or actor \`target\`): ${NAMED_TARGETS.join(', ')}, {prop: id} (a prop in the world beneath), {character: id} or {x, y}. A character with a target faces it and turns its head toward it, not the camera: a standing character looking at something far (window, street, horizon, skyline) turns its back to the camera; seated or for nearer things it turns three-quarters. A cue may set view: ${VIEWS.join(' | ')}.`,
+    `Targets (cue or actor \`target\`): ${NAMED_TARGETS.join(', ')}, {prop: id} (a prop in the world beneath), {character: id}, {scene: id, anchor: name} (a point a graphic on the same plate publishes, e.g. node-graph's hub, node-<id> and converge; a cue with one and no at plays as it lands) or {x, y}. A character with a target faces it and turns its head toward it, not the camera: a standing character looking at something far (window, street, horizon, skyline) turns its back to the camera; seated or for nearer things it turns three-quarters. A cue may set view: ${VIEWS.join(' | ')}.`,
     'Never cover what a character looks at: a card must not sit over the window, street or skyline point while someone looks at it (the acting gate fails it). Put the card to one side, or bring it in after the look.',
     'If the idea is an action (look away, get up, walk over, point at the proof), a character performs it on screen on that line, toward what it is about: a bench sitter looking at the street turns toward the street.'
   ];
