@@ -63,9 +63,9 @@ export const SCRIPT_SKELETONS = Object.freeze({
     name: 'Stakes hook → open loop → numbered list → pattern interrupt → payoff → CTA',
     beats: Object.freeze([
       beat('hook', 'Stakes hook', 0.1, 'A cost, a consequence or a number the viewer feels, aimed at "you" ("your deck", "your app"): the stakes in one line.'),
-      beat('loop', 'Open loop', 0.07, 'Promise a payoff and say when it comes ("…and one fix I\'ll give you at the end", "number three is the one nobody checks"). Pay it off later.'),
+      beat('loop', 'Open loop', 0.07, 'Promise a payoff and say when it comes ("…and one fix I\'ll give you at the end", "number three costs the most to fix"). Pay it off later.'),
       beat('list', 'Numbered list', 0.5, 'A named, numbered list or framework of three to six items, each said with its number. Each item: its name, then one concrete specific from the brief (a number, a name, a rule), then an example or an analogy.'),
-      beat('rehook', 'Pattern interrupt', 0.08, 'One short line that reframes everything before it ("The word is per.", "But here\'s the part nobody checks."). It turns the list into one idea.'),
+      beat('rehook', 'Pattern interrupt', 0.08, 'One short line that reframes everything before it ("The word is per.", "All three fail the same way: water sits on the cut end."). It turns the list into one idea.'),
       beat('payoff', 'Payoff', 0.13, 'Close the open loop and pay off the hook in concrete terms.'),
       beat('cta', 'Call to action', 0.12, 'One action built into the story: the plan\'s comment keyword when it has one, else a reason to follow or save that follows from the last idea.')
     ])
@@ -457,7 +457,7 @@ export const SHORT_VIDEO_RULES = Object.freeze([
   'Concrete pictures: every sentence names something the viewer can picture (an object, a place, a person, a number with its unit), so each one can own a scene; no sentence rests on an abstraction alone.',
   'Write to the footage: when the assets list what the footage shows, picture each sentence with something in that list. Do not promise a demonstration no asset shows (a product being applied, a close-up of a material, a before-and-after); say it over footage that exists, or leave it out.',
   'Specific, never hedged: say the number, the name, the rule and the consequence the brief gives ("$53,000 per email", "oil it every 12 months"), in firm words. No "can help", "may need", "might", "possibly", "in some cases" or "it depends". When the brief has no figure, stay qualitative but firm ("untreated pine rots", not "it may start to deteriorate"); never invent the figure.',
-  'Over 30 s, keep them to the end: open a loop in the first quarter (a payoff promised for later: "the last one is the one nobody checks", "one fix I\'ll give you at the end") and close it before the call to action; put one pattern interrupt near the middle, a short line that reframes what came before.',
+  'Over 30 s, keep them to the end: open a loop in the first quarter (a payoff promised for later: "the last one is the cheapest fix", "one fix I\'ll give you at the end") and close it before the call to action; put one pattern interrupt near the middle, a short line that reframes what came before.',
   'A call to action built into the story, never bolted on: when the plan names a comment keyword, end on it; otherwise give a reason to follow or save that follows from the last idea ("save this before your next build"). Never promise to send something the brief does not offer.'
 ]);
 
@@ -475,6 +475,7 @@ export function scriptRuleLines(plan = null) {
     'Simplify spoken numbers ("4 in 10", not "43.7%") and keep to one number per sentence; the exact figure can go on screen.',
     'Plain words: about grade 7 or below for consumers and cold audiences, grade 9 or below for business and technical buyers; define any harder word in the same line.',
     'Exactly one call to action, worded the same when spoken and when shown.',
+    'No stock cadence: no "nobody checks", no "Not X. Y.", no "X. No Y.", no "here\'s the thing". Name the specific thing instead.',
     'Never invent facts: every number, name, customer, quote, rating, user count, price, deadline and guarantee must come from the brief, notes, assets or transcripts. No placeholder testimonials, no urgency or scarcity unless the brief gives a real deadline or limit. Illustrative numbers must be framed as examples. When the brief has no proof, use honest substitutes: a demo of the outcome, a plain product fact, "launching today".'
   ];
 }

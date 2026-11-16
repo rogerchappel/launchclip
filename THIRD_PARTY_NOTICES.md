@@ -193,6 +193,17 @@ of that file. Its glyph outlines are drawn from the MathJax TeX fonts and are
 written into a typeset equation's `params.typeset`. MathJax is not relicensed
 under LaunchClip's MIT License.
 
+## impeccable (copy checks)
+
+The copy-tell rules in `src/script_check.js` (the `buzzword` phrase list, the
+`aphorism` regexes, the em-dash floor and the `theater` heads) are ported from
+impeccable by Paul Bakaus (<https://github.com/pbakaus/impeccable>), licensed
+under the Apache License, Version 2.0
+(<http://www.apache.org/licenses/LICENSE-2.0>). Changes: ported from Rust to
+JavaScript, thresholds set per script for a spoken narration, and
+LaunchClip's own house phrases added. impeccable is not relicensed under
+LaunchClip's MIT License.
+
 ## AI model providers (optional, paid)
 
 Planning, scripts, the headless critic and some assets can call OpenAI,

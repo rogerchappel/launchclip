@@ -310,3 +310,38 @@ test("cta-keyword and cta-choice: the host's keyword or the series' options are 
   assert.ok(ids(short).includes("cta-choice"));
   assert.match(short.errors.find((item) => item.id === "cta-choice").message, /missing IKE/);
 });
+
+test("buzzword: one is a warning, two or one in the hook an error; it replaces the superlative warning", () => {
+  const once = check(GOOD.replace("Your team gets its evenings back.", "Your team can unlock its evenings."));
+  assert.ok(ids(once, "warnings").includes("buzzword"));
+  assert.ok(!ids(once, "warnings").includes("superlative"));
+  assert.ok(!ids(once).includes("buzzword"));
+  assert.ok(ids(check(GOOD.replace("Your team gets its evenings back.", "Best-in-class matching. Your team can unlock its evenings."))).includes("buzzword"));
+  assert.ok(ids(check(GOOD.replace("Month-end close should not take a week.", "Supercharge your month-end close."))).includes("buzzword"));
+  assert.ok(!ids(check(GOOD), "warnings").includes("buzzword"));
+});
+
+test("aphorism: one stock cadence is voice, two warn, three are an error", () => {
+  const run = (narration) => checkScript({ narration, duration: 45, brief: DECK_BRIEF, ctaKeyword: "deck" });
+  const one = run(STAKES.replace("Here's the catch. ", ""));
+  assert.ok(!ids(one, "warnings").includes("aphorism"));
+  const two = run(STAKES);
+  assert.ok(ids(two, "warnings").includes("aphorism"), "nobody checks + here's the catch");
+  assert.ok(!ids(two).includes("aphorism"));
+  const three = run(STAKES.replace("All three are invisible once the deck is finished.", "Not a build fault. A design one."));
+  assert.ok(ids(three).includes("aphorism"), formatScriptCheck(three));
+  assert.ok(ids(run(STAKES.replace("Here's the catch.", "Three boards. Just one sealed.")), "warnings").includes("aphorism"), "\"X. Just Y.\" counts");
+});
+
+test("em-dash: three dashes at one per 500 characters warn; a long script may carry three", () => {
+  const dashed = GOOD.replace("Month-end close should not take a week.", "Month-end close — the week you lose — should not take a week.").replace("Your team gets its evenings back.", "Your team gets its evenings back — every month.");
+  assert.ok(ids(check(dashed), "warnings").includes("em-dash"));
+  assert.ok(!ids(check(GOOD.replace("Your team gets its evenings back.", "Your team gets its evenings back — every month.")), "warnings").includes("em-dash"));
+  const long = `${dashed} ${GOOD.repeat(3)}`;
+  assert.ok(!ids(checkScript({ narration: long, brief: BRIEF }), "warnings").includes("em-dash"));
+});
+
+test("theater: \"security theater\" and its kin warn", () => {
+  assert.ok(ids(check(GOOD.replace("Your team gets its evenings back.", "Spreadsheets are compliance theater.")), "warnings").includes("theater"));
+  assert.ok(!ids(check(GOOD.replace("Your team gets its evenings back.", "Your team gets to the theatre on time.")), "warnings").includes("theater"));
+});
