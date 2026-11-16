@@ -1,0 +1,85 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Before-and-after wipe (golden, 9:16)",
+  "notes": "Golden story for the before-and-after wipe (kit/core/before-after.mjs): a clip arrives over the last one with the before-after transition (the handle rests half-way, a label on each side), then the before-after module compares one shot with a mono grade on the before side, resting and reversing (0.6, 0.3, then all the way). No narration and no paid calls.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 13,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0b1020",
+      "primary": "#ff7a59",
+      "accent": "#7ce7ff",
+      "ink": "#0b1020",
+      "paper": "#f5f1ea"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "clip",
+      "start": 0,
+      "end": 3,
+      "energy": 1,
+      "params": {
+        "media": "assets/shots/boards.svg",
+        "move": "none"
+      }
+    },
+    {
+      "id": "s2",
+      "module": "clip",
+      "start": 3,
+      "end": 7,
+      "energy": 1,
+      "in": {
+        "type": "before-after",
+        "dur": 1.6,
+        "pause": 0.4,
+        "labels": {
+          "before": "Old",
+          "after": "New"
+        }
+      },
+      "params": {
+        "media": "assets/shots/ridge.svg",
+        "focus": {
+          "x": 0.74,
+          "y": 0.5
+        },
+        "move": "none"
+      }
+    },
+    {
+      "id": "s3",
+      "module": "before-after",
+      "start": 7,
+      "end": 13,
+      "energy": 1,
+      "params": {
+        "before": "assets/shots/ridge.svg",
+        "grade": "mono",
+        "gradeSide": "before",
+        "stops": [
+          0.6,
+          0.3,
+          1
+        ],
+        "labels": {
+          "before": "Before",
+          "after": "After"
+        }
+      }
+    }
+  ]
+}

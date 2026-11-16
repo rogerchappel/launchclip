@@ -84,7 +84,8 @@ export const SHOT_LAYOUT_SLOTS = Object.freeze({
   "media-stat": Object.freeze(["media"]),
   "media-compare": Object.freeze(["left.media", "right.media"]),
   "media-grid": Object.freeze(["items.*.media"]),
-  "media-list": Object.freeze(["items.*.media"])
+  "media-list": Object.freeze(["items.*.media"]),
+  "before-after": Object.freeze(["before", "after"])
 });
 const STILL_LAYOUT_SLOTS = new Set(["media-list"]);
 export const SHOTS_DIR = "assets/shots";
@@ -171,7 +172,7 @@ function layoutShotLine() {
   const slots = Object.entries(SHOT_LAYOUT_SLOTS).map(([id, paths]) => `${id} params.${paths.join(" and params.").replace(/\.\*\./g, "[i].")}`).join(", ");
   return [
     `Media layouts put library footage inside the design, so a footage line can also carry its point: the same {kind: "shot", shows, type?} request goes in ${slots} (media-list's thumbnails show a still).`,
-    "Use split-screen when the shot and the line's title, stat or short list share the frame (footage top or bottom on 9:16); landscape-card for a wide shot with a title and a caption or chip (ask for landscape footage); picture-in-picture when a stat or list leads and the footage backs it up; media-compare for two options with footage of each (hardwood vs composite); media-stat for a figure with footage of what it measures, beside it or behind it; media-grid for two to four options shown together (\"three options\"), revealed on their words; media-list for steps or checks with a thumbnail each. Mix them with clip and photo-scene: a short video uses several different frames."
+    "Use split-screen when the shot and the line's title, stat or short list share the frame (footage top or bottom on 9:16); landscape-card for a wide shot with a title and a caption or chip (ask for landscape footage); picture-in-picture (16:9 only; on 9:16 it is drawn as a split-screen) when a stat or list leads and the footage backs it up; media-compare for two options with footage of each (hardwood vs composite); media-stat for a figure with footage of what it measures, beside it or behind it; media-grid for two to four options shown together (\"three options\"), revealed on their words; media-list for steps or checks with a thumbnail each. Mix them with clip and photo-scene: a short video uses several different frames."
   ].join("\n");
 }
 
