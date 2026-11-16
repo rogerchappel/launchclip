@@ -1645,7 +1645,7 @@ export const ENTRANCE_CLASSIFY = Object.freeze({
   minArea: 0.002,
   maxArea: 0.6, // not in the RFC: change over more of the frame is a transition or a camera move, not an element
   role: 1.25, // not in the RFC: detail (luma gradient) after ÷ before ≥ this is an entrance, before ÷ after an exit, else a change
-  ease: Object.freeze({ out: 0.68, in: 0.32, linearCv: 0.45, floorPairs: 6, tail: 0.05 }), // not in the RFC: the noise floor taken off the activity is read over floorPairs each side, and the span runs out from the peak (up to floorPairs past the thresholded one) while activity is above tail × the peak
+  ease: Object.freeze({ out: 0.68, in: 0.32, linearCv: 0.45, floorPairs: 6, tail: 0.05, onset: 0.25 }), // not in the RFC (onset: an entrance starts where its activity first crosses this share of its peak): the noise floor taken off the activity is read over floorPairs each side, and the span runs out from the peak (up to floorPairs past the thresholded one) while activity is above tail × the peak
   kind: Object.freeze({ tip: 0.35, correlation: 0.6, travel: 0.02, ownTravel: 0.25, scale: 0.6, presence: 10, firstShare: 0.5 }), // not in the RFC: presence is a cell's mean moved this far from before the event; the first frame read is the first with firstShare of the final presence; a slide also travels ownTravel of its own extent (a blurred shrink-in drifts ≤ 0.07, a slide ~1)
   stagger: Object.freeze({ min: 3, size: 0.4, duration: 0.5, regularity: 0.4 })
 });
@@ -1867,8 +1867,14 @@ function describeEvent(runs, { means, details, mags, cw, ch, cells, fps, E }) {
   if (n % 2) done += curve[(n - 1) / 2] / 2;
   const share = done / total, mean = total / n;
   const cv = Math.sqrt(curve.reduce((sum, v) => sum + (v - mean) ** 2, 0) / n) / (mean || 1);
-  // An entrance lasts its widened span; its start stays the thresholded one, which staggers read.
+  // An entrance lasts its widened span. Its onset, which staggers read, is
+  // where the curve first crosses a share of its peak, between frame pairs:
+  // the thresholded start jitters with an item's size on a slow ease-in.
   event.seconds = round(n / fps, 3);
+  const cross = E.ease.onset * Math.max(...curve);
+  const k = curve.findIndex((v) => v >= cross);
+  event.onset = from + (k > 0 ? k - 1 + (cross - curve[k - 1]) / (curve[k] - curve[k - 1]) : 0);
+  event.at = round(event.onset / fps, 3);
   event.ease = share > E.ease.out ? 'ease-out' : share < E.ease.in ? 'ease-in' : cv < E.ease.linearCv ? 'linear' : 'in-out';
   Object.assign(event, entranceKind(event, list, { means, cw, fps, E }));
   return event;
@@ -1926,8 +1932,8 @@ function staggerSequences(entrances, shots, fps, E) {
       // The entrances like the first, taken in order while each gap stays near the first gap.
       const like = remaining.filter((event) => event === head || (event.kind === head.kind && near(event.area, head.area, S.size) && near(event.seconds, head.seconds, S.duration)));
       const chain = like.slice(0, 2);
-      for (const event of like.slice(2)) if (Math.abs(event.first - chain.at(-1).first - (chain[1].first - head.first)) <= S.regularity * (chain[1].first - head.first)) chain.push(event); else break;
-      const gaps = differences(chain.map((event) => event.first));
+      for (const event of like.slice(2)) if (Math.abs(event.onset - chain.at(-1).onset - (chain[1].onset - head.onset)) <= S.regularity * (chain[1].onset - head.onset)) chain.push(event); else break;
+      const gaps = differences(chain.map((event) => event.onset));
       const mean = gaps.reduce((s, v) => s + v, 0) / Math.max(1, gaps.length);
       const std = Math.sqrt(gaps.reduce((s, v) => s + (v - mean) ** 2, 0) / Math.max(1, gaps.length));
       if (chain.length < S.min || mean <= 0 || std > S.regularity * mean) { remaining = remaining.slice(1); continue; }
