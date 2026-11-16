@@ -26,6 +26,7 @@
 
 import { getEase } from './motion.mjs';
 import { resolveGrammar } from './grammar.mjs';
+import { fitAxes } from './story-loop.mjs';
 
 export const AMBIENT_LEVELS = Object.freeze(['off', 'subtle', 'standard', 'lively']);
 
@@ -228,7 +229,8 @@ export function ambientField(story) {
       scale: { kind: 'wave', center: 1, amp: scaleAmp, period: round(14 + random() * 6, 3), phase: random() < 0.5 ? 0 : 1 }
     });
   }
-  return { level, direction, blobs };
+  // A short that loops onto its opener: each blob ends its last frame where it began (kit/core/story-loop.mjs).
+  return { level, direction, blobs: blobs.map((blob) => ({ ...blob, ...fitAxes(story, { x: blob.x, y: blob.y, scale: blob.scale }) })) };
 }
 
 const frac = (value) => value - Math.floor(value);
