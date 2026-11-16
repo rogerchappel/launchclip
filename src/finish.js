@@ -48,6 +48,8 @@ import { getRenderer, resolveRendererName } from "./renderers/index.js";
 import { deriveBoundaries, resolveStory, storyBase, storyFormat } from "./story.js";
 import { storyChapters } from "@launchclip/core/story.mjs";
 import { vfxSounds } from "@launchclip/core/vfx/plan.mjs";
+import { VFX_EFFECTS } from "@launchclip/core/vfx/catalog.mjs";
+import { pairsCheck, storyVisuals } from "@launchclip/core/sound/pairs.mjs";
 import { ffmetadataChapters, youtubeChapterProblems, youtubeChapters } from "@launchclip/core/long-form.mjs";
 import { directionFileFor, moduleParamErrors, readScriptBeside, validateStory } from "./story_cli.js";
 import { ANIMATIC_FILE, ANIMATIC_VIDEO, writeAnimatic } from "./animatic.js";
@@ -336,6 +338,20 @@ export function bindCues(story, { models, palette = false } = {}) {
   }
   cues.sort((a, b) => a.at - b.at || a.cue.localeCompare(b.cue));
   return { cues, warnings };
+}
+
+/**
+ * The VFX ↔ sound pairs check (kit/core/sound/pairs.mjs) on bound cues, as
+ * finish warnings: each error on its own line, the unpaired warnings in one.
+ * Visual changes are cuts, hits, VFX peaks and module events; a transition's
+ * whoosh starts before its cut, so it is left out.
+ */
+export function cuePairNotes(story, cues, modelFor = () => null) {
+  const { hits, changes } = storyVisuals(story, { peaks: Object.fromEntries(Object.entries(VFX_EFFECTS).map(([name, info]) => [name, info.peak])) });
+  for (const scene of Array.isArray(story?.scenes) ? story.scenes : []) for (const event of modelFor(scene)?.events ?? []) if (Number.isFinite(Number(event.time))) changes.push(Number(event.time));
+  const sounds = cues.filter((cue) => cue.source !== "transition").map((cue) => ({ at: cue.lands_at ?? cue.at, cue: cue.cue }));
+  const { errors, warnings } = pairsCheck({ hits, changes, sounds });
+  return [...errors.map((error) => `pairs: ${error}`), ...(warnings.length ? [`pairs: ${warnings.length} warning${warnings.length === 1 ? "" : "s"}, first: ${warnings[0]}`] : [])];
 }
 
 // Cue pacing. Most catalogue modules tag their title and emphasis events
@@ -1263,6 +1279,7 @@ const STAGES = [
       const score = scored ? scoreFor(ctx.resolved) : null;
       const bound = score ? { cues: score.cues, warnings: [] } : sfxOn ? bindCues(ctx.resolved, { models, palette: Boolean(sound.palette) }) : { cues: [], warnings: [] };
       if (!score) bound.cues = paceCues(applyDensity(bound.cues, density, storyId), density, storyId);
+      if (sfxOn && !score) ctx.warnings.push(...cuePairNotes(ctx.resolved, bound.cues, models));
       const typing = sfxOn ? typingSchedule(collectTyping(ctx.resolved, { models }), { seed: storyId, ...densityTyping(density) }) : [];
       const libraries = sfxOn ? await resolveLibraries({ project: ctx.project, library: ctx.options.sfxLibrary ?? (audio.sfx_library ? path.resolve(ctx.project, audio.sfx_library) : undefined), home: ctx.options.sfxHome }) : [];
       // One line when a cue family is missing from every SFX library and falls
