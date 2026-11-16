@@ -1,0 +1,91 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Catalogue H parity: h-node-graph-sub-card-portrait",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 4,
+      "platform": "youtube-shorts"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#06070d",
+        "primary": "#fdb022",
+        "accent": "#46d4ff",
+        "ink": "#06070d",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "el",
+        "module": "node-graph",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "hub": {
+            "label": "Head chef",
+            "icon": "chef-hat"
+          },
+          "nodes": [
+            {
+              "id": "baker",
+              "member": {
+                "module": "sub-card",
+                "label": "Baker",
+                "sub": "3 a.m. start",
+                "icon": "croissant"
+              }
+            },
+            {
+              "id": "proof",
+              "member": {
+                "module": "sub-card",
+                "label": "Proof",
+                "sub": "90 min rise",
+                "icon": "timer"
+              }
+            },
+            {
+              "id": "oven",
+              "member": {
+                "module": "sub-card",
+                "label": "Oven",
+                "sub": "230 °C",
+                "icon": "flame"
+              }
+            },
+            {
+              "id": "pastry",
+              "member": {
+                "module": "sub-card",
+                "label": "Pastry",
+                "sub": "laminated",
+                "icon": "cookie"
+              }
+            },
+            {
+              "id": "orders",
+              "label": "Orders",
+              "icon": "receipt"
+            }
+          ],
+          "variant": "fan"
+        }
+      }
+    ]
+  },
+  "sceneId": "el",
+  "threshold": {
+    "ssim": 0.97
+  }
+}

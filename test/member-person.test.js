@@ -49,3 +49,9 @@ test('person: node-graph and icon-grid take it as {member: {module: "person"}}',
   assert.ok(texts([catalogHView(grid)].flat()).includes('SR'));
   assert.throws(() => resolve('icon-grid', {items: ['star', {member: {module: 'person', name: 'Sol', image: 'https://x.com/s.jpg'}}]}), /items\[1\].member.image must be a project-local assets/);
 });
+
+test('person: a graphic reaching for an avatar is pointed at the person member', async () => {
+  const {beyondGraphic} = await import('@launchclip/core/graphic.mjs');
+  assert.match(beyondGraphic('avatar'), /\{member: \{module: "person"/);
+  assert.match(beyondGraphic('faces'), /person member/);
+});

@@ -50,7 +50,7 @@ test('graphic: past the closed list, the error names the module that draws it, o
     [{kind: 'arrows'}, /the callout-arrow module's job/],
     [{kind: 'images', label: 'x'}, /the photo-scene module's job/],
     [{kind: 'hexagon'}, /no catalogue module draws that yet/],
-    [{kind: 'card', label: 'Baker', detail: 'Starts at 4am'}, /graphic.detail is not supported \(allowed: kind, icon, label, badge\): the list is closed, and that is the concept-card module's job/],
+    [{kind: 'card', label: 'Baker', detail: 'Starts at 4am'}, /graphic.detail is not supported \(allowed: kind, icon, label, badge\): the list is closed, and that is the sub-card member's job: give the item \{member: \{module: "sub-card"/],
     [{kind: 'chip', label: 'Hot', progress: 0.4}, /the progress module's job/],
     [{kind: 'card', label: 'Baker', color: '#f00'}, /graphic.color .*no catalogue module draws that yet/],
     [{kind: 'card', label: 'Baker', x: 120}, /the module lays out its members; no module takes free positions/],
