@@ -605,7 +605,7 @@ export function drawKind(style, params, colors, {id, joints: j, expression = 'ne
   const faces = [...new Set([expression, ...expressions])].map(name => face(faceCtx, name)).filter(Boolean);
   // Head frame: the pivot is the head joint's (the trunk's top, or the face area's chin).
   const centre = quad ? -d.ry * 0.9 + shapes.dy * d.ry : headed ? -d.up + (shapes.dy ?? 0.16) * d.ry : -d.ry;
-  const features = [Object.assign(group([...(shapes.features ?? []), ...faces, ...(params.flaw ? flawMarks(F, 0, params.flaw, true) : [])], {transform: `translate(${n(shapes.dx ?? 0)} ${n(centre - 38 * k)}) scale(${Math.round(k * 1000) / 1000})`}), {[UNIT]: true})];
+  const features = [Object.assign(group([...(shapes.features ?? []), ...faces, ...(params.flaw ? flawMarks(F, 0, params.flaw, true, Math.min(62, n(cheek * 0.52))) : [])], {transform: `translate(${n(shapes.dx ?? 0)} ${n(centre - 38 * k)}) scale(${Math.round(k * 1000) / 1000})`}), {[UNIT]: true})];
   // The head's outline, for bounds checks: a head's own, or the area of a single body the face sits on.
   const [at, index] = headed ? ['head', 0] : AREA[params.kind] ?? ['body', 0];
   asHead(shapes[at][index]);

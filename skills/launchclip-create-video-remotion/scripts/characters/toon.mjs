@@ -462,12 +462,13 @@ export function face(ctx, name) {
  * A character's flaw (rig param `flaw`), in toon face units around the
  * head's centre cy; the same marks for a person's face and a kind's.
  */
-export function flawMarks(P, cy, flaw, cute = false) {
-  const cheekX = cute ? 50 : 46, cheekY = cy + (cute ? 40 : 30);
+export function flawMarks(P, cy, flaw, cute = false, cheek = null) {
+  // On the cheek, below and outside the eye (a cute face's eyes sit lower and wider); cheek: a narrower face's own cheek.
+  const cheekX = cheek ?? (cute ? 62 : 52), cheekY = cy + (cute ? 58 : 38);
   if (flaw === 'cheek-plaster') return [P.shape(`M${-cheekX - 15} ${cheekY - 9}L${-cheekX + 13} ${cheekY - 3}Q${-cheekX + 17} ${cheekY - 2} ${-cheekX + 16} ${cheekY + 2}L${-cheekX + 15} ${cheekY + 6}Q${-cheekX + 14} ${cheekY + 10} ${-cheekX + 10} ${cheekY + 9}L${-cheekX - 18} ${cheekY + 3}Q${-cheekX - 22} ${cheekY + 2} ${-cheekX - 21} ${cheekY - 2}L${-cheekX - 20} ${cheekY - 6}Q${-cheekX - 19} ${cheekY - 10} ${-cheekX - 15} ${cheekY - 9}Z`, '#f0cfa0', {width: 3.5})];
   if (flaw === 'brow-scar') {
     const x = cute ? CUTE.eyeX : EYE_X, y = cy + (cute ? CUTE.browY : -22);
-    return [P.line(`M${x - 2} ${y - 13}L${x + 7} ${y + 11}`, 'skinShade', 4.5)];
+    return [P.line(`M${x - 3} ${y - 12}L${x + 9} ${y + 16}`, 'outline', 4)];
   }
   if (flaw === 'cheek-scratch') return [P.line(`M${cheekX - 8} ${cheekY - 8}L${cheekX + 8} ${cheekY + 2}M${cheekX - 10} ${cheekY}L${cheekX + 4} ${cheekY + 9}`, '#c0505a', 3.5)];
   return [];
