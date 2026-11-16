@@ -13,11 +13,11 @@ const execFileAsync = promisify(execFile);
 
 export const GRADE_CUBE_FILE = ".launchclip/finish/grade.cube";
 
-/** The story's cube (preset or the user's .cube, strength mixed in), or null. Throws on an unreadable .cube. */
-export async function storyGradeCube(project, story) {
-  const grade = resolveGrade(story);
+/** The story's cube (preset or the user's .cube, strength mixed in; `value` overrides story.grade), or null. Throws on an unreadable .cube. */
+export async function storyGradeCube(project, story, value = story?.grade) {
+  const grade = resolveGrade(story, value);
   if (!grade) return null;
-  const cube = grade.cube ? parseCube(await readFile(path.resolve(project, grade.cube), "utf8").catch(() => { throw new Error(`grade.cube not found: ${grade.cube}`); })) : presetCube(grade.preset, GRADE_CUBE_SIZE);
+  const cube = grade.cube ? parseCube(await readFile(path.resolve(project, grade.cube), "utf8").catch(() => { throw new Error(`grade.cube not found: ${grade.cube}`); })) : presetCube(grade.preset, GRADE_CUBE_SIZE, grade.tint);
   return { grade, cube: mixCube(cube, grade.strength) };
 }
 

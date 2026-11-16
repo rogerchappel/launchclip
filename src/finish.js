@@ -17,7 +17,9 @@
 // written to .launchclip/finish/storyboard.json (resolved:
 // .launchclip/finish/story.resolved.json), which is what gets rendered.
 import { motionBlurOptions } from "./motion_blur.js";
-import { applyGrade, gradeWarnings, storyGradeCube } from "./grade.js";
+import { gradeWarnings, storyGradeCube } from "./grade.js";
+import { applyFinish } from "./finish_pass.js";
+import { resolveFinish } from "@launchclip/core/finish.mjs";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -41,7 +43,7 @@ import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, li
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
 import { worstStillSpans, writeMotionReport } from "./render_motion_analysis.js";
-import { PARTIAL_RENDERERS, SEGMENTS_DIR, renderWithSegments, sceneStills, storyMotionBlurGuard } from "./render_segments.js";
+import { PARTIAL_RENDERERS, SEGMENTS_DIR, renderWithSegments, sceneStills, storyFinishProtect, storyFrames, storyMotionBlurGuard } from "./render_segments.js";
 import { renderShare } from "./capacity.js";
 import { withSlot } from "./queue.js";
 import { getRenderer, resolveRendererName } from "./renderers/index.js";
@@ -694,8 +696,9 @@ export function defaultAdapters() {
     voiceProvider: (name, options) => getVoiceProvider(name, options),
     normalizeVoice: (input, output) => normalizeLoudness(input, output),
     renderer: (name) => getRenderer(name),
-    // The colour grade over a finished render (src/grade.js): null when the story has none.
-    grade: (project, story, file) => applyGrade(project, story, file),
+    // The finish over a finished render: the story's shader chain (src/finish_pass.js),
+    // else the colour grade alone (src/grade.js); null when the story has neither.
+    grade: (project, story, file) => applyFinish(project, story, file, { format: storyFrames(story), protect: () => storyFinishProtect(project, story) }),
     // Cores for this render: the machine's cores split across the render slots.
     renderShare: () => renderShare(),
     withSlot: (kind, options, fn) => withSlot(kind, options, fn),
@@ -1532,7 +1535,8 @@ const STAGES = [
       const missing = Object.entries(assets).filter(([, hash]) => hash === null).map(([asset]) => asset);
       if (missing.length) ctx.warnings.push(`referenced assets not found: ${missing.join(", ")}`);
       if (ctx.options.previewScene) return { always: `--preview-scene ${ctx.options.previewScene} renders that scene only`, outputs: [] };
-      const graded = await storyGradeCube(ctx.project, resolved);
+      // The grade inside story.finish wins over story.grade (kit/core/finish.mjs).
+      const graded = await storyGradeCube(ctx.project, resolved, resolveFinish(resolved)?.find((entry) => entry.pass === "grade")?.params ?? resolved.grade);
       if (graded) ctx.warnings.push(...gradeWarnings(resolved, graded.cube));
       const inputHash = hashValue({ renderer: ctx.rendererName, quality: ctx.quality, story: resolved, assets, words: ctx.words, grade: graded?.grade.cube ? await fileHash(path.resolve(ctx.project, graded.grade.cube)) : graded?.grade ?? null, version: VERSION, kit: await treeFingerprint(path.join(ROOT, "kit")), projectEntry: await fileHash(path.join(ctx.project, "remotion", "entry.tsx")) });
       return { inputHash, outputs: [rel(ctx.project, ctx.raw)] };
@@ -1922,8 +1926,9 @@ export function previewPath(sceneId) {
 // story directly.
 async function renderStory(ctx, adapter, options) {
   const segments = await renderUngraded(ctx, adapter, options);
-  // The grade (story.grade, src/grade.js) goes over the finished picture, so
-  // the caption legibility pass that follows measures the graded frames.
+  // The finish (story.finish and story.grade; src/finish_pass.js) goes over the
+  // finished picture, so the caption legibility pass that follows measures the
+  // finished frames.
   await ctx.adapters.grade(ctx.project, ctx.resolved, options.output);
   return segments;
 }

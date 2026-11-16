@@ -55,6 +55,8 @@ import { sceneWindows } from "@launchclip/core/transitions.mjs";
 import { allFontFaces } from "@launchclip/core/fonts.mjs";
 import { SEGMENT_SCHEMA, captionOverlay, collectAssets, hashSegments, hashValue, planSegments, sceneModels, segmentsForScenes, shownCaptionChunks, storyFrames, storySoundtrack } from "@launchclip/core/render-segments.mjs";
 import { storyBase } from "@launchclip/core/story.mjs";
+import { guardRect } from "@launchclip/core/motion-blur.mjs";
+import { protectRects } from "@launchclip/core/finish.mjs";
 import { blendSubframes, motionBlurOptions } from "./motion_blur.js";
 
 const execFileAsync = promisify(execFile);
@@ -131,6 +133,27 @@ export async function storyMotionBlurGuard(project, story, { models = sceneModel
   const format = { width, height, fps };
   const plan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide, zones: storyCaptionZones(story, storyBase(story) ? layoutPlan(story) : null) });
   return captionBlurGuard(story, chunks, plan, format);
+}
+
+/**
+ * The finish pass's protect mask (kit/core/finish.mjs protectRects): the
+ * brand frame's regions, and the caption band over each shown chunk (a
+ * little before its fade-in to a little after its fade-out).
+ */
+export async function storyFinishProtect(project, story, { models = sceneModels(story) } = {}) {
+  const { fps, width, height } = storyFrames(story);
+  const format = { width, height, fps };
+  const overlay = captionsOverlayOf(story);
+  const chunks = overlay ? await storyCaptionChunks(project, story, { models }) : null;
+  let captionRect = null;
+  if (chunks?.length) {
+    const hide = [...(overlay.hide ?? []), ...sceneWindows(story).scenes.filter((entry) => models.get(entry.id)?.hidesCaptions).map((entry) => [entry.start, entry.renderEnd])];
+    const plan = captionPlan(chunks, overlay, { brand: story.brand, format, story, hide, zones: storyCaptionZones(story, storyBase(story) ? layoutPlan(story) : null) });
+    const rect = guardRect(plan.options, format, /lc-cap-z\d/.test(plan.css));
+    // shortcut: zoned captions (cast stories) get no caption rect, as guardRect gives the whole frame; protect each zone's rect if those stories take a finish.
+    if (rect.height < height) captionRect = rect;
+  }
+  return protectRects(story, { captions: (chunks ?? []).map((chunk) => [chunk.start - 0.1, chunk.end + 0.2]), captionRect, format });
 }
 
 // The kit sources that render for each renderer (content, not mtimes, so a

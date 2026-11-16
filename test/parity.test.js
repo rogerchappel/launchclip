@@ -3,7 +3,7 @@
 // runs only with LAUNCHCLIP_PARITY=1. Reports land in qa/parity/<fixture>/.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {existsSync, readdirSync} from 'node:fs';
+import {existsSync, readFileSync, readdirSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {mkdtemp, rm} from 'node:fs/promises';
@@ -68,6 +68,19 @@ for (const {id, times} of STORY_PARITY) {
   test(`parity: story ${id} (ambient)`, {skip: enabled ? false : 'set LAUNCHCLIP_PARITY=1 to render story parity', timeout: 600_000}, async () => {
     const report = await runStoryParity(path.join(ROOT, 'examples', 'story', id), {times, out: path.join(ROOT, 'qa', 'parity', `story-${id}`)});
     for (const sample of report.samples) assert.ok(sample.pass, `story ${id} t=${sample.time}: ssim ${sample.ssim} < ${report.threshold.ssim}`);
+  });
+}
+
+// Finish passes (src/finish_pass.js): each runs over both renderers' stills of
+// one story, so a pass that is not seek-pure or reads anything but the frame
+// shows up here (test/fixtures/parity-finish/).
+const FINISH_DIR = path.join(ROOT, 'test', 'fixtures', 'parity-finish');
+for (const file of readdirSync(FINISH_DIR).filter(name => name.endsWith('.json')).sort()) {
+  const name = file.replace(/\.json$/, '');
+  test(`parity: finish ${name}`, {skip: enabled ? false : 'set LAUNCHCLIP_PARITY=1 to render finish parity', timeout: 600_000}, async () => {
+    const {story, times, finish} = JSON.parse(readFileSync(path.join(FINISH_DIR, file), 'utf8'));
+    const report = await runStoryParity(path.join(ROOT, 'examples', 'story', story), {times, patch: {finish}, out: path.join(ROOT, 'qa', 'parity', `finish-${name}`)});
+    for (const sample of report.samples) assert.ok(sample.pass, `finish ${name} t=${sample.time}: ssim ${sample.ssim} < ${report.threshold.ssim}`);
   });
 }
 

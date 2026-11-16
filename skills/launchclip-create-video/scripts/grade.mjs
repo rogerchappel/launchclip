@@ -5,7 +5,10 @@
 // read by path. The render applies the cube once to the finished video with
 // ffmpeg `lut3d` (src/grade.js), so both renderers match by construction.
 //
-//   story.grade = "warm-film" | "off" | {preset | cube, strength: 0–1}
+//   story.grade = "warm-film" | "off" | {preset | cube, strength: 0–1, tint}
+//
+// tint ("brand" or "#rrggbb") turns a preset's split tone to that hue: the
+// highlight tint takes it, the shadow tint its opposite.
 //
 // Pure ESM that imports only kit/core siblings. Canonical copy:
 // kit/core/grade.mjs.
@@ -50,20 +53,29 @@ export function gradeErrors(value, where = 'grade') {
   if (typeof value === 'string') return GRADE_PRESETS[value] ? [] : [`${where} must be "off", one of ${GRADE_PRESET_NAMES.join(', ')}, or {preset | cube, strength}`];
   if (!isObject(value)) return [`${where} must be "off", a preset name or {preset | cube, strength}`];
   const errors = [];
-  for (const key of Object.keys(value)) if (!['preset', 'cube', 'strength'].includes(key)) errors.push(`${where}.${key} is not a grade field (preset, cube, strength)`);
+  for (const key of Object.keys(value)) if (!['preset', 'cube', 'strength', 'tint'].includes(key)) errors.push(`${where}.${key} is not a grade field (preset, cube, strength, tint)`);
   if (value.preset !== undefined && value.cube !== undefined) errors.push(`${where} takes preset or cube, not both`);
   if (value.preset === undefined && value.cube === undefined) errors.push(`${where} needs a preset or a cube`);
   if (value.preset !== undefined && !GRADE_PRESETS[value.preset]) errors.push(`${where}.preset must be one of ${GRADE_PRESET_NAMES.join(', ')}`);
   if (value.cube !== undefined && !(typeof value.cube === 'string' && /\.cube$/i.test(value.cube.trim()))) errors.push(`${where}.cube must be a path to a .cube file`);
   if (value.strength !== undefined && !(typeof value.strength === 'number' && value.strength >= 0 && value.strength <= 1)) errors.push(`${where}.strength must be a number from 0 to 1`);
+  if (value.tint !== undefined && !(value.tint === 'brand' || /^#[0-9a-f]{6}$/i.test(String(value.tint)))) errors.push(`${where}.tint must be "brand" or a #rrggbb colour`);
+  if (value.tint !== undefined && value.cube !== undefined) errors.push(`${where}.tint re-tints a preset, not a .cube`);
   return errors;
 }
 
-/** The grade a story asks for, or null (none, off, or strength 0). → {preset | cube, strength} */
-export function resolveGrade(story) {
-  const value = story?.grade;
+/**
+ * The grade a story asks for (story.grade, or `value` when given), or null
+ * (none, off, or strength 0). tint "brand" becomes the brand's accent (else
+ * primary), or is dropped without one. → {preset | cube, strength, tint?}
+ */
+export function resolveGrade(story, value = story?.grade) {
   if (value === undefined || value === null || value === false || value === 'off' || gradeErrors(value).length) return null;
   const grade = typeof value === 'string' ? { preset: value, strength: 1 } : { ...value, strength: value.strength ?? 1 };
+  if (grade.tint === 'brand') {
+    const hex = [story?.brand?.colors?.accent, story?.brand?.colors?.primary].find((c) => /^#[0-9a-f]{6}$/i.test(String(c)));
+    if (hex) grade.tint = hex; else delete grade.tint;
+  }
   return grade.strength > 0 ? grade : null;
 }
 
@@ -86,10 +98,24 @@ function labToRgb([L, a, b]) {
 }
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
-/** One preset applied to an sRGB colour (channels 0–1). */
-export function gradeColor(name, rgb) {
-  const p = GRADE_PRESETS[name];
-  if (!p) throw new Error(`unknown grade preset ${name}`);
+// Split-tone strength a tint gives a preset that has none (OKLab a/b units).
+const TINT_CHROMA = 0.012;
+
+/** A preset's operations with its split tone turned to `tint`'s hue (#rrggbb): highlights take the hue, shadows its opposite. */
+export function tintPreset(p, tint) {
+  if (!tint) return p;
+  const [, ta, tb] = rgbToLab(hexRgb(tint));
+  const len = Math.hypot(ta, tb);
+  if (len < 1e-4) return p; // a grey tint has no hue
+  const unit = [ta / len, tb / len];
+  const along = (v, sign) => { const m = v ? Math.hypot(v[0], v[1]) : TINT_CHROMA; return [sign * unit[0] * m, sign * unit[1] * m]; };
+  return { ...p, highlight: along(p.highlight, 1), ...(p.shadow ? { shadow: along(p.shadow, -1) } : {}) };
+}
+
+/** One preset applied to an sRGB colour (channels 0–1), re-tinted when `tint` (#rrggbb) is given. */
+export function gradeColor(name, rgb, tint = null) {
+  if (!GRADE_PRESETS[name]) throw new Error(`unknown grade preset ${name}`);
+  const p = tintPreset(GRADE_PRESETS[name], tint);
   let [L, a, b] = rgbToLab(rgb);
   const sw = (1 - L) ** 2, hw = L ** 2;
   if (p.contrast) L = 0.5 + (L - 0.5) * p.contrast - (p.contrast - 1) * 0.5 * (L - 0.5) * Math.abs(L - 0.5) * 2;
@@ -114,7 +140,7 @@ export function buildCube(fn, size = GRADE_CUBE_SIZE) {
   return { size, data };
 }
 
-export const presetCube = (name, size = GRADE_CUBE_SIZE) => buildCube((rgb) => gradeColor(name, rgb), size);
+export const presetCube = (name, size = GRADE_CUBE_SIZE, tint = null) => buildCube((rgb) => gradeColor(name, rgb, tint), size);
 
 /** Mix a cube with identity: strength 0 is identity, 1 the cube. */
 export function mixCube(cube, strength) {

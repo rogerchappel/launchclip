@@ -3066,6 +3066,43 @@ frames, and the render stage warns when the grade takes a brand colour pair
 from 4.5:1 or more to under it. Generated styles take the look's preset
 (`GRADE_LOOK_DEFAULTS`), else the tone's (`GRADE_TONE_DEFAULTS`).
 
+`grade.tint` (`"brand"` or `#rrggbb`) turns a preset's split tone to that
+hue: highlights take it, shadows its opposite, at the preset's strength (a
+preset without one gets a light highlight tint). `"brand"` is the brand's
+accent, else primary. A `.cube` takes no tint.
+
+## Finish passes (`kit/core/finish.mjs`, `src/finish_pass.js`)
+
+`story.finish` is a list of `{pass, ...params}`, at most 8, each pass once;
+every pass is off unless listed. Passes run in chain order whatever order
+the list has: `aberration` (`px` 0.5–4, `falloff` 0–1), `grade` (the
+`story.grade` fields), `grain` (`amount` 0–1, `size` 1–4 px, `mono`,
+`seed`). Ranges and defaults: `STORY_FINISH_PASSES` in `kit/core/story.mjs`.
+
+`launchclip finish` runs the chain over the finished render, in place of
+the ffmpeg grade, before the caption legibility pass: ffmpeg decodes to
+RGBA, one headless Chromium page draws each pass as a WebGL2 fragment
+shader (`src/finish_shaders.js`), and ffmpeg encodes H.264 with the
+original audio. The same code runs after either renderer, so the finish is
+in parity by construction. The grade joins the chain (a `{pass: "grade"}`
+entry, else `story.grade`) only when another pass is listed; a grade alone
+stays the `lut3d` pass. The GL grade samples the same cube tetrahedrally
+and truncates to 8 bits as `lut3d` does (ΔE2000 under 1 on a chart).
+
+Every value is a function of the absolute frame number, the size and the
+params (grain hashes cell, frame and seed), so frame N finished alone equals
+frame N in a sequence and segment joins never seam.
+
+Protect mask: every pass but the grade mixes back to its input pixel inside
+the caption band while a caption shows (0.1 s before a chunk to 0.2 s after)
+and inside the brand frame's regions while the frame shows, feathered
+12 px, at most 16 rects a frame. Zoned captions (cast stories) are not
+protected yet.
+
+Cost, measured on an M4 at 1080×1920: about 4 s to start, then about
+86 ms a frame for three passes (input over loopback HTTP, output over a
+WebSocket, x264 `medium`).
+
 ## Motion blur (`src/motion_blur.js`, `kit/core/motion-blur.mjs`)
 
 `story.motion.blur`: `true` (`{samples: 3, shutter: 1}`) or `{samples?: 2–6,
