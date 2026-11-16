@@ -32,6 +32,7 @@ import { driftEligible } from "@launchclip/core/ambient.mjs";
 import { stateTimes } from "@launchclip/core/shot-states.mjs";
 import { resolveGrammar } from "@launchclip/core/grammar.mjs";
 import { grammarMotionFindings, sceneMotionFindings } from "@launchclip/core/motion-check.mjs";
+import { vfxCueFindings } from "@launchclip/core/vfx/plan.mjs";
 import { renderedModels } from "./direction_guardrails.js";
 
 // Thresholds (docs/DIRECTION_GUARDRAILS.md §7).
@@ -220,12 +221,14 @@ export function stateGate(story) {
  * The motion check (§8, kit/core/motion-check.mjs): the story's grammar and
  * every scene's timing and op list against the rules of good motion. Errors:
  * linear-move, entrance-ease, exit-ease, exit-longer, long-stagger. Warnings:
- * crowded-move, no-rest, late-beat.
+ * crowded-move, no-rest, late-beat, and the VFX cue rules (vfx-crowd,
+ * vfx-words, vfx-over-caption; kit/core/vfx/plan.mjs vfxCueFindings).
  */
 export function choreographyGate(story) {
   const { entries } = renderedModels(story);
   const findings = grammarMotionFindings(resolveGrammar(story));
   for (const [id, { entry, model }] of entries) findings.push(...sceneMotionFindings({ id, motion: model.motion, ops: modelOps(model) ?? [], states: stateTimes(entry.scene), hits: (Array.isArray(entry.scene?.hits) ? entry.scene.hits : []).map((hit) => Number(hit?.at)) }));
+  findings.push(...vfxCueFindings(story));
   // Errors first, so the 40 kept are the ones that fail the gate.
   return gateResult(findings.sort((a, b) => (a.severity === "error" ? 0 : 1) - (b.severity === "error" ? 0 : 1)), { scenes: entries.size });
 }
