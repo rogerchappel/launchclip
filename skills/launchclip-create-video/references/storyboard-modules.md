@@ -81,7 +81,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - Two world scenes of the same place (kind, time and props) joined by a cut make the room jump: make them one world scene, or move to a different place.
 - A cast-scene over a world plate shares the plate's window (same start and end), so its set never pops in mid-plate.
 - Acting cues (cast-scene cues[].action): look-far (shades the eyes and looks into the distance (default target: far)); turn-to-look (turns to face the target and looks at it, keeping the pose); gaze-at (looks at the target (head and eyes), keeping the pose and facing); point-at (faces the target and points at it); walk-to (turns and walks toward the target at a walking pace, then stands: all the way when the scene leaves time, else as far as it does); stand-up (gets up from a seat (seated sets) and stands); stretch (stretches both arms overhead).
-- Targets (cue or actor `target`): far, window, horizon, street, skyline, left, right, {prop: id} (a prop in the world beneath), {character: id} or {x, y}. A character with a target faces it and turns its head toward it, not the camera: a standing character looking at something far (window, street, horizon, skyline) turns its back to the camera; seated or for nearer things it turns three-quarters. A cue may set view: front | three-quarter | back.
+- Targets (cue or actor `target`): far, window, horizon, street, skyline, left, right, {prop: id} (a prop in the world beneath), {character: id}, {scene: id, anchor: name} (a point a graphic on the same plate publishes, e.g. node-graph's hub, node-<id> and converge; a cue with one and no at plays as it lands) or {x, y}. A character with a target faces it and turns its head toward it, not the camera: a standing character looking at something far (window, street, horizon, skyline) turns its back to the camera; seated or for nearer things it turns three-quarters. A cue may set view: front | three-quarter | back.
 - Never cover what a character looks at: a card must not sit over the window, street or skyline point while someone looks at it (the acting gate fails it). Put the card to one side, or bring it in after the look.
 - If the idea is an action (look away, get up, walk over, point at the proof), a character performs it on screen on that line, toward what it is about: a bench sitter looking at the street turns toward the street.
 - Shot framing (cast-scene params.shot, character-cameo params.shot): wide | medium | close. wide shows whole figures on the set's floor; medium is knees up and close is chest up, with faces big enough to read on a phone. A 9:16 cast-scene in standing, phone, kitchen-counter, sofa, park-bench defaults to medium (wide when someone walks); others default to wide. The kit keeps every framing inside the safe zone and every face above the caption band, so frame closer with shot, not with zooms. A cameo with shot medium or close puts the head at the top of its rect and runs the body off the frame's bottom edge, so it needs no floor.
@@ -2483,6 +2483,19 @@ params:
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build, node-<id>, converge
 
+### sprout (keeps captions)
+Labels that branch out of an element another scene already shows (an ad card, a hub), on glowing wires with pulses, so nothing new appears unattached: an overlay on a higher track aimed at that scene's anchor. Each wire grows from the element's edge and its label lands as it arrives; pulses then run out to the labels on the beat and light them.
+params:
+- from: {scene, anchor}: an anchor another scene publishes (required; that element must stay on screen for this whole scene, pinned across a cut if needed)
+- branches: [label ≤ 16 | {label ≤ 16, icon? (kit/core/icons.mjs), id? (default b<i>)}] 1–4 (events branch-<id>)
+- side: auto (default: the side of the element with the most room) | below | above | left | right
+- tone: wires and rims: primary | accent (default) | paper | #rrggbb
+- at: when the first wire leaves: seconds from scene start (optional; else a matching hit, else a default); default half a beat after the anchor lands
+- bpm: beats per minute for default timing, 60–200 (default 120)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, branch-<id>
+
 ### drop-grid (keeps captions)
 Things pile up as they are said: 1–40 cards, coins or tiles drop into a grid one by one ("10 times a day": ten cards land), each with a weighted fall, a squash on contact, a contact shadow and a puff of dust, over faint empty slots; an optional counter climbs with every landing, and confetti bursts and the grid ripples when it fills. Landed items rock gently on their base. Time each drop to its word with params.times.
 params:
@@ -2776,6 +2789,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | feynman-diagram | 2 s | 0.5 s | scene − 0.65 s | lines draw in 0.6 s each, about 0.55 s apart from at; both compress so every label stays up 1 s plus 0.3 s a word before the exit, and a label the scene has no time for is dropped; vertices pop as the first line reaches them; the caption shows with the build |
 | line-diagram | 2 s | 0.5 s | scene − 0.65 s | strokes draw in 0.6 s, 0.5 s apart from at; both compress so every label stays up 1 s plus 0.3 s a word before the exit, and a label the scene still has no time for is dropped (keep labels few and short, or lengthen the scene); an explicit line at must leave its label that read |
 | node-graph | 2 s | 0.5 s | scene − 0.65 s | the hub pops on the first beat after 0.5 s; nodes flock out from the middle of the fan outwards a quarter beat apart; a pulse lands on every beat once the wires are drawn; converge falls on the first bar line two beats after the last wire, or the last beat before the exit |
+| sprout | 2 s | 0.5 s | scene − 0.65 s | wires leave half a beat after the anchor lands, nearest first, a quarter beat apart; each label lands 0.4 s after its wire leaves; a pulse reaches one label per beat once all have landed |
 | drop-grid | 2 s | 0.5 s | scene − 0.65 s | each item lands TACTILE.fall s after its drop time; time drops to the words that count them; the last item lands before the exit |
 | live-counter | 2 s | 0.5 s | scene − 0.65 s | the count runs from at until just before the exit, so the figure is moving whenever it is on screen |
 | live-bars | 2 s | 0.5 s | scene − 0.65 s | the bars climb from at until just before the exit |
