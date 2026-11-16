@@ -87,6 +87,17 @@ export const STORY_LOOK_KEYS = ["name", "strength", "step", "furniture", "palett
 // story.grade presets (kit/core/grade.mjs GRADE_PRESET_NAMES; kept in step by
 // test/grade.test.js, which also runs gradeErrors against validateGrade).
 export const STORY_GRADE_PRESETS = ["clean", "warm-film", "teal-amber", "cool-tech", "neon-crush", "bleach", "ink-mono"];
+export const STORY_GRADE_KEYS = ["preset", "cube", "strength", "tint"];
+// story.finish passes in chain order (optical first, film last) and their
+// params (docs/FINISHING_AND_ELEMENTS_RFC.md §E.1; kit/core/finish.mjs reads
+// this table): [min, max, default] for a number, or a boolean default. grade
+// takes the story.grade fields instead.
+export const STORY_FINISH_MAX = 8;
+export const STORY_FINISH_PASSES = Object.freeze({
+  aberration: Object.freeze({ px: [0.5, 4, 1.5], falloff: [0, 1, 1] }),
+  grade: null,
+  grain: Object.freeze({ amount: [0, 1, 0.06], size: [1, 4, 1.5], mono: true, seed: [0, 999999, 0] })
+});
 // story.light (kit/core/lighting.mjs LIGHT_PARAMS, LIGHT_PRESETS): ranges per
 // layer, kept in step by test/lighting.test.js.
 export const STORY_LIGHT_PRESETS = ["none", "studio", "spot", "soft"];
@@ -122,7 +133,8 @@ const EPS = 1e-6;
 // look: the whole-scene treatment (a style pack's look; kit/core/look.mjs).
 // light: the story's lighting (a style pack's light; kit/core/lighting.mjs).
 // grade: the colour grade applied to the finished render (a style pack's grade; kit/core/grade.mjs).
-const TOP_LEVEL = new Set(["grade", "look", "light", "cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine", "bible"]);
+// finish: whole-frame shader passes over the finished render (kit/core/finish.mjs, src/finish_pass.js).
+const TOP_LEVEL = new Set(["grade", "finish", "look", "light", "cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine", "bible"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -606,6 +618,8 @@ export function validateStory(story, { modules, moduleParams } = {}) {
   validateLook(story.look, err);
   // grade: the 3D LUT over the finished render (kit/core/grade.mjs).
   validateGrade(story.grade, err);
+  // finish: shader passes over the finished render (kit/core/finish.mjs).
+  validateFinish(story.finish, err);
 
   // variants: one designed variant per module (docs/SEEDED_STYLES_RFC.md §3.2).
   if (story.variants !== undefined && story.variants !== null) {
@@ -1812,15 +1826,40 @@ function validateMedium(value, err, path = "medium") {
 // file stays import-free.
 function validateGrade(value, err, path = "grade") {
   if (value === undefined || value === null || value === false || value === "off") return;
-  const shape = `"off", one of ${STORY_GRADE_PRESETS.join(", ")}, or {preset | cube, strength}`;
+  const shape = `"off", one of ${STORY_GRADE_PRESETS.join(", ")}, or {preset | cube, strength, tint}`;
   if (typeof value === "string") { if (!STORY_GRADE_PRESETS.includes(value)) err(`${path} must be ${shape}`); return; }
   if (!isObject(value)) { err(`${path} must be ${shape}`); return; }
-  for (const key of Object.keys(value)) if (!["preset", "cube", "strength"].includes(key)) err(`${path}.${key} is not a grade field (preset, cube, strength)`);
+  for (const key of Object.keys(value)) if (!STORY_GRADE_KEYS.includes(key)) err(`${path}.${key} is not a grade field (${STORY_GRADE_KEYS.join(", ")})`);
   if (value.preset !== undefined && value.cube !== undefined) err(`${path} takes preset or cube, not both`);
   if (value.preset === undefined && value.cube === undefined) err(`${path} needs a preset or a cube`);
   if (value.preset !== undefined && !STORY_GRADE_PRESETS.includes(value.preset)) err(`${path}.preset must be one of ${STORY_GRADE_PRESETS.join(", ")}`);
   if (value.cube !== undefined && !(typeof value.cube === "string" && /\.cube$/i.test(value.cube.trim()))) err(`${path}.cube must be a path to a .cube file`);
   if (value.strength !== undefined && !(typeof value.strength === "number" && value.strength >= 0 && value.strength <= 1)) err(`${path}.strength must be a number from 0 to 1`);
+  if (value.tint !== undefined && !(value.tint === "brand" || /^#[0-9a-f]{6}$/i.test(String(value.tint)))) err(`${path}.tint must be "brand" or a #rrggbb colour`);
+  if (value.tint !== undefined && value.cube !== undefined) err(`${path}.tint re-tints a preset, not a .cube`);
+}
+
+// story.finish: [{pass, ...params}], at most STORY_FINISH_MAX, each pass once.
+function validateFinish(value, err, path = "finish") {
+  if (value === undefined || value === null) return;
+  if (!Array.isArray(value)) { err(`${path} must be a list of {pass, ...params}`); return; }
+  if (value.length > STORY_FINISH_MAX) err(`${path} takes at most ${STORY_FINISH_MAX} passes`);
+  const names = Object.keys(STORY_FINISH_PASSES), seen = new Set();
+  value.forEach((entry, i) => {
+    const at = `${path}[${i}]`;
+    if (!isObject(entry) || !names.includes(entry.pass)) { err(`${at}.pass must be one of ${names.join(", ")}`); return; }
+    if (seen.has(entry.pass)) err(`${at}: ${entry.pass} is listed twice`);
+    seen.add(entry.pass);
+    const { pass, ...params } = entry;
+    if (pass === "grade") { validateGrade(params, err, at); return; }
+    const spec = STORY_FINISH_PASSES[pass];
+    for (const [key, v] of Object.entries(params)) {
+      const rule = spec[key];
+      if (rule === undefined) err(`${at}.${key} is not a ${pass} param (${Object.keys(spec).join(", ")})`);
+      else if (typeof rule === "boolean") { if (typeof v !== "boolean") err(`${at}.${key} must be true or false`); }
+      else if (!(typeof v === "number" && v >= rule[0] && v <= rule[1])) err(`${at}.${key} must be a number from ${rule[0]} to ${rule[1]}`);
+    }
+  });
 }
 
 // The same rules as kit/core/look.mjs lookErrors(), kept here so this file
