@@ -1,0 +1,16 @@
+{
+  "describe": "motif grid",
+  "project": "examples/story/minimal",
+  "times": [
+    1.2,
+    5.5
+  ],
+  "patch": {
+    "background": {
+      "kind": "motif",
+      "params": {
+        "shape": "grid"
+      }
+    }
+  }
+}
