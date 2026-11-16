@@ -17,7 +17,7 @@
 // …layout} or null (does not fit that width), and draw rect-local from the
 // box place() returns.
 
-import {contrastRatio, createBase, mixColor, r2, rt, textWidth, timingRules} from './catalog-b-base.mjs';
+import {balancedLines, contrastRatio, createBase, mixColor, r2, rt, textWidth, timingRules} from './catalog-b-base.mjs';
 import {abs, el, set, tw} from './catalog-b-view.mjs';
 import {headRect} from './catalog-c.mjs';
 import {iconNode, iconPath} from './icons.mjs';
@@ -239,10 +239,10 @@ export const row = (x, y, width, height, children, {gap = 0} = {}) => el('div', 
 /** An in-flow box (flex child) of a fixed width and optional height. */
 export const flow = (id, width, height, style, children) => el('div', id, {position: 'relative', flex: 'none', width, ...(height === undefined ? {} : {height}), ...style}, children);
 /** In-flow wrapped text. */
-export const flowText = (id, width, style, value) => flow(id, width, undefined, {margin: 0, whiteSpace: 'normal', overflowWrap: 'break-word', ...style}, [value]);
+export const flowText = (id, width, style, value) => flow(id, width, undefined, {margin: 0, whiteSpace: 'normal', overflowWrap: 'break-word', textWrap: 'balance', ...style}, [value]);
 
 /** Wrapped text block (rect-local). */
-export const block = (id, x, y, width, style, value, extra = {}) => el('div', id, abs(x, y, width, undefined, {margin: 0, whiteSpace: 'normal', overflowWrap: 'break-word', ...style, ...extra}), [value]);
+export const block = (id, x, y, width, style, value, extra = {}) => el('div', id, abs(x, y, width, undefined, {margin: 0, whiteSpace: 'normal', overflowWrap: 'break-word', textWrap: 'balance', ...style, ...extra}), [value]);
 
 // ---------------------------------------------------------------------------
 // Shared motion
@@ -335,9 +335,13 @@ export function tintBehind(b, tone, text, {alpha = 0.34, min = 4.5} = {}) {
 /**
  * The lines fitText's conservative wrap makes of `text` (catalogue B's
  * advance model), for a variant that draws per line. The model overestimates
- * widths, so each forced line fits the browser's real width too.
+ * widths, so each forced line fits the browser's real width too. Balanced
+ * (balancedLines), as the flowing text is.
  */
 export function wrapWords(text, size, family, width) {
+  return balancedLines(w => greedyWords(text, size, family, w), width);
+}
+function greedyWords(text, size, family, width) {
   const lines = [];
   const space = textWidth(' ', size, family);
   let line = '', used = 0;

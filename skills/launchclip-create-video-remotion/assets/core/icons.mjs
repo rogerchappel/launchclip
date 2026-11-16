@@ -324,3 +324,56 @@ export function iconNode(name, {id = null, x = 0, y = 0, size = 48, color = '#ff
   return el('svg', id, {position: 'absolute', left: x, top: y, width: size, height: size, overflow: 'visible', ...style}, paths,
     {width: size, height: size, viewBox: `0 0 ${ICON_BOX} ${ICON_BOX}`, fill: 'none'});
 }
+
+// ---------------------------------------------------------------------------
+// A relevant icon for some words (docs/KIT_CONTRACTS.md, "Icon set"): an icon
+// only when a word names it outright, else none. A loose match (a word inside
+// a longer name, a hash of the words) draws an icon that means nothing.
+
+/** Common words → the icon that names them. Every target is an icon name. */
+export const ICON_ALIASES = Object.freeze({
+  fast: 'zap', speed: 'zap', quick: 'zap', instant: 'zap', power: 'zap', energy: 'zap',
+  secure: 'shield', security: 'shield', safe: 'shield', safety: 'shield', protect: 'shield', protection: 'shield', private: 'lock', privacy: 'lock', password: 'lock',
+  time: 'clock', hour: 'clock', minute: 'clock', late: 'clock', deadline: 'timer', wait: 'hourglass',
+  money: 'wallet', cost: 'wallet', price: 'wallet', budget: 'wallet', cheap: 'piggy-bank', saving: 'piggy-bank', savings: 'piggy-bank', pay: 'wallet', payment: 'wallet', upfront: 'coins', dollar: 'dollar-sign', invoice: 'receipt',
+  idea: 'lightbulb', insight: 'lightbulb', growth: 'trending-up', grow: 'trending-up', revenue: 'trending-up',
+  team: 'users', people: 'users', customer: 'users', audience: 'users', user: 'users', community: 'users',
+  find: 'search', email: 'mail', inbox: 'mail', message: 'message-circle', chat: 'message-circle', reply: 'message-circle',
+  weekend: 'calendar', schedule: 'calendar', date: 'calendar', plan: 'calendar', diary: 'calendar',
+  weather: 'sun', sunny: 'sun', summer: 'sun', sunlight: 'sun', rain: 'cloud-rain', wet: 'droplet', water: 'droplet', oil: 'droplet', oiling: 'droplet', stain: 'droplet',
+  paint: 'paintbrush', brush: 'paintbrush', coat: 'paintbrush', build: 'hammer', builder: 'hammer', diy: 'hammer', repair: 'wrench', fix: 'wrench', maintenance: 'wrench', tool: 'wrench', tools: 'wrench',
+  home: 'house', done: 'check', finished: 'check', complete: 'check', warning: 'triangle-alert', risk: 'triangle-alert', danger: 'triangle-alert', problem: 'triangle-alert',
+  magic: 'sparkles', data: 'database', developer: 'code', software: 'code', phone: 'smartphone', mobile: 'smartphone', film: 'video', song: 'music', love: 'heart',
+  goal: 'target', aim: 'target', launch: 'rocket', ship: 'rocket', chart: 'chart-bar', stats: 'chart-bar', analytics: 'chart-bar',
+  tree: 'tree-pine', timber: 'trees', wood: 'trees', forest: 'trees', eco: 'leaf', green: 'leaf', hot: 'flame', heat: 'flame', fire: 'flame', cold: 'snowflake', winter: 'snowflake',
+  world: 'globe', global: 'globe', location: 'map-pin', place: 'map-pin', travel: 'plane', delivery: 'truck', shipping: 'truck', learn: 'graduation-cap', course: 'graduation-cap', study: 'book',
+  work: 'briefcase', job: 'briefcase', business: 'briefcase', shop: 'shopping-cart', buy: 'shopping-cart', photo: 'camera', picture: 'image', document: 'file-text', write: 'pencil', recycling: 'recycle',
+  notification: 'bell', alert: 'bell', view: 'eye', see: 'eye', like: 'thumbs-up', deal: 'handshake', partner: 'handshake', fair: 'scale', balance: 'scale', law: 'scale', performance: 'gauge',
+  ai: 'sparkles', robot: 'bot', agent: 'bot', think: 'brain', mind: 'brain', chip: 'cpu', server: 'server', voice: 'mic', podcast: 'mic', listen: 'headphones'
+});
+
+// Icon names that are also everyday words with another sense ("save now",
+// "key point", "type of wood"): never matched from words alone.
+const LOOSE_NAMES = new Set(['save', 'type', 'option', 'command', 'group', 'list', 'table', 'frame', 'move', 'copy', 'merge', 'split', 'crop', 'scan', 'share', 'key', 'link',
+  'hash', 'minus', 'plus', 'divide', 'equal', 'slash', 'ban', 'cross', 'circle', 'square', 'box', 'layers', 'layout', 'menu', 'grip', 'space', 'text', 'quote', 'undo', 'redo',
+  'rotate', 'flip', 'sort', 'filter', 'focus', 'expand', 'shrink', 'pin', 'contrast', 'option', 'pointer', 'mouse', 'cast', 'cable', 'tag', 'tags', 'badge', 'ratio', 'radius',
+  'spline', 'sigma', 'pi', 'omega', 'origin', 'drill', 'stamp', 'shell', 'signal', 'fence', 'dot', 'bold', 'italic', 'underline', 'strikethrough', 'baseline']);
+const STOP = new Set(['the', 'and', 'for', 'you', 'your', 'our', 'are', 'not', 'but', 'with', 'from', 'that', 'this', 'what', 'why', 'how', 'who', 'all', 'any', 'can', 'one', 'two', 'now', 'new', 'get', 'more', 'less', 'really', 'very', 'just', 'its', 'it']);
+const singular = word => (word.length > 4 && word.endsWith('ies') ? `${word.slice(0, -3)}y` : word.length > 3 && word.endsWith('s') && !word.endsWith('ss') ? word.slice(0, -1) : word);
+
+/**
+ * The icon that `text` names outright → an icon name, or null. A word matches
+ * an alias (ICON_ALIASES) or a whole one-word icon name; an icon name that is
+ * also a loose everyday word ("save", "key") never matches. Words are tried
+ * in order, the first match wins.
+ */
+export function relevantIcon(text) {
+  const words = String(text ?? '').toLowerCase().split(/[^a-z0-9]+/).filter(word => word.length >= 2 && !STOP.has(word));
+  for (const raw of words) {
+    for (const word of new Set([raw, singular(raw)])) {
+      if (Object.hasOwn(ICON_ALIASES, word)) return ICON_ALIASES[word];
+      if (word.length >= 3 && !LOOSE_NAMES.has(word) && isIcon(word)) return word;
+    }
+  }
+  return null;
+}

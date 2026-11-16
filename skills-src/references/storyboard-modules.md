@@ -340,8 +340,8 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | calls to action, or the loop ending | cta |
 | asks the viewer to subscribe, like or ring the bell partway through a long video ("if you're new here, subscribe"): a glass subscribe pill on an overlay track (track 1+) over the scene, clicked on the word | subscribe-cta |
 | opens or closes a channel's video on its name ("welcome back to …", "see you in the next one"): the channel's glass logo sting, 3–5 s, as the first or last scene | logo-sting |
-| names a claim, a problem or a turn in a few words ("the problem is", "here's the thing", "too slow"): a big word or phrase with an icon and a sub-line (on a card beside the presenter, or full frame) | concept-card |
-| lists two to five things, features, steps or audiences ("X, Y and Z", "three things"): an icon per item that pops on its word | icon-row |
+| names a claim, a problem or a turn in a few words ("the problem is", "here's the thing", "too slow"): a big word or phrase with a sub-line, set free on the footage or on a scrim, glass or sticker look (variant free, scrim, glass, sticker) rather than a box; give an icon only when one names the idea ("droplet" for oiling, "shield" for security), else leave it out | concept-card |
+| lists two to five things, features, steps or audiences ("X, Y and Z", "three things"): the items pop on their words as chips, ticks, tags or a glass list (variant chips, ticks, glass, tags); give an item an icon only when one names it ("truck" for delivery), never for names like a timber or a brand | icon-row |
 | opens a new section or chapter ("part two", "first, the problem", "chapter", "let's start with"): the brand frame's kicker and the section title (usually an insert) | section-card |
 | talks about a thing the product is or makes (a box, a launch, a calendar, a laptop, an inbox): a simple illustrated object with a caption | object-card |
 | states a real figure with its source in the brief or assets ("87% of", "saves $1,400", "3× faster"): the figure counts up with a label and a source line (no source, no stat-card) | stat-card |
@@ -1176,10 +1176,10 @@ params:
 events: trace, doodle-<i>
 
 ### concept-card (keeps captions)
-A big word or short phrase (≤ 3 words) with an icon from the icon set and a sub-line, on a brand card beside the presenter or full frame. For naming a claim, a problem or a turn ("Security first", "Too slow", "Now: one click").
+A big word or short phrase (≤ 3 words) with a sub-line and, only when one names the idea, an icon from the icon set: free type, a scrim, a glass plate, a sticker or a brand card, beside the presenter or full frame. For naming a claim, a problem or a turn ("Security first", "Too slow", "Now: one click").
 params:
 - text: word or phrase ≤ 28, ≤ 3 words
-- icon: icon name from kit/core/icons.mjs (optional)
+- icon: icon name from kit/core/icons.mjs, only when it names the idea (optional; none is drawn without one)
 - sub: sub-line ≤ 64 (optional)
 - tone: word colour: paper (default) | primary | accent
 - at: word time
@@ -1187,12 +1187,12 @@ params:
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: icon, word, sub
-variants: stacked (default), side-icon, banner, marker
+variants: stacked (default), side-icon, banner, marker, free, scrim, glass, sticker
 
 ### icon-row (keeps captions)
-Two to five icons from the icon set, each with a short label, that pop in one by one on their words: a row, or a list when the labels are long or the room is narrow. For lists of features, steps or audiences.
+Two to five short labels, each with an icon from the icon set only when one names it, that pop in one by one on their words: chips, ticks, tags, a glass list, tiles, pills, an orbit or a numbered list. For lists of features, steps or audiences.
 params:
-- items: [{icon: icon name, label ≤ 24, at?}] 2–5
+- items: [{label ≤ 24, icon?: icon name only when it names the item, at?}] 2–5 (an item with no icon shows its number or nothing)
 - title: string ≤ 48 (optional)
 - layout: auto (default) | row | list
 - stagger: seconds between pops (default 0.18)
@@ -1201,7 +1201,7 @@ params:
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: item-<i>
-variants: tiles (default), pills, orbit, list
+variants: tiles (default), pills, orbit, list, chips, ticks, glass, tags
 
 ### section-card (keeps captions)
 A section opener in the brand frame: a kicker ("Part 2", "The fix"), a rule that draws out and a big section title, with an optional chapter number or icon. For the start of each section of a longer video.

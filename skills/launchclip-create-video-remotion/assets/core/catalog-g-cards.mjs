@@ -10,6 +10,7 @@
 import {fitText, r2, rt} from './catalog-b-base.mjs';
 import {abs, el, set, tw} from './catalog-b-view.mjs';
 import {CARD_PARAMS, after, at, bob, cardTiming, column, createCardBase, flow, flowText, iconParam, iconTile, pick, pop, rise, row, solidFill, spread, tintBehind, wrapWords} from './catalog-g-base.mjs';
+import {CONCEPT_LOOKS, CONCEPT_LOOK_VIEWS, ICON_ROW_LOOKS, ICON_ROW_LOOK_VIEWS, conceptLookContent, conceptLookTimeline, conceptLooks, iconRowLookContent, iconRowLookTimeline, iconRowLooks} from './catalog-g-looks.mjs';
 import {ICON_STROKE, iconNode} from './icons.mjs';
 
 const TONES = ['primary', 'accent', 'paper'];
@@ -21,8 +22,9 @@ const hidden = {opacity: 0};
 // Variants: stacked (the icon over the word, the original), side-icon (a
 // solid icon tile beside the word, a rule and the sub-line), banner (the word
 // on a brand band that wipes in, the icon on a disc at its end) and marker
-// (a big left-set word that a highlighter sweeps under).
-export const CONCEPT_VARIANTS = Object.freeze(['stacked', 'side-icon', 'banner', 'marker']);
+// (a big left-set word that a highlighter sweeps under), then the looks
+// beyond the box in catalog-g-looks.mjs (free, scrim, glass, sticker).
+export const CONCEPT_VARIANTS = Object.freeze(['stacked', 'side-icon', 'banner', 'marker', ...CONCEPT_LOOKS]);
 
 function resolveConcept(params, ctx) {
   const b = createCardBase('concept-card', params, ctx, {allowed: ['text', 'icon', 'sub', 'tone', 'at'], required: ['text'], variants: CONCEPT_VARIANTS});
@@ -78,31 +80,38 @@ function resolveConcept(params, ctx) {
     const subGap = u(30 * k);
     return {mode: 'marker', iconSize, iconGap, word, sub: subFit, subGap, height: r2(iconSize + iconGap + word.lines * word.size * 1.08 + (subFit ? subGap + subFit.lines * subFit.size * 1.25 : 0))};
   };
-  const shapes = {'side-icon': side, banner, marker};
+  const shapes = {'side-icon': side, banner, marker, ...conceptLooks(b, {text, glyph, sub})};
   const shaped = shapes[b.variant];
   const original = width => [...b.scales.map(k => () => stack(width, k)), ...(glyph ? [1, 0.82].map(k => () => inline(width, k)) : [])];
   // A variant tries its own shape at every scale; a room too small for it
   // falls back to the original (and then its compact inline form).
-  const measure = (width, maxHeight) => pick([...(shaped ? b.scales.map(k => () => shaped(width, k)) : []), ...original(width)], maxHeight);
+  // A look short of room drops its icon before it falls back to the box.
+  const bare = glyph && CONCEPT_LOOKS.includes(b.variant) ? conceptLooks(b, {text, glyph: null, sub})[b.variant] : null;
+  const measure = (width, maxHeight) => pick([...(shaped ? b.scales.map(k => () => shaped(width, k)) : []),
+    ...(bare ? b.scales.map(k => () => (layout => layout && {...layout, noIcon: true})(bare(width, k))) : []), ...original(width)], maxHeight);
   const box = b.place(measure, {maxWidth: u(portrait ? 900 : b.variant === 'stacked' ? 1100 : 1300)});
   const L = box.layout;
+  const icon = L.noIcon ? null : glyph;
   const t0 = b.timeOf('word', p.at, 'params.at', 0.05);
-  const iconAt = glyph ? rt(Math.max(b.start, t0 - 0.15)) : null;
+  const iconAt = icon ? rt(Math.max(b.start, t0 - 0.15)) : null;
   const subAt = sub ? after(b, t0, 0.35) : null;
-  if (glyph) b.events.push({id: `${b.id}-icon`, name: 'icon', time: iconAt, endTime: rt(iconAt + 0.5), role: 'emphasis', cue: 'pop-soft'});
+  if (icon) b.events.push({id: `${b.id}-icon`, name: 'icon', time: iconAt, endTime: rt(iconAt + 0.5), role: 'emphasis', cue: 'pop-soft'});
   b.events.push({id: `${b.id}-word`, name: 'word', time: t0, endTime: rt(t0 + 0.45), role: 'title', cue: 'whoosh'});
   if (sub) b.events.push({id: `${b.id}-sub`, name: 'sub', time: subAt, endTime: rt(subAt + 0.45), role: 'detail'});
   const tile = solidFill(b, 'primary', 3);
-  const content = {box: {x: box.x, y: box.y, width: box.width}, layout: L, text, icon: glyph, sub, wordColor, iconColor: colors.primary, subColor: theme.muted, t0, iconAt, subAt};
+  const content = {box: {x: box.x, y: box.y, width: box.width}, layout: L, text, icon, sub, wordColor, iconColor: colors.primary, subColor: theme.muted, t0, iconAt, subAt};
   if (L.mode === 'side') Object.assign(content, {tileFill: tile.fill, tileInk: tile.ink, ruleColor: colors.accent});
   if (L.mode === 'banner') Object.assign(content, {bandFill: tile.fill, bandInk: tile.ink, discFill: theme.bg, discEdge: colors.primary});
   if (L.mode === 'marker') Object.assign(content, {markFill: tintBehind(b, 'accent', wordColor), markLines: wrapWords(text, L.word.size, 'display', r2(box.width - u(24)))});
+  // A look is its own surface: no card under it.
+  if (CONCEPT_LOOKS.includes(L.mode)) { Object.assign(content, conceptLookContent(b, ctx, L)); b.model.surface = 'plate'; }
   return b.finish(content, {minTextPx: Math.min(L.word.size, L.sub?.size ?? Infinity)});
 }
 
 function conceptView(model) {
   const {id, fonts, unit} = model;
   const c = model.content, L = c.layout, B = c.box;
+  if (CONCEPT_LOOK_VIEWS[L.mode] && CONCEPT_LOOKS.includes(L.mode)) return CONCEPT_LOOK_VIEWS[L.mode](model);
   if (L.mode === 'side' || L.mode === 'banner' || L.mode === 'marker') return CONCEPT_VIEWS[L.mode](model);
   const stacked = L.mode === 'stack';
   const textW = stacked ? B.width : L.textW;
@@ -125,9 +134,15 @@ const CONCEPT_VIEWS = {
       // The bare glyph in the brand colour beside the word: no tile behind it (the icon-tile tell).
       ? flow(`${id}-icon`, L.tile, L.tile, {...hidden, transformOrigin: '50% 50%'}, [iconNode(c.icon, {x: r2(L.tile * 0.08), y: r2(L.tile * 0.08), size: r2(L.tile * 0.84), color: c.iconColor, stroke: 1.6})])
       : flow(`${id}-bar`, L.tile, L.textH, {borderRadius: L.tile, background: c.tileFill, transformOrigin: '50% 0%', transform: 'scale(1, 0)'}, []);
+    // The word a line per block in a shrink-wrapped column, so the rule under
+    // it is as wide as its widest line (measured by the browser), not a set bar.
+    const word = el('div', `${id}-word`, {...hidden, position: 'relative', flex: 'none', margin: 0, fontFamily: fonts.display, fontSize: L.word.size, lineHeight: '1.02', color: c.wordColor},
+      L.word.rows.map(line => el('div', null, {margin: 0, whiteSpace: 'nowrap'}, [line])));
     const text = flow(null, L.textW, undefined, {display: 'flex', flexDirection: 'column', alignItems: 'flex-start'}, [
-      flowText(`${id}-word`, L.textW, {...hidden, fontFamily: fonts.display, fontSize: L.word.size, lineHeight: '1.02', color: c.wordColor}, c.text),
-      c.sub ? flow(`${id}-rule`, r2(Math.min(L.textW * 0.4, 180 * unit)), L.rule, {margin: `${L.ruleGap}px 0`, borderRadius: L.rule, background: c.ruleColor, transformOrigin: '0% 50%', transform: 'scale(0, 1)'}, []) : null,
+      c.sub ? el('div', null, {position: 'relative', display: 'inline-flex', flexDirection: 'column', alignItems: 'stretch', maxWidth: L.textW}, [
+        word,
+        el('div', `${id}-rule`, {position: 'relative', height: L.rule, margin: `${L.ruleGap}px 0`, borderRadius: L.rule, background: c.ruleColor, transformOrigin: '0% 50%', transform: 'scale(0, 1)'})
+      ]) : word,
       c.sub ? flowText(`${id}-sub`, L.textW, {...hidden, fontFamily: fonts.body, fontWeight: 500, fontSize: L.sub.size, lineHeight: '1.25', color: c.subColor}, c.sub) : null
     ].filter(Boolean));
     return [row(B.x, B.y, B.width, L.height, [lead, text], {gap: L.gap})];
@@ -174,6 +189,7 @@ const CONCEPT_VIEWS = {
 function conceptTimeline(model, ops) {
   const {id, start, unit} = model;
   const c = model.content, mode = c.layout.mode;
+  if (CONCEPT_LOOKS.includes(mode)) return conceptLookTimeline(model, ops);
   if (mode === 'side') {
     if (c.icon) {
       set(ops, `${id}-icon`, start, {opacity: 0, x: r2(-60 * unit), y: 0, scaleX: 0.8, scaleY: 0.8, rotation: -10});
@@ -224,8 +240,8 @@ function conceptTimeline(model, ops) {
 
 export const conceptCard = {
   id: 'concept-card',
-  describe: 'A big word or short phrase (≤ 3 words) with an icon from the icon set and a sub-line, on a brand card beside the presenter or full frame. For naming a claim, a problem or a turn ("Security first", "Too slow", "Now: one click").',
-  params: {text: 'word or phrase ≤ 28, ≤ 3 words', icon: 'icon name from kit/core/icons.mjs (optional)', sub: 'sub-line ≤ 64 (optional)', tone: 'word colour: paper (default) | primary | accent', at: 'word time', ...CARD_PARAMS},
+  describe: 'A big word or short phrase (≤ 3 words) with a sub-line and, only when one names the idea, an icon from the icon set: free type, a scrim, a glass plate, a sticker or a brand card, beside the presenter or full frame. For naming a claim, a problem or a turn ("Security first", "Too slow", "Now: one click").',
+  params: {text: 'word or phrase ≤ 28, ≤ 3 words', icon: 'icon name from kit/core/icons.mjs, only when it names the idea (optional; none is drawn without one)', sub: 'sub-line ≤ 64 (optional)', tone: 'word colour: paper (default) | primary | accent', at: 'word time', ...CARD_PARAMS},
   events: ['icon', 'word', 'sub'],
   timing: cardTiming(['with no at, the word lands at 0.05 s; the icon pops up to 0.15 s before it and the sub-line follows it by 0.35 s']),
   mood: ['editorial', 'launch', 'bold'],
@@ -242,8 +258,10 @@ export const conceptCard = {
 // Variants: tiles (icon tiles in a row or a list, the original), pills
 // (capsules with the icon on a solid disc that slide in), orbit (the icons on
 // a ring around a hub that fly out from its centre) and list (numbered rows
-// between drawn rules).
-export const ICON_ROW_VARIANTS = Object.freeze(['tiles', 'pills', 'orbit', 'list']);
+// between drawn rules), then the looks beyond the box in catalog-g-looks.mjs
+// (chips, ticks, glass, tags). An item's icon is optional: with none, a
+// variant draws the item's number or nothing, never a stand-in icon.
+export const ICON_ROW_VARIANTS = Object.freeze(['tiles', 'pills', 'orbit', 'list', ...ICON_ROW_LOOKS]);
 
 function resolveIconRow(params, ctx) {
   const b = createCardBase('icon-row', params, ctx, {allowed: ['items', 'title', 'layout', 'stagger', 'at'], required: ['items'], variants: ICON_ROW_VARIANTS});
@@ -251,7 +269,7 @@ function resolveIconRow(params, ctx) {
   const p = b.params;
   check.arr(p.items, 'params.items', 2, 5);
   const items = p.items.map((raw, i) => {
-    const entry = check.obj(raw, `params.items[${i}]`, ['icon', 'label', 'at'], ['icon', 'label']);
+    const entry = check.obj(raw, `params.items[${i}]`, ['icon', 'label', 'at'], ['label']);
     return {index: i, icon: iconParam(check, entry.icon, `params.items[${i}].icon`), label: check.str(entry.label, `params.items[${i}].label`, 24), at: entry.at};
   });
   const title = p.title === undefined ? null : check.str(p.title, 'params.title', 48);
@@ -336,12 +354,13 @@ function resolveIconRow(params, ctx) {
   };
   // list: numbered rows between rules.
   const numbered = (width, k) => {
-    const num = u(84 * k), icon = u(64 * k), gap = u(30 * k), padY = u(18 * k), labelW = r2(width - num - icon - gap * 2);
+    const num = u(84 * k), icon = items.some(item => item.icon) ? u(64 * k) : 0, gap = u(30 * k), padY = u(18 * k), labelW = r2(width - num - gap - (icon ? icon + gap : 0));
     const labels = fitLabels(labelW, k, 50);
     const size = Math.min(...labels.map(l => l.size));
     const rowH = r2(Math.max(num * 1.05, Math.max(...labels.map(l => l.lines)) * size * 1.2) + padY * 2);
     return withTitle(width, k, {mode: 'numbered', num, icon, gap, padY, labelW, labelSize: size, rowH, rule: u(2), height: r2(n * rowH + u(2) * (n + 1))});
   };
+  const looks = iconRowLooks(b, {items, title});
   const original = width => {
     const rows = b.scales.map(k => () => asRow(width, k)), lists = b.scales.map(k => () => asList(width, k));
     return layoutIn === 'row' ? rows : layoutIn === 'list' ? lists : [...rows, ...lists];
@@ -349,7 +368,8 @@ function resolveIconRow(params, ctx) {
   const own = {
     pills: (width) => [...(layoutIn === 'list' ? [] : b.scales.map(k => () => pills(width, k, true))), ...(layoutIn === 'row' ? [] : b.scales.map(k => () => pills(width, k, false)))],
     orbit: (width, maxHeight) => b.scales.map(k => () => orbit(width, maxHeight, k)),
-    list: (width) => b.scales.map(k => () => numbered(width, k))
+    list: (width) => b.scales.map(k => () => numbered(width, k)),
+    ...Object.fromEntries(ICON_ROW_LOOKS.map(name => [name, width => b.scales.map(k => () => looks[name](width, k))]))
   }[b.variant];
   const measure = (width, maxHeight) => {
     // A variant tries its own shape first; a room too small falls back to tiles.
@@ -369,30 +389,40 @@ function resolveIconRow(params, ctx) {
   });
   const L = box.layout;
   const dot = solidFill(b, 'primary', 3);
-  return b.finish({box: {x: box.x, y: box.y, width: box.width}, layout: L, title, items: placed, color: colors.primary, labelColor: theme.foreground, titleColor: b.titleColor,
-    dotFill: dot.fill, dotInk: dot.ink, panel: theme.panel, border: theme.border, ring: `${colors.primary}80`, numberColor: colors.primary, iconMuted: colors.accent},
-  {minTextPx: Math.min(L.labelSize, L.title?.size ?? Infinity)});
+  const content = {box: {x: box.x, y: box.y, width: box.width}, layout: L, title, items: placed, color: colors.primary, labelColor: theme.foreground, titleColor: b.titleColor,
+    dotFill: dot.fill, dotInk: dot.ink, panel: theme.panel, border: theme.border, ring: `${colors.primary}80`, numberColor: colors.primary, iconMuted: colors.accent};
+  // A look is its own surface: no card under it.
+  if (ICON_ROW_LOOKS.includes(L.mode)) { Object.assign(content, iconRowLookContent(b, ctx, L)); b.model.surface = 'plate'; }
+  return b.finish(content, {minTextPx: Math.min(L.labelSize, L.title?.size ?? Infinity)});
 }
 
 function iconRowView(model) {
   const {id, fonts, unit} = model;
   const c = model.content, L = c.layout, B = c.box;
+  if (ICON_ROW_LOOKS.includes(L.mode)) return ICON_ROW_LOOK_VIEWS[L.mode](model);
   if (ICON_ROW_VIEWS[L.mode]) return ICON_ROW_VIEWS[L.mode](model);
   const rowMode = L.mode === 'row';
   const label = {fontFamily: fonts.body, fontWeight: 600, fontSize: L.labelSize, lineHeight: '1.2', color: c.labelColor};
   const title = c.title ? flowText(null, B.width, {marginBottom: L.titleGap, fontFamily: fonts.body, fontWeight: 700, fontSize: L.title.size, lineHeight: '1.15', color: c.titleColor, textAlign: rowMode ? 'center' : 'left'}, c.title) : null;
   const items = c.items.map(item => rowMode
     ? flow(`${id}-item-${item.index}`, L.cell, undefined, {...hidden, display: 'flex', flexDirection: 'column', alignItems: 'center', transformOrigin: '50% 30%'}, [
-      iconTile(null, item.icon, L.tile, c.color, unit),
+      markTile(model, item, L.tile),
       flowText(null, L.cell, {...label, marginTop: L.labelGap, textAlign: 'center'}, item.label)
     ])
     : flow(`${id}-item-${item.index}`, B.width, L.rowH, {...hidden, display: 'flex', alignItems: 'center', gap: L.labelGap, transformOrigin: `${r2(L.tile / 2)}px 50%`}, [
-      iconTile(null, item.icon, L.tile, c.color, unit),
+      markTile(model, item, L.tile),
       flowText(null, L.labelW, label, item.label)
     ]));
   const group = flow(null, B.width, undefined, rowMode ? {display: 'flex', justifyContent: 'center', alignItems: 'flex-start', gap: L.gap} : {display: 'flex', flexDirection: 'column', gap: L.gap}, items);
   return [column(B.x, B.y, B.width, L.height, [title, group].filter(Boolean), {align: rowMode ? 'center' : 'start'})];
 }
+
+// An item's number centred in a square of `size` (an item with no icon).
+const numberIn = (model, item, size, color) => el('div', null, abs(0, 0, size, size, {display: 'flex', alignItems: 'center', justifyContent: 'center', margin: 0,
+  fontFamily: model.fonts.display, fontSize: r2(size * 0.46), lineHeight: '1', color}), [String(item.index + 1).padStart(2, '0')]);
+// The tiles look's tile: the item's icon, else its number, on the tint.
+const markTile = (model, item, size) => (item.icon ? iconTile(null, item.icon, size, model.content.color, model.unit)
+  : flow(null, size, size, {boxSizing: 'border-box', borderRadius: r2(size * 0.28), background: `${model.content.color}24`, border: `${r2(2 * model.unit)}px solid ${model.content.color}66`}, [numberIn(model, item, r2(size - 4 * model.unit), model.content.color)]));
 
 const listTitle = (model, align) => {
   const {fonts} = model;
@@ -406,7 +436,7 @@ const ICON_ROW_VIEWS = {
     const c = model.content, L = c.layout, B = c.box;
     const items = c.items.map(item => flow(`${id}-item-${item.index}`, L.pillW, L.pillH, {...hidden, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: r2(26 * unit), padding: `0 ${r2(32 * unit)}px 0 ${L.pad}px`,
       borderRadius: r2(L.pillH / 2), background: c.panel, border: `${r2(2 * unit)}px solid ${c.border}`}, [
-      flow(`${id}-dot-${item.index}`, L.dot, L.dot, {borderRadius: '50%', background: c.dotFill, transformOrigin: '50% 50%'}, [iconNode(item.icon, {x: r2(L.dot * 0.22), y: r2(L.dot * 0.22), size: r2(L.dot * 0.56), color: c.dotInk})]),
+      flow(`${id}-dot-${item.index}`, L.dot, L.dot, {borderRadius: '50%', background: c.dotFill, transformOrigin: '50% 50%'}, [item.icon ? iconNode(item.icon, {x: r2(L.dot * 0.22), y: r2(L.dot * 0.22), size: r2(L.dot * 0.56), color: c.dotInk}) : numberIn(model, item, L.dot, c.dotInk)]),
       flowText(null, L.labelW, {fontFamily: fonts.body, fontWeight: 600, fontSize: L.labelSize, lineHeight: '1.2', color: c.labelColor}, item.label)
     ]));
     const group = flow(null, B.width, undefined, L.across ? {display: 'flex', justifyContent: 'center', gap: L.gap} : {display: 'flex', flexDirection: 'column', alignItems: 'center', gap: L.gap}, items);
@@ -430,7 +460,7 @@ const ICON_ROW_VIEWS = {
       const top = Math.min(spot.y - L.node / 2, spot.labelY);
       kids.push(el('div', `${id}-item-${item.index}`, abs(r2(spot.x - half), r2(top), L.labelW, r2(L.node + L.labelGap + L.lh), {...hidden, transformOrigin: `50% ${r2(spot.y - top)}px`}), [
         el('div', null, abs(r2(half - L.node / 2), r2(spot.y - L.node / 2 - top), L.node, L.node, {boxSizing: 'border-box', borderRadius: '50%', background: model.theme.bg, border: `${r2(4 * unit)}px solid ${c.color}`}), [
-          iconNode(item.icon, {x: r2(L.node * 0.22 - 4 * unit), y: r2(L.node * 0.22 - 4 * unit), size: r2(L.node * 0.56), color: c.color})
+          item.icon ? iconNode(item.icon, {x: r2(L.node * 0.22 - 4 * unit), y: r2(L.node * 0.22 - 4 * unit), size: r2(L.node * 0.56), color: c.color}) : numberIn(model, item, r2(L.node - 8 * unit), c.color)
         ]),
         el('div', null, abs(0, r2(spot.labelY - top), L.labelW, L.lh, {display: 'flex', alignItems: spot.above ? 'flex-end' : 'flex-start', justifyContent: 'center'}), [
           flowText(null, L.labelW, {fontFamily: fonts.body, fontWeight: 600, fontSize: L.labelSize, lineHeight: '1.2', color: c.labelColor, textAlign: 'center'}, item.label)
@@ -448,8 +478,8 @@ const ICON_ROW_VIEWS = {
       rows.push(flow(`${id}-item-${item.index}`, B.width, L.rowH, {...hidden, display: 'flex', alignItems: 'center', gap: L.gap}, [
         flowText(null, L.num, {fontFamily: fonts.display, fontSize: r2(L.num * 0.86), lineHeight: '1', color: c.numberColor, whiteSpace: 'nowrap'}, String(i + 1).padStart(2, '0')),
         flowText(null, L.labelW, {fontFamily: fonts.body, fontWeight: 600, fontSize: L.labelSize, lineHeight: '1.2', color: c.labelColor}, item.label),
-        flow(null, L.icon, L.icon, {}, [iconNode(item.icon, {size: L.icon, color: c.iconMuted})])
-      ]));
+        item.icon ? flow(null, L.icon, L.icon, {}, [iconNode(item.icon, {size: L.icon, color: c.iconMuted})]) : null
+      ].filter(Boolean)));
       rows.push(rule(i + 1));
     });
     return [column(B.x, B.y, B.width, L.height, [listTitle(model, 'left'), ...rows].filter(Boolean), {align: 'start'})];
@@ -459,6 +489,7 @@ const ICON_ROW_VIEWS = {
 function iconRowTimeline(model, ops) {
   const {id, start, unit} = model;
   const c = model.content, mode = c.layout.mode;
+  if (ICON_ROW_LOOKS.includes(mode)) return iconRowLookTimeline(model, ops);
   if (mode === 'pills') {
     for (const item of c.items) {
       const target = `${id}-item-${item.index}`, dx = r2((c.layout.across ? 0 : -50) * unit), dy = r2((c.layout.across ? 30 : 0) * unit);
@@ -499,8 +530,8 @@ function iconRowTimeline(model, ops) {
 
 export const iconRow = {
   id: 'icon-row',
-  describe: 'Two to five icons from the icon set, each with a short label, that pop in one by one on their words: a row, or a list when the labels are long or the room is narrow. For lists of features, steps or audiences.',
-  params: {items: '[{icon: icon name, label ≤ 24, at?}] 2–5', title: 'string ≤ 48 (optional)', layout: 'auto (default) | row | list', stagger: 'seconds between pops (default 0.18)', at: 'first pop time', ...CARD_PARAMS},
+  describe: 'Two to five short labels, each with an icon from the icon set only when one names it, that pop in one by one on their words: chips, ticks, tags, a glass list, tiles, pills, an orbit or a numbered list. For lists of features, steps or audiences.',
+  params: {items: '[{label ≤ 24, icon?: icon name only when it names the item, at?}] 2–5 (an item with no icon shows its number or nothing)', title: 'string ≤ 48 (optional)', layout: 'auto (default) | row | list', stagger: 'seconds between pops (default 0.18)', at: 'first pop time', ...CARD_PARAMS},
   events: ['item-<i>'],
   timing: cardTiming(['items pop in order; with no at, the first pops at 0.05 s and the rest follow by stagger (default 0.18 s)']),
   mood: ['editorial', 'launch', 'playful'],

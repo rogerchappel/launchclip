@@ -343,7 +343,7 @@ const FOOTAGE_IMAGE = Object.freeze({ blur: 32, dim: 0.62 });
 
 // The project's own footage on a story's shots → up to FOOTAGE_PLATES plates
 // (video: blur treatment from where the shot plays; image: blurred and dimmed).
-function footagePlates(story) {
+export function footagePlates(story) {
   const seen = new Set();
   const found = [];
   for (const scene of Array.isArray(story?.scenes) ? story.scenes : []) {

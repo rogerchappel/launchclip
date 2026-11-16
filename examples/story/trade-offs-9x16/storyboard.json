@@ -323,6 +323,14 @@
         ],
         "highlight": 1,
         "variant": "pills"
+      },
+      "backdrop": {
+        "kind": "image",
+        "params": {
+          "src": "assets/shots/ridge.jpg",
+          "blur": 14,
+          "dim": 0.55
+        }
       }
     },
     {
