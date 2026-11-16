@@ -1,0 +1,93 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Catalogue H parity: h-node-graph-graphics-portrait",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 4,
+      "platform": "youtube-shorts"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#06070d",
+        "primary": "#fdb022",
+        "accent": "#46d4ff",
+        "ink": "#06070d",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "el",
+        "module": "node-graph",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "hub": {
+            "label": "Head chef",
+            "icon": "chef-hat"
+          },
+          "nodes": [
+            {
+              "graphic": {
+                "kind": "card",
+                "icon": "croissant",
+                "label": "Baker",
+                "badge": "3"
+              }
+            },
+            {
+              "graphic": {
+                "kind": "chip",
+                "icon": "timer",
+                "label": "Proofing"
+              }
+            },
+            {
+              "graphic": {
+                "kind": "badge",
+                "icon": "flame",
+                "label": "Oven"
+              }
+            },
+            {
+              "graphic": {
+                "kind": "ribbon",
+                "icon": "star",
+                "label": "Fresh"
+              }
+            },
+            {
+              "graphic": {
+                "kind": "prop",
+                "prop": "bread",
+                "label": "Loaves"
+              }
+            },
+            {
+              "graphic": {
+                "kind": "badge",
+                "text": "24",
+                "label": "Orders"
+              }
+            }
+          ],
+          "variant": "fan"
+        }
+      }
+    ]
+  },
+  "sceneId": "el",
+  "threshold": {
+    "ssim": 0.97
+  }
+}
