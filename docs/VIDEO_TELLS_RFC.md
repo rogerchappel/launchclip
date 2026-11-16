@@ -122,6 +122,7 @@ example.
 | baked-text | Words, fake buttons or logos inside a generated image (`uns`) | P · A | a generated asset whose prompt contains quoted text | Real text over a clean image |
 | buried-raster | A photo under a near-opaque wash or blur, so it never shows (`imp`) | F | `media_presence` finds no detail in an `image` plate with `dim` over 0.85 | Less dim; or no photo |
 | unblended-media | A media rect with a hard edge and a different black (`uns`) | F · A | edge contrast between the media rect and the plate | Match the ground, soften the edge |
+| thin-text-on-footage | Small or thin type set straight over a busy shot, often on a wash of the brand colour (pilot review) | F | a text element over media whose size is under 56 px (at 1080) or weight under 600, with 14% or more edge pixels around it | Larger, heavier type on a local dark grade, or off the busy part of the shot |
 | organic-mask | A polygon or circle mask faking a subject's outline (`imp` organic-clip-path, craft floor) | P | a clip path with more than 12 points on a photo | A real matte from subject matting |
 
 *Already covered* (no new rule; the gate that owns it is named): broken
@@ -223,6 +224,7 @@ both.
 | accent-everywhere | one quarter-size frame per main-track scene, mid-hold | over 10% of the frame within RGB distance 48 of `brand.colors.accent` (or `primary`), outside `direction.moments`. Off when the accent is within 48 of `bg`, `background` or `paper` |
 | buried-raster | each image or video plate with `dim` over 0.85, read from its asset (the media-presence grey frames) | the asset has detail (edge share at least 1%) and loses it once the edge step is scaled by 1 / (1 − dim) |
 | unblended-media | each media window the layout check placed (not full frame, not the footage base), full size, mid-time | a mean colour step of 60 or more across the edge on three of its measured sides, and black levels (the darkest tenth of the luma) 12 or more apart inside and around it |
+| thin-text-on-footage | each text element over media (a window, a full-frame shot or the footage base), full size, mid-time | a size under 56 px (scaled to the canvas) or a declared weight under 600, and at least 14% of a ring around the text on an edge (a luma step of 24) |
 
 Changes from the proposals: buried-raster reads the asset and the planned
 dim rather than the rendered frame, because cards drawn over the plate add

@@ -375,17 +375,35 @@ export function elementsFromStory(resolvedStory, { moduleLayout, profile, captio
   return elements;
 }
 
-// Caption position (captions overlay `position`): the band moves up to the
-// top or the middle of the frame; kept in step with captionBandTop() in
-// kit/core/captions.mjs (test/caption_presets.test.js).
+// Caption positions (captions overlay `position`), the one copy:
+// captions.mjs captionBandTop() reads them too, so the band the layout check
+// checks is where the captions render. 'top' places the band's top edge;
+// the others its centre, as a fraction of the canvas height:
+//   middle       0.5   dead centre
+//   low          0.58  just below the middle (the interface-explainer word tag)
+//   lower-third  0.73  about a quarter up from the bottom; in portrait the
+//                      band (0.12 tall) ends by 0.79, above the platforms'
+//                      own caption and button area. Portrait `bottom` means
+//                      this too; in landscape both keep the format's band,
+//                      already in the lower title-safe area.
+// auto (and seam, chest) keep the format's band (portrait centre 0.68).
 export const CAPTION_POSITION_TOP = Object.freeze({ portrait: 0.13, landscape: 0.08 });
-// 'low' centres the band 58% down (captions.mjs CAPTION_LOW_CENTRE).
-const CAPTION_LOW_CENTRE = 0.58;
+export const CAPTION_POSITION_CENTRE = Object.freeze({ middle: 0.5, low: 0.58, "lower-third": 0.73 });
+// The share of a portrait canvas the platforms leave clear above their own captions and buttons.
+export const PLATFORM_UI_TOP = 0.8;
+
+/** The band centre (fraction of the height) for a position, or null where the format's band stays. */
+export function captionPositionCentre(position, landscape = false) {
+  if (position === "bottom" || position === "lower-third") return landscape ? null : CAPTION_POSITION_CENTRE["lower-third"];
+  return CAPTION_POSITION_CENTRE[position] ?? null;
+}
+
 export function captionBandAt(band, canvas, position) {
-  if (!band || (position !== "top" && position !== "middle" && position !== "low")) return band;
+  if (!band) return band;
   const landscape = canvas.width > canvas.height;
-  const y = position === "top" ? canvas.height * (landscape ? CAPTION_POSITION_TOP.landscape : CAPTION_POSITION_TOP.portrait) : canvas.height * (position === "low" ? CAPTION_LOW_CENTRE : 0.5) - band.height / 2;
-  return { ...band, y };
+  if (position === "top") return { ...band, y: canvas.height * (landscape ? CAPTION_POSITION_TOP.landscape : CAPTION_POSITION_TOP.portrait) };
+  const centre = captionPositionCentre(position, landscape);
+  return centre === null ? band : { ...band, y: canvas.height * centre - band.height / 2 };
 }
 
 function normalizeElement(element, index) {

@@ -1941,15 +1941,19 @@ async function runRender(ctx) {
   // its plates for the next full pass).
   const legibility = await measureCaptions(ctx);
   if (legibility?.failed.length && !scenes.length && !ctx.chapter) {
-    const added = legibility.failed.filter((id) => !(ctx.captionPlates ?? []).includes(id));
-    if (added.length) {
-      await writeCaptionPlates(ctx, legibility, added);
+    // A line on a flat backdrop (the brand surface) takes colours picked for
+    // it; a line on footage gets a plate.
+    const surface = legibility.surface ?? [];
+    const added = legibility.failed.filter((id) => !surface.includes(id) && !(ctx.captionPlates ?? []).includes(id));
+    if (added.length || surface.length) {
+      await writeCaptionPlates(ctx, legibility, added, surface);
       await applyCaptionPlates(ctx);
       ctx.resolved = withAudioFeatures(resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null }), ctx.audioFeatures);
       await writeResolvedCopy(ctx);
       details.segments_first_pass = segments ?? null;
       await renderStory(ctx, adapter, { output: ctx.raw, scenes, range: null });
       details.captions_replated = added;
+      if (surface.length) details.captions_on_surface = surface;
       ctx.captionLegibility = await measureCaptions(ctx);
     }
   }
@@ -2638,17 +2642,22 @@ async function applyCaptionPlates(ctx) {
   const overlay = captionsOverlay(ctx.copy);
   const chunks = overlay ? await captionChunks(ctx) : null;
   if (!overlay || !chunks) { ctx.captionPlates = []; return; }
-  const { predictCaptionPlates, captionLines, mergePlates } = await import("./caption_legibility.js");
+  const { predictCaptionPlates, predictCaptionSurfaces, captionLines, mergePlates } = await import("./caption_legibility.js");
   const probe = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null });
   const predicted = predictCaptionPlates(probe, chunks, ctx.layout?.rects ?? []);
   const saved = await readOptionalJson(path.join(ctx.project, PATHS.captionLegibility));
   const ids = new Set(captionLines(probe, chunks).lines.map((line) => line.id));
-  const measured = (Array.isArray(saved?.measured_plates) ? saved.measured_plates : []).filter((id) => ids.has(id));
+  const kept = (list) => (Array.isArray(list) ? list : []).filter((id) => ids.has(id));
+  const measured = kept(saved?.measured_plates);
   // "all" (repairLayout's contrast repair, or the author's) plates every line; predictions only add to a list.
   const plates = overlay.plates === "all" ? "all" : mergePlates(predicted, measured);
   ctx.captionPlates = plates === "all" ? [...ids].sort() : plates;
   ctx.captionPredicted = predicted;
-  ctx.copy = { ...ctx.copy, overlays: ctx.copy.overlays.map((entry) => (entry === overlay ? { ...entry, plates } : entry)) };
+  // Lines on the brand surface, where the idle colour does not read: predicted
+  // (no media under them) and measured (a flat backdrop in a render).
+  const surface = overlay.surface === "all" ? "all" : mergePlates(kept(overlay.surface), predictCaptionSurfaces(probe, chunks, ctx.layout?.rects ?? []), kept(saved?.measured_surface));
+  const entryOf = (entry) => ({ ...entry, plates, ...(surface === "all" || surface.length ? { surface } : {}) });
+  ctx.copy = { ...ctx.copy, overlays: ctx.copy.overlays.map((entry) => (entry === overlay ? entryOf(entry) : entry)) };
 }
 
 async function measureCaptions(ctx) {
@@ -2661,11 +2670,11 @@ async function measureCaptions(ctx) {
   return result;
 }
 
-async function writeCaptionPlates(ctx, legibility, added) {
+async function writeCaptionPlates(ctx, legibility, added, surface = []) {
   const file = path.join(ctx.project, PATHS.captionLegibility);
   const saved = await readOptionalJson(file);
-  const measured = [...new Set([...(Array.isArray(saved?.measured_plates) ? saved.measured_plates : []), ...added])].sort();
-  await writeJson(file, { schema: "launchclip.caption-legibility.v1", thresholds: (await import("./caption_legibility.js")).CAPTION_LEGIBILITY, predicted_plates: ctx.captionPredicted ?? [], measured_plates: measured, plates: ctx.captionPlates ?? [], lines: legibility?.lines ?? [], failed: legibility?.failed ?? [] });
+  const merged = (list, more) => [...new Set([...(Array.isArray(list) ? list : []), ...more])].sort();
+  await writeJson(file, { schema: "launchclip.caption-legibility.v1", thresholds: (await import("./caption_legibility.js")).CAPTION_LEGIBILITY, predicted_plates: ctx.captionPredicted ?? [], measured_plates: merged(saved?.measured_plates, added), measured_surface: merged(saved?.measured_surface, surface), plates: ctx.captionPlates ?? [], lines: legibility?.lines ?? [], failed: legibility?.failed ?? [] });
 }
 
 function captionSummary(ctx) {
