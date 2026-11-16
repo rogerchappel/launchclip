@@ -69,3 +69,9 @@ test('brand-mark: icon-grid and node-graph take it as {member: {module: "brand-m
   assert.equal(graph.content.nodes[0].label, 'Lumen');
   assert.throws(() => resolve('icon-grid', {items: ['star', mark('https://x.com/a.svg')]}), /items\[1\].member.src must be a project-local assets/);
 });
+
+test('brand-mark: a graphic reaching for a logo is pointed at the brand-mark member', async () => {
+  const {beyondGraphic} = await import('@launchclip/core/graphic.mjs');
+  assert.match(beyondGraphic('logo'), /\{member: \{module: "brand-mark"/);
+  assert.match(beyondGraphic('integrations'), /brand-mark member/);
+});

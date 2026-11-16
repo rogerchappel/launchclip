@@ -734,6 +734,63 @@ a tone runs its wire, pulse and lit rim in it too (the set takes a member's
 `examples/story/member-tone-9x16` (a kitchen whose hot stations sit in the
 primary's steps and cold ones in the accent's; finish's motion and pace gates
 pass).
+**Member module: `status`** (`kit/core/member-status.mjs`). A card (`icon`,
+`label`) whose status changes over time, as status-rack does for a whole
+module: `{member: {module: "status", icon, label, status}}`, where `status` is
+`pending | active | pass | fail` or up to four changes, `["pending", {state:
+"active", beat: 4}, {state: "pass", at: 5.5}]`. The first change holds from
+the scene start; each later one lands `at` seconds or `beat` beats from the
+scene start on the set's grid (node-graph's `bpm`, else 120 bpm), at least
+0.3 s after the one before, and is done before the module leaves. Pending is
+the muted foreground, active the brand primary, pass and fail a green and a
+red, each pushed to 3:1 on bg. The card is drawn once per state it reaches,
+face and corner mark (clock, loader, check, x) in that state's colour, and a
+change fades only the upper of the two layers (`sine.inOut`, 0.45 s: slow →
+fast → slow, no overshoot), so the card never turns see-through mid-change;
+the set's lit rim lies over every layer. Proof: parity fixture
+`h-node-graph-status-portrait` (min SSIM 0.9956, sampled mid-crossfade too),
+`test/member-status.test.js`, and the sample `examples/story/member-status-9x16`
+(a dinner rush, its tickets going pending → active → pass on the beat, the
+cake sinking to fail and back; finish's motion and pace gates pass).
+
+**Member module: `value-card`** (`kit/core/member-value-card.mjs`).
+`{member: {module: "value-card", value ≤ 10, label?}}`: a
+value or multiplier too long for a badge ("$7.15", "×3.2", "1,250") set in
+the display face at 1.9× the label in the member's colour, the label under
+it. Its width is measured from the label size, so the fit that keeps labels
+over the brand's meta floor also keeps the longest value inside its card,
+and node-graph widens every card to it while icon-grid fails a cell it cannot
+fill rather than overflow. A badge or count past three characters, or a
+`value` on a graphic, now names it. Proof: `h-node-graph-value-card-portrait`,
+`h-icon-grid-value-card-portrait`, `test/member_value_card.test.js`, and
+`examples/story/members-value-9x16` (the bakery's morning in numbers).
+
+**Member module: `sub-card`** (`kit/core/member-sub-card.mjs`).
+`{member: {module: "sub-card", label, sub ≤ 24, icon?, badge?}}`: the default card with a second line under its label, in the meta
+face and a muted ink, as map pins, grid-race and cell-grid carry theirs. The
+sub is the label's size, so the fit that keeps labels over the brand's meta
+floor keeps the sub over it too; the card is one line taller, and node-graph
+gives every node that height. A `sub`, `detail` or `subtitle` on a graphic
+now names it. Proof: `h-node-graph-sub-card-portrait`,
+`h-icon-grid-sub-card-portrait`, `test/member_sub_card.test.js`, and
+`examples/story/members-sub-9x16` (the bakery team, a line each).
+
+**Member: a person (`person`).** `kit/core/member-person.mjs`. A person is
+`{member: {module: "person", name, image?, shape?}}`: their photo
+(`shape: "photo"`, a 4:5 portrait with rounded corners) or avatar (the default,
+a circle) from a project file (`assets/…`, never fetched), or, with no image,
+an initials tile: up to two initials from the name, in the display face, ink
+on a gradient of the member's colour, so a mixed set stays in the brand
+palette. The face carries a rim in the member's colour with its glow, and the
+name sits under it on a plate of the panel (a wire running under it stays
+hidden), like a badge's label. Its face is `glow`: a round or portrait face
+lights from behind. It takes a card's height, so the face grows into the room
+a card's icon and label would take. Proof: parity fixtures
+`h-node-graph-people-portrait` and `h-icon-grid-people-portrait` (drawn SVG
+avatars, no real people; min SSIM 0.9952), `test/member-person.test.js`, and
+the sample `examples/story/people-9x16` (seven people sign off a release:
+avatars, portrait photos and initials tiles wired into a Release hub). Seven
+fit the golden rect where five or six do not, as with graphics.
 
 **Member: a brand mark (`brand-mark`).** `kit/core/member-mark.mjs`. An
 integration's or partner's logo in place of an icon is
