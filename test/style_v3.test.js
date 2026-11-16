@@ -222,3 +222,38 @@ test("dials: defaults, pack, then story; polish picks the ambient level when not
   assert.match(lines, /Dials: energy 0\.9/);
   assert.match(lines, /coverage 0\.6 \(band 0\.4-0\.8\)/);
 });
+
+test("a pack's finish, look and background fill a story that sets none, and the story's own win", async () => {
+  const { resolveFinish } = await import("@launchclip/core/finish.mjs");
+  const pack = { ...upgradeV2Pack(v2()).pack, finish: "subtle-film", look: "risograph", background: { kind: "aurora" } };
+  assert.deepEqual(validateStylePack(pack).errors, []);
+  const filled = applyStyle(story(), pack);
+  assert.equal(filled.story.finish, "subtle-film");
+  assert.equal(filled.story.look, "risograph");
+  assert.equal(filled.story.background.kind, "aurora");
+  for (const key of ["finish", "look", "background"]) assert.ok(filled.applied.includes(key), `applied lists ${key}`);
+  assert.deepEqual(validateStory(filled.story).errors, []);
+  // The preset expands to its passes in chain order.
+  assert.deepEqual(resolveFinish({ finish: "subtle-film" }), [{ pass: "grade", params: { preset: "warm-film", strength: 0.35 } }, { pass: "grain", params: { amount: 0.04, size: 1.2, mono: true, seed: 0 } }]);
+  assert.deepEqual(resolveFinish({ finish: "soft-glow" }).map((entry) => entry.pass), ["bloom", "grain"]);
+
+  const own = applyStyle(story({ finish: [{ pass: "grain", amount: 0.2 }], look: "blueprint", background: { kind: "flat" } }), pack);
+  assert.deepEqual(own.story.finish, [{ pass: "grain", amount: 0.2 }]);
+  assert.equal(own.story.look, "blueprint");
+  assert.equal(own.story.background.kind, "flat");
+  assert.ok(!own.applied.includes("finish") && !own.applied.includes("background"));
+  assert.ok(!applyStyle(story({ finish: [] }), pack).applied.includes("finish"), "an empty list turns the pack's finish off");
+});
+
+test("a pack's finish is checked as a story's is", () => {
+  const base = upgradeV2Pack(v2()).pack;
+  const errors = (finish) => validateStylePack({ ...base, finish }).errors.join("\n");
+  assert.match(errors("film-ish"), /finish must be a finish preset \(subtle-film, soft-glow\)/);
+  assert.match(errors([{ pass: "grain", amount: 3 }]), /finish\[0\]\.amount must be a number from 0 to 1/);
+  assert.match(errors([{ pass: "sparkle" }]), /finish\[0\]\.pass must be one of/);
+  assert.match(errors({ pass: "grain" }), /finish must be a finish preset/);
+  assert.match(validateStylePack({ ...base, look: "riso" }).errors.join("\n"), /look/);
+  assert.match(validateStylePack({ ...base, background: { kind: "lava" } }).errors.join("\n"), /background/);
+  assert.match(validateStory(story({ finish: "film-ish" })).errors.join("\n"), /finish must be a finish preset/);
+  assert.match(validateStylePack({ ...v2(), finish: "subtle-film" }).warnings.join("\n"), /finish is a style v3 field/);
+});

@@ -25,7 +25,7 @@ test("every finish pass has a shader, in the table's chain order", () => {
 
 test("story.finish validation", () => {
   assert.deepEqual(errorsOf([{ pass: "grain", amount: 0.1 }, { pass: "aberration" }, { pass: "grade", preset: "bleach", tint: "#ff8800" }]), []);
-  assert.match(errorsOf({ pass: "grain" })[0], /must be a list/);
+  assert.match(errorsOf({ pass: "grain" })[0], /or a list of \{pass/);
   assert.match(errorsOf([{ pass: "sparkle" }])[0], /pass must be one of/);
   assert.match(errorsOf([{ pass: "grain" }, { pass: "grain" }])[0], /listed twice/);
   assert.match(errorsOf([{ pass: "grain", amount: 2 }])[0], /amount must be a number from 0 to 1/);

@@ -178,6 +178,15 @@ export const STORY_FINISH_PASSES = Object.freeze({
   grade: null,
   grain: Object.freeze({ amount: [0, 1, 0.06], size: [1, 4, 1.5], mono: true, seed: [0, 999999, 0] })
 });
+// Named finishes: story.finish (or a style pack's finish) may be one of these
+// names instead of a pass list, so a host sets a brand's finish once without
+// copying pass lists around. storyFinishList expands a name to its passes.
+export const STORY_FINISH_PRESETS = Object.freeze({
+  "subtle-film": Object.freeze([Object.freeze({ pass: "grade", preset: "warm-film", strength: 0.35 }), Object.freeze({ pass: "grain", amount: 0.04, size: 1.2 })]),
+  "soft-glow": Object.freeze([Object.freeze({ pass: "bloom", threshold: 0.8, strength: 0.35 }), Object.freeze({ pass: "grain", amount: 0.03, size: 1.2 })])
+});
+/** story.finish as a pass list: a preset name expanded, a list as given, else []. */
+export const storyFinishList = (value) => (typeof value === "string" ? (STORY_FINISH_PRESETS[value] ?? []).map((entry) => ({ ...entry })) : Array.isArray(value) ? value : []);
 // story.light (kit/core/lighting.mjs LIGHT_PARAMS, LIGHT_PRESETS): ranges per
 // layer, kept in step by test/lighting.test.js.
 export const STORY_LIGHT_PRESETS = ["none", "studio", "spot", "soft"];
@@ -2033,10 +2042,11 @@ function validateGrade(value, err, path = "grade") {
   if (value.tint !== undefined && value.cube !== undefined) err(`${path}.tint re-tints a preset, not a .cube`);
 }
 
-// story.finish: [{pass, ...params}], at most STORY_FINISH_MAX, each pass once.
-function validateFinish(value, err, path = "finish") {
+// story.finish: a STORY_FINISH_PRESETS name, or [{pass, ...params}], at most STORY_FINISH_MAX, each pass once.
+export function validateFinish(value, err, path = "finish") {
   if (value === undefined || value === null) return;
-  if (!Array.isArray(value)) { err(`${path} must be a list of {pass, ...params}`); return; }
+  if (typeof value === "string") { if (!STORY_FINISH_PRESETS[value]) err(`${path} must be a finish preset (${Object.keys(STORY_FINISH_PRESETS).join(", ")}) or a list of {pass, ...params} (got ${JSON.stringify(value)})`); return; }
+  if (!Array.isArray(value)) { err(`${path} must be a finish preset (${Object.keys(STORY_FINISH_PRESETS).join(", ")}) or a list of {pass, ...params}`); return; }
   if (value.length > STORY_FINISH_MAX) err(`${path} takes at most ${STORY_FINISH_MAX} passes`);
   const names = Object.keys(STORY_FINISH_PASSES), seen = new Set();
   value.forEach((entry, i) => {
