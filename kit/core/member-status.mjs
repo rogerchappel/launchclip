@@ -9,33 +9,33 @@
 // both renderers draw the same frames from the same view and ops.
 //
 // Status colours: pending is the muted foreground, active the brand primary,
-// pass and fail a green and a red (brand.colors.pass / success and
-// brand.colors.fail / danger / error when the brand gives them), each pushed
-// until it clears 3:1 on bg, like status-rack's palette.
+// pass and fail a green and a red, each pushed until it clears 3:1 on bg, like
+// status-rack's palette.
 //
-// Plain ESM. Canonical copy: kit/core/member-status.mjs.
+// The `status` member module (kit/core/members.mjs) is a card (icon, label)
+// with a status: its face and a corner mark in each state's colour.
+//
+// Canonical copy: kit/core/member-status.mjs.
 
 import {abs, el, hex2, set, tw} from './catalog-b-view.mjs';
 import {contrastRatio, fitContrast, hexToOklch} from './oklch.mjs';
 import {iconNode} from './icons.mjs';
+import {graphicNodes, graphicSpec, graphicWidth} from './graphic.mjs';
 
 export const STATUS_STATES = Object.freeze(['pending', 'active', 'pass', 'fail']);
 export const STATUS_MARKS = Object.freeze({pending: 'clock', active: 'loader', pass: 'check', fail: 'x'});
 // A crossfade: long enough to read, short enough to sit inside a beat at 120 bpm.
 export const STATUS_CHANGE = Object.freeze({duration: 0.45, ease: 'sine.inOut', gap: 0.3, mark: 0.72});
 const BASE = Object.freeze({pass: '#2fbf71', fail: '#f2545b'});
-const HEX = /^#[0-9a-fA-F]{6}$/;
 
 /** One line for a member's params: what a `status` may be. */
 export const STATUS_PARAM = `${STATUS_STATES.join(' | ')}, or changes over time: [{state, at? (s from scene start) | beat? (beats from scene start)}] 1–4, the first holding from the start`;
 
 const legible = (hex, bg) => contrastRatio(hex, bg) >= 3 ? hex : fitContrast(hexToOklch(hex), bg, 3) ?? hex;
 
-/** The four status colours on a brand ({bg, primary, paper, pass?, success?, fail?, danger?, error?}) and its muted tone. */
+/** The four status colours on a brand ({bg, primary}) and its muted tone. */
 export function statusColors(colors, muted) {
-  const pick = (...roles) => roles.map(role => colors[role]).find(value => HEX.test(value ?? ''));
-  return {pending: legible(muted, colors.bg), active: legible(colors.primary, colors.bg),
-    pass: legible(pick('pass', 'success') ?? BASE.pass, colors.bg), fail: legible(pick('fail', 'danger', 'error') ?? BASE.fail, colors.bg)};
+  return {pending: legible(muted, colors.bg), active: legible(colors.primary, colors.bg), pass: legible(BASE.pass, colors.bg), fail: legible(BASE.fail, colors.bg)};
 }
 
 /**
@@ -104,3 +104,32 @@ export function statusOps(ops, id, changes, start) {
     }
   }
 }
+
+// The text colour (ink, paper or bg) that reads best on a fill.
+const inkOn = (colors, fill) => [colors.ink, colors.paper, colors.bg].reduce((best, c) => contrastRatio(c, fill) > contrastRatio(best, fill) ? c : best);
+const CARD = ['icon', 'label'];
+
+/** The `status` member module: a card whose status changes over time. */
+export const statusMember = {
+  id: 'status',
+  describe: 'A member whose status changes over time: a card (icon, label) that goes pending → active → pass or fail at times or on beats, its colour and corner mark crossing over slow → fast → slow.',
+  params: {status: STATUS_PARAM, icon: 'icon name (optional)', label: 'string (optional; one of icon or label)'},
+  face: 'card',
+  spec(check, raw, path, {labelMax, base}) {
+    for (const key of Object.keys(raw)) if (key !== 'status' && !CARD.includes(key)) check.fail(`${path}.${key}`, `is not supported (allowed: module, status, ${CARD.join(', ')})`);
+    if (raw.status === undefined) check.fail(`${path}.status`, `is required: ${STATUS_PARAM}`);
+    const {status, ...card} = raw;
+    // A beat is the set's own (node-graph's bpm), else 120 bpm, counted from the scene start.
+    const changes = memberStatus(check, status, `${path}.status`, {start: base.start, until: base.motion.exitStart, beat: 60 / (base.params.bpm ?? 120)});
+    const colors = statusColors(base.colors, base.theme.muted);
+    const inks = Object.fromEntries(STATUS_STATES.map(state => [state, inkOn(base.colors, colors[state])]));
+    return {...graphicSpec(check, {kind: 'card', ...card}, path, labelMax ? {labelMax} : undefined), status: changes, colors, inks};
+  },
+  width: (spec, L) => graphicWidth({...spec, kind: 'card'}, L),
+  // One face per state; the set's lit rim (look.over) lies over them all.
+  nodes: (spec, W, H, look) => [
+    ...statusNodes(look.key, spec.status, W, H, color => graphicNodes({...spec, kind: 'card'}, W, H, {...look, color, ink: inkOn(look.colors, color), over: []}),
+      {colors: spec.colors, ink: state => spec.inks[state], unit: look.unit, mark: Math.round(Math.max(look.labelSize * 1.3, look.icon * 0.6) * 100) / 100, panel: look.panel}),
+    ...(look.over ?? [])],
+  timeline: (ops, spec, at) => statusOps(ops, at.key, spec.status, at.start)
+};
