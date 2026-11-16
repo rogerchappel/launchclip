@@ -1,13 +1,13 @@
 {
   "schema": "launchclip.story.v1",
   "title": "Sets that arrive together and breathe (9:16 group and idle motion)",
-  "notes": "Sample for docs/FLUID_MOTION_RFC.md phase 5 (second half), in the default grammar: icon-grid flocks out of the middle, item-list pills breathe, social-wall arrives as one wave and its pulled posts breathe. drop-grid is left out: its fall and squash physics trip the example-story entrance and bounce gates. Demo posts only; no narration and no paid calls.",
+  "notes": "Sample for docs/FLUID_MOTION_RFC.md phase 5 (second half), in the default grammar: icon-grid flocks out of the middle, drop-grid items fall on their words, squash with no overshoot, rock on their base and ripple when the grid fills, item-list pills breathe, social-wall arrives as one wave and its pulled posts breathe. Demo posts only; no narration and no paid calls.",
   "lane": "motion",
   "format": {
     "width": 1080,
     "height": 1920,
     "fps": 30,
-    "duration": 20,
+    "duration": 26,
     "platform": "youtube-shorts"
   },
   "brand": {
@@ -62,10 +62,24 @@
       }
     },
     {
-      "id": "list",
-      "module": "item-list",
+      "id": "drops",
+      "module": "drop-grid",
       "start": 6,
       "end": 12,
+      "params": {
+        "count": 10,
+        "counter": {
+          "suffix": "×",
+          "label": "times a day"
+        },
+        "title": "How often you check"
+      }
+    },
+    {
+      "id": "list",
+      "module": "item-list",
+      "start": 12,
+      "end": 18,
       "params": {
         "title": "Before you post",
         "subject": "Your Short",
@@ -90,8 +104,8 @@
     {
       "id": "wall",
       "module": "social-wall",
-      "start": 12,
-      "end": 20,
+      "start": 18,
+      "end": 26,
       "params": {
         "posts": [
           {

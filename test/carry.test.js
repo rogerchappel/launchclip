@@ -97,6 +97,41 @@ test('story validation checks the carry shape', () => {
   assert.equal(errors({map: {'s1-a': 's2-x', 's1-b': 's2-x'}}).length, 1);
 });
 
+const flipStory = () => pinStory([
+  graph('s1', 0, 4, ['Research', 'Script', 'Voice', 'Camera']),
+  graph('s2', 4, 8, ['Research', 'Script', 'Voice', 'Camera', 'Edit'], {carry: {map: {'s1-title': 's2-title', 's1-hub': 's2-hub', 's1-node-n0': 's2-node-n0', 's1-node-n1': 's2-node-n1', 's1-node-n2': 's2-node-n2', 's1-node-n3': 's2-node-n3'}}})
+]);
+
+test('carry: each element starts on its source rect and settles on its slot (the FLIP)', () => {
+  const story = flipStory();
+  const a = resolveModule(story.scenes[0], story), b = resolveModule(story.scenes[1], story);
+  const items = b.carry.in.items;
+  assert.equal(items.find(item => item.id === 's2-title').pin, true);
+  assert.ok(items.filter(item => item.id.includes('node')).every(item => !item.pin), 'the cards move to a five-node fan');
+  const {children: ca, ops: oa} = opList(a), {children: cb, ops: ob} = opList(b);
+  const ids = items.map(item => item.id), from = ids.map(id => id.replace('s2-', 's1-'));
+  const end = visualBoxes(a, ca, oa, 4, from), first = visualBoxes(b, cb, ob, 4, ids);
+  for (const [k, id] of ids.entries()) for (const key of ['cx', 'cy', 'w', 'h', 'rotation']) assert.ok(Math.abs(end[from[k]][key] - first[id][key]) < 1, `${id}.${key}: ${end[from[k]][key]} vs ${first[id][key]}`);
+  // Settled on the slot once the flock has landed: the same as with no carry.
+  const plain = flipStory();
+  delete plain.scenes[1].carry;
+  const free = resolveModule(plain.scenes[1], plain), {children: cf, ops: of} = opList(free);
+  const settled = visualBoxes(b, cb, ob, 6.6, ids), slot = visualBoxes(free, cf, of, 6.6, ids);
+  for (const id of ids.filter(id => id.includes('node'))) assert.ok(Math.abs(settled[id].cx - slot[id].cx) < 1 && Math.abs(settled[id].cy - slot[id].cy) < 1, `${id} settles on its slot`);
+  // Visible throughout, and members leave a little apart, nearest first.
+  const cards = ob.filter(op => op.type === 'tween' && /node-n[0-3]$/.test(op.target) && 'x' in op.to && op.from.x !== op.to.x && op.start < 5);
+  assert.equal(new Set(cards.map(op => op.start)).size, 4);
+  assert.ok(Math.max(...cards.map(op => op.start)) - 4 <= 0.3 + 1e-6);
+  assert.equal(frameState(ob, 4.2).get('s2-node-n0').opacity, 1);
+});
+
+test('carry eases slow → fast → slow with no overshoot', () => {
+  const story = flipStory();
+  const b = resolveModule(story.scenes[1], story);
+  const moves = opList(b).ops.filter(op => op.type === 'tween' && op.target === 's2-node-n0' && op.start < 5);
+  assert.deepEqual(moves.map(op => op.ease).sort(), ['power2.inOut', 'power3.inOut', 'power3.inOut']);
+});
+
 test('both sides of a carry sit on a still plate: no per-scene hold drift', async () => {
   const {sceneDrift} = await import('@launchclip/core/ambient.mjs');
   const story = twoGraphs();
@@ -106,4 +141,13 @@ test('both sides of a carry sit on a still plate: no per-scene hold drift', asyn
   const plain = twoGraphs();
   delete plain.scenes[1].carry;
   assert.notEqual(sceneDrift(plain, plain.scenes[1], resolveModule(plain.scenes[1], plain)), null);
+});
+
+test('an overlay that rests hidden and only flashes is not an entrance: lit rims stay dark on the first frame', () => {
+  const story = flipStory();
+  const b = resolveModule(story.scenes[1], story);
+  const first = state(b, 4);
+  assert.equal(first.get('s2-node-n0-lit').opacity, 0);
+  assert.equal(first.get('s2-hub-ring').opacity, 0);
+  assert.equal(first.get('s2-node-n0').opacity, 1);
 });

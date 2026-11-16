@@ -1,22 +1,33 @@
 {
   "schema": "launchclip.story.v1",
   "title": "Flow across scenes (golden, 9:16 carry and pins)",
-  "notes": "Golden story for elements carried across scenes (docs/FLUID_MOTION_RFC.md §6): the title is pinned across the cut from one node-graph to the next, so it never leaves while the team below it changes. No narration and no paid calls.",
+  "notes": "Golden story for elements carried across scenes (docs/FLUID_MOTION_RFC.md §6): the title is pinned across every cut, the four agent cards and the hub fly from one fan into the next when a fifth agent joins, the host cuts in for a beat, and the plate comes back where it left off and settles into a three-card fan. No narration and no paid calls.",
   "lane": "motion",
-  "format": {"width": 1080, "height": 1920, "fps": 30, "duration": 9, "platform": "youtube-shorts"},
+  "format": {"width": 1080, "height": 1920, "fps": 30, "duration": 13.5, "platform": "youtube-shorts"},
   "brand": {
     "colors": {"bg": "#0b0d1a", "primary": "#ffb547", "accent": "#46d4ff", "ink": "#0b0d1a", "paper": "#f6f3ee"},
     "fonts": {"display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono"}
   },
+  "motion": {"feel": "steady"},
   "camera": {"mode": "cuts"},
+  "cast": {"style": "chibi", "characters": [{"id": "bot", "name": "Bot", "kind": "robot", "position": "center"}]},
+  "world": {"kind": "cafe", "time": "night"},
   "scenes": [
-    {"id": "plan", "module": "node-graph", "start": 0, "end": 4.5, "params": {
+    {"id": "plan", "module": "node-graph", "start": 0, "end": 4, "params": {
       "title": "One brief, a whole team", "hub": {"label": "Director", "icon": "clapperboard"},
-      "nodes": [{"label": "Research", "icon": "search"}, {"label": "Script", "icon": "pen-line"}, {"label": "Voice", "icon": "mic"}, {"label": "Camera", "icon": "camera"}],
+      "nodes": [{"id": "research", "label": "Research", "icon": "search"}, {"id": "script", "label": "Script", "icon": "pen-line"}, {"id": "voice", "label": "Voice", "icon": "mic"}, {"id": "camera", "label": "Camera", "icon": "camera"}],
       "bpm": 120}},
-    {"id": "ship", "module": "node-graph", "start": 4.5, "end": 9, "carry": {"map": {"plan-title": "ship-title"}}, "params": {
-      "title": "One brief, a whole team", "hub": {"label": "Publish", "icon": "megaphone"},
-      "nodes": [{"label": "Edit", "icon": "scissors"}, {"label": "Music", "icon": "music"}, {"label": "Captions", "icon": "captions"}],
-      "bpm": 120}}
+    {"id": "ship", "module": "node-graph", "start": 4, "end": 8, "params": {
+      "title": "One brief, a whole team", "hub": {"label": "Director", "icon": "clapperboard"},
+      "nodes": [{"id": "research", "label": "Research", "icon": "search"}, {"id": "script", "label": "Script", "icon": "pen-line"}, {"id": "voice", "label": "Voice", "icon": "mic"}, {"id": "camera", "label": "Camera", "icon": "camera"}, {"id": "edit", "label": "Edit", "icon": "scissors"}],
+      "bpm": 120},
+      "carry": {"map": {"plan-title": "ship-title", "plan-hub": "ship-hub", "plan-hub-label": "ship-hub-label", "plan-node-research": "ship-node-research", "plan-node-script": "ship-node-script", "plan-node-voice": "ship-node-voice", "plan-node-camera": "ship-node-camera"}}},
+    {"id": "talk", "module": "cast-scene", "start": 8, "end": 10, "params": {"set": "standing", "shot": "medium",
+      "cast": [{"id": "bot", "pose": "point", "expression": "happy"}]}},
+    {"id": "wrap", "module": "node-graph", "start": 10, "end": 13.5, "params": {
+      "title": "One brief, a whole team", "hub": {"label": "Director", "icon": "clapperboard"},
+      "nodes": [{"id": "research", "label": "Research", "icon": "search"}, {"id": "edit", "label": "Edit", "icon": "scissors"}, {"id": "publish", "label": "Publish", "icon": "megaphone"}],
+      "bpm": 120},
+      "carry": {"map": {"ship-title": "wrap-title", "ship-hub": "wrap-hub", "ship-hub-label": "wrap-hub-label", "ship-node-research": "wrap-node-research", "ship-node-edit": "wrap-node-edit"}}}
   ]
 }
