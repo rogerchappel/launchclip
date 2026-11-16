@@ -398,7 +398,7 @@ export function roomImpulse(space, seed = 1) {
   return `aevalsrc=exprs='${room.expr.join('|')}':s=${RATE}:d=${fmt(space.seconds)}`;
 }
 
-async function synthCue(entry, directory) {
+export async function synthCue(entry, directory) {
   const { spec } = entry;
   const raw = path.join(directory, `.${entry.name}.raw.wav`);
   const output = path.join(directory, `${entry.name}.wav`);
