@@ -131,6 +131,16 @@ const CASES = [
   ['icon-tile',
     {scenes: [scene('s', 'concept-card', 0, 3, {view: box([box([svg], {background: '#ff6b3d', borderRadius: 24}), txt('Headline')])})]},
     {scenes: [scene('s', 'concept-card', 0, 3, {view: box([box([svg], {}), txt('Headline')])})]}],
+  // The pilot's chips: two boxed panels on the flat brand plate; the near miss is the same chips over footage.
+  ['boxed-on-flat',
+    {scenes: [scene('s', 'compare', 0, 3, {view: box([box([txt('Cheap'), txt('Weekend brush')], {background: '#e5fcfc', borderRadius: 28}), box([txt('Dearer'), txt('Pay once')], {border: '2px solid #ccc', borderRadius: 28})])})]},
+    {scenes: [scene('b', 'clip', 0, 3), scene('s', 'compare', 0, 3, {view: box([box([txt('Cheap'), txt('Weekend brush')], {background: '#e5fcfc', borderRadius: 28}), box([txt('Dearer'), txt('Pay once')], {border: '2px solid #ccc', borderRadius: 28})])})]}],
+  ['stock-icon',
+    {scenes: [scene('s', 'concept-card', 0, 3, {scene: {params: {text: 'All about upkeep', icon: 'layers'}}})]},
+    {scenes: [scene('s', 'concept-card', 0, 3, {scene: {params: {text: 'Three layers of oil', icon: 'layers'}}})]}],
+  ['caption-echoes-headline',
+    {story: story({overlays: [{type: 'captions'}]}), words: 'composite is wood fibre and plastic'.split(' ').map((word, i) => ({word, start: 1 + i * 0.3})), scenes: [scene('s', 'clip', 1, 4, {scene: {params: {title: 'Wood fibre + plastic blend'}}})]},
+    {story: story({overlays: [{type: 'captions'}]}), words: 'composite never needs oiling'.split(' ').map((word, i) => ({word, start: 1 + i * 0.3})), scenes: [scene('s', 'clip', 1, 4, {scene: {params: {title: 'Wood fibre + plastic blend'}}})]}],
   ['emoji-icons',
     {scenes: [scene('s', 'icon-row', 0, 3, {scene: {params: {items: ['🚀 Launch']}}})]},
     {scenes: [scene('s', 'icon-row', 0, 3, {scene: {params: {items: ['Launch']}}})]}],
@@ -175,6 +185,11 @@ test('every plan detector has a hit and a near miss', () => {
     assert.ok(rules(hit).includes(id), `${id} fires on its hit: ${JSON.stringify(planTells({story: story(), words: [], ...hit}))}`);
     assert.ok(!rules(miss).includes(id), `${id} stays quiet on its near miss`);
   }
+});
+
+test('icon-tile: a tile whose fill is its first layer (catalog-g-base iconTile) fires; a bare glyph does not', () => {
+  assert.ok(rules({scenes: [scene('s', 'icon-row', 0, 3, {view: box([box([box([], {background: '#ff6b3d24', borderRadius: 28}), svg]), txt('Label')])})]}).includes('icon-tile'));
+  assert.ok(!rules({scenes: [scene('s', 'icon-row', 0, 3, {view: box([box([box([], {}), svg]), txt('Label')])})]}).includes('icon-tile'));
 });
 
 test('a finding ends in its fix and carries the date the tell was added', () => {

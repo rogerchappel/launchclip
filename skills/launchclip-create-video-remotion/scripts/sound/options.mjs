@@ -6,7 +6,8 @@
 //     palette: <SOUND_PALETTES>,
 //     music: { genre: <MUSIC_GENRES>, bpm, key: <MUSIC_KEYS>, progression: 0-based },
 //     ambience: "auto" | "none" | <AMBIENCE_BEDS>,
-//     sfx_density: 0..1 | "low" | "normal" | "high"
+//     sfx_density: 0..1 | "low" | "normal" | "high",
+//     sonify: true (chart scenes play their data; off by default, sonify.mjs)
 //   }
 //
 // Everything is procedural synthesis: no samples, no network, no provider.
@@ -172,6 +173,7 @@ export function soundProblems(sound) {
   if (sound.ambience !== undefined && !['auto', 'none', ...AMBIENCE_BEDS].includes(sound.ambience)) problems.push(`sound.ambience must be auto, none or one of ${AMBIENCE_BEDS.join(', ')}`);
   if (sound.sfx_density !== undefined && densityValue(sound.sfx_density) === null) problems.push('sound.sfx_density must be a number from 0 to 1, or low, normal or high');
   if (sound.score !== undefined && typeof sound.score !== 'boolean') problems.push('sound.score must be true or false');
+  if (sound.sonify !== undefined && typeof sound.sonify !== 'boolean') problems.push('sound.sonify must be true or false');
   const music = sound.music;
   if (music !== undefined && music !== null) {
     if (typeof music !== 'object' || Array.isArray(music)) problems.push('sound.music must be an object');

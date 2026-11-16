@@ -42,18 +42,18 @@ function paramSets(kind) {
   return sets;
 }
 
-test("background core is plain ESM that imports only ambient.mjs, panels.mjs, icons.mjs and lighting.mjs, and keeps no clock", async () => {
+test("background core is plain ESM that imports only ambient.mjs, panels.mjs, icons.mjs, lighting.mjs and the VFX catalogue and ramps, and keeps no clock", async () => {
   for (const file of ["backgrounds.mjs", "panels.mjs"]) {
     const source = await readFile(path.join(ROOT, "kit/core", file), "utf8");
     const imports = [...source.matchAll(/^import .* from ['"]([^'"]+)['"]/gm)].map((match) => match[1]);
-    assert.ok(imports.every((name) => ["./ambient.mjs", "./panels.mjs", "./icons.mjs", "./lighting.mjs"].includes(name)), `${file} imports ${imports}`);
+    assert.ok(imports.every((name) => ["./ambient.mjs", "./panels.mjs", "./icons.mjs", "./lighting.mjs", "./vfx/catalog.mjs", "./vfx/plan.mjs"].includes(name)), `${file} imports ${imports}`);
     assert.doesNotMatch(source, /\brequire\(|Date\.now|performance\.now|Math\.random/);
   }
 });
 
 test("story.mjs keeps the kinds, param ranges, colours and treatments in step", () => {
   assert.deepEqual(STORY_BACKGROUND_KINDS, [...BACKGROUND_KINDS]);
-  assert.equal(BACKGROUND_KINDS.length, 17);
+  assert.equal(BACKGROUND_KINDS.length, 18);
   for (const kind of BACKGROUND_KINDS) {
     assert.deepEqual(STORY_BACKGROUND_PARAMS[kind], Object.fromEntries(Object.entries(BACKGROUND_PARAMS[kind]).map(([key, value]) => [key, [value.min, value.max]])), kind);
     assert.deepEqual(STORY_BACKGROUND_OPTIONS[kind], Object.fromEntries(Object.entries(BACKGROUND_OPTIONS[kind]).map(([key, value]) => [key, [...value.values]])), kind);
@@ -347,4 +347,34 @@ test("seeded patterns are visible: the strongest pattern tone stands off bg, and
       for (const tone of plan.tones) assert.ok(contrast(paper, tone) >= Math.min(4.5, contrast(paper, bg) - 0.01), `${kind} ${seed}: text on ${tone}`);
     }
   }
+});
+
+test("weather draws a VFX loop on a canvas pair that covers the frame, off unless the story asks", async () => {
+  const { VFX_WEATHER } = await import("@launchclip/core/vfx/catalog.mjs");
+  const { drawVfxFrame } = await import("@launchclip/core/vfx/paint.mjs");
+  assert.deepEqual(BACKGROUND_OPTIONS.weather.type.values, Object.keys(VFX_WEATHER));
+  assert.deepEqual(STORY_BACKGROUND_OPTIONS.weather.type, Object.keys(VFX_WEATHER));
+  assert.ok(!backgroundPlan(story())?.layers.some((layer) => layer.vfx), "no weather without a story asking");
+  for (const [width, height, grid] of [[1920, 1080, 6], [1080, 1920, 11], [1080, 1080, 6]]) {
+    const plan = backgroundPlan({ ...story({ background: { kind: "weather", params: { type: "snow" } } }), format: { width, height } });
+    const [layer] = plan.layers;
+    assert.equal(layer.vfx.grid, grid);
+    assert.ok(layer.box.x <= 0 && layer.box.y <= 0 && layer.box.x + layer.box.width >= width && layer.box.y + layer.box.height >= height, `${width}x${height} covered`);
+    assert.equal(layer.vfx.cues[0].effect, "snow");
+  }
+  // it moves with the ambient level, and level off holds the first frame
+  const moving = backgroundPlan(story({ background: { kind: "weather" } })).layers[0].vfx;
+  const still = backgroundPlan(story({ background: { kind: "weather" }, ambient: { level: "off" } })).layers[0].vfx;
+  assert.equal(still.cues[0].speed, 0);
+  const bytes = (plan, t) => Buffer.from(drawVfxFrame(plan, t).light.buffer).toString("base64");
+  assert.notEqual(bytes(moving, 1), bytes(moving, 2));
+  assert.equal(bytes(still, 1), bytes(still, 2));
+  assert.match(panelFillErrors({ kind: "weather" }).join(), /cannot be weather/);
+  const base = JSON.parse(await readFile(path.join(MINIMAL, "storyboard.json"), "utf8"));
+  const words = JSON.parse(await readFile(path.join(MINIMAL, "NARRATION.json"), "utf8")).words;
+  const { html } = await compileStoryToHyperFrames(resolveStory({ ...base, background: { kind: "weather", params: { type: "fireflies" } } }, { words }), { write: false, sourceDir: MINIMAL });
+  assert.match(html, /<canvas id="lc-bg-[^"]+-weather-light"[^>]*mix-blend-mode:plus-lighter/);
+  assert.match(html, /window\.lcVfx = window\.lcVfx/, "the painter is inlined for the weather alone");
+  const source = await readFile(path.join(ROOT, "kit", "remotion", "StoryComposition.tsx"), "utf8");
+  assert.match(source, /if \(layer\.vfx\) return <div style=\{style\}><VfxCanvas plan=\{layer\.vfx\}/);
 });

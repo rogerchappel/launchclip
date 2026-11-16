@@ -427,14 +427,16 @@ function tierRules(tier) {
 
 function laneRules(lane, profile = null) {
   const rules = {
-    motion: 'motion: no voice. Full-frame modules cover the whole duration back to back on track 0 (no gaps). Time scenes in seconds or beat anchors. finish snaps second-timed cuts to the nearest downbeat (within 0.25 s), so plan cuts on bar lines where you can.',
-    'voiceover-motion': 'voiceover-motion: audio.voice and audio.words are fixed inputs; copy them unchanged. Full-frame modules cover the whole duration on track 0. Start scenes and place hits on word anchors from the narration so visuals land on the spoken word. Add a captions overlay.',
-    'footage-led': `footage-led: base (the edited recording under assets/) plays underneath and is a fixed input; copy it unchanged. Scenes are overlays beside the presenter and full-frame inserts (insert: true), placed where the direction map says: every dress or insert line gets its scenes, and face lines keep the recording on purpose. ${coverageRule(profile)}${faceTimeRule(profile)} ${FREE_TYPE} Add a captions overlay.`
+    motion: 'motion: no voice. Full-frame modules cover the whole duration back to back on track 0 (no gaps). Time scenes in seconds or beat anchors. finish snaps second-timed cuts to the nearest downbeat (within 0.25 s), so plan cuts on bar lines where you can. ' + ON_SCREEN_TEXT,
+    'voiceover-motion': 'voiceover-motion: audio.voice and audio.words are fixed inputs; copy them unchanged. Full-frame modules cover the whole duration on track 0. Start scenes and place hits on word anchors from the narration so visuals land on the spoken word. Add a captions overlay. ' + ON_SCREEN_TEXT,
+    'footage-led': `footage-led: base (the edited recording under assets/) plays underneath and is a fixed input; copy it unchanged. Scenes are overlays beside the presenter and full-frame inserts (insert: true), placed where the direction map says: every dress or insert line gets its scenes, and face lines keep the recording on purpose. ${coverageRule(profile)}${faceTimeRule(profile)} ${FREE_TYPE} ${ON_SCREEN_TEXT} Add a captions overlay.`
   };
   return lane && rules[lane] ? [rules[lane]] : STORY_LANES.map((name) => rules[name]);
 }
 
 // Over a presenter, type set straight on the footage and real pictures read as edited; a run of boxed cards reads as a slideshow.
+// The pilot review: echoed headlines, chips on the flat plate and stock icons read as cheap (kit/core/tells.mjs).
+const ON_SCREEN_TEXT = 'On-screen text adds what the narration does not say (the figure, the name, the trade-off, the label on the picture), never the line the caption is reading: a headline whose words the voice says while it is up competes with the caption. No boxed panels or chips on a flat plate: with footage or a photo to hand, set the words over it as free type (before-after for one thing in two states, media-compare for two options, item-list over the footage for a list, media-grid tiles of real footage with a label each for named options, photo-scene lines for a named thing) or give the card a scenes[i].backdrop. An icon leads a card only when it names the thing; never a stock glyph (layers, sparkle, rocket) standing in for the topic.';
 const FREE_TYPE = 'Over the presenter prefer free type and pictures to boxed cards: an emphasis-caption, kinetic-words or a motion-title for the words that matter, set straight on the footage with no panel behind them, and a full-frame shot or screen for a thing the viewer could see. A boxed card (checklist, compare, stat-card, callout, concept-card) is for a real list or comparison: at most one in any 15 s, and no module twice in a row.';
 
 // The footage-led coverage rule: the cadence profile's band (RFC §5.5), not a fixed cap.

@@ -42,6 +42,7 @@ export const TELLS = Object.freeze({
   glowSaturation: 0.25, chromaSaturation: 0.3,
   stragglerLines: 3, organicPoints: 12, pulseShare: 0.02,
   heroMetrics: 1, signatureScenes: 3,
+  chipBoxes: 2, headlineEcho: 0.5, headlineLetters: 4,
   // Frame rules (frameTells): shares of the sampled frame, colour distances in RGB.
   accentShare: 0.1, accentDistance: 48, rasterDim: 0.85, edgeStep: 60, blackStep: 12, edgeSides: 3,
   // Text over footage (thin-text-on-footage): the share of edge pixels (a
@@ -91,6 +92,10 @@ export const TELL_REGISTRY = Object.freeze([
   tell('hero-metric', 'slop', 'warning', 'plan', 'heroMetric', 'Put the number on the thing it counts, in the world.', 'impeccable, unslop, frontend-design'),
   tell('card-grid', 'slop', 'warning', 'plan', 'cardGrid', 'Vary the sizes so one leads, or use item-list.', 'impeccable, unslop'),
   tell('icon-tile', 'slop', 'warning', 'plan', 'iconTile', 'The icon beside the text, or none.', 'impeccable'),
+  // The pilot's cheap modules (a 9:16 explainer with the brand's own footage).
+  tell('boxed-on-flat', 'slop', 'error', 'plan', 'boxedOnFlat', 'Free type over the footage or a photo: before-after for one thing in two states, media-compare for two options with footage, item-list over footage, media-grid photo-backed tiles, photo-scene lines; or the same module on a scene backdrop.', 'LaunchClip pilot review'),
+  tell('stock-icon', 'slop', 'warning', 'plan', 'stockIcon', 'Show the thing itself (the footage, a photo, an object), or no icon.', 'LaunchClip pilot review'),
+  tell('caption-echoes-headline', 'slop', 'warning', 'plan', 'captionEchoesHeadline', 'Make the on-screen text add what the narration does not say (the figure, the name, the trade-off), or drop the headline and let the caption carry the line.', 'LaunchClip pilot review'),
   tell('emoji-icons', 'slop', 'error', 'plan', 'emojiIcons', 'One icon set (catalog-h-icons) or none.', 'unslop, impeccable'),
   tell('decorative-chrome', 'slop', 'warning', 'plan', 'decorativeChrome', 'Remove it, or show the real series.', 'impeccable, unslop'),
   tell('pulsing-dot', 'slop', 'warning', 'plan', 'pulsingDot', 'Keep it still unless something is live.', 'impeccable, unslop'),
@@ -189,6 +194,22 @@ const OVERUSED_FONTS = Object.freeze(['Inter', 'Space Grotesk', 'Instrument Seri
 const EMOJI = /\p{Extended_Pictographic}/u;
 const AI_STOCK = /\b(robots?|android|cyborg|glowing brain|brain|neural|circuit(?:s| board| lines)?|hologram|matrix code)\b/i;
 const PROMPT_KEY = /prompt|query|search/i;
+// Real interfaces rebuilt on screen, and diagrams and charts: their boxes are the information.
+const REAL_UI = /social|tooltip|window|terminal|repo-|commit|diff|device|evidence|tokenizer|calendar|month|date-|heatmap|keyboard|ui-|table|code|chat|notification|browser|person-id|subscribe|watermark|chart|plot|map|diagram|graph|clock|odometer|grid|multiples|cloud|ticker|archive/;
+const wordedBox = (node) => viewTexts(node).some((t) => words(t.text).filter((w) => /\p{L}{2,}/u.test(w)).length >= 2);
+const isFill = (v) => typeof v === 'string' && v.trim() && !/^(transparent|none)$/i.test(v.trim()) && !/^#[0-9a-f]{6}00$/i.test(v.trim());
+const isBox = (node) => Boolean(parseFloat(node.style?.borderRadius) || /%/.test(String(node.style?.borderRadius ?? ''))) && (isFill(node.style?.background) || isFill(node.style?.backgroundColor) || /\b(solid|dashed)\b/.test(String(node.style?.border ?? '')));
+// Icons that stand for any topic: on a hero card they read as a placeholder.
+const STOCK_ICONS = new Set(['layers', 'box', 'boxes', 'sparkle', 'sparkles', 'star', 'lightbulb', 'rocket', 'bolt', 'zap', 'check', 'check-circle', 'info', 'grid', 'layout', 'target', 'diamond', 'gear', 'puzzle', 'trophy', 'flag', 'help']);
+const HERO_ICON = new Set(['concept-card', 'section-card', 'stat-card', 'object-card']);
+const ECHO_STOP = new Set(['with', 'your', 'that', 'this', 'from', 'what', 'when', 'they', 'them', 'have', 'more', 'than', 'into', 'about', 'just', 'only', 'also', 'every', 'each', 'here', 'there', 'their', 'will', 'were', 'been']);
+const echoToken = (w) => String(w ?? '').toLowerCase().replace(/[‘’]/g, "'").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+// The scene's headline: the largest text of two or more words in its view, else its longest title-like param.
+function headlineOf(s) {
+  if (s.view) return viewTexts(s.view).filter((t) => words(t.text).length >= 2).sort((a, b) => Number(b.style.fontSize) - Number(a.style.fontSize))[0]?.text ?? null;
+  const p = s.scene?.params ?? {};
+  return ['headline', 'title', 'heading', 'text', 'label'].map((k) => p[k]).filter((v) => typeof v === 'string' && words(v).length >= 2).sort((a, b) => b.length - a.length)[0] ?? null;
+}
 const kindOf = (value) => (typeof value === 'string' ? value : value?.kind ?? null);
 
 function stringsUnder(value, keyTest, out = [], parentKey = '') {
@@ -389,11 +410,41 @@ const DETECTORS = {
     if (!s.view) return null;
     for (const { node } of viewNodes(s.view)) {
       const kids = (node.children ?? []).filter((k) => k && typeof k === 'object');
-      const i = kids.findIndex((k) => (k.style?.background || k.style?.backgroundColor) && k.style?.borderRadius && viewNodes(k).some(({ node: n }) => n.tag === 'svg') && !viewTexts(k).length);
+      // The fill sits on the tile itself or on its first layer (catalog-g-base iconTile).
+      const filled = (k) => [k, ...(k.children ?? []).filter((c) => c && typeof c === 'object')].some((n) => (isFill(n.style?.background) || isFill(n.style?.backgroundColor)) && n.style?.borderRadius);
+      const i = kids.findIndex((k) => filled(k) && viewNodes(k).some(({ node: n }) => n.tag === 'svg') && !viewTexts(k).length);
       if (i >= 0 && kids[i + 1] && viewTexts(kids[i + 1]).length) return 'an icon in a filled tile sits above the headline';
     }
     return null;
   }),
+  boxedOnFlat: (input) => perScene(input, (s) => {
+    if (!s.view || REAL_UI.test(s.module) || s.scene?.backdrop || input.scenes.some((o) => o !== s && overlaps(o, s) && PICTURED.test(o.module))) return null;
+    const frame = Number(input.story?.format?.width) || 1080;
+    for (const { node } of viewNodes(s.view)) {
+      const boxes = (node.children ?? []).filter((k) => k && typeof k === 'object' && isBox(k) && wordedBox(k) && !(Number(k.style?.width) >= frame * 0.9));
+      if (boxes.length >= TELLS.chipBoxes) return `${s.id} (${s.module}) sets ${boxes.length} boxed text panels side by side on a flat plate`;
+    }
+    return null;
+  }),
+  stockIcon: (input) => perScene(input, (s) => {
+    const icon = s.scene?.params?.icon;
+    if (!HERO_ICON.has(s.module) || !STOCK_ICONS.has(icon)) return null;
+    const shown = new Set(sceneTextWords(s.scene.params));
+    return icon.split('-').some((part) => shown.has(part)) ? null : `${s.id} (${s.module}) leads with the stock icon "${icon}", which names nothing in its text`;
+  }),
+  captionEchoesHeadline(input) {
+    if (!(input.story?.overlays ?? []).some((o) => o?.type === 'captions') || !input.words?.length) return [];
+    return perScene(input, (s) => {
+      // Title cards hide their captions (captions.mjs captionEchoHide); cards are fact-card-vs-caption's.
+      if (CAPTION_ECHO_MODULES.includes(s.module) || isCard(s.module)) return null;
+      const head = headlineOf(s);
+      const content = head ? [...new Set(words(head).map(echoToken).filter((w) => w.length >= TELLS.headlineLetters && !ECHO_STOP.has(w)))] : [];
+      if (content.length < 2) return null;
+      const said = new Set(input.words.filter((w) => w.start >= s.start - 0.2 && w.start < s.end).map((w) => echoToken(w.word ?? w.text)));
+      const echoed = content.filter((w) => said.has(w));
+      return echoed.length / content.length >= TELLS.headlineEcho ? `the caption says ${echoed.map((w) => JSON.stringify(w)).join(', ')} while the headline ${JSON.stringify(head.slice(0, 48))} is on screen` : null;
+    });
+  },
   emojiIcons: (input) => perScene(input, (s) => {
     const hits = stringsUnder(s.scene?.params ?? {}, () => true).filter((v) => EMOJI.test(v) && !/^(assets|https?:)\//.test(v));
     return hits.length ? `emoji on screen (${hits.slice(0, 3).map((v) => JSON.stringify(v.slice(0, 24))).join(', ')})` : null;

@@ -277,6 +277,66 @@ and falls back to shot length only with no data. On our renders: planned type
 vs classified type, ≥ 80% agreement or a `transition-intent` warning listing
 the mismatches.
 
+#### Built so far (phase 4, transition classifier)
+
+What shipped, and where it departs from the text above:
+
+- **Code.** `classifyTransitions`, `pictureCrop`, `analyzeTransitionsFile`
+  and `transitionStats` in `src/render_motion_analysis.js`, every
+  threshold in `TRANSITION_CLASSIFY`. `TRANSITION_TYPE_KINDS` gives the
+  kind each of our types draws; `KIND_TRANSITION_TYPES` maps a measured
+  kind back to our types for the style drafter.
+- **Grids.** The file reader decodes twice: 48 frames at 640 px on the long
+  side find the crop (rounded inward, so no bar bleeds in), then ffmpeg
+  crops the picture and scales it straight to a work grid with a 48 px
+  short side at 30 fps, so a letterboxed copy is read from the same
+  pixels. Distances use a 12×16 thumb and a 6×8 block grid of that grid.
+- **Boundaries.** "Just outside" is a quarter of the window (at least two
+  frames). Overlapping windows are grouped by their tightened spans, not
+  the windows (a 1.5 s window reaches the next boundary), and the widest
+  wins: a cover through a held dark frame also passes as old → dark and
+  dark → new. The warp check searches five scales and shifts up to 30% on
+  a half-size grid. Step 3 (widening a hard cut's span) is not built: a
+  cut is one frame pair jumping from progress ≤ 0.12 to ≥ 0.88 inside a
+  span under 0.25 s, because an eased push is as short but passes through.
+- **Kinds.** The flat-frame test uses 1.4826 × the median absolute
+  deviation, not the std, so sparks and light streaks over a dark cover
+  still count. A new `dip` via `pattern`: a middle frame at least 1.2× the
+  A–B change from both pictures (a halftone grid; glow-wipe peaks at 0.98).
+  The edge composites take one gain per frame when it lowers the residual
+  (glow-wipe's flare, push-blur's exposure dip), the residual limit is 0.35
+  (not 0.25; orbit and the pans with a gap sit at 0.27–0.33, the blend test
+  still rules out dissolves), and cover or reveal must beat push by 20% as a
+  moving mode must beat wipe (near ties flipped between renderers). A slide
+  whose sharpest middle frame has under 0.7 of its composite's detail is a
+  whip; a smeared "wipe" goes on to the motion tests. Shift, scale and
+  rotation come from block matching on the work grid and a similarity fit,
+  not `globalMotion`/`analyzeZoom` (fixed grids, another decode). Zoom is
+  a net |log scale| ≥ 0.25 that is at least 0.4 of the summed one (the RFC:
+  summed ≥ 0.5): per-pair fits over two blended pictures are noisy, and our
+  zoom (in 0.6 → 1, out 1 → 1.5) nets 0.31.
+- **The RFC test** (`test/transition_classifier.test.js`, a media test):
+  every type but `overview` between two footage stills at 360×640, cuts
+  mode, both renderers: 27/28 right in each (96%); `whip-pan` reads as a
+  push (its blur lasts two frames at 48 px). Pillarboxed and letterboxed
+  copies give the same kind for every boundary. All nine VFX covers,
+  `dot-wipe` and `light-sweep` cover the frame at their midpoint and read as
+  dips (black, or pattern for the halftone), so the RFC's "wipe →
+  dot-wipe" becomes "dip"; `push-blur` travels with a smear and reads as a
+  whip; between footage `morph`, `rack-focus` and `card-to-card` play as a
+  fade and read as dissolves (blur is untested on our types). In
+  `camera.mode: world` a push is a dolly and reads as zoom. Analysis takes
+  about 5 s for 46 s of video.
+- **Profile fields** land in each reference's `pacing` (with the list of
+  `transitions`) and, averaged, in `reference_stats.pacing`.
+  `grammarFromPacing` orders `transition_preference` by the measured mix
+  (kinds with at least a tenth, first three types) and keeps the shot-length
+  guess for the grammar and for no data. `finish`'s style gate skips the
+  pass.
+- **Not yet built:** planned type vs classified type on our renders and the
+  `transition-intent` warning (phase 7). Spin, shake, blur and glitch have
+  thresholds but no type of ours draws them cleanly, so they are untested.
+
 ### 4.2 Per-element entrances
 
 Decode at 180 px wide, ≤ 15 fps; 4 px cells. A pixel changed when any channel
@@ -356,9 +416,11 @@ planned.
 
 What shipped, and where it departs from the text above:
 
-- **Code.** `analyzeRhythm`, `analyzeRhythmFile`, `speechSpans`, `sfxType`
-  and `rhythmSync` in `src/render_audio_analysis.js`, with every threshold
-  in `AUDIO_RHYTHM` and `SFX_TYPE_RULES`. The FFT and the median-filter
+- **Code.** `analyzeRhythm`, `analyzeRhythmFile`, `speechSpans` and
+  `rhythmSync` in `src/render_audio_analysis.js`, with every threshold in
+  `AUDIO_RHYTHM`; the SFX measures, rules and family table (`sfxFeatures`,
+  `sfxType`, `SFX_TYPE_RULES`, `FAMILY_TYPE`) are the one classifier in
+  `src/sfx/classify.js`. The FFT and the median-filter
   split are not a new `kit/core/sound/dsp.mjs`: they are the ones
   `AUDIO_FEATURES.json` already uses (`fft` and the newly exported
   `percussiveSpectra` in `src/scripts/audio-features.mjs`). Decoding reuses
@@ -384,18 +446,17 @@ What shipped, and where it departs from the text above:
   over 550 Hz, with decay under 0.08 s; whoosh also accepts "noisy and
   sustained" (decay > 0.18 s, tonality < 15); ding's centroid floor is
   1 kHz. Tonality is max/mean of the magnitude, not the power, spectrum.
-  `SFX_FAMILY_TYPES` gives each family its expected type (null for riser,
+  `FAMILY_TYPE` gives each family its expected type (null for riser,
   tally, tape-stop, glitch, error-buzz and pen-scribble). Measured on each
   variant alone: default kit 86% (the test), minimal 78%, glassy 77%,
   organic 55% (its dings and keys are marimba-like, under 1 kHz). Boing
   measures as impact and a space bar as impact in every palette.
-- **Two rule sets.** The immersive sound RFC's classifier
-  (`src/sfx/classify.js`, merged alongside this) types one isolated file
-  with rea-video's thresholds unchanged and its own family table
-  (`FAMILY_TYPE`); this scan shares its `SFX_TYPES` and `typingRuns` but
-  keeps the recalibrated rules above and `SFX_FAMILY_TYPES`. Its baseline
-  types our clicks and keys as ding in every palette, which is what the
-  recalibration fixes. One table and one rule set is a follow-up.
+- **One rule set.** The immersive sound RFC first shipped its own copy
+  (`src/sfx/classify.js`, rea-video's thresholds unchanged, its own family
+  table), which typed our clicks and keys as ding in every palette. The
+  two are now one: the recalibrated rules and this family table live in
+  `src/sfx/classify.js`, and `classifySfx` (one isolated file) and this
+  scan measure with the same `sfxFeatures`.
 - **Profile fields** land in each reference's `sound` and in
   `reference_stats.sound`: all eight from the list above plus
   `beat_synced`. `soundFromAudio` sets `sfx_density` from `sfx_per_min`
