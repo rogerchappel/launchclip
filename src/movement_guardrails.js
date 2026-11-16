@@ -29,6 +29,7 @@ import { MODULES as H } from "@launchclip/core/catalog-h.mjs";
 import { MODULES as CHARACTERS } from "@launchclip/core/catalog-characters.mjs";
 import { MODULES as WORLD } from "@launchclip/core/catalog-world.mjs";
 import { driftEligible } from "@launchclip/core/ambient.mjs";
+import { resolveFeel } from "@launchclip/core/feel.mjs";
 import { stateTimes } from "@launchclip/core/shot-states.mjs";
 import { resolveGrammar } from "@launchclip/core/grammar.mjs";
 import { grammarMotionFindings, sceneMotionFindings } from "@launchclip/core/motion-check.mjs";
@@ -172,11 +173,18 @@ function motionSpans(story, { media = {} } = {}) {
   const duration = Number(story?.resolved?.duration ?? story?.format?.duration) || 0;
   const { windows, entries } = renderedModels(story);
   const live = [], drift = [];
+  // The feel's camera breath (motion.feel ambient, drift or steady) moves every pixel; a stepping camera holds between moves.
+  let feel = null;
+  try { feel = resolveFeel(story); } catch { feel = null; }
+  if (feel?.camera && feel.ambient && feel.ambient.mode !== "step") live.push([0, duration]);
   for (const entry of windows.scenes) {
     for (const tw of entry.tweens) if (tw.duration > 0) live.push([tw.at, tw.at + tw.duration]);
     const model = entries.get(entry.id)?.model;
     if (!model) { live.push([entry.start, entry.renderEnd]); continue; }
-    // A module whose content moves on its own the whole time (layout.live: clip's playing footage or still move).
+    // A module whose content moves on its own the whole time (layout.live: clip's playing footage or still move),
+    // or a card over a playing footage backdrop.
+    const plate = entry.scene?.backdrop ?? entry.scene?.plate;
+    if (plate?.kind === "video") live.push([entry.start, entry.renderEnd]);
     if (model.camera || entry.transitionIn?.camera || model.layout?.live === true) live.push([entry.start, entry.renderEnd]);
     else if (driftEligible(story, entry.scene, model)) drift.push([entry.start, entry.renderEnd]);
     // Measured motion in a full-frame asset (marks drawn on, a camera truck in the video).

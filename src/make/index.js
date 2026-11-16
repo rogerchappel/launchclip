@@ -1568,7 +1568,8 @@ async function planStage(ctx) {
   const hasProvider = Boolean(ctx.adapters.assets || ctx.options.assetProviderCmd || ctx.options.assetProvider);
   const shotLimit = shotRequestLimit(ctx.format?.duration);
   const minShots = hasProvider ? Math.min(Number(options.minShots ?? 0), shotLimit) : 0;
-  const cardBackdrops = hasProvider && String(options.cardBackdrops ?? "off").toLowerCase() === "footage" ? "footage" : null;
+  // Card backdrops are on whenever there is a provider to ask for footage (--card-backdrops off keeps stock plates).
+  const cardBackdrops = hasProvider && String(options.cardBackdrops ?? "footage").toLowerCase() === "footage" ? "footage" : null;
   // --layout: a talking head's layout for the whole video (footage-led, 9:16 for stacked).
   const layout = talkingHeadLayout(options.layout);
   const laidOut = layout !== "full" && lane === "footage-led" ? layout : null;
@@ -1642,7 +1643,7 @@ async function planStage(ctx) {
     ...(lane !== "footage-led" ? { clips: manifest.filter((item) => item.clip) } : {}),
     ...(options.density != null ? { density: Number(options.density) } : {}),
     ...(history?.prompt ? { history: history.prompt } : {}),
-    ...(assets ? { assets, project: ctx.project, minShots, ...(cardBackdrops ? { cardBackdrops } : {}) } : {}),
+    ...(assets ? { assets, project: ctx.project, minShots, cardBackdrops: cardBackdrops ?? "off" } : {}),
     ...(constraints ? { constraints } : {}),
     ...(media.length ? { media } : {}),
     ...(featured.length ? { featured } : {}),

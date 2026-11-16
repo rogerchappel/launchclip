@@ -1,0 +1,355 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Deck materials: cutaways on footage (9:16)",
+  "notes": "Sample for the cutaway rules (tells boxed-on-flat, the planner's footage backdrops): the shape of a deck-materials explainer with library footage, where every card, list, comparison and table sits on footage instead of a filled box on the flat plate. The hook builds in steps, the one split carries a list that fills its panel, the end card plays over a shot, and every cutaway keeps moving (its backdrop plays and the camera breathes). The shots are generated stand-ins (assets/shots/*.mp4); no narration and no paid calls.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 31,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#10140f",
+      "primary": "#e0a33a",
+      "accent": "#8fd3c8",
+      "ink": "#10140f",
+      "paper": "#f4efe6"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "feel": {
+      "preset": "kinetic",
+      "ambient": {
+        "scale": [
+          1.03,
+          1.07
+        ],
+        "shift": 0.016,
+        "period": [
+          3,
+          5
+        ]
+      }
+    }
+  },
+  "scenes": [
+    {
+      "id": "hook",
+      "module": "clip",
+      "start": 0,
+      "end": 1.9,
+      "energy": 2,
+      "params": {
+        "media": "assets/shots/deck.mp4",
+        "move": "push-in",
+        "callouts": [
+          {
+            "text": "Pine, hardwood or composite?",
+            "at": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "id": "hook-2",
+      "module": "clip",
+      "start": 1.9,
+      "end": 4,
+      "energy": 2,
+      "params": {
+        "media": "assets/shots/oil.mp4",
+        "move": "push-in",
+        "callouts": [
+          {
+            "text": "One picks your weekends",
+            "at": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "id": "teaser",
+      "module": "concept-card",
+      "start": 4,
+      "end": 6,
+      "energy": 1,
+      "in": {
+        "type": "push",
+        "dur": 0.45
+      },
+      "backdrop": {
+        "kind": "video",
+        "params": {
+          "src": "assets/shots/railing.mp4",
+          "treatment": "dim"
+        }
+      },
+      "params": {
+        "text": "Coming up",
+        "sub": "One question picks yours"
+      }
+    },
+    {
+      "id": "pine",
+      "module": "clip",
+      "start": 6,
+      "end": 9,
+      "energy": 2,
+      "in": {
+        "type": "push",
+        "dur": 0.45
+      },
+      "params": {
+        "media": "assets/shots/saw.mp4",
+        "move": "push-in",
+        "callouts": [
+          {
+            "text": "#1 Treated pine: cheapest to lay",
+            "at": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "id": "hardwoods",
+      "module": "item-list",
+      "start": 9,
+      "end": 12.5,
+      "energy": 2,
+      "in": {
+        "type": "push",
+        "dur": 0.45
+      },
+      "backdrop": {
+        "kind": "video",
+        "params": {
+          "src": "assets/shots/deck.mp4",
+          "treatment": "dim"
+        }
+      },
+      "params": {
+        "title": "#2 Aussie hardwoods",
+        "variant": "stack",
+        "items": [
+          {
+            "label": "Merbau"
+          },
+          {
+            "label": "Spotted gum"
+          },
+          {
+            "label": "Blackbutt"
+          }
+        ]
+      }
+    },
+    {
+      "id": "oiled",
+      "module": "before-after",
+      "start": 12.5,
+      "end": 16,
+      "energy": 1,
+      "params": {
+        "before": "assets/shots/oil.mp4",
+        "grade": "mono",
+        "gradeSide": "before",
+        "stops": [
+          0.6,
+          0.3,
+          1
+        ],
+        "labels": {
+          "before": "Sun-greyed",
+          "after": "Oiled"
+        }
+      }
+    },
+    {
+      "id": "composite",
+      "module": "clip",
+      "start": 16,
+      "end": 19,
+      "energy": 2,
+      "in": {
+        "type": "push",
+        "dur": 0.45
+      },
+      "params": {
+        "media": "assets/shots/railing.mp4",
+        "move": "push-in",
+        "callouts": [
+          {
+            "text": "#3 Composite",
+            "at": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "id": "composite-facts",
+      "module": "split-screen",
+      "start": 19,
+      "end": 22.5,
+      "energy": 1,
+      "params": {
+        "media": "assets/shots/railing.mp4",
+        "title": "What composite asks of you",
+        "items": [
+          {
+            "text": "Wash it twice a year",
+            "at": 0.6
+          },
+          {
+            "text": "No oil, no sanding",
+            "at": 1.3
+          },
+          {
+            "text": "Pay more up front",
+            "at": 2
+          }
+        ],
+        "variant": "bottom"
+      }
+    },
+    {
+      "id": "tradeoff",
+      "module": "clip",
+      "start": 22.5,
+      "end": 25.5,
+      "energy": 2,
+      "in": {
+        "type": "push",
+        "dur": 0.45
+      },
+      "params": {
+        "media": "assets/shots/oil.mp4",
+        "move": "push-in",
+        "callouts": [
+          {
+            "text": "Save now or free weekends?",
+            "at": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "id": "verdict",
+      "module": "comparison-table",
+      "start": 25.5,
+      "end": 28.5,
+      "energy": 2,
+      "in": {
+        "type": "push",
+        "dur": 0.45
+      },
+      "backdrop": {
+        "kind": "video",
+        "params": {
+          "src": "assets/shots/saw.mp4",
+          "treatment": "dim"
+        }
+      },
+      "params": {
+        "title": "No brush? Pick composite",
+        "columns": [
+          "Pine",
+          "Hardwood",
+          "Composite"
+        ],
+        "rows": [
+          {
+            "label": "Cheap to buy",
+            "values": [
+              true,
+              false,
+              false
+            ]
+          },
+          {
+            "label": "No oiling",
+            "values": [
+              false,
+              false,
+              true
+            ]
+          }
+        ],
+        "highlight": 2
+      }
+    },
+    {
+      "id": "end",
+      "module": "end-card",
+      "start": 28.5,
+      "end": 31,
+      "energy": 1,
+      "in": {
+        "type": "fade",
+        "dur": 0.4
+      },
+      "backdrop": {
+        "kind": "video",
+        "params": {
+          "src": "assets/shots/deck.mp4",
+          "treatment": "dim"
+        }
+      },
+      "params": {
+        "action": "follow",
+        "headline": "Follow for part two: fixings",
+        "handle": "@deckschool"
+      }
+    }
+  ],
+  "camera": {
+    "kicks": [
+      {
+        "at": 0.9
+      },
+      {
+        "at": 2.6
+      },
+      {
+        "at": 4.6
+      },
+      {
+        "at": 7.2
+      },
+      {
+        "at": 9.4
+      },
+      {
+        "at": 11.4
+      },
+      {
+        "at": 13.8
+      },
+      {
+        "at": 17.2
+      },
+      {
+        "at": 20.2
+      },
+      {
+        "at": 23.4
+      },
+      {
+        "at": 26.1
+      },
+      {
+        "at": 28.0
+      },
+      {
+        "at": 29.6
+      }
+    ]
+  }
+}

@@ -299,11 +299,26 @@ export function textLines(text, size, family, width, spacing = 0, slash = false)
   if (line) lines.push(line);
   return lines.length ? lines : [''];
 }
+// Balanced lines: wrap(width) → lines (or null) at the narrowest width, to
+// 1 px, that keeps as many lines as at `width`, so the lines come out close
+// in width and the last is never a lone short word ("Really oil / it?" →
+// "Really / oil it?"). One line comes back as wrapped.
+export function balancedLines(wrap, width) {
+  const lines = wrap(width);
+  if (!lines || lines.length < 2) return lines;
+  let lo = 0, hi = width;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) / 2, test = wrap(mid);
+    if (test && test.length <= lines.length) hi = mid; else lo = mid;
+  }
+  return wrap(hi);
+}
 // Largest size in [min, preferred] (step 2) where text fits maxLines lines:
 // first at the brand face's real width (brandTextScale), so a wide face gets
 // smaller type, then, when nothing fits that way, at the calibrated width.
 // Text with a URL shrinks before it breaks: only when no size fits does a URL
-// break after a "/", onto one more line if it needs it. → {size, lines, rows}
+// break after a "/", onto one more line if it needs it. → {size, lines, rows
+// (balanced, as text-wrap: balance draws them)}
 export function fitText(check, path, text, {family, width, preferred, min, maxLines = 1, spacing = 0}) {
   const scale = brandTextScale(family);
   const urlish = String(text).split(/\s+/).some(isUrlish);
@@ -312,7 +327,7 @@ export function fitText(check, path, text, {family, width, preferred, min, maxLi
     for (const fitWidth of scale > 1 ? [width / scale, width] : [width]) {
       for (let size = Math.floor(preferred); size >= Math.ceil(min); size -= 2) {
         const rows = textLines(text, size, family, fitWidth, spacing, slash);
-        if (rows && rows.length <= most) return {size, lines: rows.length, rows};
+        if (rows && rows.length <= most) return {size, lines: rows.length, rows: balancedLines(w => textLines(text, size, family, w, spacing, slash), fitWidth)};
       }
     }
   }

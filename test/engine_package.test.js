@@ -89,7 +89,7 @@ const words = [['Every', 0.2], ['morning', 0.6], ['starts', 1.1], ['here', 1.5],
 const parsed = JSON.parse(story);
 const report = await engine.planStoryboard({ brief: 'A calm morning coffee short.', words, lane: parsed.lane, format: parsed.format, audio: parsed.audio, tier: 'structured', model: 'app-model', project: 'coffee' });
 const { synthAmbience } = await import(new URL('./node_modules/@launchclip/engine/src/scripts/synth-audio-kit.mjs', import.meta.url));
-console.log(JSON.stringify({ resolved: import.meta.resolve('@launchclip/engine'), keys: ADAPTER_KEYS, loads, status: report.status, errors: report.errors, shots: report.shots.length, synth: typeof synthAmbience }));
+console.log(JSON.stringify({ resolved: import.meta.resolve('@launchclip/engine'), keys: ADAPTER_KEYS, loads, status: report.status, errors: report.errors, shots: report.shots.filter((shot) => shot.slot !== 'backdrop').length, backdrops: report.shots.filter((shot) => shot.slot === 'backdrop').length, synth: typeof synthAmbience }));
 `);
   const story = {
     schema: 'launchclip.story.v1', title: 'Morning', lane: 'voiceover-motion',
@@ -112,6 +112,7 @@ console.log(JSON.stringify({ resolved: import.meta.resolve('@launchclip/engine')
   assert.deepEqual(Object.entries(result.loads).filter(([, value]) => value.startsWith('MISSING')), []);
   assert.equal(result.status, 'passed', result.errors.join('\n'));
   assert.equal(result.shots, 1);
+  assert.equal(result.backdrops, 1, 'the call to action asks for a footage backdrop (on by default with a provider)');
   assert.equal(result.synth, 'function');
   assert.equal(existsSync(path.join(temp, 'no-home')), false, 'nothing was written under the home folder');
   assert.ok(existsSync(path.join(work, 'coffee', 'assets', 'shots')), 'the shot landed in the project');
