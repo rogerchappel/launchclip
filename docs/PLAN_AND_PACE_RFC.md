@@ -415,6 +415,80 @@ them. On our renders the measured ease must match the grammar's role; an
 ease-in measured on an entrance is the `entrance-ease` rule, caught from
 pixels when the ops missed it (a custom module).
 
+#### Built so far (phase 5, entrances)
+
+What shipped, and where it departs from the text above:
+
+- **Code.** `classifyEntrances`, `entranceAccumulator`, `entranceStats` and
+  `analyzeEntrancesFile` in `src/render_motion_analysis.js`, every
+  threshold in `ENTRANCE_CLASSIFY`. `ENTRANCE_EASE_ROLES` maps a measured
+  ease to the grammar role it plays (ease-out → enter, ease-in → exit,
+  in-out → move, linear → none).
+- **Decode.** 180 px wide at 30 fps, not ≤ 15: at 15 fps a start is known
+  only to 67 ms and the stagger test is one 30 fps frame. Frames are
+  reduced one at a time to per-cell stats (means, detail, changed share,
+  change size), so no pixels are kept; only the first 120 s are read.
+- **Shots.** The RFC leaves "a shot" open: a frame pair with at least half
+  the cells active and three times both neighbours splits shots.
+- **Continuous layer.** The slow-drift test counts only 1 s windows in which
+  the cell is never active, so an element that enters and stays is not
+  drift. Drifting cells still take part in events (they are never active,
+  so they make none); only the busy cells (active > 70%) are left out.
+- **Events.** New: an event over 60% of the frame is a transition or a
+  camera move and is dropped. Each event has a role from the luma detail
+  in its cells before and after (≥ 1.25× more after is an entrance, 1.25×
+  less an exit, else a change), so exits and colour changes do not count
+  as entrances.
+- **Ease.** The thresholded span misses an ease's slow ends and keeps
+  bridged noise, which shifts the midpoint (a power2.inOut bell read as
+  ease-out): the activity curve is the raw change less its noise floor
+  (the lower of the medians over six pairs each side), and the span runs
+  out from the curve's peak, up to six pairs past the thresholded span,
+  while the activity stays above 5% of the peak. The entrance's duration
+  is that span; its start (`at`, which staggers read) is where the curve
+  first crosses a quarter of its peak, between frame pairs, because the
+  first thresholded pair jitters with an item's size on a slow ease-in.
+  The RFC's cuts hold: on renders ease-in shares sit at 0.19–0.29,
+  power2.inOut CVs at 0.61–0.79 and linear CVs at 0.17–0.37.
+- **Kinds** are `draw-on`, `slide`, `scale` and `fade` (the last when
+  nothing else matches). The first frame read for travel and width is the
+  first with half the final presence (a cell whose mean moved more than 10
+  levels): earlier frames hold a few bright cells whose centroid wanders.
+  A slide must also travel a quarter of its own extent on that axis, not
+  only 2% of the frame: a blurred shrink-in drifts up to 7% of its size,
+  a slide about 100%. Only draw-ons join into one draw-on: staggered items
+  whose interval equals their duration would otherwise join.
+- **Stagger.** Entrances like the first (kind, size, duration) are taken in
+  order while each gap stays within 40% of the first gap, so a shot with
+  several runs of items gives several sequences; the interval is the mean
+  gap between starts.
+- **Profile fields** land in each reference's `energy` (they describe
+  motion, not cuts) and, combined across references (medians, mean mixes),
+  in `reference_stats.energy`. `grammarFromEntrances` in
+  `src/style_reference.js` writes `motion.grammar` as `{base, ...overrides}`:
+  `duration.enter` from `entrance_seconds`, `stagger` as
+  `stagger_interval_seconds ÷ MODULE_STAGGER_SECONDS` (0.28 s, the median
+  element-level module default), and `ease.enter` from the ease at least
+  half the entrances share (in-out → power2.inOut, linear → none; ease-out
+  keeps the preset's own ease, ease-in is never copied). `finish`'s style
+  gate skips the pass.
+- **The RFC test** (`test/entrance_classifier.test.js`, a media test):
+  kinetic-words beats (`stack`, the `scale` entrance: opacity, scale and
+  blur on one ease) at staggers of 0.3, 0.45 and 0.6 s, with the grammar's
+  enter ease set to power3.out, power2.in, power2.inOut and none, rendered
+  at 360×640 by both renderers. Ease role right for 48/48 beats in
+  HyperFrames and 47/48 in Remotion (one linear beat read as in-out); every
+  interval within 0.011 s. Each scene ends one stagger after its last beat,
+  so every beat enters for the same time: a longer last entrance starts
+  later on a slow ease and pulled the 0.3 s interval a frame off. The
+  `rise` entrance is not a fixture: its mask hides the start of the motion,
+  so its pixels show less ease-in than the ops plan (a linear rise reads as
+  in-out). Synthetic unit tests cover the four eases, intervals, the four
+  kinds, exits and the continuous layer. Analysis takes about 1.5 s for 9 s
+  of video.
+- **Not yet built:** planned-vs-measured eases on our renders and the
+  `entrance-ease` rule from pixels (phase 7).
+
 ### 4.3 Tempo, beats, SFX and sync
 
 STFT at 22,050 Hz, n_fft 1024, hop 256 (11.6 ms). Harmonic/percussive split by
