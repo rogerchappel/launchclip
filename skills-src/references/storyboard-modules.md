@@ -234,6 +234,26 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - slowed: a card or character dragging: slow, stuck, on a mask, loops to the scene end; tape-stop
 - frozen: a card or character frozen: stalled, on ice, on a mask, loops to the scene end; shimmer
 - burning: a card or character on fire: burning money, burnout, on a mask, loops to the scene end; riser
+- blunt-hit: a soft, heavy thud: a weight dropped, a bad number landing; thud
+- plasma-explosion: a clean energy blast with no smoke: a breakthrough, a power-up; impact
+- implosion: everything sucked into one point, then a pop: a collapse, a squeeze; subdrop
+- spark-arc: a live arc between two points: a connection, a current, loops to the scene end; snap
+- zap-hit: a contact zap: a shock, a bug, a short circuit; snap
+- ball-lightning: a wandering ball of energy: an idea, a live charge, loops to the scene end; shimmer
+- holy-pillar: a spotlight from above on the one that matters; shimmer
+- feather-burst: a puff of feathers: something light, a soft landing; pop
+- heal-aoe: a healing ring across the floor: a fix, a recovery; chime
+- mana-burst: energy gathering and blowing out: a charge, a release; riser
+- star-fall: stars falling over an area: a shower of wins; sparkle
+- chest-open: a chest kicking open with coins: a payout, a reward; cash
+- power-star: a power star: the bonus, the upgrade, loops to the scene end; sparkle
+- key-glint: a key with a glint: the answer, access, loops to the scene end; ping
+- gem-spin: a spinning gem: the valuable one, the premium tier, loops to the scene end; sparkle
+- quake: the ground jolting and splitting: a shake-up, a market shock; thud
+- earth-spike: a stone spike ramming up from the floor: a sudden spike; impact
+- spawn-portal: a rift opening and closing: something new arriving; whoosh
+- coin-drop: coins bursting out and settling: earnings, a drop of cash; cash
+- splash: a drop into water: a launch into a market, a first step; pop
 
 ## Footage layouts (sections)
 
