@@ -174,10 +174,38 @@ async function endCardLogo(value, projectDir, measure) {
   return { ...measured, ...given };
 }
 
+const IMAGE = /^assets\/.+\.(svg|png|jpe?g|webp)$/i;
+
+/**
+ * `value` (scene params, or anything inside them) with every brand-mark
+ * member (`{mark: "assets/…"}` or `{mark: {src, …}}` nested in a set, see
+ * kit/core/member-mark.mjs) measured like an end-card logo. A module's own
+ * top-level `mark` param is not a member and is left alone. → the same value
+ * when nothing changes.
+ */
+async function withMemberMarks(value, projectDir, measure, top = false) {
+  if (!value || typeof value !== "object") return value;
+  let changed = false;
+  const entries = await Promise.all(Object.entries(value).map(async ([key, item]) => {
+    if (key === "mark" && !top && (typeof item === "string" ? IMAGE.test(item.trim()) : typeof item?.src === "string")) {
+      const logo = await endCardLogo(item, projectDir, measure);
+      if (logo) { changed = true; return [key, logo]; }
+      return [key, item];
+    }
+    const next = await withMemberMarks(item, projectDir, measure);
+    if (next !== item) changed = true;
+    return [key, next];
+  }));
+  if (!changed) return value;
+  return Array.isArray(value) ? entries.map(([, item]) => item) : Object.fromEntries(entries);
+}
+
 /**
  * The story with every brand-lockup scene's untinted mark and wordmark tinted
  * to read on its backdrop (lockupTint), measured from the files. A stated
- * tint or markTint (even "none") wins. → the same story when nothing changes.
+ * tint or markTint (even "none") wins. Brand-mark members in any other
+ * scene are measured like an end-card logo (withMemberMarks). → the same
+ * story when nothing changes.
  */
 export async function withLockupTints(story, projectDir = process.cwd(), measure = measureLogoMark) {
   const scenes = Array.isArray(story?.scenes) ? story.scenes : [];
@@ -189,7 +217,13 @@ export async function withLockupTints(story, projectDir = process.cwd(), measure
       changed = true;
       return { ...scene, params: { ...scene.params, logo } };
     }
-    if (scene?.module !== "brand-lockup" || !scene.params || typeof scene.params !== "object") return scene;
+    if (scene?.module !== "brand-lockup") {
+      const params = await withMemberMarks(scene?.params, projectDir, measure, true);
+      if (params === scene?.params) return scene;
+      changed = true;
+      return { ...scene, params };
+    }
+    if (!scene.params || typeof scene.params !== "object") return scene;
     const params = { ...scene.params };
     let tinted = false;
     const src = (value) => (typeof value === "string" ? value : value?.src);
