@@ -626,6 +626,25 @@ member. Graphics draw byte for byte as before. `test/members.test.js` proves
 the path with a stand-in member; each member module brings its own parity
 fixture, tests and 9:16 sample.
 
+**Member: a brand mark (`brand-mark`).** `kit/core/member-mark.mjs`. An
+integration's or partner's logo in place of an icon is
+`{member: {module: "brand-mark", src, label?}}`, a project file (`assets/…`,
+never fetched). It reuses the end card's logo handling rather than a second
+one: when the story is read, `withLockupTints` (`src/logo_mark.js`) measures
+every brand-mark member once, like an end-card logo, filling `ratio`, `tone`,
+`clear` and `box` where the story does not state them, and the painter draws
+it by the end card's classes (`logoTreatment`) on the scene's background: a
+dark mark on a see-through background is recoloured to the brand's paper so
+it reads, a light one is kept as it is, a logo with its own solid background
+sits whole on a plate of that colour, and an unmeasured one (an SVG ffmpeg
+cannot read, say) goes on a paper plate. A mixed see-through mark is tinted
+like the end card's. The mark fits its box at its ratio over an optional
+label on a plate of the panel; its face is `glow`. Proof: parity fixtures
+`h-icon-grid-marks-portrait` and `h-node-graph-marks-portrait` (generated
+PNG marks, one per class plus an unmeasured one), `test/member-mark.test.js`,
+and the sample `examples/story/marks-9x16` (the vocabulary sample's "Works
+with" row, with brand marks where it stood generic icons in).
+
 ## 11. Phases
 
 1. **`node-graph` and `fluid-motion.mjs`** (this PR): flock, wave, idle, impact

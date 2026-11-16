@@ -120,7 +120,7 @@ Five R&D documents, each built in small steps that work on their own. Every visu
   - A member in its own colour or tone, which about 5 modules take (map highlights and pins, the results cards, cell-grid, grid-race). Today the module's palette decides every member's colour.
   - A person as a member, shown as a photo, avatar or initials tile. About 5 modules have one: person-id, lineage-graph people, map pin cards, commit authors and the repo-pr-card author.
   - A value or multiplier longer than three characters ("$7.15", "×3.2"), as on map-highlight and cell-grid.
-  - A brand mark instead of an icon. logo-row takes image files and particle-logo takes a path; the vocabulary sample's "Works with" row stands generic icons in for integrations.
+  - A brand mark instead of an icon (built; in the next release: `{member: {module: "brand-mark", src, label?}}` on node-graph and icon-grid, measured once at import and recoloured, kept or plated like an end-card logo). Still to come: particle-logo taking a measured mark the same way.
   - A member whose status changes over time (pending, pass, fail), which status-rack and the results cards do for the whole module.
   - One-off, not yet a candidate: a progress bar inside a card (only the custom-module test fixture has one; progress-ring and percent-fill are nearby).
 - **List items as separate elements, never a boxed list** (built; in the next release): a list (steps, features, a checklist) is drawn as one element per item, each with its own entrance (`item-list`): its own pill chip, or free type stacked, fanned, scattered or orbiting a subject, with ticks landing one at a time. The finish gate's `boxed-list` warning flags a checklist card of checkbox rows as a tell.
