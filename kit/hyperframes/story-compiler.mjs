@@ -994,7 +994,7 @@ function smearLayer(tweens, id, outer) {
 }
 
 function tweenCode(selector, tw) {
-  const from = gsapVars(tw.prop, tw.from), to = gsapVars(tw.prop, tw.to);
+  const from = gsapVars(tw.prop, tw.from, tw.args), to = gsapVars(tw.prop, tw.to, tw.args);
   return `tl.fromTo(${js(selector)}, ${js(from)}, ${js({ ...to, duration: round(tw.duration, 4), ease: tw.ease, immediateRender: false })}, ${num(tw.at)});`;
 }
 

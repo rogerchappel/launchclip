@@ -12,7 +12,7 @@ export const STORY_SCHEMA = "launchclip.story.v1";
 export const STORY_REVISION = 0;
 
 export const STORY_LANES = ["motion", "voiceover-motion", "footage-led"];
-export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe", "light-sweep", "push-blur", "light-leak", "before-after", "burn-away", "slash-wipe", "shatter", "crt-off", "glitch-wipe", "blinds", "diamond-wipe", "star-iris", "pixel-dissolve"];
+export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe", "light-sweep", "push-blur", "light-leak", "before-after", "burn-away", "slash-wipe", "shatter", "crt-off", "glitch-wipe", "blinds", "diamond-wipe", "star-iris", "pixel-dissolve", "wipe", "clock-wipe", "card-flip"];
 /** Transitions the VFX layer draws as a pixel cover (kit/core/transitions.mjs VFX_COVER_TRANSITIONS); color names the cover's colour. */
 export const STORY_VFX_TRANSITIONS = ["burn-away", "slash-wipe", "shatter", "crt-off", "glitch-wipe", "blinds", "diamond-wipe", "star-iris", "pixel-dissolve"];
 export const STORY_ENDING_KEYS = Object.freeze(["loop_to", "in", "loop", "final"]);
@@ -309,7 +309,7 @@ export function samePlaceCuts(story) {
 // CARD_TRANSITIONS, kept here so this file stays import-free (kept in step by
 // test/transition_frames.test.js).
 export const STORY_FOOTAGE_PLATES = ["clip", "photo-scene"];
-export const STORY_CARD_TRANSITIONS = ["card-to-card", "rack-focus", "morph"];
+export const STORY_CARD_TRANSITIONS = ["card-to-card", "rack-focus", "morph", "card-flip"];
 
 /**
  * Track-0 footage plates (a clip, a photo plate) that arrive from another
@@ -375,7 +375,7 @@ const LIGHT_SWEEP_ANGLE = [20, 80];
 function lightSweepOptionErrors(transition, path) {
   const errors = [];
   if (transition.type !== "light-sweep") {
-    for (const key of ["streaks", "angle"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a light-sweep option; ${JSON.stringify(transition.type)} does not take it`);
+    for (const key of transition.type === "wipe" ? ["streaks"] : ["streaks", "angle"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a light-sweep option; ${JSON.stringify(transition.type)} does not take it`);
     return errors;
   }
   const { color, streaks, angle } = transition;
@@ -384,6 +384,19 @@ function lightSweepOptionErrors(transition, path) {
   if (streaks !== undefined && !(Number.isInteger(streaks) && streaks >= slo && streaks <= shi)) errors.push(`${path}.streaks must be a whole number of light streaks from ${slo} to ${shi}; got ${JSON.stringify(streaks)}`);
   if (angle !== undefined && !(typeof angle === "number" && angle >= alo && angle <= ahi)) errors.push(`${path}.angle must be the streaks' tilt from the horizontal, ${alo} to ${ahi} degrees; got ${JSON.stringify(angle)}`);
   for (const key of ["cover", "hold"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a dot-wipe option; "light-sweep" does not take it`);
+  return errors;
+}
+
+/** Validation messages for the CSS transitions' options (wipe: angle, feather; clock-wipe: start, segments, feather). */
+function cssTransitionOptionErrors(transition, path) {
+  const errors = [];
+  const own = { wipe: ["angle", "feather"], "clock-wipe": ["start", "segments", "feather"] }[transition.type] ?? [];
+  for (const key of ["feather", "start", "segments"]) if (transition[key] !== undefined && !own.includes(key)) errors.push(`${path}.${key} is a ${key === "feather" ? "wipe or clock-wipe" : "clock-wipe"} option; ${JSON.stringify(transition.type)} does not take it`);
+  const { angle, feather, start, segments } = transition;
+  if (own.includes("angle") && angle !== undefined && !(typeof angle === "number" && Number.isFinite(angle))) errors.push(`${path}.angle must be the way the edge travels in degrees (0 up, 90 right); got ${JSON.stringify(angle)}`);
+  if (own.includes("start") && start !== undefined && !(typeof start === "number" && Number.isFinite(start))) errors.push(`${path}.start must be where the hand starts in degrees (0 at 12 o'clock); got ${JSON.stringify(start)}`);
+  if (own.includes("segments") && segments !== undefined && !(Number.isInteger(segments) && segments >= 1 && segments <= 8)) errors.push(`${path}.segments must be a whole number of hands from 1 to 8 (more than 1 opens like a fan); got ${JSON.stringify(segments)}`);
+  if (own.includes("feather") && feather !== undefined && !(typeof feather === "number" && feather >= 0 && feather <= 40)) errors.push(`${path}.feather must be the soft edge, 0 to 40 (% of the frame for a wipe, degrees for a clock); got ${JSON.stringify(feather)}`);
   return errors;
 }
 
@@ -778,6 +791,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (transition.type === "pixel-dissolve" && !retroStory(story)) err(`${path}.in.type "pixel-dissolve" is retro only: set look "pixel-arcade" or vfx.words "pixel" (the retro-pixel style family sets both)`);
         for (const message of lightSweepOptionErrors(transition, `${path}.in`)) err(message);
         for (const message of beforeAfterOptionErrors(transition, `${path}.in`)) err(message);
+        for (const message of cssTransitionOptionErrors(transition, `${path}.in`)) err(message);
         if (transition.type === "overview") overviews.push({ index, path: `${path}.in`, label, transition, start, track });
       }
     }
@@ -964,6 +978,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
           for (const message of dotWipeOptionErrors(transition, "ending.in", storyFps(story))) err(message);
           for (const message of lightSweepOptionErrors(transition, "ending.in")) err(message);
           for (const message of beforeAfterOptionErrors(transition, "ending.in")) err(message);
+          for (const message of cssTransitionOptionErrors(transition, "ending.in")) err(message);
           if (transition.from_object !== undefined) {
             const sceneId = typeof transition.from_object === "string" ? transition.from_object.split(".")[0] : null;
             if (!sceneId || !ids.has(sceneId)) err(`ending.in.from_object references unknown scene "${sceneId ?? transition.from_object}"`);
