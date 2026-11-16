@@ -3,6 +3,7 @@
 // by src/finish_pass.js, so the finish is in parity by construction.
 //
 //   story.finish = [{pass: "grain", amount: 0.08}, {pass: "aberration", px: 2}]
+//   story.finish = "subtle-film"   (a STORY_FINISH_PRESETS name)
 //
 // Passes run in STORY_FINISH_PASSES order whatever order the story lists
 // them in. Every pass is off unless listed. The grade joins the chain (from a
@@ -20,7 +21,7 @@
 // Pure ESM that imports only kit/core siblings. Canonical copy:
 // kit/core/finish.mjs.
 
-import { STORY_FINISH_PASSES } from './story.mjs';
+import { STORY_FINISH_PASSES, storyFinishList } from './story.mjs';
 import { brandFrameLayout, frameWindows } from './brand-frame.mjs';
 import { lookFinish } from './looks/index.mjs';
 
@@ -57,7 +58,7 @@ export function finishTimes(story, at) {
  * → [{pass, params}] in chain order; grade's params are its grade value.
  */
 export function resolveFinish(story) {
-  const own = Array.isArray(story?.finish) ? story.finish.filter((entry) => FINISH_PASS_NAMES.includes(entry?.pass)) : [];
+  const own = storyFinishList(story?.finish).filter((entry) => FINISH_PASS_NAMES.includes(entry?.pass));
   // A finish look (stained-glass, silkscreen) adds its passes; the story's own entries win, pass by pass.
   const listed = [...own, ...lookFinish(story?.look).filter((entry) => !own.some((mine) => mine.pass === entry.pass))];
   if (!listed.some((entry) => entry.pass !== 'grade')) return null;
