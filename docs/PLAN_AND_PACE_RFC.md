@@ -79,6 +79,11 @@ required on bespoke.
 | `sound.breath` | "Give the viewer one held moment, 0.4 s or more, where nothing moves." | Plan: no tween runs in the window except idle (the motion check reads the ops). Render: stillness spans it. A declared breath is exempt from `max_still`. |
 | `sound.drop` | "If the music has a drop, start the track so it lands on the signature." | `audio.music` offset is solved from the track's measured section change (§4.3). |
 
+The silences, prelaps and breath are planned per scene instead, as
+`scenes[i].sound` (hush, prelap, tail), and checked in the mix: see
+[IMMERSIVE_SOUND_RFC.md](IMMERSIVE_SOUND_RFC.md) §2, "Shipped (phase 6)".
+`treatment.sound` does not take them.
+
 The planner prompt lines go in a new `treatmentLines()` beside
 `guardrailLines()`. The style pack gains `avoid` tokens so `banned` starts
 from the look, not from nothing.
