@@ -1195,15 +1195,16 @@ export const TRANSITION_KINDS = Object.freeze(['cut', 'dip', 'flash', 'iris', 'w
 // world turns push into a dolly, which measures as zoom). Between two
 // footage plates morph, rack-focus and card-to-card play as a fade. The
 // VFX covers, dot-wipe and light-sweep cover the whole frame at their
-// midpoint, so they read as dips, as does card-flip (both cards edge-on at
-// its midpoint). overview needs a chapter: null.
+// midpoint, so they read as dips. A clock wipe's sweep is no straight edge
+// (other); a card-flip measures as a dissolve, as both renderers draw it.
+// overview needs a chapter: null.
 export const TRANSITION_TYPE_KINDS = Object.freeze({
   cut: 'cut', fade: 'dissolve', push: 'push', whip: 'whip', zoom: 'zoom', iris: 'iris', morph: 'dissolve',
   pan: 'push', pull: 'zoom', orbit: 'push', 'whip-pan': 'whip', 'rack-focus': 'dissolve', 'glow-wipe': 'wipe',
   'card-to-card': 'dissolve', overview: null, 'dot-wipe': 'dip', 'light-sweep': 'dip', 'push-blur': 'whip',
   'light-leak': 'flash', 'before-after': 'wipe', 'burn-away': 'dip', 'slash-wipe': 'dip', shatter: 'dip',
   'crt-off': 'dip', 'glitch-wipe': 'dip', blinds: 'dip', 'diamond-wipe': 'dip', 'star-iris': 'dip', 'pixel-dissolve': 'dip',
-  wipe: 'wipe', 'clock-wipe': 'wipe', 'card-flip': 'dip'
+  wipe: 'wipe', 'clock-wipe': 'other', 'card-flip': 'dissolve'
 });
 
 // Measured kind → our types to prefer, first first (the RFC's map, plus the
@@ -1769,19 +1770,20 @@ function classifyCells({ means, details, shares, mags, cw, ch, fps }, options) {
       if (start >= 0) runs.push({ c, a: start, b: end });
     }
     runs.forEach((run, i) => { if (!byCell.has(run.c)) byCell.set(run.c, []); byCell.get(run.c).push(i); });
-    // Connected cells whose runs overlap in time are one piece.
+    // Connected cells whose runs overlap in time and start together are one piece: touching items that
+    // enter in turn (a stagger of stacked words) stay apart even while one is still animating as the next starts.
+    const split = E.splitSeconds * fps;
     const parent = runs.map((_, i) => i);
     const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
     runs.forEach((run, i) => {
       const x = run.c % cw, y = Math.floor(run.c / cw);
       for (const [nx, ny] of [[x + 1, y], [x, y + 1]]) {
         if (nx >= cw || ny >= ch) continue;
-        for (const j of byCell.get(ny * cw + nx) ?? []) if (runs[j].a <= run.b + 1 && run.a <= runs[j].b + 1) parent[find(i)] = find(j);
+        for (const j of byCell.get(ny * cw + nx) ?? []) if (runs[j].a <= run.b + 1 && run.a <= runs[j].b + 1 && Math.abs(runs[j].a - run.a) <= split) parent[find(i)] = find(j);
       }
     });
     const groups = new Map();
     runs.forEach((run, i) => { const root = find(i); if (!groups.has(root)) groups.set(root, []); groups.get(root).push(run); });
-    const split = E.splitSeconds * fps;
     for (const group of groups.values()) {
       group.sort((left, right) => left.a - right.a);
       let piece = [group[0]];
