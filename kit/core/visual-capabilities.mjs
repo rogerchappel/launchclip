@@ -72,11 +72,12 @@ export const CAPABILITIES = Object.freeze([
   cap('date-carousel', ['date', 'timeline'], ['timeline']),
   cap('month-grid', ['month', 'date'], ['timeline']),
   cap('timeline', ['timeline', 'process', 'date'], ['icon-row']),
-  // Structure.
+  // Structure. A list is free items first (item-list), never a boxed checklist card by default.
+  cap('item-list', ['list'], ['icon-row']),
   cap('icon-row', ['list', 'concept'], ['concept-card']),
   cap('icon-grid', ['list', 'grid'], ['icon-row']),
   cap('process-steps', ['process', 'list'], ['timeline']),
-  cap('checklist', ['list'], ['icon-row']),
+  cap('checklist', ['list'], ['item-list']),
   cap('lineage-graph', ['lineage', 'family'], ['timeline']),
   cap('planet-family', ['family'], ['icon-row']),
   cap('paper-stack', ['documents'], ['excerpt']),
@@ -244,6 +245,7 @@ const BUILDERS = {
   'icon-row': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), items: items.map((label, i) => ({ icon: iconFor(beat, i), label: clip(label, 14) })) } : null; },
   'icon-grid': (beat) => { const items = itemsOf(beat, 4, 6); return items ? { title: clip(beat.headline, 32), items: items.map((label, i) => ({ icon: iconFor(beat, i), label: clip(label, 14) })), variant: 'duotone' } : null; },
   'process-steps': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), steps: items.map((label) => ({ label: clip(label, 22) })) } : null; },
+  'item-list': (beat) => { const items = itemsOf(beat, 3, 4); return items ? { title: clip(beat.headline, 32), items } : null; },
   'checklist': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), rows: items.map((label, i) => ({ label: clip(label, 28), status: 'done', at: round(0.6 + i * 0.6) })) } : null; },
   // Quotes, posts and excerpts show only words someone said or wrote: a quote in the clause, or the source's own quote. Narration is never dressed as a quote.
   'quote-card': (beat) => { const quote = quoteOf(beat); return quote ? { quote: clip(quote, 90), author: clip(beat.evidence.source?.publisher ?? beat.evidence.source?.title ?? 'Source', 32), ...(beat.evidence?.source?.date ? { role: clip(beat.evidence.source.date, 24) } : {}) } : null; },
@@ -365,6 +367,7 @@ const ADDITIONS = {
   'icon-grid': (beat) => ({ key: 'items', items: [{ icon: iconFor(beat), label: clip(beat.headline, 14) }] }),
   'process-steps': (beat) => ({ key: 'steps', items: [{ label: clip(beat.headline, 22) }] }),
   'timeline': (beat) => ({ key: 'steps', items: ((beat.facts?.dates ?? []).length ? beat.facts.dates.map((entry) => entry.label) : [beat.headline]).map((label, i) => ({ label: clip(label, 14), icon: iconFor(beat, i) })) }),
+  'item-list': (beat) => ({ key: 'items', items: [clip(beat.headline, 22)] }),
   'checklist': (beat) => ({ key: 'rows', items: [{ label: clip(beat.headline, 28), status: 'done' }] })
 };
 

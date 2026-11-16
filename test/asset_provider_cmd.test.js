@@ -52,9 +52,10 @@ test("the command answers requests in order, one JSON line each way, and is star
 });
 
 test("no answer in time, a non-JSON line or a dead command is no shot, and answers stay aligned", async (t) => {
-  const { command } = await script(t, answering(`async (request) => { if (request.id === "slow") await new Promise((done) => setTimeout(done, 300)); return { id: request.id, path: "/lib/" + request.id + ".jpg" }; }`));
+  // Wide margins: on a loaded machine a 100 ms window also timed out the request after the slow one.
+  const { command } = await script(t, answering(`async (request) => { if (request.id === "slow") await new Promise((done) => setTimeout(done, 1500)); return { id: request.id, path: "/lib/" + request.id + ".jpg" }; }`));
   const notices = [];
-  const provider = createCommandAssetProvider(command, { timeoutMs: 100, notice: (line) => notices.push(line) });
+  const provider = createCommandAssetProvider(command, { timeoutMs: 400, notice: (line) => notices.push(line) });
   t.after(() => provider.close());
   assert.equal(await provider.findShot({ id: "slow" }), null);
   assert.equal((await provider.findShot({ id: "next" })).path, "/lib/next.jpg", "the late answer for slow is dropped, not given to next");

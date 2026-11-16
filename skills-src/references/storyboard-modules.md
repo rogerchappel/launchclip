@@ -235,7 +235,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | runs something in a terminal ("clone the repo", "pip install", "run the tests", "38 scripts pass"): commands type, output streams PASS/FAIL rows, a ⏩ timer fast-forwards long runs | terminal-session |
 | gives a number, time, price or count | count-up |
 | gives a sourced figure that should stay on screen with captions | metric |
-| lists steps, features or duties | checklist |
+| lists steps, features or duties: each item its own element (pill chips, free-type stack, fan, scatter, or orbit round a subject), ticks one at a time with ticks: true | item-list |
 | explains a sequence or mechanism | process-steps |
 | walks through the stages of a workflow | step-rail |
 | names a law or formula | equation-lockup |
@@ -263,6 +263,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | leads with a point, a figure or a short list that real footage backs up ("payload explained", "what you can carry"): the point in a panel, a rounded clip card in its corner (16:9 only; on 9:16 use split-screen) [motion, voiceover-motion] | picture-in-picture |
 | shows real footage while the line makes a point: the shot fills the top or bottom half (left or right on 16:9), the other half carries the title, a figure or a short list [motion, voiceover-motion] | split-screen |
 | shows a wide view in landscape footage (a vehicle side-on, a campsite, a road, a beach): the shot letterboxed in a rounded 16:9 window mid-frame, a title above and a caption or chip below, no heavy crop [motion, voiceover-motion] | landscape-card |
+| the ending: one action (a link, a comment keyword, follow, save, subscribe, download, visit, book, a launch date, or a loop back to the hook) as a designed end card from a library of ~30 layouts, dressed in the brand and its logo; leave params.layout out and it is picked from the action, the ground and the seed (pass params.avoid with the endings of recent videos) | end-card |
 | names the brand on a title or end card, with its logo and wordmark images (and an app-store badge or URL on the end card) | brand-lockup |
 | calls to action, or the loop ending | cta |
 | asks the viewer to subscribe, like or ring the bell partway through a long video ("if you're new here, subscribe"): a glass subscribe pill on an overlay track (track 1+) over the scene, clicked on the word | subscribe-cta |
@@ -728,6 +729,35 @@ params:
 - at: first beat (seconds from scene start (optional; else a matching hit, else a default); default 0.15 s)
 - stagger: seconds between beats (default 0.35, scaled by the grammar)
 events: mark, wordmark, eyebrow, headline, badge, url, shine
+
+### end-card (hides captions)
+The ending, from a library of designed end cards (docs/END_CARDS_RFC.md): a layout (or one picked from the action, the ground, the logo and the seed) dressed in the brand's fonts, colours and logo, which is tinted, plated or recoloured so it reads. Over footage it holds params.still or lets the shot play under it. Hides captions.
+params:
+- layout: one of sign-off, url-hero, handle-hero, keyword-ticket, keyword-stamp, last-line, stacked-index, bloom, split-panel, plate-centre, wordmark-wipe, mark-orbit, monogram, freeze-scrim, live-lower, frame-in-frame, cutout-type, grade-out, pointer, poster, receipt, typed-page, badge-row, countdown, diagonal-band, marquee, seam, rewind (default: picked from the action, the ground, the logo and the seed)
+- action: url|keyword|follow|save|subscribe|download|visit|book|launch|loop — what the ending asks for; narrows the pick
+- headline: string ≤ 80, the closing line
+- emphasis: words of the headline set in italic (optional)
+- url: address ≤ 48, no spaces
+- handle: @handle ≤ 32
+- keyword: one word viewers comment (shown in capitals)
+- offer: what they get for it ≤ 60
+- reason: why follow ≤ 60
+- next: the next video's title ≤ 60
+- date: launch or event date ≤ 16
+- place: where ≤ 40
+- slot: the booking action ≤ 32
+- app: app name ≤ 28
+- hook: the video's opening line, for loop endings ≤ 70
+- issue: issue or episode number ≤ 12
+- rating: stars, e.g. "4.8"
+- logo: "assets/…" or {src, ratio, tone: dark|light|mixed, clear: see-through?, box: "#rrggbb"} (tone and clear are measured when the story is read)
+- still: "assets/…" the last frame as an image: footage layouts hold it; without it the shot plays under the ending
+- badges: download: one or two store badge images (handed in)
+- avoid: layout ids used by recent videos; the pick avoids them
+- seed: string or number for the pick (default: from the scene and brand)
+- at: first beat, seconds from the scene start (default 0.1)
+- stagger: seconds between beats (default 0.28, scaled by the grammar)
+events: enter, ask
 
 ### punch-in (keeps captions)
 Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay). Steps punch in, further in or back out on successive words; blur adds a few frames of zoom blur on each move.
@@ -2168,6 +2198,17 @@ params:
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: explode, snap
 
+### layer-stack (keeps captions)
+The breakdown reel in one 20-beat scene: the finished shot with a hook landing word by word on the beat, the shot playing, then the frame tilting into an isometric stack whose layers (the project's own artefacts, final on top) peel apart one a beat with labels, snap back on a beat with a shake, and settle under a payoff line on the opening frame, so it loops.
+params:
+- hook: string ≤ 48, at most 6 words (lands over beats 0–2)
+- payoff: string ≤ 48 (beats 17–19)
+- layers: [{label ≤ 18, kind?: image | storyboard | style (default image), image (image layers: assets/… still), fit?: cover | contain, panels (storyboard layers: [string ≤ 40] 2–6)}] 2–5, bottom first; the last is the finished shot (an image)
+- play: [assets/… still] 2–48 (optional): frames of the finished shot, played over beats 3–6 and ending on the top layer's image
+- bpm: 90–160 (default 120); the scene is at least 20 beats
+- rect: {x, y, width, height} canvas px inside the safe zone (optional; labels and words keep inside it, the layers fill the frame) [guided and bespoke tiers only]
+events: hook, play, explode, snap, payoff
+
 ### scatter-plot (keeps captions)
 Points or 1–5 series on two axes (linear or log, with ticks), built in beats: series lines draw on in order, one series takes the focus with a glow while the rest dim, and annotations land one at a time (dashed guides from a point to both axes with value pills, a "?" placeholder point, labelled callouts). Two panels compare an official chart with an independent re-run.
 params:
@@ -2427,6 +2468,22 @@ params:
 - stage: {tilt deg (look-down, e.g. 8), dolly {x, y design px, scale} (a slow camera move over the scene; far layers move less)} (optional)
 events: enter, beat, pose
 
+### item-list (keeps captions)
+A list (steps, features, a checklist) as separate items, each with its own entrance: its own pill chip cascading down the frame (default), free type stacked down the frame, fanned out from a pile, scattered with a tilt, or orbiting a subject. Ticks draw on one item at a time. Use this, not a boxed checklist card, for any list.
+params:
+- items: [string | {label ≤ 40, detail? ≤ 60, at?, tickAt?}] 2–6
+- title: string ≤ 48 (optional)
+- subject: string ≤ 24, the centre the items circle (required for orbit, ignored by the others)
+- ticks: boolean: each item gets a tick that draws on at tickAt (default: just after it enters)
+- numbered: boolean (default true without ticks)
+- tone: primary | accent | paper | #rrggbb (numbers and ticks)
+- stagger: seconds between entrances (default min(0.35, 1.6 / count))
+- at: first item: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: item-<i>, tick-<i>
+variants: pills (default), stack, fan, scatter, orbit
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), framed wide, medium or close, acting on cues: named poses and expressions at times or narration words, mouths moving on their lines, cuts in on a character. The screen set plays a real capture.
 params:
@@ -2519,6 +2576,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | archive-card | 2 s | 0.5 s | scene − 0.65 s | stamp.at defaults to 0.35 s after the quote finishes revealing |
 | logo-row | 2 s | 0.5 s | scene − 0.65 s | logos pop in order; with no at, the first pops at 0.65 s and the rest follow by stagger (default 0.14 s) |
 | brand-lockup | 2 s | 0.5 s | scene − 0.65 s | elements land in this order: mark, wordmark, eyebrow, headline, badge, url, stagger apart (default 0.35 s), the first at 0 s; a hit on one moves the defaults after it |
+| end-card | 2 s | 0.5 s | scene − 0.65 s | elements land beat by beat, stagger apart (default 0.28 s), the ask (the action) last; holds until the scene ends |
 | punch-in | 0.8 s | 0 s | — | at (and every steps[i].at) ≤ scene − release − 0.25 s (release 0.3–2 s, default min(0.5, 0.3 × scene)); steps at least 0.3 s apart |
 | zoom-through | 0.8 s | — | — | the cut (at) needs rush before it and burst after it inside the scene (rush 0.15–0.6 s, default 0.3; burst 0.2–0.8 s, default 0.4) |
 | footage-callout | 1.5 s | 0 s | scene − 1.1 s | — |
@@ -2621,6 +2679,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | paper-stack | 2 s | 0.5 s | scene − 0.65 s | the stack lands bottom first within about 1.4 s (the folder lands, opens about 0.8 s later and its files rise); statuses pop top to bottom after the build, up to 0.8 s apart |
 | planet-family | 2 s | 0.5 s | scene − 0.65 s | the first body shows with the build; each next body on its cue, at least 0.75 s apart (default: spread to the end of the scene) |
 | exploded-view | 2 s | 0.5 s | scene − 0.65 s | the explode takes about 1.1 s from at, the outermost part first; the snap back takes 0.6 s and ends before the exit; needs a scene of 4 s or more |
+| layer-stack | 2 s | 0.5 s | scene − 0.65 s | the scene is at least 20 beats at params.bpm (10 s at 120); after beat 20 it holds the opening frame; hook 0–3, play 3–6, tilt 6, one layer a beat from 7, snap 16, payoff 17–19, clear by 20 |
 | scatter-plot | 2 s | 0.5 s | scene − 0.65 s | the axes draw in 0.6 s from at; each series line draws in 0.9 s on its cue; default cues follow the build 0.45–0.8 s apart and squeeze to fit the scene |
 | race-bars | 2 s | 0.5 s | scene − 0.65 s | rows land from at, the race starts 0.6 s later; each row finishes in proportion to its time; the badge follows the winner's finish |
 | small-multiples | 2 s | 0.5 s | scene − 0.65 s | panels land up to 0.18 s apart from at, bars grow in 0.6 s; the highlight follows the build |
@@ -2637,6 +2696,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | live-counter | 2 s | 0.5 s | scene − 0.65 s | the count runs from at until just before the exit, so the figure is moving whenever it is on screen |
 | live-bars | 2 s | 0.5 s | scene − 0.65 s | the bars climb from at until just before the exit |
 | ui-scene | 2 s | 0 s | scene − 0.65 s | the first element enters by 0.6 s; a scene that opens on a whip-pan or opens the video enters its hero panel with enter "cut" at 0, so it is built when the move lands; every time is seconds from the scene start, inside the scene; a child enters no earlier than its parent |
+| item-list | 2 s | 0.5 s | scene − 0.65 s | items enter in order from at, stagger apart; a tick lands after its item enters |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | sprite-scene | 2 s | 0 s | scene − 0.4 s | cue, prop and card times sit at least 0.4 s before the scene ends; a pose cue swaps the sprite; a character speaking its says ranges shows its talk sprite (or a jaw bounce) on each word |

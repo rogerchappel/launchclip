@@ -15,7 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {MODULES, VARIANTS} from '@launchclip/core/catalog-h.mjs';
-import {EXTRA_SAMPLES, SAMPLES} from './element-samples.mjs';
+import {EXTRA_SAMPLES, SAMPLES, SAMPLE_DURATIONS} from './element-samples.mjs';
 import {BRAND, SCENE} from './element-sheet.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -24,8 +24,8 @@ const FORMATS = {portrait: {width: 1080, height: 1920, fps: 30, duration: SCENE,
 
 export function fixtureName(id, variant, shape) { return `h-${id}-${variant}-${shape}`; }
 
-const fixture = (name, id, variant, shape, params) => ({name, fixture: {story: {schema: 'launchclip.story.v1', title: `Catalogue H parity: ${name}`, lane: 'motion', format: FORMATS[shape], brand: BRAND, base: null,
-  scenes: [{id: 'el', module: id, start: 0, end: SCENE, params: {...params, variant}}]}, sceneId: 'el', threshold: {ssim: 0.97}}});
+const fixture = (name, id, variant, shape, params, duration = SAMPLE_DURATIONS[id] ?? SCENE) => ({name, fixture: {story: {schema: 'launchclip.story.v1', title: `Catalogue H parity: ${name}`, lane: 'motion', format: {...FORMATS[shape], duration}, brand: BRAND, base: null,
+  scenes: [{id: 'el', module: id, start: 0, end: duration, params: {...params, variant}}]}, sceneId: 'el', threshold: {ssim: 0.97}}});
 
 /** {name, fixture} for every module variant (portrait), default (landscape) and extra case. */
 export function elementFixtures(ids = Object.keys(MODULES)) {

@@ -8,7 +8,7 @@
       "layout": "full",
       "lines": [
         { "words": [0, 16], "intent": "hook", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-1"], "why": "sting (evidence c-history-2023): logo-sting" },
-        { "words": [17, 26], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-2"], "why": "list: process-steps, ahead of icon-row" },
+        { "words": [17, 26], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-2"], "why": "list: item-list" },
         { "words": [27, 36], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-3"], "why": "documents: nothing specific draws it; the line itself (\"forty page system card\")" },
         { "words": [37, 50], "intent": "claim", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh1-4"], "why": "pr (evidence c-pr-comments, capture sdk-pr-1842): repo-pr-card" },
         { "words": [51, 63], "intent": "number", "treatment": "insert", "scenes": ["the-launch-nobody-saw-coming-1-sh2-1"], "why": "social (evidence c-shares, capture halcyon-2-post): quote-card" },
@@ -28,10 +28,10 @@
       "lines": [
         { "words": [170, 183], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh1-1"], "why": "title: the chapter title" },
         { "words": [184, 202], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh1-2"], "why": "date: nothing specific draws it; the line itself (\"hundred partners could use\")" },
-        { "words": [203, 217], "intent": "list", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh1-3"], "why": "list (evidence c-long-doc): process-steps, ahead of icon-row" },
+        { "words": [203, 217], "intent": "list", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh1-3"], "why": "list (evidence c-long-doc): item-list" },
         { "words": [218, 231], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh2-1"], "why": "code: nothing specific draws it; the line itself (\"Halcyon 1.5\")" },
         { "words": [232, 239], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh2-2"], "why": "concept: nothing specific draws it; the line itself (\"most developers met\")" },
-        { "words": [240, 257], "intent": "proof", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh2-3"], "why": "list (evidence c-training-cost): checklist, ahead of icon-row" },
+        { "words": [240, 257], "intent": "proof", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh2-3"], "why": "list (evidence c-training-cost): process-steps, ahead of icon-row" },
         { "words": [258, 267], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh3-1"], "why": "date: nothing specific draws it; the line itself (\"No new models\")" },
         { "words": [268, 279], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh3-2"], "why": "map: map-highlight" },
         { "words": [280, 291], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh3-3"], "why": "concept: nothing specific draws it; the line itself (\"Halcyon 2\")" },
@@ -39,7 +39,7 @@
         { "words": [312, 322], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh4-1"], "why": "page (evidence c-cutoff, capture system-card-table-7): media-window" },
         { "words": [323, 336], "intent": "number", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh4-2"], "why": "concept (evidence c-cluster): quote-card, ahead of glass-word" },
         { "words": [337, 344], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh4-3"], "why": "lineage: nothing specific draws it; quote-card holds" },
-        { "words": [345, 363], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh4-4"], "why": "list: process-steps, ahead of icon-row" }
+        { "words": [345, 363], "intent": "claim", "treatment": "insert", "scenes": ["a-short-history-of-halcyon-1-sh4-4"], "why": "list: item-list" }
       ]
     },
     {
@@ -52,9 +52,9 @@
         { "words": [383, 399], "intent": "number", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh1-3"], "why": "stat: number-line" },
         { "words": [400, 408], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh1-4"], "why": "concept: nothing specific draws it; the line itself (\"Running it costs real money\")" },
         { "words": [409, 419], "intent": "number", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-1"], "why": "compare (evidence c-training-cost): bar-chart" },
-        { "words": [420, 429], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-2"], "why": "list: checklist, ahead of icon-row" },
-        { "words": [430, 440], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-3"], "why": "concept: builds on checklist (+1 rows)" },
-        { "words": [441, 452], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-4"], "why": "concept: builds on checklist (+1 rows)" },
+        { "words": [420, 429], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-2"], "why": "list: item-list, ahead of icon-row" },
+        { "words": [430, 440], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-3"], "why": "concept: builds on item-list (+1 items)" },
+        { "words": [441, 452], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh2-4"], "why": "concept: builds on item-list (+1 items)" },
         { "words": [453, 462], "intent": "claim", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh3-1"], "why": "documents: nothing specific draws it; the line itself (\"The system card\")" },
         { "words": [463, 484], "intent": "quote", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh3-2"], "why": "cta (evidence c-energy, capture system-card-table-7): cta" },
         { "words": [485, 494], "intent": "process", "treatment": "insert", "scenes": ["inside-the-training-run-1-sh3-3"], "why": "process: nothing specific draws it; the line itself (\"Then there is the data\")" },
@@ -91,7 +91,7 @@
       "lines": [
         { "words": [733, 744], "intent": "product", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh1-1"], "why": "title: the chapter title" },
         { "words": [745, 758], "intent": "number", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh1-2"], "why": "concept: nothing specific draws it; the line itself (\"like a search box\")" },
-        { "words": [759, 779], "intent": "number", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh1-3"], "why": "list: process-steps, ahead of icon-row" },
+        { "words": [759, 779], "intent": "number", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh1-3"], "why": "list: item-list, ahead of icon-row" },
         { "words": [780, 791], "intent": "claim", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh2-1"], "why": "code: nothing specific draws it; the line itself (\"code as they type\")" },
         { "words": [792, 799], "intent": "process", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh2-2"], "why": "process: nothing specific draws it; the line itself (\"step before they ask\")" },
         { "words": [800, 813], "intent": "number", "treatment": "insert", "scenes": ["why-speed-changed-everything-1-sh2-3"], "why": "compare (evidence c-latency): bar-chart" },
@@ -134,7 +134,7 @@
         { "words": [1146, 1166], "intent": "number", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh1-2"], "why": "compare: bar-chart" },
         { "words": [1167, 1175], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh2-1"], "why": "concept: nothing specific draws it; the line itself (\"savings run into millions\")" },
         { "words": [1176, 1184], "intent": "turn", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh2-2"], "why": "money: nothing specific draws it; the line itself (\"come from somewhere\")" },
-        { "words": [1185, 1200], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh2-3"], "why": "list: process-steps, ahead of icon-row" },
+        { "words": [1185, 1200], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh2-3"], "why": "list: item-list, ahead of icon-row" },
         { "words": [1201, 1216], "intent": "quote", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh2-4"], "why": "page (evidence c-cluster, capture system-card-table-7): media-window" },
         { "words": [1217, 1230], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh3-1"], "why": "tokens: nothing specific draws it; the line itself (\"fell by about half\")" },
         { "words": [1231, 1243], "intent": "claim", "treatment": "insert", "scenes": ["the-price-cut-and-who-pays-for-it-1-sh3-2"], "why": "concept: nothing specific draws it; kinetic-words holds" },
@@ -201,7 +201,7 @@
         { "words": [1799, 1819], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh3-2"], "why": "concept (evidence c-repro): excerpt, ahead of glass-word" },
         { "words": [1820, 1838], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh3-3"], "why": "concept: nothing specific draws it; the line itself (\"That is a good sign\")" },
         { "words": [1839, 1852], "intent": "claim", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh4-1"], "why": "ranking: nothing specific draws it; the line itself (\"a model is simple\")" },
-        { "words": [1853, 1866], "intent": "list", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh4-2"], "why": "list (evidence c-leaderboard): process-steps, ahead of icon-row" }
+        { "words": [1853, 1866], "intent": "list", "treatment": "insert", "scenes": ["the-failure-table-and-what-it-admits-1-sh4-2"], "why": "list (evidence c-leaderboard): item-list, ahead of icon-row" }
       ]
     },
     {

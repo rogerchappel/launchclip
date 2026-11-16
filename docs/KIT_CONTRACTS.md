@@ -6033,6 +6033,58 @@ of set type. It hides captions, like `hook-title` and `cta`.
 - **Compilers:** the catalogue B emitter and `CatalogBModule`
   (`kit/remotion/catalog/BrandLockup.tsx`) draw the same tree and ops.
 
+## End card (catalogue B, `kit/core/catalog-b-end-card.mjs`)
+
+`end-card` is the library of endings from the [end-card RFC](END_CARDS_RFC.md):
+about thirty designed layouts, each dressed in the brand's fonts, colours and
+logo. It hides captions.
+
+```json
+{ "module": "end-card", "params": { "action": "keyword",
+  "keyword": "DECK", "offer": "the board checklist", "headline": "Save this before you pick your deck boards",
+  "logo": "assets/brand/logo.png", "still": "assets/last-frame.png", "avoid": ["freeze-scrim"] } }
+{ "module": "end-card", "params": { "layout": "sign-off",
+  "headline": "Made slowly, meant to last", "emphasis": "meant to last", "url": "koyaclay.studio", "logo": "assets/brand/logo.jpg" } }
+```
+
+- **Layouts:** `params.layout` names one; the families live in
+  `kit/core/end-card-layouts-{type,brand,footage,graphic,loop}.mjs`
+  (`END_CARD_LAYOUTS` lists them all). Each declares the grounds and actions it
+  is built for, style tags, the fields it `needs` (a stated layout without
+  them fails with a param error naming them) and, optionally, the logo classes
+  and aspects it handles.
+- **The pick:** with no layout, the story's `variants["end-card"]` wins, then
+  `pickEndCard()`: layouts that fit the action, the grounds (footage only when
+  the video has a shot under the ending: `still`, or a footage base), the logo
+  class, the aspect and the content, weighted by the style's tags and doubled
+  for footage layouts over footage, with the last two of `avoid` weighed down
+  to 2% and the rest to 25%. The seed (`params.seed`, else the scene id, the
+  primary colour and the headline) draws one, so the same inputs end the same
+  way.
+- **Content:** `headline` (with `emphasis`, words of it set in italic), `url`,
+  `handle`, `keyword` (one word, shown in capitals), `offer`, `reason`, `next`,
+  `date`, `place`, `slot`, `app`, `hook`, `issue`, `rating`, and `badges`
+  (handed-in store badge images) for download endings.
+- **Logo:** `logo` is an `assets/` image or `{src, ratio, tone, clear, box}`.
+  `src/logo_mark.js` measures the file when the story is read and fills in
+  the ratio, the tone (dark, light, mixed), whether its background is
+  see-through and, for a boxed logo, the box colour. `logoTreatment()` then
+  draws it: a see-through mark that would not read on the ground is tinted
+  paper or ink (an SVG `feColorMatrix`), a boxed or unmeasured logo sits whole
+  on a plate in its box colour, and a layout may recolour a see-through mark
+  outright (a knockout in a colour block).
+- **Grounds:** card (`brand.colors.bg`), paper, a split of colour blocks, or
+  footage. Footage layouts sit over the last shot on track 2: with `still` (the
+  last frame as an image) they hold it and push in 6% over the scene, without
+  it the shot keeps playing under them. Type over footage sits on a scrim.
+- **Motion:** elements land beat by beat, `stagger` apart (0.28 s, scaled by
+  the grammar), the first at `at` (0.1 s), the action last. Eases go slow,
+  fast, slow and nothing overshoots: rise, fade, scale from 0.86, a clip wipe,
+  a stamp from 1.5×, a stroke drawing on, typed text, a ticker, a slow spin, a
+  stepping count and a blinking cursor, all as the shared catalogue B op list,
+  so both renderers match. Events: `enter` and `ask` (the action landing, with
+  its sound cue).
+
 ## Photo scene (catalogue D, `kit/core/catalog-d-photo-scene.mjs`)
 
 `photo-scene` fills the frame with one photo or video clip from `assets/` and
@@ -6677,6 +6729,27 @@ polaroid a brand gradient with an icon, so nothing shows empty.
 | `tooltip` | dark, light, brand | `text`, `title`, `target` (canvas px) | show | A dot lands on the target with a looping pulse ring; the box rises above it, or below when the rect has no room above |
 | `callout-arrow` | curve, straight, sketch | `text`, `target`, `from` (canvas px), `circle`, `tone` | point | The label pops, the shaft draws on, the head flicks, a ring draws round the target; sketch adds an echo stroke and an italic note |
 
+### Lists (`catalog-h-list.mjs`)
+
+A list (steps, features, a checklist) is never rows inside one card. `item-list`
+draws each item as its own element in the view tree (`<id>-item-<i>`), with its
+own entrance and settle: its own pill chip, or free type with nothing behind it.
+
+| Module | Variants | Params (beyond title, at, rect) | Events | Build |
+| --- | --- | --- | --- | --- |
+| `item-list` | pills, stack, fan, scatter, orbit | `items` 2–6 (string or `{label ≤ 40, detail? ≤ 60, at?, tickAt?}`), `ticks`, `numbered` (default true without ticks), `subject` ≤ 24 (orbit only, required there), `tone`, `stagger` | item-&lt;i&gt;, tick-&lt;i&gt; | Items enter in order, `stagger` apart (the motion grammar's stagger by default). pills (default): each item a rounded chip that hugs its label, cascading a step right down the frame; it pops in from the left, and with `ticks` its ring fills and pops before the check draws on (the filled disc is `<id>-tick-<i>`). stack: free type down the frame, each slides in from the left. fan: the stack bent on an arc (each item turned a few degrees), every item flies out from one pile to its place. scatter: a loose grid, each item tilted and dropped in with a small overshoot. orbit: the subject pops in the middle and the items fly out from it to an ellipse round it (the phase that keeps them clear of the subject; fails when none does). With `ticks`, each item's tick (`<id>-tick-<i>`) draws on by itself at `tickAt` (default just after the item enters) and the number, if any, fades |
+
+All items share the smallest fitted label size, so the list reads as one set,
+and each label block centres in its measured box (the text measure can count
+a line more than the label sets on). The module declares states
+(`states: {params: ['items'], items: ['item', 'tick']}`), so a multi-state shot
+can hold items back and land one tick per state: `{at, set: {reveal:
+["tick-2"]}}` shifts that tick's draw to the state. The `variety` finish gate
+warns (`boxed-list`) on any `checklist` scene: checkbox rows with status
+labels inside one card read as a template. The planner routes lists to
+`item-list`; `checklist` stays for footage-led stories, where its card sits
+beside the presenter and its rows type in.
+
 ### Data explainers (`catalog-h-data.mjs`)
 
 Built for the "the study says" format: a near-empty stage where each beat
@@ -6934,6 +7007,48 @@ right in portrait).
 
 Parity fixtures: `test/fixtures/parity/h-exploded-view-*.json` (the server
 in both aspects, the phone in portrait, the battery pack in landscape).
+
+### Catalogue I: layer stack (`catalog-i-layers.mjs`)
+
+`layer-stack` is the breakdown reel's one scene (`launchclip reel`,
+`src/reel.js`). It is timed in beats at `params.bpm` (120 by default: a beat
+every 0.5 s) and is 20 beats long (a longer scene, such as a story's final
+hold, keeps the opening frame after beat 20):
+
+| Beats | At 120 BPM | What happens |
+| --- | --- | --- |
+| 0–3 | 0–1.5 s | The finished shot fills the frame (top layer) under a scrim; the hook's words pop in over beats 0–2 (back.out); the camera eases out of a 6% push |
+| 3–6 | 1.5–3 s | `play` frames show one after another, ending on the top layer's image |
+| 6–7 | 3–3.5 s | Every layer tilts into an isometric plane (45° turn, squashed by tan 30°) with anticipation and a little overshoot; the camera moves the stack aside without overshoot |
+| 7 on | 3.5 s on | The layers lift apart, top first, one per beat (back.out); each label slides in as its layer lands, the bottom one last |
+| hold–15.3 | to 7.65 s | The camera eases in 8% and the layers spread 22%, labels following; labels leave at 14.8 |
+| 16 | 8 s | Every layer winds up (back.in) and lands together; a 0.32 s decaying shake; the planes settle flat |
+| 17–19 | 8.5–9.5 s | The payoff line pops in over the scrim; the camera eases back into the 6% push |
+| 19–20 | 9.5–10 s | Payoff and scrim clear; every element is back in its opening state |
+
+- A layer is three nested full-frame `div`s (screen offset › squash ›
+  rotation): an isometric plane without a CSS 3D context, so both renderers
+  draw the same tree.
+- The root never fades in or out, and the module turns off the ambient drift
+  (`layout.drift: false`), so the last frame is the first. Tests check every
+  element's state on the last frame against frame 0; `launchclip reel check`
+  checks a render (SSIM ≥ 0.97 and PSNR ≥ 35 dB between the first and last
+  frames, which is within encoder noise; a visible jump measures 0.80–0.86).
+- A story that holds a layer stack ends with `{"loop": false, "final":
+  "exit"}`, not `loop_to`: the scene loops itself, and a loop ending would
+  lay a transition over its last frames.
+- `storyboard` and `style` layers are drawn from the project: storyboard
+  panels with their captions, and the brand's swatches and type in its three
+  faces. The text-hold gate counts only the hook and the payoff as reading
+  text.
+
+| Module | Params | Events | Motion |
+| --- | --- | --- | --- |
+| `layer-stack` | `hook` ≤ 48, ≤ 6 words; `payoff` ≤ 48; `layers` 2–5 bottom first `{label ≤ 18, kind? image · storyboard · style, image (assets/…), fit? cover · contain, panels (storyboard) [≤ 40] 2–6}`, the last an image (the finished shot); `play` 2–48 assets/ stills (optional); `bpm` 90–160 | hook, play, explode, snap, payoff | Above. The scene is at least 20 beats |
+
+Parity fixtures: `test/fixtures/parity/h-layer-stack-default-*.json` (a
+storyboard, style and image stack in both aspects, sampled through the hook,
+the play, the explode, the snap and the seam).
 
 ### Motion titles (`catalog-h-text.mjs`)
 

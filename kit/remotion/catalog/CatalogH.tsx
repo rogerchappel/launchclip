@@ -2,7 +2,7 @@
 // same view tree and op list as HyperFrames (kit/core/catalog-h.mjs).
 // Frame-pure: the scene clock and the model only.
 import React, {useMemo} from 'react';
-import {AbsoluteFill} from 'remotion';
+import {AbsoluteFill, Img} from 'remotion';
 import {assetUrl} from '../media';
 import {useSceneTime} from '../clock';
 // @ts-ignore plain ESM core module
@@ -24,10 +24,11 @@ function renderNode(node: ViewNode | string, state: Map<string, FrameProps>, key
   if (node.tag === 'canvas' && node.id && paint?.plans[node.id]) return <PaintCanvas key={key} id={node.id} plan={paint.plans[node.id]} t={paint.t} style={style as React.CSSProperties} attrs={attrs} />;
   // A ui-scene host (kit/core/ui-runtime.mjs) is drawn by the UI painter.
   if (node.tag === 'div' && node.id && paint?.ui[node.id]) return <UiHost key={key} id={node.id} spec={paint.ui[node.id]} t={paint.t} style={style as React.CSSProperties} attrs={attrs} />;
-  if (node.tag === 'img' && typeof attrs.src === 'string') attrs.src = assetUrl(attrs.src as string);
+  // <Img> holds the frame until the image has loaded, so a still is drawn on frame 0 (a plain <img> can miss it).
+  if (node.tag === 'img' && typeof attrs.src === 'string') return <Img key={key} id={node.id} style={style as React.CSSProperties} {...(attrs as Record<string, string>)} src={assetUrl(attrs.src as string)} />;
   const children = props && props.text !== undefined ? [String(props.text)] : node.children ?? [];
   return React.createElement(node.tag, {key, id: node.id, style, ...attrs},
-    ...(node.tag === 'img' ? [] : children.map((child, index) => renderNode(child, state, index, paint))));
+    ...children.map((child, index) => renderNode(child, state, index, paint)));
 }
 
 const CatalogHModule: React.FC<{model: any}> = ({model}) => {

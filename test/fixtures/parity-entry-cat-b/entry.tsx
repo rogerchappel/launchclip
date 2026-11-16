@@ -4,6 +4,8 @@
 // module on brand.colors.bg for the scene's duration (frame 0 = scene start).
 import React from 'react';
 import {AbsoluteFill, Composition, registerRoot} from 'remotion';
+// Registers every bundled font file, so ensureFonts() loads the brand's faces, not a fallback.
+import '../../../kit/remotion/font-files';
 import { ensureFonts } from '../../../kit/remotion/fonts';
 // @ts-ignore plain ESM core module
 import {MODULES} from '../../../kit/core/catalog-b.mjs';

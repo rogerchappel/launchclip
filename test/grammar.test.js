@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
@@ -84,12 +83,9 @@ async function goldenStory(id) {
 
 test("editorial is the default and compiles every golden story byte for byte as before grammars", async () => {
   assert.equal(DEFAULT_GRAMMAR, "editorial");
-  // The compiler reads a WAV's channel count itself; any other sound needs ffprobe, and a mono one compiles 3 dB down.
-  const ffprobe = spawnSync("ffprobe", ["-version"]).status === 0;
   for (const [id, expected] of Object.entries(PRE_GRAMMAR_HTML_SHA256)) {
     const { dir, resolved, cleanup } = await goldenStory(id);
     try {
-      if (!ffprobe && [resolved.audio?.mix, resolved.audio?.voice, resolved.base?.src].some((src) => typeof src === "string" && !/\.wav$/i.test(src))) continue;
       for (const story of [resolved, { ...resolved, motion: { grammar: "editorial" } }, { ...resolved, motion: { grammar: { base: "editorial" } } }]) {
         const { html } = await compileStoryToHyperFrames(story, { projectDir: dir, write: false });
         assert.equal(sha(html), expected, `${id} (${JSON.stringify(story.motion ?? null)})`);
