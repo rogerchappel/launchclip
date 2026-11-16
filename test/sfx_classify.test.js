@@ -59,6 +59,8 @@ test("every SFX family sits in at most one type row (null: no single type)", () 
 // and this fails when a sound that lands in its row leaves it: a palette or
 // builder change that turns an impact into a pop. Refresh the baseline when a
 // change moves sounds into their rows.
+// analog/whoosh-4 is recorded as pop: its tonality sits on the cut-off and the
+// kit's ffmpeg filters push it over on Ubuntu's ffmpeg (whoosh on macOS).
 test("family-name test: no family × palette × variant leaves its type row", { skip: !process.env.LAUNCHCLIP_MEDIA_TESTS && "media test: run with npm run test:media (LAUNCHCLIP_MEDIA_TESTS=1)", timeout: 900_000 }, async () => {
   const baseline = JSON.parse(await readFile(path.join(ROOT, "test/fixtures/sfx-classify-baseline.json"), "utf8"));
   assert.deepEqual(Object.keys(baseline).sort(), [...SOUND_PALETTES, "none"].sort());
