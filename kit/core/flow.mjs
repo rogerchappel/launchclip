@@ -13,7 +13,7 @@
 // camera move that keeps zoom and roll (a pan or whip-pan, world or cuts
 // mode): then A's rect is mapped through the two plates' world placements and
 // the element travels with the move (docs/rd/carry-moving-camera.md), or by a
-// push or pull of the camera: then the element rides a layer that cancels the
+// push, pull or orbit of the camera: then the element rides a layer that cancels the
 // camera (docs/FLUID_MOTION_RFC.md §6.6).
 //
 // Plain ESM; imports kit/core siblings only.
@@ -57,8 +57,8 @@ export function carrySource(story, scene) {
 
 /** Camera moves a carry rides: they keep zoom and roll, so the element's world travel is a straight line on screen. */
 export const CARRY_MOVES = Object.freeze(['pan', 'whip-pan']);
-/** Camera moves that change zoom a carry rides on a layer that cancels the camera (§6.6). */
-export const CARRY_RIDES = Object.freeze(['push', 'pull']);
+/** Camera moves that change zoom or roll a carry rides on a layer that cancels the camera (§6.6). */
+export const CARRY_RIDES = Object.freeze(['push', 'pull', 'orbit']);
 /** Typed transitions a carry rides: B's layer slides in on one axis (and may blur), which is a camera move in all but name. */
 export const CARRY_SLIDES = Object.freeze(['push', 'whip']);
 

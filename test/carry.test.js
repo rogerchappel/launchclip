@@ -80,8 +80,8 @@ test('carry needs a cut, a pan, a whip-pan, a push or a pull, and real elements'
   assert.equal(stillPlateProblem(fade, {in: {type: 'push', dur: 0.6}}), null);
   assert.match(stillPlateProblem(fade, fade.scenes[1]), /fade/);
   assert.throws(() => resolveModule(fade.scenes[1], fade), /carry needs a cut/);
-  const orbit = {...twoGraphs(undefined, {in: {type: 'orbit', dur: 0.8}}), camera: {mode: 'world'}};
-  assert.throws(() => resolveModule(orbit.scenes[1], orbit), /orbit camera move; carry rides/);
+  const overview = {...twoGraphs(undefined, {in: {type: 'overview', dur: 2.4}}), camera: {mode: 'world'}};
+  assert.throws(() => resolveModule(overview.scenes[1], overview), /overview camera move; carry rides/);
   for (const extra of [{in: {type: 'whip-pan', dur: 0.26, direction: 'left'}}, {in: {type: 'pan', dur: 0.8}}]) assert.equal(stillPlateProblem(twoGraphs(undefined, extra), twoGraphs(undefined, extra).scenes[1]), null);
   const missing = twoGraphs({map: {'s1-nope': 's2-title'}});
   assert.throws(() => resolveModule(missing.scenes[1], missing), /no element "s1-nope"/);
@@ -264,7 +264,9 @@ for (const [name, transition, camera] of [
   // §6.6: through a zoom the element rides a layer that cancels the camera.
   ['a push in a world-camera story', {type: 'push', dur: 0.9}, {mode: 'world'}],
   ['a pull in a world-camera story', {type: 'pull', dur: 0.9}, {mode: 'world'}],
-  ['a pull in a cuts story', {type: 'pull', dur: 0.8}, {mode: 'cuts'}]
+  ['a pull in a cuts story', {type: 'pull', dur: 0.8}, {mode: 'cuts'}],
+  ['an orbit in a world-camera story', {type: 'orbit', dur: 0.9, direction: 'right'}, {mode: 'world'}],
+  ['an orbit in a cuts story', {type: 'orbit', dur: 0.9, direction: 'left'}, {mode: 'cuts'}]
 ]) {
   test(`carry rides ${name}: a straight line on screen with the camera's ease, a held title stays put`, () => {
     const story = movingStory(transition, camera);
@@ -274,11 +276,18 @@ for (const [name, transition, camera] of [
     assert.ok(items.every(item => !item.pin), 'nothing is a pin across a move: the plates sit apart in the world');
     // A zoom rides a layer whose scale is the camera's reciprocal on every sample (§6.6); pans and slides have none.
     const ride = b.carry.in.ride;
-    assert.equal(Boolean(ride), ['push', 'pull'].includes(transition.type) && (camera.mode === 'world' || transition.type === 'pull'));
+    assert.equal(Boolean(ride), transition.type === 'orbit' || transition.type === 'pull' || (transition.type === 'push' && camera.mode === 'world'));
     if (ride) {
       const plan = cameraPlan(story, {windows: sceneWindows(story), objects: sceneObjectLookup(story, (scene, value) => resolveModule(scene, value))});
       const zoomAt = t => (({zoom}) => zoom)(cameraStateAt(plan, t)) * plan.placements[b.id].scale;
       for (const [t, value] of ride.scale) assert.ok(Math.abs(value * zoomAt(t) - 1) < 1e-4, `ride scale at ${t}`);
+      // And its rotation cancels the camera's roll, so a carried element stays upright while the plates turn.
+      const rideId = `${items[0].id}-ride`;
+      for (let k = 0; k <= 10; k += 1) {
+        const t = move.start + (move.duration * k) / 10;
+        const roll = cameraStateAt(plan, t).rotation + plan.placements[b.id].rotation;
+        assert.ok(Math.abs((frameState(opList(b).ops, t).get(rideId).rotation ?? 0) + roll) < 1e-3, `ride rotation at ${t}`);
+      }
     }
     // A hides its handed copies on the boundary; it is drawn on through the move.
     assert.ok(a.end > 4);
