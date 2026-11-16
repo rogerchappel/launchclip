@@ -20,7 +20,7 @@ const at = 'seconds from scene start (optional; else a matching hit, else a defa
 const rect = '{x, y, width, height} canvas px inside the safe zone (optional)';
 export const LIST_VARIANTS = Object.freeze(['pills', 'stack', 'fan', 'scatter', 'orbit']);
 // The tick: one stroke in a 24-unit box, drawn on like a pen mark.
-const TICK = 'M4 12.5 L9.5 18 L20 6';
+export const TICK = 'M4 12.5 L9.5 18 L20 6';
 const ENTER = 0.55, TICK_DRAW = 0.35;
 // Items are wide lines of type: half the idle tilt keeps their far ends steady.
 const LIST_TILT = 0.5;

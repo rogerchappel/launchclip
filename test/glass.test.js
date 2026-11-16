@@ -63,10 +63,12 @@ test('window-chrome and comparison-table draw glass under rim-glass and their ow
   for (const variant of MODULES['comparison-table'].variants) {
     const model = glassModel('comparison-table', {...SAMPLES['comparison-table'], variant});
     const view = catalogHView(model);
-    const sheet = variant === 'cards' ? find(view, `${model.id}-colcard-0`) : find(view, `${model.id}-glass`);
+    const sheet = variant === 'cards' ? find(view, `${model.id}-colcard-0`) : variant === 'pills' ? find(view, `${model.id}-pill-0`) : find(view, `${model.id}-glass`);
     assert.match(sheet.style.backdropFilter, /blur/, variant);
     const ops = catalogHTimeline(model);
-    assert.ok(ops.some(op => op.target === sheet.id && op.type === 'tween'), `${variant}: the glass rises in`);
+    // A glass pill rides its row's entrance.
+    const mover = variant === 'pills' ? `${model.id}-row-0` : sheet.id;
+    assert.ok(ops.some(op => op.target === mover && op.type === 'tween'), `${variant}: the glass rises in`);
     const out = EMITTERS['comparison-table'](model);
     assert.match(out.html, /backdrop-filter:blur/, variant);
     assert.equal(find(catalogHView({...model, panel: undefined}), `${model.id}-glass`), null, variant);

@@ -1,0 +1,80 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Variant parity: h-comparison-table-pills-portrait",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 4,
+      "platform": "youtube-shorts"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0f2527",
+        "primary": "#7fd6c2",
+        "accent": "#f2b880",
+        "ink": "#0f2527",
+        "paper": "#eef5f2"
+      },
+      "fonts": {
+        "display": "oswald",
+        "body": "outfit",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "el",
+        "module": "comparison-table",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "title": "No brush? Pick composite",
+          "columns": [
+            "Timber",
+            "Composite"
+          ],
+          "rows": [
+            {
+              "label": "No oiling",
+              "values": [
+                false,
+                true
+              ]
+            },
+            {
+              "label": "Free weekends",
+              "values": [
+                false,
+                true
+              ]
+            },
+            {
+              "label": "Upfront cost",
+              "values": [
+                "$",
+                "$$$"
+              ]
+            },
+            {
+              "label": "Natural grain",
+              "values": [
+                true,
+                null
+              ]
+            }
+          ],
+          "highlight": 1,
+          "variant": "pills"
+        }
+      }
+    ]
+  },
+  "sceneId": "el",
+  "threshold": {
+    "ssim": 0.97
+  }
+}
