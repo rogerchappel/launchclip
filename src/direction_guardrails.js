@@ -347,7 +347,9 @@ function readingTime(entry, model) {
   const m = model.motion;
   const fadeIn = m.enterFrom?.opacity < 1 ? m.enterDuration : 0;
   // A ui-scene's reading text is its headlines (uiReadingWords); panel labels are glanced at.
-  const words = entry.scene.module === "ui-scene" ? uiReadingWords(entry.scene.params) : paramWords(entry.scene.params);
+  // A layer stack's reading text is its hook and payoff; layer labels and the drawn sheets are glanced at.
+  const params = entry.scene.params ?? {};
+  const words = entry.scene.module === "ui-scene" ? uiReadingWords(params) : entry.scene.module === "layer-stack" ? paramWords({ hook: params.hook, payoff: params.payoff }) : paramWords(params);
   const enterEnd = Number.isFinite(m.enterEnd) ? m.enterEnd : entry.start + (fadeIn || 0);
   const exitStart = Number.isFinite(m.exitStart) ? m.exitStart : model.end;
   return { words, at: enterEnd, hold: round(exitStart - enterEnd, 2), need: textHold(words) };
