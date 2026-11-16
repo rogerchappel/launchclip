@@ -1645,8 +1645,8 @@ export const ENTRANCE_CLASSIFY = Object.freeze({
   minArea: 0.002,
   maxArea: 0.6, // not in the RFC: change over more of the frame is a transition or a camera move, not an element
   role: 1.25, // not in the RFC: detail (luma gradient) after ÷ before ≥ this is an entrance, before ÷ after an exit, else a change
-  ease: Object.freeze({ out: 0.68, in: 0.32, linearCv: 0.35, floorPairs: 6, tail: 0.05 }), // linearCv: the RFC's 0.45 splits power2.inOut's sampled triangle (CV 0.43–0.47 once its ends sink into the floor); a linear plateau measures ≤ 0.25. Not in the RFC: the noise floor taken off the activity is read over floorPairs each side, and the span widens up to floorPairs while activity is above tail × its peak
-  kind: Object.freeze({ tip: 0.35, correlation: 0.6, travel: 0.02, scale: 0.6, presence: 10, firstShare: 0.2 }), // presence: a cell's mean moved this far from before the event; the first frame read is the first with firstShare of the final presence
+  ease: Object.freeze({ out: 0.68, in: 0.32, linearCv: 0.45, floorPairs: 6, tail: 0.05 }), // not in the RFC: the noise floor taken off the activity is read over floorPairs each side, and the span runs out from the peak (up to floorPairs past the thresholded one) while activity is above tail × the peak
+  kind: Object.freeze({ tip: 0.35, correlation: 0.6, travel: 0.02, ownTravel: 0.25, scale: 0.6, presence: 10, firstShare: 0.5 }), // not in the RFC: presence is a cell's mean moved this far from before the event; the first frame read is the first with firstShare of the final presence; a slide also travels ownTravel of its own extent (a blurred shrink-in drifts ≤ 0.07, a slide ~1)
   stagger: Object.freeze({ min: 3, size: 0.4, duration: 0.5, regularity: 0.4 })
 });
 
@@ -1852,9 +1852,11 @@ function describeEvent(runs, { means, details, mags, cw, ch, cells, fps, E }) {
   // Less the noise floor: the quietest of the medians just before and just after.
   const around = (from, to) => { const values = []; for (let p = Math.max(0, from); p <= Math.min(mags.length - 1, to); p += 1) values.push(level(p)); return values.length ? median(values) : 0; };
   const floor = Math.min(around(first - E.ease.floorPairs, first - 1), around(last + 1, last + E.ease.floorPairs));
-  // The thresholded span misses the slow ends of an ease: widen it while the activity stays above a share of its peak.
-  let from = first, to = last, peak = 0;
-  for (let p = first; p <= last; p += 1) peak = Math.max(peak, level(p) - floor);
+  // The thresholded span misses an ease's slow ends and keeps bridged noise:
+  // the span runs out from the peak while the activity stays above a share of it.
+  let top = first, peak = -Infinity;
+  for (let p = first; p <= last; p += 1) if (level(p) - floor > peak) { peak = level(p) - floor; top = p; }
+  let from = top, to = top;
   while (from > Math.max(0, first - E.ease.floorPairs) && level(from - 1) - floor > E.ease.tail * peak) from -= 1;
   while (to < Math.min(mags.length - 1, last + E.ease.floorPairs) && level(to + 1) - floor > E.ease.tail * peak) to += 1;
   const curve = [];
@@ -1896,7 +1898,9 @@ function entranceKind({ first, last, runs }, list, { means, cw, E }) {
   const [ex, ey] = centroid(early), [fx, fy] = centroid(final);
   const ch = means[0].length / 3 / cw;
   const dx = (fx - ex) / cw, dy = (fy - ey) / ch;
-  if (Math.max(Math.abs(dx), Math.abs(dy)) > K.travel) return { kind: 'slide', direction: Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up') };
+  const extent = (f) => Math.max(...final.map(f)) - Math.min(...final.map(f)) + 1;
+  const ownX = Math.abs(fx - ex) / extent((c) => c % cw), ownY = Math.abs(fy - ey) / extent((c) => Math.floor(c / cw));
+  if ((Math.abs(dx) > K.travel && ownX >= K.ownTravel) || (Math.abs(dy) > K.travel && ownY >= K.ownTravel)) return { kind: 'slide', direction: Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up') };
   const width = (set) => Math.max(...set.map((c) => c % cw)) - Math.min(...set.map((c) => c % cw)) + 1;
   return width(early) < K.scale * width(final) ? { kind: 'scale' } : { kind: 'fade' };
 }
