@@ -79,8 +79,22 @@ effect, options and seed); a later `t` steps forward (4 steps a frame at 30
 fps), an earlier `t` rebuilds, the same rule `PARTICLE_RUNTIME` uses for its
 bitmaps. Remotion renders each chunk in order, so a seek costs one replay per
 chunk. Checkpointing is not worth it: state lives in closures, so snapshots
-would mean editing 120 files. The check caps simulated effects at 4 s; long
-loops (all of weather) are pure.
+would mean editing 120 files. Long loops (all of weather) are pure.
+
+*Measured (phase 1, `kit/core/vfx/driver.mjs`, Node 22 on an Apple M4, seed
+7, a cold seek to the last frame):* a step costs 0.7–4 µs, not 5–20 µs, and the
+longest one-shots run past 3 s: small-explosion (5.4 s, 644 steps) and
+smoke-bomb (5 s, 596 steps) leave smoke behind. A full replay still costs at
+most 1.8 ms (firework-burst 1.7, smoke-bomb 1.7, small-explosion 1.4,
+ground-slam 1.4 ms; the sub-second hits under 0.3 ms). The exception is
+impact-frame: its `create()` precomputes eight full-canvas masks, about 40 ms,
+once per cache slot, and its steps are free. So the cap on simulated effects is
+6 s, not 4 s: the replay is cheap, and the smoke tails are the point. Drawing a
+frame forward through the cache costs under 1 ms median (4.6 ms worst, a
+ground-slam frame) on a 320 × 180 art canvas. The purity test
+(`test/vfx_driver.test.js`) draws five times per effect by 30 fps forward play,
+by a cached seek backwards and by an uncached replay, and compares the colour
+and light buffers byte for byte.
 
 **One runtime string.** `kit/core/vfx/runtime.mjs` exports `VFX_RUNTIME`, an
 IIFE bundle built with the esbuild already in our dev dependencies: the
@@ -214,7 +228,7 @@ Checks:
   bytes; `Math.random`/`Date` are absent (grep and a trapped global).
 - **Effect check** (our own, after upstream's checker): draws stay inside the
   canvas, one-shots draw nothing at `duration`, loops have no seam, a frame
-  costs under 4 ms at 1080p, simulated effects are 4 s or less.
+  costs under 4 ms at 1080p, simulated effects are 6 s or less.
 - **motion-check:** a VFX cue reads as a flash (`pulse`), not an entrance.
   New findings: `vfx-crowd` (more than three hits within 1 s), `vfx-off-beat`
   (peak more than one frame off its beat), `vfx-over-caption` (an impact
