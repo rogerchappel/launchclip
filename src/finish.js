@@ -691,6 +691,8 @@ export function defaultAdapters() {
     voiceProvider: (name, options) => getVoiceProvider(name, options),
     normalizeVoice: (input, output) => normalizeLoudness(input, output),
     renderer: (name) => getRenderer(name),
+    // The colour grade over a finished render (src/grade.js): null when the story has none.
+    grade: (project, story, file) => applyGrade(project, story, file),
     // Cores for this render: the machine's cores split across the render slots.
     renderShare: () => renderShare(),
     withSlot: (kind, options, fn) => withSlot(kind, options, fn),
@@ -1886,7 +1888,7 @@ async function renderStory(ctx, adapter, options) {
   const segments = await renderUngraded(ctx, adapter, options);
   // The grade (story.grade, src/grade.js) goes over the finished picture, so
   // the caption legibility pass that follows measures the graded frames.
-  await applyGrade(ctx.project, ctx.resolved, options.output);
+  await ctx.adapters.grade(ctx.project, ctx.resolved, options.output);
   return segments;
 }
 
