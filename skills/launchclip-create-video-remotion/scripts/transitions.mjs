@@ -80,6 +80,7 @@
 import { grammarEase, resolveGrammar } from './grammar.mjs';
 import { LIGHT_LEAK } from './light-leak.mjs';
 import { BEFORE_AFTER, beforeAfterSteps } from './before-after.mjs';
+import { loopEndingStart } from './story-loop.mjs';
 
 export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan', 'rack-focus', 'glow-wipe', 'card-to-card', 'overview', 'dot-wipe', 'light-sweep', 'push-blur', 'light-leak', 'before-after', 'burn-away', 'slash-wipe', 'shatter', 'crt-off', 'glitch-wipe', 'blinds', 'diamond-wipe', 'star-iris', 'pixel-dissolve', 'wipe', 'clock-wipe', 'card-flip']);
 /**
@@ -688,7 +689,8 @@ export function sceneWindows(story) {
     const target = scenes.find((entry) => entry.id === ending.loop_to);
     if (ending.in && typeof ending.in === 'object') {
       const tweens = transitionTweens(ending.in, options);
-      const start = round(duration - tweens.duration, 6);
+      // The hand-back lands on the last frame (kit/core/story-loop.mjs).
+      const start = loopEndingStart(duration, tweens.duration, fps);
       loop = { sceneId: target.id, scene: target.scene, start, end: duration, transitionIn: { type: tweens.type, dur: tweens.duration, direction: ending.in.direction ?? null, from_object: ending.in.from_object ?? null },
         tweens: tweens.in.map((tw) => ({ ...tw, at: start + tw.start, role: 'in' })) };
       if (tweens.camera) loop.transitionIn.camera = true;

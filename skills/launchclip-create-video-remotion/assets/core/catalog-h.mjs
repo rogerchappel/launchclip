@@ -76,6 +76,7 @@ import {TACTILE_MODULES} from './catalog-h-tactile.mjs';
 import {UI_MODULES} from './catalog-i-ui.mjs';
 import {LIST_MODULES} from './catalog-h-list.mjs';
 import {AUDIO_MODULES} from './catalog-h-audio.mjs';
+import {applyLoop} from './loop.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
 const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...SOCIAL_MODULES, ...CHANNEL_MODULES, ...CODE_MODULES, ...PARTICLE_MODULES, ...GRID_MODULES, ...TOKENIZER_MODULES, ...OBJECT_MODULES, ...EXPLODED_MODULES, ...LAYER_MODULES, ...SCATTER, ...EXPLAIN_MODULES, ...TACTILE_MODULES, ...UI_MODULES, ...LIST_MODULES, ...AUDIO_MODULES];
@@ -83,7 +84,7 @@ const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CA
 
 
 
-export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, states: def.states, aspects: ASPECTS, variants: def.variants}]));
+export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, states: def.states, anchors: def.anchors, aspects: ASPECTS, variants: def.variants}]));
 /** Each module's designed variants, the default (its original look) first. */
 export const VARIANTS = Object.freeze(Object.fromEntries(DEFINITIONS.map(def => [def.id, def.variants])));
 const BY_ID = Object.fromEntries(DEFINITIONS.map(def => [def.id, def]));
@@ -114,6 +115,8 @@ export function catalogHTimeline(model) {
   if (model.grammar) grammarTweens(ops, model.grammar, {roles: ['emphasis']});
   // Elements carried across scenes (kit/core/carry.mjs): lift the root's motion, hold, skip entrances.
   if (model.carry) applyCarry(model, ops, shotStateView(model, def.view(model), stateHooks(def)));
+  // A loop (kit/core/loop.mjs): every element ends where it began.
+  if (model.loop) applyLoop(model, ops);
   return ops;
 }
 

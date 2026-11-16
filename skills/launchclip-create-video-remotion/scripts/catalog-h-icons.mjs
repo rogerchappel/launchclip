@@ -8,6 +8,7 @@ import {VARIANT_PARAM, createHBase, fitText, mixColor, r2, rt, toneColor} from '
 import {chromeNodes, chromeOps, el, label} from './catalog-h-view.mjs';
 import {iconNode, isIcon} from './icons.mjs';
 import {flockOps, idleAmplitude, idleFor, idleOps} from './fluid-motion.mjs';
+import {loopHome} from './loop.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
 const rect = '{x, y, width, height} canvas px inside the safe zone (optional)';
@@ -83,7 +84,7 @@ function gridTimeline(model, ops) {
   const settle = rt(motion.exitStart - 0.05);
   chromeOps(model, ops);
   const lands = flockOps(ops, c.cells.map((cell, i) => ({id: `${id}-cell-${i}`, x: r2(cell.x + c.cellW / 2), y: r2(cell.y + c.cellH / 2), at: cell.time})), start, c.origin, {duration: FLOCK});
-  c.cells.forEach((_, i) => idleOps(ops, `${id}-cell-${i}-idle`, start, rt(lands[i] + 0.3), settle, c.idle));
+  c.cells.forEach((_, i) => idleOps(ops, `${id}-cell-${i}-idle`, start, rt(lands[i] + 0.3), settle, c.idle, loopHome(model)));
 }
 
 export const iconGrid = {
