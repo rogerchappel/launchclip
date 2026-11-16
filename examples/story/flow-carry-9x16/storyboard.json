@@ -1,0 +1,22 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Flow across scenes (golden, 9:16 carry and pins)",
+  "notes": "Golden story for elements carried across scenes (docs/FLUID_MOTION_RFC.md §6): the title is pinned across the cut from one node-graph to the next, so it never leaves while the team below it changes. No narration and no paid calls.",
+  "lane": "motion",
+  "format": {"width": 1080, "height": 1920, "fps": 30, "duration": 9, "platform": "youtube-shorts"},
+  "brand": {
+    "colors": {"bg": "#0b0d1a", "primary": "#ffb547", "accent": "#46d4ff", "ink": "#0b0d1a", "paper": "#f6f3ee"},
+    "fonts": {"display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono"}
+  },
+  "camera": {"mode": "cuts"},
+  "scenes": [
+    {"id": "plan", "module": "node-graph", "start": 0, "end": 4.5, "params": {
+      "title": "One brief, a whole team", "hub": {"label": "Director", "icon": "clapperboard"},
+      "nodes": [{"label": "Research", "icon": "search"}, {"label": "Script", "icon": "pen-line"}, {"label": "Voice", "icon": "mic"}, {"label": "Camera", "icon": "camera"}],
+      "bpm": 120}},
+    {"id": "ship", "module": "node-graph", "start": 4.5, "end": 9, "carry": {"map": {"plan-title": "ship-title"}}, "params": {
+      "title": "One brief, a whole team", "hub": {"label": "Publish", "icon": "megaphone"},
+      "nodes": [{"label": "Edit", "icon": "scissors"}, {"label": "Music", "icon": "music"}, {"label": "Captions", "icon": "captions"}],
+      "bpm": 120}}
+  ]
+}
