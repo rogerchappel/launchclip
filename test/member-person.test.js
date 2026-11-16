@@ -16,7 +16,7 @@ test('person: initials, validation and a local image only', () => {
   assert.equal(initials('ada  lovelace'), 'AL');
   assert.equal(initials('Grace'), 'G');
   assert.equal(initials('🙂'), '?');
-  assert.deepEqual(personSpec(check, {name: 'Ada Lovelace'}, 'p'), {kind: 'person', name: 'Ada Lovelace', image: null, shape: 'avatar'});
+  assert.deepEqual(personSpec(check, {name: 'Ada Lovelace'}, 'p'), {kind: 'person', label: 'Ada Lovelace', image: null, shape: 'avatar'});
   assert.equal(personSpec(check, {name: 'Ada', image: 'assets/ada.jpg', shape: 'photo'}, 'p').shape, 'photo');
   assert.throws(() => personSpec(check, {image: 'assets/a.jpg'}, 'p'), /p.name is required/);
   assert.throws(() => personSpec(check, {name: 'A', image: 'https://x.com/a.jpg'}, 'p'), /project-local assets/);
@@ -34,4 +34,18 @@ test('person: a photo or avatar fills the face; no image is an initials tile', (
   assert.equal(img.attrs?.src ?? img.src, 'assets/ada.jpg');
   assert.equal(img.style.width, 128, 'a photo is a 4:5 portrait of the 160 px face');
   assert.deepEqual(texts(photo), ['Ada']);
+});
+
+test('person: node-graph and icon-grid take it as {member: {module: "person"}}', async () => {
+  const {MODULES, catalogHView} = await import('@launchclip/core/catalog-h.mjs');
+  const brand = {colors, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
+  const resolve = (module, params) => ({...MODULES[module].resolve(params, {id: 's', start: 0, duration: 10, format: {width: 1080, height: 1920, fps: 30}, brand, aspect: '9:16', hits: []}), module});
+  const graph = resolve('node-graph', {hub: 'Release', nodes: [{id: 'a', member: {module: 'person', name: 'Mira Osei', image: 'assets/people/mira.svg'}}, {id: 'b', member: {module: 'person', name: 'Ana Brandt'}}, 'Docs']});
+  assert.equal(graph.content.nodes[0].label, 'Mira Osei', 'the name is the node\'s label (events, anchors)');
+  const view = [catalogHView(graph)].flat();
+  assert.ok(texts(view).includes('AB'), 'no image: an initials tile');
+  assert.ok(view.flatMap(walk).some(n => n?.tag === 'img' && (n.attrs?.src ?? n.src) === 'assets/people/mira.svg'));
+  const grid = resolve('icon-grid', {items: ['star', {member: {module: 'person', name: 'Sol Reyes', shape: 'photo'}}]});
+  assert.ok(texts([catalogHView(grid)].flat()).includes('SR'));
+  assert.throws(() => resolve('icon-grid', {items: ['star', {member: {module: 'person', name: 'Sol', image: 'https://x.com/s.jpg'}}]}), /items\[1\].member.image must be a project-local assets/);
 });
