@@ -33,6 +33,56 @@ export const STORY_VFX_EFFECTS = ["hit-spark", "crit-hit", "impact-frame", "grou
 /** The silhouette effects among them (kit/core/vfx/catalog.mjs VFX_MASKED): each draws round a cue's mask, "module" or "cast:<id>". */
 export const STORY_VFX_MASKED = ["electrified", "glitch", "scanner", "halo", "hit-flash", "confused", "sleep", "stunned", "charmed", "rage", "haste", "slowed", "frozen", "burning"];
 export const STORY_MOMENTS = ["letdown", "promise", "reveal", "impact", "crystallise", "wonder", "miss", "resolve"];
+
+// A scene's sound block (docs/IMMERSIVE_SOUND_RFC.md §2): kit/core/sound/directing.mjs carries it out.
+export const SCENE_SOUND_FIELDS = ["hush", "prelap", "tail", "into", "space", "focus"];
+export const SOUND_INTO = ["riser", "swell", "tape-stop", "hit", "silence"];
+export const SOUND_SPACES = ["dry", "room", "hall"];
+export const SOUND_FOCUSES = ["voice", "music", "fx"];
+export const SOUND_HUSH_FOR = [0.2, 0.8];
+export const SOUND_LEAD = [0.15, 1];
+const soundRange = (value, [lo, hi]) => typeof value === "number" && Number.isFinite(value) && value >= lo - 1e-9 && value <= hi + 1e-9;
+
+/**
+ * Problems with one scene's sound block: {errors, warnings}. hushAt: hush.at
+ * resolved to story seconds (null when it could not be). first, last: the
+ * scene's place among the track-0 scenes; prevTail: the scene before's tail.
+ */
+export function sceneSoundProblems(sound, { path = "sound", first = false, last = false, start = null, end = null, hushAt = null, prevTail = undefined } = {}) {
+  const errors = [], warnings = [];
+  const err = (message) => errors.push(`${path}${message}`);
+  if (sound === undefined) return { errors, warnings };
+  if (!isObject(sound)) return { errors: [`${path} must be an object`], warnings };
+  for (const key of Object.keys(sound)) if (!SCENE_SOUND_FIELDS.includes(key)) err(`.${key} is not a sound field (${SCENE_SOUND_FIELDS.join(", ")})`);
+  if (sound.hush !== undefined) {
+    const hush = sound.hush;
+    if (!isObject(hush)) err(".hush must be {at, for}: the moment it sets up and how long the quiet before it lasts");
+    else {
+      if (hush.at === undefined) err(".hush.at is required (the line or hit the hush leads into)");
+      if (!soundRange(hush.for, SOUND_HUSH_FOR)) err(`.hush.for must be ${SOUND_HUSH_FOR[0]}–${SOUND_HUSH_FOR[1]} s`);
+      if (hushAt !== null && start !== null && end !== null && (hushAt < start - 1e-9 || hushAt > end + 1e-9)) err(`.hush.at (${hushAt}) falls outside the scene [${start}, ${end}]`);
+      else if (hushAt !== null && typeof hush.for === "number" && hushAt - hush.for < 0) err(".hush starts before the video does");
+    }
+  }
+  for (const field of ["prelap", "tail"]) {
+    if (sound[field] === undefined) continue;
+    if (!soundRange(sound[field], SOUND_LEAD)) err(`.${field} must be ${SOUND_LEAD[0]}–${SOUND_LEAD[1]} s`);
+    else if (start !== null && end !== null && sound[field] >= end - start) err(`.${field} (${sound[field]}) must be shorter than the scene`);
+  }
+  if (sound.prelap !== undefined && first) err(".prelap: the first scene has no cut to arrive before");
+  if (sound.tail !== undefined && last) err(".tail: the last scene has no cut to ring past");
+  if (sound.prelap !== undefined && prevTail !== undefined) err(".prelap: the scene before has a tail on the same cut; a cut is a J or an L, not both");
+  if (sound.into !== undefined) {
+    if (!SOUND_INTO.includes(sound.into)) err(`.into must be one of ${SOUND_INTO.join(", ")}`);
+    else if (first) err(".into: the first scene has no cut into it");
+    else if (sound.into === "silence" && prevTail !== undefined) err(".into \"silence\" drops to nothing on the cut, so the scene before cannot ring over it (tail)");
+    else if (sound.into === "silence" && sound.prelap !== undefined) err(".into \"silence\" drops to nothing on the cut, so the scene cannot also arrive early (prelap)");
+  }
+  if (sound.space !== undefined && !SOUND_SPACES.includes(sound.space)) err(`.space must be one of ${SOUND_SPACES.join(", ")}`);
+  if (sound.focus !== undefined && !SOUND_FOCUSES.includes(sound.focus)) err(`.focus must be one of ${SOUND_FOCUSES.join(", ")}`);
+  return { errors, warnings };
+}
+
 export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "documentary", "cinematic"];
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
@@ -788,6 +838,17 @@ export function validateStory(story, { modules, moduleParams } = {}) {
 
     validateAmbient(scene.ambient, `${path}.ambient`, err);
 
+    // Sound directing (kit/core/sound/directing.mjs): first, last and the tail before count among track-0 scenes, in order.
+    if (scene.sound !== undefined) {
+      const cutting = (scenes ?? []).filter((other) => isObject(other) && (other.track ?? 0) === 0);
+      const place = cutting.indexOf(scene);
+      const hushAt = isObject(scene.sound) && isObject(scene.sound.hush) && scene.sound.hush.at !== undefined ? anchorField(scene.sound.hush.at, `${path}.sound.hush.at`) : null;
+      const prevTail = place > 0 && isObject(cutting[place - 1].sound) ? cutting[place - 1].sound.tail : undefined;
+      const problems = sceneSoundProblems(scene.sound, { path: `${path}.sound`, first: place === 0, last: place === cutting.length - 1, start, end, hushAt, prevTail });
+      problems.errors.forEach(err);
+      problems.warnings.forEach(warn);
+    }
+
     // An opt-in idle motion on the scene's content (kit/core/behaviours.mjs).
     if (scene.behaviour !== undefined) {
       const b = scene.behaviour;
@@ -1145,6 +1206,7 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
     if (Array.isArray(scene.vfx)) scene.vfx.forEach((cue, v) => {
       if (isObject(cue) && cue.at !== undefined) cue.at = resolve(cue.at, `${path}.vfx[${v}].at`);
     });
+    if (isObject(scene.sound) && isObject(scene.sound.hush) && scene.sound.hush.at !== undefined) scene.sound = { ...scene.sound, hush: { ...scene.sound.hush, at: resolve(scene.sound.hush.at, `${path}.sound.hush.at`) } };
     if (Array.isArray(scene.states)) scene.states.forEach((state, s) => {
       if (isObject(state) && state.at !== undefined) state.at = resolve(state.at, `${path}.states[${s}].at`);
     });

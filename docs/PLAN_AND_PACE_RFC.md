@@ -79,6 +79,11 @@ required on bespoke.
 | `sound.breath` | "Give the viewer one held moment, 0.4 s or more, where nothing moves." | Plan: no tween runs in the window except idle (the motion check reads the ops). Render: stillness spans it. A declared breath is exempt from `max_still`. |
 | `sound.drop` | "If the music has a drop, start the track so it lands on the signature." | `audio.music` offset is solved from the track's measured section change (§4.3). |
 
+The silences, prelaps and breath are planned per scene instead, as
+`scenes[i].sound` (hush, prelap, tail), and checked in the mix: see
+[IMMERSIVE_SOUND_RFC.md](IMMERSIVE_SOUND_RFC.md) §2, "Shipped (phase 6)".
+`treatment.sound` does not take them.
+
 The planner prompt lines go in a new `treatmentLines()` beside
 `guardrailLines()`. The style pack gains `avoid` tokens so `banned` starts
 from the look, not from nothing.
@@ -188,6 +193,52 @@ What shipped, and where it departs from the text above:
   and the pace change rule wait for the beat data of §4.3.
   Phase 3 now measures tempo, beats and cuts on beat on references; the
   gate does not read them yet.
+
+### Built so far (phase 7, the render)
+
+- **Gate on renders.** `renderPaceGate` in `src/quality_gates.js`, filed by
+  `finish` as `pace` (with `source: "render"`, and the plan's verdict kept
+  as `plan`) when the render's motion report exists; prototypes keep the
+  plan's. Events are the render's cuts, motion bursts and flow onsets
+  (`hookEventSeconds` over the whole runtime); frozen spans are the motion
+  report's still spans, the closing hold left out. `slow-hook`, `flat-hook`
+  and `frozen-frame` fail here, as planned.
+- **Planned against measured** (`renderPaceFindings` in
+  `kit/core/pace-check.mjs`, constants in `RENDER_PACE`; all warnings):
+  `planned-events-missing` (over a quarter of the plan's events show no
+  change within 0.25 s), `hook-lost` (the render opens with fewer events
+  than the plan and fewer than the band), `cut-mid-motion` (a planned cut
+  scoring over 1.2 on the render's 12 fps curve, read two samples before
+  the cut so the cut's own spike is left out), `cuts-off-beat` (with
+  `BEATS.json` and four cuts or more, fewer on a beat within 70 ms than
+  the format's `cuts_on_beat`, and for short motion than 1.8× chance) and
+  `cuts-on-every-beat` (eight in a row). The beat-strength condition of
+  the table is taken as given: the beats are the music finish put under
+  the video.
+- **Bands.** Each `CADENCE_TARGETS` pace gains `cuts_on_beat` (the table's
+  row; `animated` 0.5) and short motion `chance_lift: 1.8`. A measured
+  profile's `hook_rate_ratio` p10, `max_event_gap_seconds` p90 and
+  `cuts_on_beat_ratio` p10 tighten the band (`profilePace`); a seed
+  profile's do not, so a calm style's longer gaps stand.
+- **Profiles.** The three fields are profile measures (`PACE_MEASURES` in
+  `kit/core/profiles.mjs`). `launchclip profile measure` reads the first
+  two from the motion report (a fixed 4 s hook window, like `hook_events`)
+  and cuts on the beat from the reference's audio when its beat strength
+  is 0.3 or more. Seed profiles carry the table's values. The four
+  measured profiles (`animated-explainer-reel`, `paper-diorama`,
+  `ui-explainer-reel`, `ui-steady-reel`) were not re-measured: their
+  reference videos are not kept in the repository or on the machine this
+  ran on. Their notes say the pace fields wait for a re-measure, and
+  `kit/profiles/PROVENANCE.md` is regenerated.
+- **Scorecard.** `eval:formats` gains `hook ×`, `max gap`, `on beat` and
+  `plan/rndr` (`renderedPace` in `eval/scorecard.mjs`): events from scene
+  detection at the event threshold, cuts from the highest, freezes from
+  `freezedetect` (one second and up, so a short-form `max_still` of 0.5 s
+  is only partly seen there), beats from the sample's `BEATS.json`.
+  `plan/rndr` only warns.
+- **Not yet:** the pace change rule, `bar:` section starts on the render,
+  and a scorecard run with the new columns (renders are rationed across
+  sessions; the columns are tested on synthetic measures).
 
 ## 3. Techniques catalogue
 

@@ -23,6 +23,7 @@
 
 import { CADENCE_BENCHMARK, cadenceGate, cadenceTarget, distribution, eventStats, mergeEvents, unionIntervals } from '@launchclip/core/cadence.mjs';
 import { isClaim } from '@launchclip/core/beat-director.mjs';
+import { RENDER_PACE, paceFindings, renderPaceFindings } from '@launchclip/core/pace-check.mjs';
 
 export const SCORECARD_SCHEMA = 'launchclip.format-scorecard.v1';
 export const SCENE_THRESHOLDS = Object.freeze([0.04, 0.08, 0.15]);
@@ -154,6 +155,31 @@ export function renderedCadence(scenes, { duration, format = 'long-form', style 
   return { target, merge_seconds: gap, thresholds, gate: cadenceGate(stats, target) };
 }
 
+/**
+ * The pace of a render (docs/PLAN_AND_PACE_RFC.md §2, phase 7): the hook's
+ * event rate over the body's, the longest gap after the hook and cuts on the
+ * beat, against the format's pace band, plus the plan against the render.
+ * events: the render's event times; cuts: its hard cuts; frozen: [[a, b]];
+ * planned / plannedCuts: the plan's events and cuts; curve: the render's
+ * motion curve or null; beats: the music's beat times or null.
+ */
+export function renderedPace({ events = [], cuts = [], frozen = [], planned = [], plannedCuts = [], curve = null, beats = null, duration, format = 'long-form', style = 'default' } = {}) {
+  const pace = cadenceTarget(format, style).pace;
+  const window = Math.min(pace.hook_window, duration);
+  const times = mergeEvents(events.filter((t) => t >= 0 && t < duration), 0.25);
+  const hook = times.filter((t) => t < window).length;
+  const bodyRate = duration > window ? (times.length - hook) / (duration - window) : 0;
+  const edges = [window, ...times.filter((t) => t > window), duration];
+  let maxGap = 0;
+  for (let i = 1; i < edges.length; i += 1) maxGap = Math.max(maxGap, edges[i] - edges[i - 1]);
+  const onBeat = beats?.length && cuts.length >= RENDER_PACE.minCuts ? cuts.filter((cut) => beats.some((beat) => Math.abs(beat - cut) <= RENDER_PACE.onBeat)).length / cuts.length : null;
+  const findings = [
+    ...paceFindings({ events: times, duration, frozen, pace, source: 'render' }),
+    ...renderPaceFindings({ planned, cuts: plannedCuts, measured: times, measuredCuts: cuts, curve, beats, pace, duration })
+  ];
+  return { pace, hook_events: hook, hook_ratio: bodyRate > 0 ? round(hook / window / bodyRate, 2) : null, max_gap: round(maxGap, 2), cuts_on_beat: onBeat === null ? null : round(onBeat, 2), findings: findings.map(({ rule, severity, at }) => ({ rule, severity, at })) };
+}
+
 /** Share of the runtime that is not frozen (motion on every hold). */
 export function motionOnHold(freezes, duration) {
   const frozen = unionIntervals(freezes).reduce((sum, [a, b]) => sum + Math.max(0, Math.min(duration, b) - Math.max(0, a)), 0);
@@ -252,7 +278,8 @@ export function avSync(planned, detected, { probe = null, toleranceMs = 250, dur
 /**
  * Score one brief's measures against its format. measures: {cadence
  * (renderedCadence), plan (cadence gate of the plan, optional), motion,
- * evidence, variety, layout: {errors, warnings}, captions, sync}. Each check
+ * evidence, variety, layout: {errors, warnings}, captions, sync, pace
+ * (renderedPace)}. Each check
  * is pass, warn (within 15% of the line) or fail; n/a is skipped.
  * → {id, format, label, checks: [{id, status, value, want}], score, status}
  */
@@ -294,6 +321,15 @@ export function scoreBrief(brief, measures) {
     const ok = s.matched_share === null || (s.matched_share >= t.matched_min && (s.offset_ms_p50 ?? 0) <= t.offset_ms_max && (s.audio?.duration_delta_ms ?? 0) <= t.duration_delta_ms_max);
     add('av_sync', s.matched_share === null ? 'n/a' : ok ? 'pass' : s.matched_share >= t.matched_min - 0.15 ? 'warn' : 'fail', s.matched_share, `≥ ${t.matched_min} of scene starts within 250 ms`);
   }
+  if (measures.pace) {
+    const p = measures.pace, band2 = p.pace;
+    add('hook_ratio', band(p.hook_ratio, p.hook_ratio >= band2.hook_ratio, p.hook_ratio >= band2.hook_ratio * 0.85), p.hook_ratio, `≥ ${band2.hook_ratio}`);
+    add('max_gap', band(p.max_gap, p.max_gap <= band2.gap_warn, p.max_gap <= band2.gap_fail), p.max_gap, `≤ ${band2.gap_warn} s (fail ${band2.gap_fail})`);
+    add('cuts_on_beat', p.cuts_on_beat === null || band2.cuts_on_beat == null ? 'n/a' : band(p.cuts_on_beat, p.cuts_on_beat >= band2.cuts_on_beat, p.cuts_on_beat >= band2.cuts_on_beat * 0.85), p.cuts_on_beat, `≥ ${band2.cuts_on_beat}`);
+    // Diagnostic: the plan against the render. It can only warn.
+    const drift = [...new Set(p.findings.filter((f) => PLAN_VS_RENDER.includes(f.rule)).map((f) => f.rule))];
+    add('plan_vs_render', drift.length ? 'warn' : 'pass', drift.length ? drift.join(',') : 'ok', 'planned events show, cuts calm');
+  }
   const judged = checks.filter((check) => check.status !== 'n/a');
   const points = judged.reduce((sum, check) => sum + (check.status === 'pass' ? 1 : check.status === 'warn' ? 0.5 : 0), 0);
   const score = judged.length ? Math.round((points / judged.length) * 100) : null;
@@ -301,10 +337,13 @@ export function scoreBrief(brief, measures) {
   return { id: brief.id, format: brief.format, label: brief.label, checks, score, status };
 }
 
+// The render pace findings that compare the plan with the render (the plan_vs_render column).
+const PLAN_VS_RENDER = Object.freeze(['planned-events-missing', 'hook-lost', 'cut-mid-motion']);
+
 /** The scorecard as a fixed-width table: a row per brief, a column per metric. */
 export function formatScorecard(rows) {
-  const columns = ['events_per_min', 'gap_p50', 'gap_p90', 'longest_static', 'soft_events', 'state_events', 'plan_cadence', 'motion_on_hold', 'evidence', 'variety', 'layout', 'captions', 'av_sync'];
-  const short = { events_per_min: 'ev/min', gap_p50: 'gap p50', gap_p90: 'gap p90', longest_static: 'static', soft_events: 'soft ev', state_events: 'states', plan_cadence: 'plan', motion_on_hold: 'motion', evidence: 'evidence', variety: 'variety', layout: 'layout', captions: 'captions', av_sync: 'a/v sync' };
+  const columns = ['events_per_min', 'gap_p50', 'gap_p90', 'longest_static', 'soft_events', 'state_events', 'plan_cadence', 'motion_on_hold', 'evidence', 'variety', 'layout', 'captions', 'av_sync', 'hook_ratio', 'max_gap', 'cuts_on_beat', 'plan_vs_render'];
+  const short = { events_per_min: 'ev/min', gap_p50: 'gap p50', gap_p90: 'gap p90', longest_static: 'static', soft_events: 'soft ev', state_events: 'states', plan_cadence: 'plan', motion_on_hold: 'motion', evidence: 'evidence', variety: 'variety', layout: 'layout', captions: 'captions', av_sync: 'a/v sync', hook_ratio: 'hook ×', max_gap: 'max gap', cuts_on_beat: 'on beat', plan_vs_render: 'plan/rndr' };
   const mark = { pass: '✓', warn: '~', fail: '✗', 'n/a': '·' };
   const cell = (check) => {
     if (!check) return '·';
