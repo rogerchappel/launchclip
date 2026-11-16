@@ -44,9 +44,8 @@ export const TELLS = Object.freeze({
   stragglerLines: 3, organicPoints: 12, pulseShare: 0.02,
   heroMetrics: 1, signatureScenes: 3,
   chipBoxes: 2, headlineEcho: 0.5, headlineLetters: 4,
-  // boxed-on-flat with footage in the story: one filled box of this share of
-  // the frame is enough; a split-screen panel its text fills less of is bare.
-  boxArea: 0.04, splitFill: 0.5,
+  // boxed-on-flat with footage in the story: one filled box of this share of the frame is enough.
+  boxArea: 0.04,
   // Frame rules (frameTells): shares of the sampled frame, colour distances in RGB.
   accentShare: 0.1, accentDistance: 48, rasterDim: 0.85, edgeStep: 60, blackStep: 12, edgeSides: 3,
   // Text over footage (thin-text-on-footage): the share of edge pixels (a
@@ -448,11 +447,10 @@ const DETECTORS = {
     for (const s of input.scenes) {
       if (REAL_UI.test(s.module) || UNBOXED_MODULES.has(s.module) || isFootage(s.scene?.backdrop) || isFootage(s.scene?.plate) || input.scenes.some((o) => o !== s && overlaps(o, s) && PICTURED.test(o.module) && o.module !== 'split-screen')) continue;
       const hit = (detail, single) => out.push({ at: s.start, ids: [s.id], detail: single ? `${detail}; ${repairLine(boxRepair(s.module))}` : detail, ...(single ? { repair: boxRepair(s.module) } : {}) });
+      // A split's panel fills only with more than a heading: a body line, a figure or a list.
       if (s.module === 'split-screen') {
-        const media = s.model?.content?.windows?.[0]?.rect, texts = (s.model?.content?.texts ?? []).map((t) => t.box).filter(Boolean);
-        const panel = media ? (media.width >= frame * 0.99 ? height - media.height : height) : 0;
-        const used = texts.length ? Math.max(...texts.map((box) => box.y + box.height)) - Math.min(...texts.map((box) => box.y)) : 0;
-        if (panel > 0 && used / panel < TELLS.splitFill) hit(`${s.id} (split-screen) runs footage over a flat panel its text fills ${Math.round((used / panel) * 100)}% of`, true);
+        const p = s.scene?.params ?? {};
+        if (footage && !p.body && !p.stat && !(Array.isArray(p.items) && p.items.length)) hit(`${s.id} (split-screen) runs footage over a panel that holds only a heading, so most of it is flat plate`, true);
         continue;
       }
       if (!s.view || PICTURED.test(s.module)) continue;

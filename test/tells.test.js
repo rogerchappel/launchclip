@@ -226,6 +226,7 @@ test('boxed-on-flat: with footage in the story one filled box is a plan error wi
   assert.deepEqual(flat(tellsGate(triage(cards.slice(0, 4)))), []);
   const backed = cards.slice(0, 4).map(c => ({...c, backdrop: {kind: 'video', params: {src: 'assets/shots/boards.mp4'}}}));
   assert.deepEqual(flat(tellsGate(triage(backed, [CLIP]))), []);
+  assert.deepEqual(flat(tellsGate(triage([{id: 'sp', module: 'split-screen', start: 0, end: 4, params: {media: 'assets/shots/boards.svg', title: 'Three jobs a year', items: ['Wash the deck', 'Oil the boards', 'Seal the ends']}}], [CLIP]))), []);
   assert.deepEqual(flat(tellsGate(triage([{id: 'il', module: 'item-list', start: 0, end: 3, params: {items: ['Merbau', 'Spotted gum']}}], [CLIP]))), []);
 });
 
