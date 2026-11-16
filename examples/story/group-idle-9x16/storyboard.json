@@ -1,0 +1,172 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Sets that arrive together and breathe (9:16 group and idle motion)",
+  "notes": "Sample for docs/FLUID_MOTION_RFC.md phase 5 (second half), in the default grammar: icon-grid flocks out of the middle, item-list pills breathe, social-wall arrives as one wave and its pulled posts breathe. drop-grid is left out: its fall and squash physics trip the example-story entrance and bounce gates. Demo posts only; no narration and no paid calls.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 20,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0b0d1a",
+      "primary": "#ffb547",
+      "accent": "#46d4ff",
+      "ink": "#0b0d1a",
+      "paper": "#f6f3ee"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "scenes": [
+    {
+      "id": "icons",
+      "module": "icon-grid",
+      "start": 0,
+      "end": 6,
+      "params": {
+        "title": "Everything in one prompt",
+        "items": [
+          {
+            "icon": "clapperboard",
+            "label": "Scenes"
+          },
+          {
+            "icon": "captions",
+            "label": "Captions"
+          },
+          {
+            "icon": "audio-waveform",
+            "label": "Voice"
+          },
+          {
+            "icon": "palette",
+            "label": "Brand"
+          },
+          {
+            "icon": "smartphone",
+            "label": "Shorts"
+          },
+          {
+            "icon": "monitor-play",
+            "label": "YouTube"
+          }
+        ],
+        "variant": "tiles"
+      }
+    },
+    {
+      "id": "list",
+      "module": "item-list",
+      "start": 6,
+      "end": 12,
+      "params": {
+        "title": "Before you post",
+        "subject": "Your Short",
+        "ticks": true,
+        "items": [
+          {
+            "label": "Hook in the first second"
+          },
+          {
+            "label": "Captions on every line"
+          },
+          {
+            "label": "One idea per scene"
+          },
+          {
+            "label": "End on the payoff"
+          }
+        ],
+        "variant": "pills"
+      }
+    },
+    {
+      "id": "wall",
+      "module": "social-wall",
+      "start": 12,
+      "end": 20,
+      "params": {
+        "posts": [
+          {
+            "platform": "x",
+            "name": "Deniz Demo",
+            "handle": "demo_deniz",
+            "demo": true,
+            "translatedFrom": "Turkish",
+            "text": "We have reached the end of all work done by hand. Editing is still standing, though.",
+            "time": "11:46 AM",
+            "date": "Oct 18, 2026",
+            "metrics": {
+              "reposts": 1,
+              "likes": 5,
+              "views": 640
+            }
+          },
+          {
+            "platform": "x",
+            "name": "Mira Demo",
+            "handle": "demo_mira",
+            "demo": true,
+            "text": "Motion designers, the storyboard is waiting for you :)",
+            "time": "11:55 PM",
+            "date": "Oct 18, 2026",
+            "metrics": {
+              "likes": 3,
+              "views": 138
+            }
+          },
+          {
+            "platform": "x",
+            "name": "Kai Example",
+            "handle": "demo_kai",
+            "verified": true,
+            "demo": true,
+            "text": "Really hoping the portrait cut ships alongside it",
+            "time": "8:00 AM",
+            "date": "Oct 25, 2026",
+            "metrics": {
+              "likes": 117,
+              "views": 79200
+            }
+          },
+          {
+            "platform": "threads",
+            "name": "Sam Demo",
+            "handle": "demo.sam",
+            "demo": true,
+            "text": "The captions finally land on the beat.",
+            "ago": "2h",
+            "metrics": {
+              "likes": 812,
+              "replies": 44
+            }
+          },
+          {
+            "platform": "bluesky",
+            "name": "Ivy Example",
+            "handle": "ivy-demo.example.social",
+            "demo": true,
+            "text": "Open source video tooling is having a moment.",
+            "ago": "5h",
+            "metrics": {
+              "likes": 240
+            }
+          }
+        ],
+        "focus": [
+          0,
+          1
+        ],
+        "highlight": "still standing",
+        "variant": "field"
+      }
+    }
+  ]
+}

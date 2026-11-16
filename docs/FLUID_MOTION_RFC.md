@@ -309,10 +309,35 @@ lands). A cast cue can then target `{scene: "s2", anchor: "node-3"}`, and the
 cue's time defaults to that anchor's event, so the character looks at the card
 as it lands and raises its arms as the fan opens (`converge`).
 
+**Shipped (phase 4).** `kit/core/anchors.mjs` makes publishing generic: a
+catalogue module declares `anchors(model) → [{name, element, event}]`, and
+`publishAnchors` measures each element on the module's view tree at rest
+(its centre, canvas px) and takes the event's time, so any module that draws
+its elements as a view tree can publish them without code of its own.
+`modules.mjs` `sceneAnchors(story, id)` resolves a scene's anchors and hands
+every module a memoised `ctx.anchorsOf`. `node-graph` publishes `hub` (at
+`build`), `converge` (the hub, at `converge`) and `node-<id>` (each card's
+centre as it lands).
+
+A cast cue or actor `target` may be `{scene, anchor}`; a cue with one and no
+`at` plays at the anchor's time, which is already on the beat grid (§8)
+because the module's default event times are. An anchor is in the picture
+plane, so the character keeps a front view and its face follows the point all
+the way (`gazeOffset` drops its half-turn floor for plate points): four cards
+side by side read as four looks, not one three-quarter turn. Errors name the
+cue: an unknown scene, a scene whose module publishes none (listing those
+that do), an unknown anchor (listing the scene's), and a defaulted time
+outside the cast scene. Both renderers resolve modules through
+`resolveModule`, so the cues are ordinary states and in parity by
+construction; `examples/story/node-graph-anchors-9x16` is the sample and a
+story parity fixture.
+
 **Unproven.** Anchors are in the module's rect space; a cast scene's targets
 are in its set's space. Both are canvas pixels on the same plate, which is
 enough for a still camera; a world camera between them needs the same mapping
-as §6.
+as §6. Anchors are measured at rest, so a camera move inside the module
+(node-graph's slow 1 → 1.05 push) is not followed; at that size the look
+still lands on the card.
 
 ## 8. Beat grid, impact shake, loop
 
@@ -395,10 +420,23 @@ world kit), any icon from `kit/core/icons.mjs`, text that fits; nothing else.
    (§6.2), carry with the FLIP, including a plate that comes back after a
    footage cutaway, the `motion.flow` switch (§6.1), then a container-morph
    test (R&D only, verdict in §12).
-4. **Anchors and character reactions** (§7).
+4. **Anchors and character reactions** (§7). Shipped.
 5. **Planner-drawn graphics** (§10), then group patterns and idle on the other
-   catalogue H modules that draw sets of things (icon-grid, drop-grid,
-   social-wall).
+   catalogue H modules that draw sets of things. The second half has shipped:
+   `icon-grid` flocks out of the middle of the grid and breathes; `drop-grid`
+   keeps its word-timed fall, rocks on its base once landed and ripples when
+   full; `social-wall`'s field arrives as one wave along the drift and its
+   pulled posts breathe; `item-list` (every layout already enters as a group)
+   breathes once in. Each has a long 9:16 parity fixture (`h-*-idle-portrait`)
+   that samples mid-breath. `examples/story/group-idle-9x16` shows three
+   of them. drop-grid is not in it, because its existing fall (`power2.in`
+   into the contact shadow) and `back.out` settle trip the example-story
+   entrance and bounce gates; that physics predates this phase. Left out on purpose: `unit-grid` (up to a hundred tiny units, where a
+   breath each is noise and a hundred more nodes), ranked and tabular sets
+   (`leaderboard`, `comparison-table`, `heatmap`), whose rows must stay
+   aligned to read, and modules that already move a set the whole time
+   (`ticker-tape`, `live-bars`). `fan` and `unison` were not needed: the
+   modules' own entrances already are those patterns.
 6. **Loop** across a whole short (§8), with the seam check.
 
 ## 12. What is unproven
@@ -406,8 +444,20 @@ world kit), any icon from `kit/core/icons.mjs`, text that fits; nothing else.
 - Carry through a moving camera or a moving transition (§6).
 - Whether a container morph (tween only the box's width, height and corner
   radius, cross-fade its contents) reads well enough to join auto-pairing.
-- Whether idle on every element of a busy scene reads as alive or as nervous;
-  the amplitude table is a first guess, to be tuned against renders.
+- Whether idle on every element of a busy scene reads as alive or as nervous.
+  What the set modules' 9:16 sample (`examples/story/group-idle-9x16`)
+  showed: the grammar table holds for large elements (node-graph cards, a
+  pulled post), but a fixed 10 px bob is too much for small members of a set.
+  On 140 px icon tiles it was 7% of each tile's height, and neighbours
+  breathing out of phase wandered visibly out of line, so the grid read as
+  nervous. The bob is now capped at 4% of the element's own height
+  (`idleFor`, `IDLE_SHARE`), which keeps the rows legible while the set still
+  breathes. Three more adjustments came from the sample. Wide lines of type
+  (item-list, a pulled post) take half the tilt, because 1.8° swings the far
+  end of an 800 px line by about 12 px. Things with weight (drop-grid) rock on
+  their base at 0.3 of the bob and 0.7 of the tilt instead of floating off
+  their contact shadow. Sets of tiny units (unit-grid) get no idle at all.
+  Still unproven: a whole short where every scene breathes.
 - Whether two staggered arcs hold eight labels in every brand's display font;
   the module fails validation rather than overlap them, which may make it
   refuse some fonts at eight nodes.

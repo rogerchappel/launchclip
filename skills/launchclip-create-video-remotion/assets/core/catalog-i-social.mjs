@@ -27,6 +27,7 @@ import {VARIANT_PARAM, createHBase, fitText, inkOn, mixColor, r2, rt, toneColor}
 import {el, set, tw} from './catalog-h-view.mjs';
 import {iconNode} from './icons.mjs';
 import {fontWidthScale} from './fonts.mjs';
+import {hashUnit, idleAmplitude, idleOps} from './fluid-motion.mjs';
 
 export const PLATFORMS = Object.freeze(['x', 'threads', 'bluesky', 'linkedin', 'reddit', 'generic']);
 export const LOOKS = Object.freeze(['glass', 'native', 'light']);
@@ -917,7 +918,9 @@ export const socialSort = {
 // ---------------------------------------------------------------------------
 // social-wall: a depth field of posts through a pinhole camera computed in
 // the model (scale, blur and parallax drift by depth), so it is seek-safe and
-// both renderers draw it with plain 2D ops.
+// both renderers draw it with plain 2D ops. The field arrives as one wave
+// along the drift, and the pulled posts breathe once they are in front
+// (docs/FLUID_MOTION_RFC.md §3, §4).
 
 const WALL_VARIANTS = Object.freeze(['field']);
 const DRIFT = {left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1]};
@@ -990,7 +993,7 @@ function wallResolve(params, ctx) {
   // Bokeh: soft orbs of light in front of and behind the field.
   const orbs = Array.from({length: 12}, (_, k) => ({size: r2(u(40 + hash(k, 5) * 180)), cx: r2(fx0 + hash(k, 6) * fw), cy: r2(fy0 + hash(k, 7) * fh), z: hash(k, 8), opacity: r2(0.14 + hash(k, 9) * 0.32), tone: k % 3 === 2 ? 'paper' : 'accent'}));
   const content = {variant: b.variant, prefix: b.id, posts, metrics, palettes: posts.map(post => palette(b, look, post.platform)), tiles: all, tileW, focus, front, frontScale: scale, drift,
-    orbs, buildAt, buildEnd, pullAt, phrases, highlighted: [...hl.byWord.entries()], source: {text: sourcesLine(posts.filter((_, i) => focus.includes(i)).concat(), 0), ...src},
+    orbs, buildAt, buildEnd, pullAt, phrases, idle: idleAmplitude(ctx?.grammar ?? null, b.unit), highlighted: [...hl.byWord.entries()], source: {text: sourcesLine(posts.filter((_, i) => focus.includes(i)).concat(), 0), ...src},
     colors: {accent: b.colors.accent, paper: b.colors.paper}};
   return b.finish(content, {minTextPx: r2(tileBs * scale)});
 }
@@ -1003,8 +1006,9 @@ function wallView(model) {
     background: `radial-gradient(circle, ${hex2(c.colors[o.tone], 0.9)} 0%, ${hex2(c.colors[o.tone], 0.35)} 45%, ${hex2(c.colors[o.tone], 0)} 70%)`}));
   c.tiles.forEach((t, k) => {
     const lead = t.front && t.front.i === c.focus[0];
+    const card = cardNode(vb, c.posts[t.post], c.metrics[t.post], c.palettes[t.post], `${id}-t${k}-c`, {highlighted: lead ? new Map(c.highlighted) : new Map()});
     kids.push(el('div', `${id}-t${k}`, {position: 'absolute', left: r2(t.cx - c.tileW / 2), top: r2(t.cy - t.h / 2), width: c.tileW, transformOrigin: '50% 50%'}, [
-      cardNode(vb, c.posts[t.post], c.metrics[t.post], c.palettes[t.post], `${id}-t${k}-c`, {highlighted: lead ? new Map(c.highlighted) : new Map()})]));
+      t.front ? el('div', `${id}-t${k}-idle`, {position: 'relative', width: c.tileW, transformOrigin: '50% 50%'}, [card]) : card]));
   });
   kids.push(sourceNode(vb, c.source.text, c.source.size, model.theme.muted, `${id}-src`, {position: 'absolute', left: 0, top: r2(rect.height - c.source.size * 1.3), width: rect.width, textAlign: 'center'}));
   return kids;
@@ -1015,6 +1019,8 @@ function wallTimeline(model, ops) {
   const c = model.content;
   const [dx, dy] = c.drift;
   const span = rt(end - start);
+  // The field arrives as one wave: upstream of the drift first, a little hashed jitter so it is not a wipe.
+  const along = c.tiles.map(t => t.cx * dx + t.cy * dy), lo = Math.min(...along), hi = Math.max(...along);
   c.orbs.forEach((o, k) => {
     const travel = r2((60 + 160 * (1 - o.z)) * u);
     const from = {opacity: 0, x: r2(-dx * travel / 2), y: r2(-dy * travel / 2), scaleX: 1, scaleY: 1};
@@ -1026,7 +1032,7 @@ function wallTimeline(model, ops) {
     const target = `${id}-t${k}`;
     const x0 = r2(-dx * t.travel / 2), y0 = r2(-dy * t.travel / 2), x1 = r2(dx * t.travel / 2), y1 = r2(dy * t.travel / 2);
     set(ops, target, start, {opacity: 0, x: x0, y: y0, scaleX: t.scale, scaleY: t.scale, blur: r2(t.blur + 6 * u)});
-    const appear = rt(c.buildAt + (t.front ? 0.35 : hash(k, 10) * 0.9));
+    const appear = rt(c.buildAt + (t.front ? 0.35 : (hi > lo ? (along[k] - lo) / (hi - lo) : 0) * 0.7 + hashUnit(`${target}`) * 0.2));
     tw(ops, target, appear, 0.9, 'power2.out', {opacity: 0, blur: r2(t.blur + 6 * u)}, {opacity: t.opacity, blur: t.blur});
     if (!t.front) {
       tw(ops, target, start, span, 'none', {x: x0, y: y0}, {x: x1, y: y1});
@@ -1042,6 +1048,8 @@ function wallTimeline(model, ops) {
     set(ops, `${target}-c-glow`, start, {opacity: 0});
     tw(ops, `${target}-c-glow`, rt(c.pullAt + 0.8), 0.5, 'power2.out', {opacity: 0}, {opacity: 1});
     if (t.front.i === c.focus[0]) highlightOps(ops, `${target}-c`, start, c.phrases);
+    // In front, it breathes: the wrapper is inside the tile's scale, so the bob is divided by it; half the tilt keeps the words steady.
+    idleOps(ops, `${target}-idle`, start, rt(c.pullAt + 1.3), rt(model.motion.exitStart - 0.05), {bob: r2(c.idle.bob / c.frontScale), tilt: r2(c.idle.tilt * 0.5)});
   });
   set(ops, `${id}-src`, start, {opacity: 0});
   tw(ops, `${id}-src`, rt(c.pullAt + 0.9), 0.4, 'power1.out', {opacity: 0}, {opacity: 1});

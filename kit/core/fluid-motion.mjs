@@ -29,6 +29,15 @@ export function idleAmplitude(grammar, unit) {
   return {bob: r2(IDLE.bob * unit * k), tilt: r2(IDLE.tilt * k)};
 }
 
+// A breath bobs at most this share of the element's own height: a set of small
+// things bobbing the full amount loses its lines and reads as nervous (RFC §12).
+export const IDLE_SHARE = 0.04;
+
+/** An amplitude for an element `height` px tall: the bob capped at IDLE_SHARE of it. */
+export function idleFor(amp, height) {
+  return {bob: r2(Math.min(amp.bob, height * IDLE_SHARE)), tilt: amp.tilt};
+}
+
 /**
  * A slow breath on `target` from `from` to `to` (absolute s): sine.inOut
  * half-cycles of y and rotation, each at least 1.6 s (so the motion check

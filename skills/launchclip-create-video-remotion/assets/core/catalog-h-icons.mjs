@@ -1,15 +1,18 @@
-// Catalogue H icon-grid: 2–12 icons (with optional labels) that pop in on a
-// stagger, in the icon set's two styles (stroke and duotone) or on tinted
-// tiles. Registered in kit/core/catalog-h.mjs.
+// Catalogue H icon-grid: 2–12 icons (with optional labels) that flock out of
+// the grid's centre to their cells on a stagger and breathe once they land
+// (docs/FLUID_MOTION_RFC.md §3, §4), in the icon set's two styles (stroke and
+// duotone) or on tinted tiles. Registered in kit/core/catalog-h.mjs.
 
 import {timingRules} from './catalog-b-base.mjs';
 import {VARIANT_PARAM, createHBase, fitText, mixColor, r2, rt, toneColor} from './catalog-h-base.mjs';
-import {chromeNodes, chromeOps, el, label, popOps} from './catalog-h-view.mjs';
+import {chromeNodes, chromeOps, el, label} from './catalog-h-view.mjs';
 import {iconNode, isIcon} from './icons.mjs';
+import {flockOps, idleAmplitude, idleFor, idleOps} from './fluid-motion.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
 const rect = '{x, y, width, height} canvas px inside the safe zone (optional)';
 const GRID_VARIANTS = Object.freeze(['stroke', 'duotone', 'tiles']);
+const FLOCK = 0.7;
 
 function gridResolve(params, ctx) {
   const b = createHBase('icon-grid', params, ctx, {allowed: ['items', 'title', 'source', 'at', 'tone', 'columns'], required: ['items'], variants: GRID_VARIANTS});
@@ -48,8 +51,10 @@ function gridResolve(params, ctx) {
     const x = r2((W - inRow * cellW) / 2 + col * cellW);
     return {...item, x, y: r2(y0 + row * cellH), time: rt(t0 + i * Math.min(0.12, 1.2 / n))};
   });
+  // The flock leaves from the middle of the grid.
+  const origin = {x: r2(W / 2), y: r2(y0 + gridH / 2)};
   const content = {variant: b.variant, title: titleFit ? {text: title, size: titleFit.size, lines: titleFit.lines} : null, source: null, align: 'center', cells, cellW: r2(cellW), cellH: r2(cellH), iconSize, labelSize, color,
-    tile: mixColor(color, b.colors.bg, 0.16), ink: b.theme.foreground, buildAt: t0};
+    tile: mixColor(color, b.colors.bg, 0.16), ink: b.theme.foreground, buildAt: t0, origin, idle: idleFor(idleAmplitude(ctx?.grammar ?? null, b.unit), iconSize * box)};
   return b.finish(content, {minTextPx: titleFit ? titleFit.size : b.min.key});
 }
 
@@ -65,23 +70,27 @@ function gridView(model) {
     if (tile) inner.push(el('div', null, {position: 'absolute', left: bx, top: 0, width: box, height: box, borderRadius: r2(box * 0.28), background: c.tile}));
     inner.push(iconNode(cell.icon, {x: r2((c.cellW - c.iconSize * (tile ? 0.62 : 1)) / 2), y: r2(tile ? box * 0.19 : 0), size: r2(c.iconSize * (tile ? 0.62 : 1)), color: c.color, mode: c.variant === 'duotone' ? 'duotone' : 'stroke'}));
     if (cell.label) inner.push(label(null, r2(8 * u), r2(box + 18 * u), r2(c.cellW - 16 * u), cell.label, {size: c.labelSize, family: fonts.body, color: c.ink, align: 'center', weight: 600, wrap: true}));
-    kids.push(el('div', `${id}-cell-${i}`, {position: 'absolute', left: cell.x, top: cell.y, width: c.cellW, height: c.cellH, opacity: 0, transformOrigin: `50% ${r2(box / 2)}px`}, inner));
+    const origin = `50% ${r2(box / 2)}px`;
+    kids.push(el('div', `${id}-cell-${i}`, {position: 'absolute', left: cell.x, top: cell.y, width: c.cellW, height: c.cellH, opacity: 0, transformOrigin: origin}, [
+      el('div', `${id}-cell-${i}-idle`, {position: 'absolute', left: 0, top: 0, width: c.cellW, height: c.cellH, transformOrigin: origin}, inner)]));
   });
   return kids;
 }
 
 function gridTimeline(model, ops) {
-  const {id, start} = model;
+  const {id, start, motion} = model;
   const c = model.content;
+  const settle = rt(motion.exitStart - 0.05);
   chromeOps(model, ops);
-  c.cells.forEach((cell, i) => popOps(ops, `${id}-cell-${i}`, start, cell.time, {from: 0.5, duration: 0.5, ease: 'power3.out'}));
+  const lands = flockOps(ops, c.cells.map((cell, i) => ({id: `${id}-cell-${i}`, x: r2(cell.x + c.cellW / 2), y: r2(cell.y + c.cellH / 2), at: cell.time})), start, c.origin, {duration: FLOCK});
+  c.cells.forEach((_, i) => idleOps(ops, `${id}-cell-${i}-idle`, start, rt(lands[i] + 0.3), settle, c.idle));
 }
 
 export const iconGrid = {
   id: 'icon-grid',
-  describe: 'A grid of 2–12 icons from the icon set (1,935: LaunchClip\'s own and Lucide\'s) that pop in on a stagger, with optional labels: stroke icons, duotone icons, or icons on tinted tiles.',
+  describe: 'A grid of 2–12 icons from the icon set (1,935: LaunchClip\'s own and Lucide\'s) that flock out of the middle of the grid on a stagger and breathe once they land, with optional labels: stroke icons, duotone icons, or icons on tinted tiles.',
   params: {items: '[icon name | {icon, label? ≤ 22}] 2–12', title: 'string ≤ 60 (optional)', columns: 'integer 1–6 (default by count and aspect)', tone: 'primary | accent | paper | #rrggbb', at: `build start: ${at}`, variant: VARIANT_PARAM, rect},
-  events: ['build'], timing: timingRules({rules: ['icons pop 0.12 s apart (closer for many) from at']}), variants: GRID_VARIANTS,
+  events: ['build'], timing: timingRules({rules: ['icons launch 0.12 s apart (closer for many) from at and land 0.5 s later']}), variants: GRID_VARIANTS,
   resolve: gridResolve, view: gridView, timeline: gridTimeline
 };
 
