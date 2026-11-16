@@ -49,6 +49,7 @@
 import {propsToStyle, rootNode, rootOps} from './catalog-b-view.mjs';
 import {grammarTweens} from './grammar.mjs';
 import {applyShotStates, shotStateView} from './shot-states.mjs';
+import {applyCarry, carryView} from './carry.mjs';
 import {clipCss} from './catalog-h-base.mjs';
 import {CHARTS} from './catalog-h-charts.mjs';
 import {SCATTER} from './catalog-h-scatter.mjs';
@@ -99,7 +100,7 @@ function definition(model) {
 /** Static element tree for a catalogue H model (initial state at scene start). */
 export function catalogHView(model) {
   const def = definition(model);
-  return rootNode(model, shotStateView(model, def.view(model), stateHooks(def)));
+  return rootNode(model, carryView(model, shotStateView(model, def.view(model), stateHooks(def))));
 }
 
 /** Renderer-neutral animation ops for a catalogue H model, root first. */
@@ -111,6 +112,8 @@ export function catalogHTimeline(model) {
   // Shot states (kit/core/shot-states.mjs): param changes, reveals, the focus ring.
   if (model.shotStates) applyShotStates(model, ops, stateHooks(def));
   if (model.grammar) grammarTweens(ops, model.grammar, {roles: ['emphasis']});
+  // Elements carried across scenes (kit/core/carry.mjs): lift the root's motion, hold, skip entrances.
+  if (model.carry) applyCarry(model, ops, shotStateView(model, def.view(model), stateHooks(def)));
   return ops;
 }
 

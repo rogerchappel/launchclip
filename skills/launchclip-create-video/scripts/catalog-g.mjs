@@ -23,6 +23,7 @@
 import {rootNode, rootOps} from './catalog-b-view.mjs';
 import {grammarTweens} from './grammar.mjs';
 import {applyShotStates, shotStateView} from './shot-states.mjs';
+import {applyCarry, carryView} from './carry.mjs';
 import {cardSurface} from './catalog-g-base.mjs';
 import {conceptCard, iconRow, objectCard, sectionCard} from './catalog-g-cards.mjs';
 import {excerpt, quoteCard, statCard} from './catalog-g-proof.mjs';
@@ -45,10 +46,13 @@ function definition(model) {
   return def;
 }
 
+// The root's children: the card surface and the module's own view.
+const content = (model, def) => [cardSurface(model), ...shotStateView(model, def.view(model), stateHooks(def))].filter(Boolean);
+
 /** Static element tree for a catalogue G model (initial state at scene start). */
 export function catalogGView(model) {
   const def = definition(model);
-  return rootNode(model, [cardSurface(model), ...shotStateView(model, def.view(model), stateHooks(def))].filter(Boolean));
+  return rootNode(model, carryView(model, content(model, def)));
 }
 
 /** Renderer-neutral animation ops for a catalogue G model, root first. */
@@ -60,5 +64,7 @@ export function catalogGTimeline(model) {
   // Shot states (kit/core/shot-states.mjs): param changes, reveals, the focus ring.
   if (model.shotStates) applyShotStates(model, ops, stateHooks(def));
   if (model.grammar) grammarTweens(ops, model.grammar, {roles: ['emphasis']});
+  // Elements carried across scenes (kit/core/carry.mjs): lift the root's motion, hold, skip entrances.
+  if (model.carry) applyCarry(model, ops, content(model, def));
   return ops;
 }

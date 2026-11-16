@@ -34,6 +34,7 @@ import { sceneLayoutAt, storySections } from './footage-layout.mjs';
 import { resolveShotStates, stateSpec, stateTargetRect } from './shot-states.mjs';
 import { scenePassage } from './media-passage.mjs';
 import { publishAnchors } from './anchors.mjs';
+import { applyFlow } from './flow.mjs';
 
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
@@ -187,7 +188,7 @@ function scenePath(scene, story) {
  * Throws with a "scenes[i] (id)…" prefixed message on unknown modules or
  * invalid params.
  */
-export function resolveModule(scene, story, { track, end } = {}) {
+export function resolveModule(scene, story, { track, end, carry = true } = {}) {
   const where = scenePath(scene, story);
   const finalEnd = endingEnd(scene, story, end);
   try {
@@ -224,6 +225,8 @@ export function resolveModule(scene, story, { track, end } = {}) {
     }
     // Zooms inside the shot (kit/core/zooms.mjs): each zoom's rect on the plate.
     if (Array.isArray(scene?.zooms) && scene.zooms.length) model.zoomRects = zoomRects(scene, model);
+    // Elements carried across scenes (kit/core/flow.mjs, docs/FLUID_MOTION_RFC.md §6).
+    if (carry) applyFlow(model, scene, story, (other) => resolveModule(other, story, { end: sceneRenderEnd(story, other), carry: false }));
     return model;
   } catch (error) {
     // An event time's window (error.timing) rides along for tooling to repair.
