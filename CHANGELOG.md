@@ -4,6 +4,16 @@
 
 ### Added
 
+- `node-graph`: 3–8 icon cards (agents, tools, steps) flock out of a hub and
+  fan above it on two staggered tiers, glowing wires draw into the hub with
+  dots streaming down them, and pulses of light land in the hub on a beat
+  grid (`bpm`), lighting each card as its pulse leaves and the hub as it
+  lands. At `converge` (a bar line by default) every wire fires at once: the
+  hub punches, the module's camera shakes and the cards ripple. Every card
+  and the hub breathe while on screen. The patterns are in
+  `kit/core/fluid-motion.mjs` (flock, wave, idle, impact shake, beat grid);
+  docs/FLUID_MOTION_RFC.md is the plan for the rest. The motion check now
+  reads an element that flashes on every beat as a flash, not an entrance.
 - `exploded-view`: one object as an isometric drawing of solid parts, in
   four tones with a single lit part and ink outlines, that comes apart along
   its axes, holds with its labels beside it and snaps back. Three built-in

@@ -92,7 +92,7 @@ moment it lands to the scene's exit:
 
 - **Period** 3.2–4.4 s per full cycle (each half at least 1.6 s), offset per
   element by a hash of its id, so no two members breathe in step.
-- **Amplitude** from the grammar: a base of 6 px of bob and 1.2° of tilt at
+- **Amplitude** from the grammar: a base of 10 px of bob and 1.8° of tilt at
   1080 px, scaled ×1.2 `snappy`, ×1.4 `playful`, ×0.8 `smooth`,
   ×0.7 `cinematic`, ×0.5 `documentary`, ×1 `editorial`.
 - **Why half-cycles of 1.6 s or more:** the motion check reads a tween longer
@@ -117,6 +117,11 @@ A new catalogue I module, `node-graph`:
   (`pathLength = 1`, `strokeDasharray = "L 2"`); tweening `strokeDashoffset`
   from `L` to `-1` runs the dash from the node to the hub. Both renderers
   draw a stroked dash the same way, so the pulse needs no sampled positions.
+  A pulse travels in at most 0.9 of a beat, so one wire never carries two.
+- **Flow**: between pulses, dots stream down every wire (a dotted copy whose
+  `strokeDashoffset` runs linearly for the rest of the scene), so the graph
+  never holds still. The first 9:16 render without it was 76% near-still
+  frames by the render motion gate; with it and the idle breath, 17%.
 - **Lighting on arrival**: when a pulse reaches the hub, the hub's ring flashes
   (scale and opacity out) and the hub core brightens; when a pulse leaves, its
   node's rim lights. These are short flashes, which the motion check already
@@ -206,7 +211,9 @@ pass it as designed, and it learns two things:
   `-idle` suffix, so an idle wrapper is never counted as an element of its
   own for `crowdElements`.
 - **Flashes are not entrances.** Pulses and ring flashes appear and go within
-  `pulse`, so the existing rule holds.
+  `pulse`. An element that flashes on every beat used to be read as one long
+  life from its first fade-in to its last fade-out; the check now reads each
+  fade-in and the fade-out after it as one flash (shipped in phase 1).
 - **New findings** (phase 2): `static-hold` (warning) when a scene longer than
   3 s has a settled stretch over 1.5 s where nothing on screen moves, which is
   what this whole entry is against; `loop-seam` (error) when `loop: true` and
