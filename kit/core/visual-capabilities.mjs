@@ -14,6 +14,7 @@
 // Pure ESM; imports only kit/core siblings. Canonical copy: kit/core/visual-capabilities.mjs.
 
 import { knownModules } from './modules.mjs';
+import { relevantIcon } from './icons.mjs';
 import { socialBuilders } from './capability-builders-social.mjs';
 import { codeBuilders } from './capability-builders-code.mjs';
 import { particlesBuilders } from './capability-builders-particles.mjs';
@@ -174,6 +175,8 @@ const clip = (text, max) => {
   return `${(cut.lastIndexOf(' ') > max * 0.5 ? cut.slice(0, cut.lastIndexOf(' ')) : cut).replace(/[,;:.\s-]+$/, '')}…`;
 };
 const cap1 = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : text);
+// concept-card and icon-row take an icon only when the words name one (relevantIcon).
+const iconOf = (words) => { const icon = relevantIcon(words); return icon ? { icon } : {}; };
 const iconFor = (beat, n = 0) => ICONS[(hash(`${beat.id ?? ''}${beat.headline ?? ''}`) + n) % ICONS.length];
 
 function hash(text) {
@@ -210,7 +213,7 @@ const formatValue = (entry) => entry.raw ?? `${entry.value}${entry.unit ? ` ${en
 const sourceOf = (beat) => beat.evidence?.source ? clip(`${beat.evidence.source.title ?? beat.evidence.source.publisher ?? new URL(beat.evidence.source.url).hostname}${beat.evidence.source.date ? `, ${beat.evidence.source.date}` : ''}`, 60) : undefined;
 
 const BUILDERS = {
-  'concept-card': (beat) => ({ text: clip(beat.headline, 26), icon: iconFor(beat), ...(beat.sub ? { sub: clip(beat.sub, 64) } : {}) }),
+  'concept-card': (beat) => ({ text: clip(beat.headline, 26), ...iconOf(beat.headline), ...(beat.sub ? { sub: clip(beat.sub, 64) } : {}) }),
   'glass-word': (beat) => ({ word: clip(keyTerms(beat.headline)[0] ?? beat.headline, 12) }),
   'object-card': (beat) => ({ object: 'box', caption: clip(beat.headline, 30), label: clip(keyTerms(beat.text)[0] ?? 'Note', 12) }),
   'motion-title': (beat) => ({ text: clip(beat.headline, 34), ...(beat.kicker ? { kicker: clip(beat.kicker, 24) } : {}), highlight: keyTerms(beat.headline)[0] }),
@@ -242,7 +245,7 @@ const BUILDERS = {
   'comparison-table': (beat) => { const n = numbersOf(beat); if (n.length < 4) return null; const rows = []; for (let i = 0; i + 1 < n.length && rows.length < 4; i += 2) rows.push({ label: cap1(clip(n[i].label ?? `Row ${rows.length + 1}`, 28)), values: [formatValue(n[i]), formatValue(n[i + 1])] }); return { title: clip(beat.headline, 40), columns: [cap1(clip(beat.facts?.sides?.[0] ?? 'Before', 16)), cap1(clip(beat.facts?.sides?.[1] ?? 'After', 16))], rows, highlight: 1, variant: 'cards' }; },
 
   'timeline': (beat) => { const steps = timelineSteps(beat); return steps.length >= 2 ? { steps: steps.map((label, i) => ({ label, icon: iconFor(beat, i) })) } : null; },
-  'icon-row': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), items: items.map((label, i) => ({ icon: iconFor(beat, i), label: clip(label, 14) })) } : null; },
+  'icon-row': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), items: items.map((label) => ({ ...iconOf(label), label: clip(label, 14) })) } : null; },
   'icon-grid': (beat) => { const items = itemsOf(beat, 4, 6); return items ? { title: clip(beat.headline, 32), items: items.map((label, i) => ({ icon: iconFor(beat, i), label: clip(label, 14) })), variant: 'duotone' } : null; },
   'process-steps': (beat) => { const items = itemsOf(beat, 3, 3); return items ? { title: clip(beat.headline, 32), steps: items.map((label) => ({ label: clip(label, 22) })) } : null; },
   'item-list': (beat) => { const items = itemsOf(beat, 3, 4); return items ? { title: clip(beat.headline, 32), items } : null; },
@@ -363,7 +366,7 @@ export function capabilityParams(module, beat) {
 const ADDITIONS = {
   'bar-chart': (beat) => ({ key: 'data', items: numbersOf(beat).map((entry, i) => ({ label: cap1(clip(entry.label ?? keyTerms(beat.text)[i] ?? formatValue(entry), 14)), value: entry.value })) }),
   'leaderboard': (beat) => ({ key: 'entries', items: numbersOf(beat).map((entry, i) => ({ label: cap1(clip(entry.label ?? keyTerms(beat.text)[i] ?? formatValue(entry), 18)), value: entry.value })) }),
-  'icon-row': (beat) => ({ key: 'items', items: [{ icon: iconFor(beat), label: clip(beat.headline, 14) }] }),
+  'icon-row': (beat) => ({ key: 'items', items: [{ ...iconOf(beat.headline), label: clip(beat.headline, 14) }] }),
   'icon-grid': (beat) => ({ key: 'items', items: [{ icon: iconFor(beat), label: clip(beat.headline, 14) }] }),
   'process-steps': (beat) => ({ key: 'steps', items: [{ label: clip(beat.headline, 22) }] }),
   'timeline': (beat) => ({ key: 'steps', items: ((beat.facts?.dates ?? []).length ? beat.facts.dates.map((entry) => entry.label) : [beat.headline]).map((label, i) => ({ label: clip(label, 14), icon: iconFor(beat, i) })) }),
