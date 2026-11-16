@@ -283,6 +283,59 @@ places the plan changed once it met the code:
   Golden sheet hashes, the effect check and the motion-check findings are
   not built.
 
+## 4b. Built in round two (hits, transitions, retro pack) and where it differs
+
+Phases 4, 5 and 7 below, built ahead of phase 3 (the `smooth` painter): every
+effect here draws in `pixel` mode, which is what the retro look wants anyway.
+
+- **Retention hits (§3d):** combo-counter, crit-number, level-up, achievement,
+  confetti and firework-rocket. A hit's words come from the cue (`text`,
+  `label`, `title`). The effect still lays its bursts, rings and shines out
+  round its pixel word, but a painter flag (`words = false`, a one-line
+  change to the vendored `ui/_lib.js`, noted in its header) leaves the word
+  out. Both renderers then draw it as brand display-face DOM text, placed and
+  timed by `VFX_WORDS` in the catalogue and moved by one pure function,
+  `vfxWordAt` (enters: slam, drop, slide; exits: pop, fade, slide; a seeded
+  shake). No enter overshoots. `vfx.words: "pixel"` on the story (or a
+  style pack) keeps the pixel font instead. level-up is vendored without
+  its hero-rig pose track. Each pairs with a sound: tally, impact, success,
+  chime, pop and sparkle.
+- **Transitions (§3c): covers, not masks.** Each upstream transition already
+  covers its screen, holds and uncovers. Rather than turning the cover into
+  a mask between two plates (a per-frame CSS mask in both renderers), the
+  VFX layer draws the effect over the cut, as a dot-wipe draws its dots:
+  the plates swap under the full cover at the midpoint. The effect runs at
+  the speed that fits its whole life into `in.dur`, and the middle of its
+  measured full-cover span (`cover` in `VFX_TRANSITIONS`, kept current by
+  `scripts/vfx-peaks.mjs`) lands on the midpoint. The 320 × 180 screen
+  turns a quarter for portrait frames. The cover takes the brand ink or
+  `in.color`. The tile and glint transitions (shatter, crt-off, blinds,
+  diamond-wipe, star-iris, pixel-dissolve) take the accent's ramp; burn-away
+  and glitch-wipe keep their fire and channel split. Each plays its paired
+  sound as it starts. The mask version and `{type: "iris", lit: true}` are
+  not built.
+- **Retro pack (§3b):** `pixel-arcade` is an SVG grade, so both renderers
+  draw it. It works like this: sample one pixel per art cell, spread it over
+  the cell with a cell-sized box convolution (no overlap, no seams), add a
+  4 × 4 Bayer tile of cells, then snap each channel to four levels. That is
+  64 colours by ordered dither, not a 16-colour palette quantise, because a
+  filter cannot pick the nearest of 16 colours. Scanlines sit one art row
+  apart. `retro-pixel` is a seed constraint (`family`), not a drawn
+  dimension. It sets the look, a heavy display face over a mono body (the
+  bundled fonts have no pixel face, so the hits keep the VFX core's own
+  pixel font via `vfx.words`), square outlined panels, and unlocks
+  `pixel-dissolve`, which validation refuses outside a retro story.
+- **Checks:** the purity test covers every drawable module (cue effects and
+  transitions). The layer test covers words (plan, motion, the runtime
+  writing the same styles), the full cover at each swap, the runtime
+  against the import, the transition sounds and the retro gate. Story parity
+  gains `vfx-hits-9x16` and `vfx-transitions-9x16`, and the contact sheet
+  gains a transitions sheet.
+- **Next:** weather backgrounds (§3e, phase 6) are not built: rain, snow,
+  fog, fireflies, aurora and god-rays are pure loops, so they need a
+  `weather` background kind tiled over the frame, not new driver work.
+  After that: `smooth` (phase 3), masks (phase 8), planner text (phase 9).
+
 ## 5. Phases
 
 | # | Step (one PR each) | Effort |
