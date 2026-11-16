@@ -13,6 +13,7 @@ import {hex2, svgRoot} from './catalog-b-view.mjs';
 import {VARIANT_PARAM, createHBase, inkOn, mixColor, r2, rt, textWidth, titleBlock, toneColor} from './catalog-h-base.mjs';
 import {abs, chromeNodes, chromeOps, drawOps, el, label, popOps, riseOps, set, tw} from './catalog-h-view.mjs';
 import {COUNTRIES, WORLD_SIZE} from './world-110m.mjs';
+import {getEase} from './motion.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
 const rect = '{x, y, width, height} canvas px inside the safe zone (optional)';
@@ -116,24 +117,31 @@ function pinList(b, raw) {
 }
 
 function mapResolve(params, ctx) {
-  const b = createHBase('map-highlight', params, ctx, {allowed: ['highlight', 'pins', 'route', 'title', 'source', 'focus', 'at', 'tone'], variants: MAP_VARIANTS});
+  const b = createHBase('map-highlight', params, ctx, {allowed: ['highlight', 'pins', 'route', 'camera', 'title', 'source', 'focus', 'at', 'tone'], variants: MAP_VARIANTS});
   const {check, u, rect} = b;
   const p = b.params;
   if (p.highlight === undefined && p.pins === undefined) check.fail('params', 'needs highlight (countries) or pins (places)');
   if (p.highlight !== undefined) check.arr(p.highlight, 'params.highlight', 1, 8);
   const base = toneColor(b, p.tone, 'params.tone');
   const items = (p.highlight ?? []).map((raw, i) => {
-    const item = typeof raw === 'string' || typeof raw === 'number' ? {country: raw} : check.obj(raw, `params.highlight[${i}]`, ['country', 'label', 'value', 'badge', 'color'], ['country']);
+    const item = typeof raw === 'string' || typeof raw === 'number' ? {country: raw} : check.obj(raw, `params.highlight[${i}]`, ['country', 'label', 'value', 'badge', 'color', 'arrive'], ['country']);
     const id = countryId(item.country);
     if (!id) check.fail(`params.highlight[${i}].country`, `is not a country on the map (${JSON.stringify(item.country)}); use its name, a common alias or its ISO numeric code`);
     return {id, name: COUNTRIES[id].name, label: item.label === undefined ? COUNTRIES[id].name.replace(/\bUnited States of America\b/, 'United States') : check.str(item.label, `params.highlight[${i}].label`, 24),
       value: item.value === undefined ? null : check.str(String(item.value), `params.highlight[${i}].value`, 12), badge: item.badge === undefined ? null : check.str(String(item.badge), `params.highlight[${i}].badge`, 8),
-      color: item.color === undefined ? base : toneColor(b, item.color, `params.highlight[${i}].color`)};
+      color: item.color === undefined ? base : toneColor(b, item.color, `params.highlight[${i}].color`),
+      arrive: item.arrive === undefined ? null : check.oneOf(item.arrive, `params.highlight[${i}].arrive`, ['route', 'order'])};
   });
   if (new Set(items.map(i => i.id)).size !== items.length) check.fail('params.highlight', 'names the same country twice');
   const pins = pinList(b, p.pins);
-  const route = p.route === undefined ? false : check.bool(p.route, 'params.route');
+  // route: true (dashed legs drawn as each pin lands) or {head} (the journey: one route with a glowing head; RFC §E.5).
+  const journey = p.route !== null && typeof p.route === 'object' && !Array.isArray(p.route);
+  const route = p.route === undefined ? false : journey ? true : check.bool(p.route, 'params.route');
+  const head = journey ? (check.obj(p.route, 'params.route', ['head']), p.route.head === undefined ? true : check.bool(p.route.head, 'params.route.head')) : false;
   if (route && pins.length < 2) check.fail('params.route', 'needs at least two pins');
+  const camera = p.camera === undefined ? null : p.camera === 'follow' ? 'follow' : cameraList(b, p.camera);
+  if (camera === 'follow' && !journey) check.fail('params.camera', '"follow" needs a journey route: route {head: true} and two or more pins');
+  if (items.some(item => item.arrive === 'route') && !journey) check.fail('params.highlight', 'arrive "route" needs a journey route: route {head: true} and two or more pins');
   if (pins.filter(pin => pin.card).length > 2) check.fail('params.pins', 'at most two pins can carry a card');
   const focus = p.focus === undefined ? 'auto' : check.oneOf(p.focus, 'params.focus', ['auto', 'world']);
   const withPole = items.some(i => i.id === ANTARCTICA);
@@ -154,9 +162,9 @@ function mapResolve(params, ctx) {
   if (focus === 'world' || k < 1.4) k = 1;
   // Translate so the bounds' centre sits mid-box; where the zoomed world is
   // larger than the box, keep it covering the box.
-  const fit = (size, worldSize, start, centre) => {
-    const t = size / 2 - start - centre * s * k;
-    return worldSize * s * k >= size ? Math.min(-start, Math.max(size - start - worldSize * s * k, t)) : t;
+  const fit = (size, worldSize, start, centre, kk = k) => {
+    const t = size / 2 - start - centre * s * kk;
+    return worldSize * s * kk >= size ? Math.min(-start, Math.max(size - start - worldSize * s * kk, t)) : t;
   };
   const tx = r2(fit(W, WORLD_SIZE.width, origin.x, (x0 + x1) / 2)), ty = r2(fit(H, worldH, origin.y, (y0 + y1) / 2));
   const t0 = b.timeOf('build', p.at, 'params.at', 0.5);
@@ -226,7 +234,8 @@ function mapResolve(params, ctx) {
     return {...pin, px, py, labelBox: {x: lx, y: ly, w: lw, h: lh}, time, card};
   });
   let routes = [];
-  if (route) {
+  const travel = journey || camera ? travelPlan(b, {items, marks, pins: pinMarks, journey, head, camera, first, t0, zoom, box, origin, s, W, H, worldH, fit, tx, ty, k}) : null;
+  if (route && !journey) {
     routes = pinMarks.slice(1).map((pin, i) => {
       const a = pinMarks[i];
       const mx = (a.px + pin.px) / 2, my = (a.py + pin.py) / 2, dx = pin.px - a.px, dy = pin.py - a.py;
@@ -252,10 +261,167 @@ function mapResolve(params, ctx) {
     const byCountry = landDots(pitch, span, shown);
     matrix = {pitch, dot: r2(pitch * 0.58), rest: dotPath(shown.filter(id => !highlighted.has(id)).flatMap(id => byCountry[id] ?? [])), lit: items.map(item => dotPath(byCountry[item.id] ?? []))};
   }
-  const lastTime = Math.max(t0 + 0.5, ...marks.map(m => m.time), ...pinMarks.map(pin => pin.card?.time ?? pin.time));
-  const content = {variant: b.variant, title: tb.title, source: tb.source, align: 'left', box, origin, s: r2(s * 1e4) / 1e4, worldH, rest, marks, pins: pinMarks, routes, matrix, zoom, t0, pillSize, pinSize, cardTitle, cardSub,
+  const lastTime = Math.max(t0 + 0.5, ...marks.map(m => m.time), ...pinMarks.map(pin => pin.card?.time ?? pin.time), ...(travel ? [travel.end] : []));
+  const content = {variant: b.variant, travel, title: tb.title, source: tb.source, align: 'left', box, origin, s: r2(s * 1e4) / 1e4, worldH, rest, marks, pins: pinMarks, routes, matrix, zoom, t0, pillSize, pinSize, cardTitle, cardSub,
     buildEnd: rt(lastTime + 0.4), land: mixColor(b.colors.paper, b.colors.bg, 0.16), border: b.colors.bg, ink: b.theme.foreground, muted: b.theme.muted, panel: b.theme.panel, accent: b.colors.accent};
   return b.finish(content, {minTextPx: tb.title ? tb.title.size : b.min.key});
+}
+
+// ---------------------------------------------------------------------------
+// Journey: a route that draws with a glowing head, countries lit on arrival
+// and a camera that moves the drawn map as one image (RFC §E.5).
+
+// The share of the route the glowing head covers, and the constant
+// per-country arrival sequence (s): the border draws, the fill blooms, the
+// label rises. Never a slice of the reveal, so a long border never flashes by.
+export const ROUTE_HEAD = 0.03;
+export const ARRIVAL = Object.freeze({border: 1.6, bloom: 0.3, settle: 0.5, label: 0.3, settled: 0.8});
+// Camera moves and route legs: slow → fast → slow, no overshoot.
+export const TRAVEL_EASE = 'power2.inOut';
+const LEG = [1.2, 2.4];
+const PUSH = 1.0, PULL = 1.2, MOVE = 1.6;
+
+function cameraList(b, raw) {
+  const {check} = b;
+  check.arr(raw, 'params.camera', 1, 6);
+  let last = -Infinity;
+  return raw.map((key, i) => {
+    const path = `params.camera[${i}]`;
+    check.obj(key, path, ['at', 'centre', 'zoom'], ['at', 'centre']);
+    const at = b.timeOf(`camera-${i}`, key.at, `${path}.at`, 1);
+    if (at <= last) check.fail(`${path}.at`, 'must come after the key before it');
+    last = at;
+    check.arr(key.centre, `${path}.centre`, 2, 2);
+    const lon = check.num(key.centre[0], `${path}.centre[0]`, -180, 180), lat = check.num(key.centre[1], `${path}.centre[1]`, -85, 85);
+    return {at, centre: projectLonLat(lon, lat), zoom: key.zoom === undefined ? null : check.num(key.zoom, `${path}.zoom`, 1, 8)};
+  });
+}
+
+/** The journey's route through the pins in world units: one path of quadratic legs, sampled by arc length. */
+export function routeGeometry(points) {
+  const legs = [], samples = [];
+  let total = 0, d = `M${r2(points[0][0])} ${r2(points[0][1])}`;
+  for (let i = 1; i < points.length; i++) {
+    const [ax, ay] = points[i - 1], [bx, by] = points[i];
+    const len = Math.hypot(bx - ax, by - ay) || 1e-6;
+    const bend = len * 0.22;
+    const cx = (ax + bx) / 2 + (by - ay) / len * bend, cy = (ay + by) / 2 - (bx - ax) / len * bend;
+    d += ` Q${r2(cx)} ${r2(cy)} ${r2(bx)} ${r2(by)}`;
+    const at = q => [(1 - q) ** 2 * ax + 2 * (1 - q) * q * cx + q * q * bx, (1 - q) ** 2 * ay + 2 * (1 - q) * q * cy + q * q * by];
+    let prev = at(0), legLen = 0;
+    if (!samples.length) samples.push({x: prev[0], y: prev[1], length: 0});
+    for (let n = 1; n <= 48; n++) {
+      const pt = at(n / 48);
+      legLen += Math.hypot(pt[0] - prev[0], pt[1] - prev[1]);
+      samples.push({x: pt[0], y: pt[1], length: total + legLen});
+      prev = pt;
+    }
+    legs.push({from: total, to: total + legLen});
+    total += legLen;
+  }
+  for (const sample of samples) sample.f = sample.length / total;
+  return {d, total, legs: legs.map(leg => ({from: leg.from / total, to: leg.to / total})), samples};
+}
+
+/** The route's normalised arc length nearest a world point. */
+export function routeStop(geometry, [x, y]) {
+  let best = geometry.samples[0];
+  for (const sample of geometry.samples) if (Math.hypot(sample.x - x, sample.y - y) < Math.hypot(best.x - x, best.y - y)) best = sample;
+  return best.f;
+}
+
+// The time an eased move from t over d reaches progress q (bisection on the ease).
+function easedTime(t, d, q, ease = TRAVEL_EASE) {
+  const fn = getEase(ease);
+  let lo = 0, hi = 1;
+  for (let n = 0; n < 40; n++) { const mid = (lo + hi) / 2; if (fn(mid) < q) lo = mid; else hi = mid; }
+  return t + d * (lo + hi) / 2;
+}
+
+function travelPlan(b, {items, marks, pins, journey, head, camera, first, t0, zoom, box, origin, s, W, H, worldH, fit, tx, ty, k}) {
+  const {check, unit} = b;
+  // The overview: the zoom the map lands on (the whole route in view).
+  const overview = {x: zoom ? tx : 0, y: zoom ? ty : 0, k: zoom ? k : 1};
+  const view = (centre, kk) => ({x: r2(fit(W, WORLD_SIZE.width, origin.x, centre[0], kk)), y: r2(fit(H, worldH, origin.y, centre[1], kk)), k: r2(kk)});
+  // Close enough to read the leg, never so close the 1:110m borders turn coarse.
+  const kFollow = r2(Math.max(overview.k, Math.min(6, Math.max(2, overview.k * 1.6))));
+  const segments = [];
+  // The dot matrix starts near its final zoom and pushes in (as without a camera).
+  if (zoom) segments.push({start: zoom.time, duration: zoom.duration, from: zoom.fromK !== 1 ? {x: zoom.fromX, y: zoom.fromY, k: zoom.fromK} : {x: 0, y: 0, k: 1}, to: overview, ease: zoom.fromK !== 1 ? 'power2.out' : 'power3.inOut'});
+  let time = first;
+  let geometry = null, legs = [], routeStart = null, routeEnd = null;
+  if (journey) {
+    geometry = routeGeometry(pins.map(pin => [pin.wx, pin.wy]));
+    const longest = Math.max(...geometry.legs.map(leg => leg.to - leg.from));
+    // The first pin drops, the camera pushes in on it (follow), then each leg draws.
+    pins[0].time = rt(time);
+    time += camera === 'follow' ? PUSH + 0.2 : 0.5;
+    if (camera === 'follow') segments.push({start: rt(first + 0.2), duration: PUSH, from: overview, to: view([pins[0].wx, pins[0].wy], kFollow), ease: TRAVEL_EASE});
+    routeStart = rt(time);
+    legs = geometry.legs.map((leg, i) => {
+      const duration = rt(LEG[0] + (LEG[1] - LEG[0]) * (leg.to - leg.from) / longest);
+      const out = {...leg, time: rt(time), duration};
+      if (camera === 'follow') segments.push({start: out.time, duration, from: view([pins[i].wx, pins[i].wy], kFollow), to: view([pins[i + 1].wx, pins[i + 1].wy], kFollow), ease: TRAVEL_EASE});
+      time += duration;
+      pins[i + 1].time = rt(time - 0.15);
+      if (pins[i + 1].card) pins[i + 1].card.time = rt(pins[i + 1].time + 0.3);
+      b.events.push({id: `${b.id}-route-${i}`, name: `route-${i}`, time: out.time, endTime: rt(out.time + duration), role: 'emphasis', cue: 'whoosh-soft'});
+      return out;
+    });
+    routeEnd = rt(time);
+    if (camera === 'follow') segments.push({start: rt(routeEnd + 0.3), duration: PULL, from: view([pins.at(-1).wx, pins.at(-1).wy], kFollow), to: overview, ease: TRAVEL_EASE});
+    // Pins land when the route reaches them (their events move with them).
+    pins.forEach((pin, i) => { const event = b.events.find(e => e.id === `${b.id}-pin-${i}`); if (event) event.time = pin.time; });
+  }
+  if (Array.isArray(camera)) {
+    let from = overview, last = zoom ? zoom.time + zoom.duration : t0;
+    for (const key of camera) {
+      const to = view(key.centre, key.zoom ?? from.k);
+      const duration = rt(Math.min(MOVE, key.at - last));
+      if (duration <= 0) check.fail('params.camera', `each key needs time to move after the map lands (${rt(last - b.start)} s)`);
+      segments.push({start: rt(key.at - duration), duration, from, to, ease: TRAVEL_EASE});
+      from = to; last = key.at;
+    }
+  }
+  // Countries: those that arrive by the route light when its head reaches
+  // them (arc-length order); the rest keep their turn after the first pin.
+  const lit = [];
+  items.forEach((item, i) => {
+    const byRoute = journey && item.arrive !== 'order';
+    if (!byRoute) return;
+    const f = routeStop(geometry, COUNTRIES[item.id].c);
+    const leg = legs.find(l => f <= l.to + 1e-9) ?? legs.at(-1);
+    const q = Math.min(1, Math.max(0, (f - leg.from) / Math.max(1e-9, leg.to - leg.from)));
+    const trigger = rt(easedTime(leg.time, leg.duration, q));
+    marks[i].time = trigger;
+    marks[i].stop = r2(f * 1e4) / 1e4;
+    const event = b.events.find(e => e.id === `${b.id}-highlight-${i}`);
+    Object.assign(event, {time: trigger, endTime: rt(trigger + ARRIVAL.border)});
+    lit.push(i);
+  });
+  // Per-node camera offsets: a screen-space node anchored at world point p sits
+  // at its overview position plus the camera's shift of p. Translate and scale
+  // tween with one ease, so p's screen position is linear in it too.
+  const shift = (cam, [wx, wy]) => ({x: r2(cam.x + wx * s * cam.k - (overview.x + wx * s * overview.k)), y: r2(cam.y + wy * s * cam.k - (overview.y + wy * s * overview.k))});
+  const kMax = Math.max(overview.k, ...segments.map(seg => seg.to.k));
+  // Motion blur only at peak speed: the screen centre's travel at the move's
+  // fastest point (1.5× the mean for power2.inOut), a quarter-frame of it.
+  for (const seg of segments) {
+    const centre = [(W / 2 - origin.x - seg.from.x) / (s * seg.from.k), (H / 2 - origin.y - seg.from.y) / (s * seg.from.k)];
+    const end = shift(seg.to, centre), startShift = shift(seg.from, centre);
+    const peak = 1.5 * Math.hypot(end.x - startShift.x, end.y - startShift.y) / seg.duration;
+    const blur = r2(Math.min(6 * unit, peak / b.fps * 0.25) / Math.max(seg.from.k, seg.to.k));
+    seg.blur = blur * Math.max(seg.from.k, seg.to.k) >= 0.75 * unit ? blur : 0;
+  }
+  const end = Math.max(routeEnd ?? 0, ...segments.map(seg => seg.start + seg.duration), ...marks.filter((m, i) => lit.includes(i)).map(m => m.time + ARRIVAL.border));
+  if (end > b.start + b.lastEvent + 1e-6) check.fail('params', `the journey needs ${rt(end - b.start + b.duration - b.lastEvent)} s; make the scene at least that long or drop a pin`);
+  return {segments, overview, kMax: r2(kMax), geometry: geometry ? {d: geometry.d} : null, head, routeStart, routeEnd, legs: legs.map(l => ({from: r2(l.from * 1e4) / 1e4, to: r2(l.to * 1e4) / 1e4, time: l.time, duration: l.duration})), lit,
+    anchors: {marks: marks.map(m => anchorOps(segments, shift, COUNTRIES[m.id].c)), pins: pins.map(pin => anchorOps(segments, shift, [pin.wx, pin.wy]))}, end: rt(end)};
+}
+
+// The camera's shift of one world point at each segment's ends.
+function anchorOps(segments, shift, point) {
+  return segments.map(seg => ({start: seg.start, duration: seg.duration, ease: seg.ease, from: shift(seg.from, point), to: shift(seg.to, point)}));
 }
 
 // ---------------------------------------------------------------------------
@@ -285,11 +451,40 @@ function mapView(model) {
       } else paths.push(el('path', `${id}-country-${i}`, {opacity: 0, ...(c.variant === 'glow' ? {filter: `drop-shadow(0 0 ${r2(6 / (c.s * k))}px ${m.color})`} : {})}, [], {d: m.d, fill: m.color, stroke: c.variant === 'glow' ? mixColor('#ffffff', m.color, 0.5) : c.border, strokeWidth: r2(stroke * (c.variant === 'glow' ? 1.6 : 1))}));
     });
   }
+  const T = c.travel;
+  if (T) {
+    // Strokes are sized for the middle of the camera's zoom range.
+    const kRef = (T.overview.k + T.kMax) / 2, px = v => r2(v * u / (c.s * kRef));
+    // A border that draws on arrival, for the fills (outline draws its own).
+    if (!c.matrix && !outline) for (const i of T.lit) paths.push(el('path', `${id}-border-${i}`, {strokeDasharray: 1, strokeDashoffset: 1}, [], {d: c.marks[i].d, fill: 'none', stroke: mixColor('#ffffff', c.marks[i].color, 0.35), strokeWidth: r2(stroke * 2.4), strokeLinejoin: 'round', pathLength: 1}));
+    if (T.geometry) {
+      const color = c.pins[1]?.color ?? c.accent, d = T.geometry.d;
+      paths.push(el('defs', null, null, [el('mask', `${id}-jmask`, null, [el('path', `${id}-jm`, {strokeDasharray: 1, strokeDashoffset: 1}, [], {d, stroke: '#ffffff', strokeWidth: px(12), strokeLinecap: 'round', fill: 'none', pathLength: 1})], {maskUnits: 'userSpaceOnUse', x: -100, y: -100, width: 1200, height: r2(c.worldH + 200)})]));
+      paths.push(el('path', null, null, [], {d, stroke: color, strokeWidth: px(3.5), strokeDasharray: `${px(10)} ${px(9)}`, strokeLinecap: 'round', fill: 'none', mask: `url(#${id}-jmask)`}));
+      if (T.head) {
+        // The head: a wide soft glow under a white core, each a dash window moved along the route. No dark casing.
+        const dash = {strokeDasharray: `${ROUTE_HEAD} 2`, strokeDashoffset: ROUTE_HEAD, opacity: 0};
+        paths.push(el('path', `${id}-glow`, dash, [], {d, stroke: color, strokeOpacity: 0.45, strokeWidth: px(16), strokeLinecap: 'round', fill: 'none', pathLength: 1}));
+        paths.push(el('path', `${id}-core`, dash, [], {d, stroke: '#ffffff', strokeWidth: px(4.5), strokeLinecap: 'round', fill: 'none', pathLength: 1}));
+      }
+    }
+  }
   const world = el('div', `${id}-world`, {...abs(c.origin.x, c.origin.y, r2(1000 * c.s), r2(c.worldH * c.s)), transformOrigin: '0px 0px', opacity: 0}, [
     el('svg', null, {position: 'absolute', left: 0, top: 0, overflow: 'visible'}, paths, {width: r2(1000 * c.s), height: r2(c.worldH * c.s), viewBox: `0 0 1000 ${c.worldH}`})
   ]);
   kids.push(el('div', null, {...abs(B.x, B.y, B.width, B.height), overflow: 'hidden'}, [world]));
+  // With a camera, nodes pinned to a place ride in an anchor the timeline
+  // moves with the map, inside a box that clips them like the map.
+  const anchored = [];
+  const holder = (kind, i) => {
+    if (!T) return kids;
+    const group = [];
+    anchored.push(el('div', `${id}-anchor-${kind}${i}`, abs(0, 0, W, H), group));
+    return group;
+  };
+  const W = model.rect.width, H = model.rect.height;
   c.marks.forEach((m, i) => {
+    const kids = holder('m', i);
     if (c.variant === 'pins') kids.push(pinNode(`${id}-pin-${i}`, m.px, m.py, m.color, c.border, u));
     const P = m.pill;
     kids.push(el('div', `${id}-label-${i}`, {...abs(P.x, P.y, P.w, P.h), boxSizing: 'border-box', borderRadius: 99, background: c.variant === 'fill' ? m.color : c.panel, border: `${r2(2 * u)}px solid ${m.color}`, opacity: 0}, [
@@ -302,10 +497,11 @@ function mapView(model) {
       ]));
     }
   });
-  const W = model.rect.width, H = model.rect.height;
   c.routes.forEach((r, i) => kids.push(svgRoot(W, H, [el('defs', null, null, [el('mask', `${id}-rmask-${i}`, null, [el('path', `${id}-rm-${i}`, {strokeDasharray: 1, strokeDashoffset: 1}, [], {d: r.d, stroke: '#ffffff', strokeWidth: r2(10 * u), strokeLinecap: 'round', fill: 'none', pathLength: 1})], {maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: W, height: H})]),
     el('path', null, null, [], {d: r.d, stroke: r.color, strokeWidth: r2(3.5 * u), strokeDasharray: `${r2(10 * u)} ${r2(9 * u)}`, strokeLinecap: 'round', fill: 'none', mask: `url(#${id}-rmask-${i})`})])));
+  const cards = [];
   c.pins.forEach((pin, i) => {
+    const kids = holder('p', i);
     const d = r2(22 * u);
     kids.push(el('div', `${id}-pulse-${i}`, abs(r2(pin.px - d), r2(pin.py - d), r2(d * 2), r2(d * 2), {borderRadius: '50%', border: `${r2(3 * u)}px solid ${pin.color}`, boxSizing: 'border-box', opacity: 0})));
     kids.push(pinNode(`${id}-place-${i}`, pin.px, pin.py, pin.color, c.border, u, {glow: true}));
@@ -324,10 +520,12 @@ function mapView(model) {
       }
       inner.push(label(null, 0, y, C.w, C.title, {size: c.cardTitle, family: fonts.body, color: c.ink, align: 'center', weight: 700, lineHeight: 1.25}));
       if (C.sub) inner.push(label(null, 0, r2(y + c.cardTitle * 1.25), C.w, C.sub, {size: c.cardSub, family: fonts.body, color: pin.color, align: 'center', weight: 600, lineHeight: 1.3}));
-      kids.push(el('div', `${id}-card-${i}`, {...abs(C.x, C.y, C.w, C.h), boxSizing: 'border-box', borderRadius: r2(20 * u), background: hex2(c.panel, 0.92), border: `${r2(2 * u)}px solid ${hex2(pin.color, 0.6)}`,
+      cards.push(el('div', `${id}-card-${i}`, {...abs(C.x, C.y, C.w, C.h), boxSizing: 'border-box', borderRadius: r2(20 * u), background: hex2(c.panel, 0.92), border: `${r2(2 * u)}px solid ${hex2(pin.color, 0.6)}`,
         boxShadow: `0 0 ${r2(30 * u)}px ${hex2(pin.color, 0.22)}`, opacity: 0}, inner));
     }
   });
+  if (anchored.length) kids.push(el('div', null, {...abs(B.x, B.y, B.width, B.height), overflow: 'hidden'}, [el('div', null, abs(-B.x, -B.y, W, H), anchored)]));
+  kids.push(...cards);
   return kids;
 }
 
@@ -355,11 +553,14 @@ function mapTimeline(model, ops) {
   chromeOps(model, ops);
   const Z = c.zoom;
   const from = Z && c.matrix ? {x: Z.fromX, y: Z.fromY, scaleX: Z.fromK, scaleY: Z.fromK} : {x: 0, y: 0, scaleX: 1, scaleY: 1};
-  set(ops, `${id}-world`, start, {opacity: 0, ...from});
+  const T = c.travel;
+  set(ops, `${id}-world`, start, {opacity: 0, ...from, ...(T ? {blur: 0} : {})});
   tw(ops, `${id}-world`, c.t0, 0.5, 'power2.out', {opacity: 0}, {opacity: 1});
-  if (Z) tw(ops, `${id}-world`, Z.time, Z.duration, c.matrix ? 'power2.out' : 'power3.inOut', from, {x: Z.x, y: Z.y, scaleX: Z.k, scaleY: Z.k});
+  if (T) travelOps(model, ops);
+  else if (Z) tw(ops, `${id}-world`, Z.time, Z.duration, c.matrix ? 'power2.out' : 'power3.inOut', from, {x: Z.x, y: Z.y, scaleX: Z.k, scaleY: Z.k});
   c.marks.forEach((m, i) => {
-    if (c.variant === 'outline') {
+    if (T?.lit.includes(i)) arrivalOps(model, ops, m, i);
+    else if (c.variant === 'outline') {
       drawOps(ops, `${id}-country-${i}`, start, m.time, 0.9, 'power2.inOut');
       set(ops, `${id}-tint-${i}`, start, {opacity: 0});
       tw(ops, `${id}-tint-${i}`, rt(m.time + 0.5), 0.5, 'power2.out', {opacity: 0}, {opacity: 1});
@@ -367,6 +568,7 @@ function mapTimeline(model, ops) {
       set(ops, `${id}-country-${i}`, start, {opacity: 0});
       tw(ops, `${id}-country-${i}`, m.time, 0.4, 'power2.out', {opacity: 0}, {opacity: 1});
     }
+    if (T?.lit.includes(i)) return;
     if (c.variant === 'pins') dropOps(ops, `${id}-pin-${i}`, start, rt(m.time + 0.05), u);
     popOps(ops, `${id}-label-${i}`, start, rt(m.time + 0.15), {from: 0.6});
     if (m.badgeBox) popOps(ops, `${id}-badge-${i}`, start, rt(m.time + 0.35), {from: 0.4, duration: 0.45, ease: 'power3.out'});
@@ -384,14 +586,68 @@ function mapTimeline(model, ops) {
   });
 }
 
+const camProps = v => ({x: v.x, y: v.y, scaleX: v.k, scaleY: v.k});
+
+// The camera moves, the route and its head, and the anchors that ride with the map.
+function travelOps(model, ops) {
+  const {id, start} = model;
+  const T = model.content.travel;
+  for (const seg of T.segments) {
+    tw(ops, `${id}-world`, seg.start, seg.duration, seg.ease, camProps(seg.from), camProps(seg.to));
+    if (seg.blur) {
+      const half = rt(seg.duration / 2);
+      tw(ops, `${id}-world`, seg.start, half, 'power2.in', {blur: 0}, {blur: seg.blur});
+      tw(ops, `${id}-world`, rt(seg.start + half), rt(seg.duration - half), 'power2.out', {blur: seg.blur}, {blur: 0});
+    }
+  }
+  for (const [kind, list] of [['m', T.anchors.marks], ['p', T.anchors.pins]]) list.forEach((moves, i) => {
+    set(ops, `${id}-anchor-${kind}${i}`, start, {x: moves[0]?.from.x ?? 0, y: moves[0]?.from.y ?? 0});
+    for (const move of moves) tw(ops, `${id}-anchor-${kind}${i}`, move.start, move.duration, move.ease, move.from, move.to);
+  });
+  if (!T.geometry) return;
+  set(ops, `${id}-jm`, start, {strokeDashoffset: 1});
+  if (T.head) for (const part of ['glow', 'core']) set(ops, `${id}-${part}`, start, {opacity: 0, strokeDashoffset: ROUTE_HEAD});
+  for (const leg of T.legs) {
+    tw(ops, `${id}-jm`, leg.time, leg.duration, TRAVEL_EASE, {strokeDashoffset: r2(1 - leg.from)}, {strokeDashoffset: r2(1 - leg.to)});
+    if (T.head) for (const part of ['glow', 'core']) tw(ops, `${id}-${part}`, leg.time, leg.duration, TRAVEL_EASE, {strokeDashoffset: r2(ROUTE_HEAD - leg.from)}, {strokeDashoffset: r2(ROUTE_HEAD - leg.to)});
+  }
+  if (T.head) for (const part of ['glow', 'core']) {
+    tw(ops, `${id}-${part}`, T.routeStart, 0.15, 'power1.out', {opacity: 0}, {opacity: 1});
+    tw(ops, `${id}-${part}`, T.routeEnd, 0.5, 'power1.inOut', {opacity: 1}, {opacity: 0});
+  }
+}
+
+// A country the route reaches: the border draws, the fill blooms past its
+// settled opacity and settles (elements may overshoot; the camera may not),
+// the label rises. Constant durations.
+function arrivalOps(model, ops, m, i) {
+  const {id, start, unit: u} = model;
+  const c = model.content;
+  const t = m.time;
+  if (c.variant === 'outline') {
+    drawOps(ops, `${id}-country-${i}`, start, t, ARRIVAL.border, 'power2.inOut');
+    set(ops, `${id}-tint-${i}`, start, {opacity: 0});
+    tw(ops, `${id}-tint-${i}`, rt(t + ARRIVAL.label), ARRIVAL.bloom, 'power2.out', {opacity: 0}, {opacity: 1});
+  } else {
+    if (!c.matrix) drawOps(ops, `${id}-border-${i}`, start, t, ARRIVAL.border, 'power2.inOut');
+    set(ops, `${id}-country-${i}`, start, {opacity: 0});
+    tw(ops, `${id}-country-${i}`, rt(t + 0.1), ARRIVAL.bloom, 'power2.out', {opacity: 0}, {opacity: 1});
+    tw(ops, `${id}-country-${i}`, rt(t + 0.1 + ARRIVAL.bloom), ARRIVAL.settle, 'power2.inOut', {opacity: 1}, {opacity: ARRIVAL.settled});
+  }
+  if (c.variant === 'pins') dropOps(ops, `${id}-pin-${i}`, start, rt(t + 0.05), u);
+  riseOps(ops, `${id}-label-${i}`, start, rt(t + ARRIVAL.label), r2(14 * u));
+  if (m.badgeBox) popOps(ops, `${id}-badge-${i}`, start, rt(t + ARRIVAL.label + 0.2), {from: 0.4, duration: 0.45, ease: 'power3.out'});
+}
+
 export const mapHighlight = {
   id: 'map-highlight',
-  describe: 'A world map that fades in, zooms to the highlighted countries and pinned places when they sit close together, then fills the countries one by one with label pills and ×multiplier badges ("$20 · ×3.2"), drops pins on places by longitude and latitude with a label or a glass callout card (a photo card with an image), and draws a dashed travel route between the pins. Variants: plain fills, pins, glow, a glowing outline that traces itself, and a dot-matrix world.',
-  params: {highlight: '[country | {country (name, common alias or ISO numeric code), label? ≤ 24, value? ≤ 12, badge? ≤ 8 ("×3.2"), color?}] 1–8 (one of highlight or pins, or both)',
+  describe: 'A world map that fades in, zooms to the highlighted countries and pinned places when they sit close together, then fills the countries one by one with label pills and ×multiplier badges ("$20 · ×3.2"), drops pins on places by longitude and latitude with a label or a glass callout card (a photo card with an image), and draws a dashed travel route between the pins, or a journey: one route with a glowing head that lights each country as it arrives while the camera follows it. Variants: plain fills, pins, glow, a glowing outline that traces itself, and a dot-matrix world.',
+  params: {highlight: '[country | {country (name, common alias or ISO numeric code), label? ≤ 24, value? ≤ 12, badge? ≤ 8 ("×3.2"), color?, arrive? "route" (default with a journey route: the country lights when the route reaches it, its border drawing over 1.6 s) | "order"}] 1–8 (one of highlight or pins, or both)',
     pins: '[{lon, lat, label ≤ 28, sub? ≤ 20 ("Ph.D. 2008"), card?: {title ≤ 28, sub? ≤ 32, image? (assets/… photo)}, color?}] 1–4 places; at most two cards (events pin-<i>)',
-    route: 'boolean: a dashed travel path from pin to pin, in order (default false; events route-<i>)', focus: '"auto" (zoom when the places are close; default) | "world"',
+    route: 'true: a dashed travel path from pin to pin, in order, each leg drawn as its pin lands | {head?: boolean (default true)}: the journey, one route that draws leg by leg with a bright glowing head, each pin landing as the route reaches it (default false; events route-<i>)',
+    camera: '"follow" (with a journey route: push in on the first pin, follow the head leg by leg, pull back to the whole route) | [{at, centre: [lon, lat], zoom? 1–8}] 1–6 keys the camera arrives at (optional; the drawn map moves as one image, slow → fast → slow, no overshoot)', focus: '"auto" (zoom when the places are close; default) | "world"',
     tone: 'primary | accent | paper | #rrggbb', title: 'string ≤ 60 (optional)', source: 'string ≤ 80 (optional)', at: `map lands: ${at}`, variant: VARIANT_PARAM, rect},
-  events: ['build', 'zoom', 'highlight-<i>', 'pin-<i>', 'route-<i>'], timing: timingRules({rules: ['the zoom runs 1.2 s from at + 0.35 (the dot matrix pushes in over 2 s); highlights, then pins, follow 0.12–0.5 s apart', 'each route leg draws as its pin lands']}), variants: MAP_VARIANTS,
+  events: ['build', 'zoom', 'highlight-<i>', 'pin-<i>', 'route-<i>'], timing: timingRules({rules: ['the zoom runs 1.2 s from at + 0.35 (the dot matrix pushes in over 2 s); highlights, then pins, follow 0.12–0.5 s apart', 'each route leg draws as its pin lands', 'a journey route: legs take 1.2–2.4 s by length; a country lights when the head reaches it and its sequence takes 1.6 s, so the scene must run to the last arrival']}), variants: MAP_VARIANTS,
   resolve: mapResolve, view: mapView, timeline: mapTimeline
 };
 
