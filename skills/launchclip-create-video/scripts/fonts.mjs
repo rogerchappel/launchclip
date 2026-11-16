@@ -70,7 +70,7 @@ export const FONT_REGISTRY = Object.freeze({
  */
 export function fontWidthScale(family, role) {
   const item = family ? FONT_REGISTRY[registeredFamily(family)] : null;
-  const base = FONT_REGISTRY[FONT_ROLE_DEFAULTS[role]];
+  const base = FONT_REGISTRY[role === 'body' ? BODY_FALLBACK : FONT_ROLE_DEFAULTS[role]];
   if (!item || !base) return 1;
   return Math.max(1, item.advance.upper / base.advance.upper, item.advance.lower / base.advance.lower);
 }
@@ -78,7 +78,8 @@ export function fontWidthScale(family, role) {
 /** The registry family each type role uses when brand.fonts does not name one. */
 export const FONT_ROLE_DEFAULTS = Object.freeze({
   display: 'Anton',
-  body: 'Inter',
+  // Manrope over Inter: a less common face, with tabular figures (tnum) for counters.
+  body: 'Manrope',
   meta: 'JetBrains Mono',
   math: 'STIX Two Text',
   serif: 'Instrument Serif'
@@ -91,6 +92,12 @@ export const FONT_ROLE_DEFAULTS = Object.freeze({
  * from a bundled file instead of whatever the host has installed.
  */
 export const SYMBOL_FALLBACK = 'STIX Two Math';
+
+/**
+ * Second family in every body stack, always loaded. The text-fit tables were
+ * measured on Inter, so fontWidthScale still compares body faces with it.
+ */
+export const BODY_FALLBACK = 'Inter';
 
 export const FONT_ROLES = Object.freeze(['display', 'body', 'meta']);
 const ALL_ROLES = Object.freeze(['display', 'body', 'meta', 'math', 'serif']);
@@ -139,7 +146,7 @@ const quote = (family) => GENERIC.has(family) ? family : `'${family.replace(/'/g
  * family, the symbol fallback, then the role's generic family. Every named
  * family in it is a bundled file, so no host font is ever reached while the
  * files load. family may be null (the role default alone).
- *   fontStack('space-grotesk', 'body') → "'Space Grotesk', 'Inter', 'STIX Two Math', sans-serif"
+ *   fontStack('space-grotesk', 'body') → "'Space Grotesk', 'Manrope', 'Inter', 'STIX Two Math', sans-serif"
  */
 export function fontStack(family, role = 'body') {
   if (!ALL_ROLES.includes(role)) throw new Error(`unknown font role "${role}"; use ${ALL_ROLES.join(', ')}`);
@@ -148,6 +155,7 @@ export function fontStack(family, role = 'body') {
   const named = family ? fontFamilyName(family) : null;
   if (named && !GENERIC.has(named)) add(named);
   add(FONT_ROLE_DEFAULTS[role]);
+  if (role === 'body') add(BODY_FALLBACK);
   add(SYMBOL_FALLBACK);
   add(ROLE_GENERIC[role]);
   return names.map(quote).join(', ');
@@ -184,7 +192,7 @@ export function brandFontStacks(brand) {
  * serif, the editorial kinds), so both renderers always load all of them.
  */
 export function projectFontFamilies(brand) {
-  const families = [...new Set([...Object.values(FONT_ROLE_DEFAULTS), SYMBOL_FALLBACK])];
+  const families = [...new Set([...Object.values(FONT_ROLE_DEFAULTS), BODY_FALLBACK, SYMBOL_FALLBACK])];
   for (const family of brandFontStacks(brand).families) if (!families.includes(family)) families.push(family);
   return families;
 }
