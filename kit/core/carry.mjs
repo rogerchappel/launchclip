@@ -3,9 +3,13 @@
 // shared view tree and op list so both renderers draw it with no new code.
 //
 //   model.carry = {
-//     out?: {ids: [element id], to: scene id},       elements this scene hands on
-//     in?:  {from: scene id, items: [{id, box?}]},   elements it receives (box: the
-//                                                     source's rect at the boundary)
+//     out?: {ids: [element id], to: scene id, at?},  elements this scene hands on (at:
+//                                                     the boundary, when the scene is
+//                                                     drawn on past it through a camera move)
+//     in?:  {from: scene id, items: [{id, box?}],    elements it receives (box: the
+//            move?: {start, duration, ease}}          source's rect at the boundary, in this
+//                                                     plate's px; move: the camera move it
+//                                                     arrives by)
 //     exitTo?, enterFrom?                             the root motion lifted off the root
 //   }
 //
@@ -21,7 +25,10 @@
 // - in, carry (an item with a box that is not a pin): the FLIP. The element
 //   starts at the source's rect as an x, y, scale and rotation offset from its
 //   slot and settles on the slot, slow → fast → slow with no overshoot; members
-//   leave nearest first, a hashed 0.04–0.1 s apart.
+//   leave nearest first, a hashed 0.04–0.1 s apart. Across a camera move it
+//   travels in the world with the move's own timing and ease, all members at
+//   once, so on screen it slides straight from its old place to its slot
+//   (docs/rd/carry-moving-camera.md).
 //
 // Plain ESM; imports only catalog-b-view.mjs, shot-states.mjs, grammar.mjs and fluid-motion.mjs.
 
@@ -134,6 +141,8 @@ export function applyCarry(model, ops, children) {
   if (c.out) {
     const held = plan.out.targets;
     for (let i = ops.length - 1; i >= 0; i -= 1) if (held.has(ops[i].target) && opTime(ops[i]) >= m.exitStart - EPS) ops.splice(i, 1);
+    // Drawn on through a camera move: the copy hides as the receiver's shows.
+    if (c.out.at < model.end - EPS) for (const id of c.out.ids) ops.push({type: 'set', target: id, time: c.out.at, props: {opacity: 0}});
   }
   if (c.in) {
     skipEntrances(model, ops, plan.into.targets, plan.index);
@@ -150,8 +159,10 @@ function flipOps(model, ops, children) {
   const moving = (model.carry.in.items ?? []).filter(item => item.box && !item.pin);
   if (!moving.length) return;
   const index = indexView(children);
-  const start = model.start;
-  const duration = grammarDuration(model.grammar ?? null, 'camera', CARRY_MOVE.duration, {min: 0.5, max: 1});
+  const start = model.start, move = model.carry.in.move;
+  // Across a camera move: its timing and ease on every prop, no gap (a lag behind the camera swings on screen).
+  const duration = move ? move.duration : grammarDuration(model.grammar ?? null, 'camera', CARRY_MOVE.duration, {min: 0.5, max: 1});
+  const ease = move ? {x: move.ease, y: move.ease, scale: move.ease} : CARRY_MOVE;
   const rest = frameState(ops, start);
   const slotOf = (id, props) => visualBoxes(model, children, props ? [...ops, {type: 'set', target: id, time: start, props}] : ops, start, [id])[id];
   const plans = moving.map(item => {
@@ -168,17 +179,17 @@ function flipOps(model, ops, children) {
     }
     return {item, own, from: roundProps(from), distance: Math.hypot(item.box.cx - slot.cx, item.box.cy - slot.cy)};
   }).sort((a, b) => a.distance - b.distance || (a.item.id < b.item.id ? -1 : 1));
-  let at = start;
+  let at = move ? move.start : start;
   for (const [k, plan] of plans.entries()) {
-    if (k) at += CARRY_MOVE.gap[0] + (CARRY_MOVE.gap[1] - CARRY_MOVE.gap[0]) * hashUnit(plan.item.id);
+    if (k && !move) at += CARRY_MOVE.gap[0] + (CARRY_MOVE.gap[1] - CARRY_MOVE.gap[0]) * hashUnit(plan.item.id);
     const t = Math.round(at * 1e6) / 1e6, {from, own} = plan, id = plan.item.id;
     // The move owns the element's transform until it lands: drop what is left of its own entrance.
     for (const op of ops) if (op.target === id && op.type !== 'loop' && opTime(op) < t + duration - EPS) for (const key of ['x', 'y', 'scaleX', 'scaleY', 'rotation']) strip(op, key);
     for (let i = ops.length - 1; i >= 0; i -= 1) if (isEmpty(ops[i])) ops.splice(i, 1);
     ops.push({type: 'set', target: id, time: start, props: {...from}});
-    ops.push({type: 'tween', target: id, start: t, duration, ease: CARRY_MOVE.x, from: {x: from.x}, to: {x: own.x}});
-    ops.push({type: 'tween', target: id, start: t, duration, ease: CARRY_MOVE.y, from: {y: from.y}, to: {y: own.y}});
-    ops.push({type: 'tween', target: id, start: t, duration, ease: CARRY_MOVE.scale, from: {scaleX: from.scaleX, scaleY: from.scaleY, rotation: from.rotation}, to: {scaleX: own.scaleX, scaleY: own.scaleY, rotation: own.rotation}});
+    ops.push({type: 'tween', target: id, start: t, duration, ease: ease.x, from: {x: from.x}, to: {x: own.x}});
+    ops.push({type: 'tween', target: id, start: t, duration, ease: ease.y, from: {y: from.y}, to: {y: own.y}});
+    ops.push({type: 'tween', target: id, start: t, duration, ease: ease.scale, from: {scaleX: from.scaleX, scaleY: from.scaleY, rotation: from.rotation}, to: {scaleX: own.scaleX, scaleY: own.scaleY, rotation: own.rotation}});
   }
 }
 

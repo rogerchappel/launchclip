@@ -9,8 +9,10 @@
 // The source of a scene is the last earlier scene on its track whose module is
 // an op-list module (catalogue B, G or H), with only footage or a gap between,
 // so a plate that comes back after a footage cutaway resumes where it left
-// off. A carry needs a still plate at the boundary: the scene arrives by a cut
-// and the story has no world camera.
+// off. A carry needs the scene to arrive by a cut (a still plate) or by a
+// camera move that keeps zoom and roll (a pan or whip-pan, world or cuts
+// mode): then A's rect is mapped through the two plates' world placements and
+// the element travels with the move (docs/rd/carry-moving-camera.md).
 //
 // Plain ESM; imports kit/core siblings only.
 
@@ -20,6 +22,8 @@ import {MODULES as CATALOG_H, catalogHTimeline, catalogHView} from './catalog-h.
 import {ROOT_REST, sameBox, visualBoxes} from './carry.mjs';
 import {indexView} from './shot-states.mjs';
 import {FEELS} from './feel.mjs';
+import {cameraActive, cameraPlan, resolveCamera, sceneObjectLookup, worldPoint} from './camera-world.mjs';
+import {isCameraTransition, sceneWindows} from './transitions.mjs';
 
 const EPS = 1e-3;
 const isObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -48,12 +52,52 @@ export function carrySource(story, scene) {
   return best;
 }
 
-/** Why a boundary is not a still plate, or null. */
+/** Camera moves a carry rides: they keep zoom and roll, so the element's world travel is a straight line on screen. */
+export const CARRY_MOVES = Object.freeze(['pan', 'whip-pan']);
+/** Typed transitions a carry rides: B's layer slides in on one axis (and may blur), which is a camera move in all but name. */
+export const CARRY_SLIDES = Object.freeze(['push', 'whip']);
+
+/** Why a scene's arrival cannot take a carry, or null (a cut, or a pan or whip-pan of the camera). */
 export function stillPlateProblem(story, scene) {
-  const type = scene?.in?.type;
-  if (scene?.in && type !== 'cut') return `it arrives by a ${type ?? 'typed'} transition; carry needs a cut (no in)`;
-  if (story?.camera?.mode === 'world') return 'the story has a world camera, which moves between plates';
-  return null;
+  const transition = scene?.in, type = transition?.type;
+  if (!transition || type === 'cut') return null;
+  if (isCameraTransition(transition, resolveCamera(story).mode)) return CARRY_MOVES.includes(type) ? null : `it arrives by a ${type} camera move, which changes zoom or roll; carry rides cuts, pans, whip-pans, pushes and whips`;
+  if (CARRY_SLIDES.includes(type)) return null;
+  return `it arrives by a ${type ?? 'typed'} transition; carry needs a cut (no in), a pan, a whip-pan, a push or a whip`;
+}
+
+/**
+ * The camera move B arrives by and the two placements, when it is a carry's
+ * move: {move: {start, duration, ease}, from, to} | null (a cut). Throws when
+ * the move does not come from A or changes zoom or roll (a rebalanced pan).
+ */
+function arrivalMove(story, A, B, resolveBare) {
+  if (!B.in || B.in.type === 'cut') return null;
+  const windows = memo(story, 'windows', () => sceneWindows(story));
+  if (!isCameraTransition(B.in, resolveCamera(story).mode)) {
+    // A slide (push, whip): B's layer starts offset on one axis and eases home while A's leaves, so map A's
+    // rect by that offset and travel with the layer's ease (docs/rd/carry-moving-camera.md §4).
+    const slide = windows.scenes.find(entry => entry.id === B.id)?.tweens.find(tween => tween.role === 'in' && (tween.prop === 'x' || tween.prop === 'y'));
+    if (!slide) return null;
+    const rest = {x: 0, y: 0, scale: 1, rotation: 0};
+    return {move: {start: slide.at, duration: slide.duration, ease: slide.ease}, from: rest, to: {...rest, [slide.prop]: slide.from}};
+  }
+  if (!cameraActive(story)) return null;
+  const plan = memo(story, 'camera', () => cameraPlan(story, {windows, objects: sceneObjectLookup(story, scene => resolveBare(scene))}));
+  const move = plan?.moves.find(entry => entry.sceneId === B.id && !entry.zoom);
+  if (!move) return null;
+  const order = plan.order, at = order.indexOf(B.id);
+  if (order[at - 1] !== A.id) throw new Error(`it arrives by a camera move from ${order[at - 1]}, not from ${A.id}`);
+  if (Math.abs(Math.log(move.to.zoom / move.from.zoom)) > 1e-4 || Math.abs(move.to.rotation - move.from.rotation) > 1e-3) throw new Error(`its ${move.type} changes the camera's zoom or roll; carry rides moves between plates of one scale`);
+  return {move: {start: move.start, duration: move.duration, ease: move.ease}, from: plan.placements[A.id], to: plan.placements[B.id]};
+}
+
+/** A visual box on plate `from` (canvas px) → the same box in the world, in plate `to`'s canvas px. */
+export function mapBox(box, from, to) {
+  const world = worldPoint(from, {x: box.cx, y: box.cy});
+  const r = (-to.rotation * Math.PI) / 180, dx = world.x - to.x, dy = world.y - to.y, k = from.scale / to.scale;
+  const round = value => Math.round(value * 100) / 100;
+  return {cx: round((dx * Math.cos(r) - dy * Math.sin(r)) / to.scale), cy: round((dx * Math.sin(r) + dy * Math.cos(r)) / to.scale), w: round(box.w * k), h: round(box.h * k), rotation: round(box.rotation + from.rotation - to.rotation)};
 }
 
 /** The scene's explicit carry: {from, map} or null (validation errors throw). */
@@ -154,13 +198,14 @@ function pairsFor(story, A, B, resolveBare) {
 }
 
 function measure(story, A, B, resolveBare, explicitMap, flow) {
+  const arrival = arrivalMove(story, A, B, resolveBare);
   let map = explicitMap;
   if (!map) {
     const a = resolveBare(A), b = resolveBare(B);
     const la = opList(a), lb = opList(b);
     const ea = elementsOf(a, la.children), eb = elementsOf(b, lb.children);
     // Where each element rests: A before its exit, B once its entrances are done.
-    const ra = visualBoxes(a, la.children, la.ops, a.motion.exitStart, ea.map(e => e.id)), rb = visualBoxes(b, lb.children, lb.ops, b.motion.exitStart, eb.map(e => e.id));
+    const ra = toB(visualBoxes(a, la.children, la.ops, a.motion.exitStart, ea.map(e => e.id)), arrival), rb = visualBoxes(b, lb.children, lb.ops, b.motion.exitStart, eb.map(e => e.id));
     map = {};
     const taken = new Set();
     for (const e of ea) {
@@ -175,11 +220,13 @@ function measure(story, A, B, resolveBare, explicitMap, flow) {
     }
     if (!Object.keys(map).length) return null;
   }
-  // Exact rects: A on its last frame with its hand-off, B on its first with its entrances skipped.
+  // Exact rects: A on its last frame before B (a camera move draws it on through the move) with its
+  // hand-off, mapped into B's plate; B on its first frame with its entrances skipped.
   const a = resolveBare(A);
-  tag(a, {out: {ids: Object.keys(map), to: B.id}});
+  const at = Math.min(a.end, Number(B.start));
+  tag(a, {out: {ids: Object.keys(map), to: B.id, at}});
   const la = opList(a);
-  const boxes = visualBoxes(a, la.children, la.ops, a.end, Object.keys(map));
+  const boxes = toB(visualBoxes(a, la.children, la.ops, at, Object.keys(map)), arrival);
   const b = resolveBare(B);
   tag(b, {into: {from: A.id, items: Object.values(map).map(id => ({id}))}});
   const lb = opList(b);
@@ -190,8 +237,10 @@ function measure(story, A, B, resolveBare, explicitMap, flow) {
     for (const [from, to] of Object.entries(map)) if (pins.has(to) ? !flow.pin : !flow.carry) delete map[from];
     if (!Object.keys(map).length) return null;
   }
-  return {map, boxes, pins};
+  return {map, boxes, pins, at, move: arrival?.move ?? null};
 }
+
+const toB = (boxes, arrival) => (arrival ? Object.fromEntries(Object.entries(boxes).map(([id, box]) => [id, mapBox(box, arrival.from, arrival.to)])) : boxes);
 
 /**
  * The elements pinned into scene B from its source (explicit or automatic):
@@ -218,9 +267,9 @@ export function applyFlow(model, scene, story, resolveBare) {
   for (const other of story.scenes) {
     if (other === scene || carrySource(story, other)?.id !== scene.id) continue;
     const pairs = pairsFor(story, scene, other, resolveBare);
-    if (pairs) out = {ids: Object.keys(pairs.map), to: other.id};
+    if (pairs) out = {ids: Object.keys(pairs.map), to: other.id, at: pairs.at};
   }
   if (!into && !out) return model;
-  tag(model, {out, into: into ? {from: source.id, items: Object.entries(into.map).map(([from, id]) => ({id, box: into.boxes[from], pin: into.pins.has(id)}))} : null});
+  tag(model, {out, into: into ? {from: source.id, ...(into.move ? {move: into.move} : {}), items: Object.entries(into.map).map(([from, id]) => ({id, box: into.boxes[from], pin: into.pins.has(id)}))} : null});
   return model;
 }
