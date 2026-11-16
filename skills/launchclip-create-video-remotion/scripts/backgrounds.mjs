@@ -65,6 +65,7 @@ import { litMask } from './lighting.mjs';
 import { VFX_WEATHER } from './vfx/catalog.mjs';
 import { rampOf } from './vfx/plan.mjs';
 import { GL_BACKGROUND_KINDS, GL_BACKGROUND_VARIANTS } from './gl-backgrounds.mjs';
+import { fitAxes } from './story-loop.mjs';
 
 export const BACKGROUND_KINDS = Object.freeze(['flat', 'gradient', 'grain-gradient', 'paper', 'geometric', 'blobs', 'dot-grid', 'mesh', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'logo-pattern', 'motif', 'texture', 'weather', 'rings', 'bokeh', 'flow-field', ...GL_BACKGROUND_KINDS]);
 export const DEFAULT_BACKGROUND_KIND = 'blobs';
@@ -689,6 +690,8 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
   }
   for (const layer of layers) for (const key of Object.keys(layer.axes)) if (layer.axes[key] === undefined) delete layer.axes[key];
   const mask = params.fade && params.fade !== 'none' ? FADE_MASKS[params.fade] : null;
+  // A short that loops onto its opener: each layer's drift fits the story (kit/core/story-loop.mjs).
+  for (const layer of layers) if (layer.axes) layer.axes = fitAxes(story, layer.axes);
   return { kind, level, params, colors, layers, tones: [...tones], ...(mask ? { mask } : {}) };
 }
 

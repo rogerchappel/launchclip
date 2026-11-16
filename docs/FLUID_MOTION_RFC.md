@@ -453,7 +453,41 @@ still lands on the card.
   on a period that divides the scene, and the module's enter and exit become
   matching states (its exit returns elements to their entrance pose). The
   check (§9) compares frame 0 with the last frame from `frameState`.
-  Not in the first slice.
+
+  **As shipped (phase 6).** `scene.loop: true` on a catalogue H or I module
+  (any other module refuses it). The root leaves into its entrance pose and
+  lands a frame early, since the next frame shown is the first again. A
+  pass at the end of `catalogHTimeline` (`kit/core/loop.mjs`) drops element
+  ops that would start once the exit has begun, then tweens every element
+  that has moved back to its frame-0 state under the root's exit
+  (`power2.inOut`): a node flies back into the hub, a wire undraws, a stream
+  of dots runs home. Opacity comes home over the element's own fade-in, so
+  no element leaves more than twice as slowly as it arrived. Idle chains
+  take `fitTo` (`idleOps`): their half-cycles stretch or shrink, never under
+  1.6 s, so the breath lands at rest exactly as the exit begins rather than
+  stopping early. `node-graph` runs its pulses on the beat nearest its `bpm`
+  that divides the scene (`fitBpm`) and sends none once the exit has begun.
+  Because it is all ops, both renderers play it unchanged. `node-graph`,
+  `icon-grid`, `social-wall` and `item-list` pass `loop-seam` looped and fail
+  it without (`test/loop.test.js`), and each has a `h-*-loop-portrait`
+  parity fixture.
+
+  A whole short loops through the existing `ending.loop_to`, which draws the
+  target scene's first state, frozen, over the final window, and returns the
+  camera to it. `kit/core/story-loop.mjs` adds the story-level rules. A
+  typed hand-back (`ending.in`) now lands on the last frame instead of one
+  frame after it, so the last frame is the frozen first state with nothing of
+  the outgoing scene left on it. The motion check warns `loop-target` when
+  `loop_to` names a scene other than the opener, because replay would jump
+  between the two. Layers that run on story time, such as the ambient blobs
+  and a planned background's drift, fit a whole number of their cycles into
+  the story (`fitAxes`). Without this, the first render of the sample failed
+  `reel check` on the background alone: SSIM 0.93, with the blobs drifting
+  on 19–21 s periods over an 18 s short. GL backgrounds run on a shader
+  clock and are not fitted yet. The sample is `examples/story/loop-9x16`: node-graph,
+  then icon-grid, then an item-list with `loop: true`, handing back to the
+  opener with a 0.4 s fade. `launchclip reel check` measures the seam of a
+  render.
 
 ## 9. The motion check
 
@@ -483,8 +517,8 @@ pass it as designed, and it learns two things:
   further from rest than the step before (by over half a pixel), that does
   not end at rest, or that runs over 0.3 s. `loop-seam` compares `frameState`
   at the model's start and one frame before its end, within half a pixel or
-  degree and 1 % for opacity and scale; it runs on a model with `loop: true`,
-  which nothing sets until phase 6. The phase-1 `node-graph` sample has no
+  degree and 1 % for opacity and scale; it runs on a model with `loop: true`
+  (`scene.loop`, phase 6). The phase-1 `node-graph` sample has no
   still gap at all and its shake runs 0.24 s. Most older catalogue modules
   hold still after their entrance and warn `static-hold` until phase 5 gives
   them idle motion.
@@ -572,7 +606,10 @@ the painter:
    aligned to read, and modules that already move a set the whole time
    (`ticker-tape`, `live-bars`). `fan` and `unison` were not needed: the
    modules' own entrances already are those patterns.
-6. **Loop** across a whole short (§8), with the seam check.
+6. **Loop** (§8), with the seam check. Shipped: `scene.loop` on catalogue H/I
+   modules (the exit returns every element to its entrance pose, idle and
+   pulses fitted to the scene), and a short that loops through
+   `ending.loop_to` hands back on its last frame (`kit/core/story-loop.mjs`).
 
 ## 12. What is unproven
 
