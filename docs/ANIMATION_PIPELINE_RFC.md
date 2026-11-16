@@ -173,7 +173,10 @@ silent lines:
   story and the characters speak the turns. Pure dialogue is allowed, and
   the brief can ask for it.
 
-**Writer.** The writers' room. Three steps, each small: a premise from the
+**Writer.** The writers' room. For one episode of a series it first checks
+the engine (`make --engine`): it pitches five episodes from it, and a weak
+engine stops the room with a stronger one proposed before anything is
+written. Then three steps, each small: a premise from the
 prompt; three to five loglines judged in a fresh context, as the skill
 judges concepts today (step 2 of `skills/launchclip-create-video/SKILL.md`);
 then the script on a skeleton. Two library skeletons are already character
@@ -226,7 +229,21 @@ voices. Silent lines become gaps of their length. No voice code changes.
   handed in. The rig draws the animatic and is the fallback.
 - `must_keep` is the short list of features a viewer would notice changing.
   Tooling writes it from the rig parameters (hair, skin tone, outfit,
-  glasses, headwear, mobility aid). The hand-in check reads it (§5.4).
+  glasses, headwear, mobility aid, and the character's flaw). The hand-in
+  check reads it (§5.4).
+- **A fixed imperfection.** Every character has one small deliberate flaw
+  (rig param `flaw`: a plaster on one cheek, a scar through one eyebrow,
+  scratches on one cheek), drawn by the rig in every style and kept in
+  `must_keep`, so drift is easy to spot for the judge and for a person.
+  `bible freeze` and `cast create` give one to a character that has none.
+- **A written description** per character (`description`), generated from
+  the rig params at freeze in a fixed order (silhouette, proportions,
+  colours as hex, signature item, gesture, `must_keep`, the flaw) and
+  pasted word for word wherever the character is described.
+- **A series engine** (`engine: {problem, episodes}`), for a bible a series
+  shares: the problem that goes wrong every episode and is never solved for
+  good, with the episode ideas pitched from it. Fewer than five distinct
+  ideas is a weak engine, and the bible does not validate.
 - `world` names a world and the sets the story may use
   (`kit/core/catalog-world.mjs`, `kit/core/characters/sets.mjs`).
 - `style` points at the project's style pack and seed
@@ -527,8 +544,9 @@ same code before it renders. Nothing is rendered from an asset that fails.
 2. **A vision judge.** The critic's model is shown the character's sheet
    beside the sprites or a strip of the clip's frames, and answers a
    structured checklist built from `must_keep`: same hair, same skin tone,
-   same glasses, same headwear, same mobility aid, same outfit, anyone
-   extra in frame. For a plate: it is the bible's place, nobody is in it,
+   same glasses, same headwear, same mobility aid, same outfit, the same
+   flaw on the same side, anyone extra in frame. (Shipped for the critic:
+   it is told each character's flaw beside its sheet.) For a plate: it is the bible's place, nobody is in it,
    and it has no lettering baked in.
 
 Results go to `qa/hand-in.json` and a `hand-in` gate:
@@ -1014,6 +1032,10 @@ drawn in code, with the critic loop.** Phases 9–12 are hand-in. Phases
 - Done when: two episodes made from one collection have identical
   characters and voices; adding a guest to one episode does not change the
   other.
+- Shipped ahead of it: the bible's `engine` and the premise check
+  (`make --animation --engine`, `bible freeze --engine --episode`). Still to
+  do: the bible living in the collection, so every episode shares it and its
+  engine.
 
 **Phase 14. Longer forms.**
 - Scope: animation past three minutes on the long-form plan: a script in

@@ -55,6 +55,8 @@ export const MAKE_FLAGS = Object.freeze([
   ["skeleton", { setting: true }],
   // A character story: the writers' room writes a script with speakers (src/make/animation.js).
   ["animation", { boolean: true, setting: true }],
+  // One episode of a series: the engine, the problem that goes wrong every episode; the writers' room checks it can pitch five episodes first.
+  ["engine", {}],
   // What a video with nothing to show is made of: visual (default: every scene drawn for the topic) or characters (a small cast carries it).
   ["explainer", { setting: true }],
   // The review stops: end the run awaiting approval after a stage (a character story's bible or animatic; any video's storyboard), and approve it on the next run.
@@ -190,6 +192,7 @@ export function makeOptionsFromFlags(flags = {}) {
     awareness: flags.awareness,
     skeleton: flags.skeleton,
     ...(flags.animation ? { animation: true } : {}),
+    ...(flags.engine != null ? { engine: flags.engine } : {}),
     stopAfter: flags["stop-after"],
     approve: flags.approve,
     pace: flags.pace,
@@ -264,6 +267,8 @@ export function validateMakeOptions(options = {}) {
   if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);
   if (options.explainer != null) explainerMode(options.explainer);
   if (options.animation != null && typeof options.animation !== "boolean") throw new Error(`--animation takes no value; got ${options.animation}`);
+  if (options.engine != null && !(typeof options.engine === "string" && options.engine.trim())) throw new Error("--engine takes the series engine in one sentence: the problem that goes wrong every episode (--engine \"…\" --animation)");
+  if (options.engine != null && options.animation !== true) throw new Error("--engine is for a character story: add --animation");
   if (options.stopAfter != null && !MAKE_STOP_POINTS.includes(String(options.stopAfter).toLowerCase())) throw new Error(`--stop-after must be ${MAKE_STOP_POINTS.join(", ")}; got ${options.stopAfter}`);
   if (options.approve === true) throw new Error(`--approve names what is approved: --approve ${MAKE_STOP_POINTS.join(" | --approve ")}`);
   for (const point of approvals(options.approve)) if (!MAKE_STOP_POINTS.includes(point)) throw new Error(`--approve must be ${MAKE_STOP_POINTS.join(", ")}; got ${point}`);

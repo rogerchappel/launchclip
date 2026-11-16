@@ -120,6 +120,7 @@ test("the critic is shown each character's reference sheet and can raise acting,
   assert.equal(request.images.length, 4, "the contact sheet, the overview strip and two reference sheets");
   assert.match(request.input, /Reference sheets \(how each character must look in every shot; not evidence, never cite them\):\n {2}Image 3: Maya \(maya\); must keep: .*curly hair/);
   assert.match(request.input, /Image 4: Sam \(sam\)/);
+  assert.match(request.input, /Image 3: Maya \(maya\); must keep: [^\n]*; its fixed flaw, [a-z ]+, is in every shot it is in/, "the judge checks the flaw");
   assert.match(request.input, /The shot list[^\n]*\n {2}desk {2}0–2\.156 s/);
   assert.match(request.input, /sam: "Did you test the rollback\?"/);
   assert.match(request.instructions, /lip-sync \(character stories only\)/);

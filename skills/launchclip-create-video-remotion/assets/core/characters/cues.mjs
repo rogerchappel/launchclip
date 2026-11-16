@@ -42,7 +42,7 @@ const ID = /^[a-z][a-z0-9-]{0,23}$/;
 // An illustrated (sprite) character: art names its sprite folder (kit/core/catalog-sprites.mjs); it
 // takes no rig params and acts only in sprite-scene.
 const SPRITE_KEYS = ['id', 'name', 'voice', 'art', 'position'];
-const ENTRY_KEYS = ['id', 'from', 'name', 'voice', 'art', 'kind', 'size', 'marks', 'build', 'height', 'age', 'skin', 'hair', 'outfit', 'accessories', 'headwear', 'mobility', 'colors', 'position', 'acting'];
+const ENTRY_KEYS = ['id', 'from', 'name', 'voice', 'art', 'kind', 'size', 'marks', 'build', 'height', 'age', 'skin', 'hair', 'outfit', 'accessories', 'headwear', 'mobility', 'flaw', 'colors', 'position', 'acting'];
 const isObj = value => value && typeof value === 'object' && !Array.isArray(value);
 
 function castEntries(cast) {
@@ -117,6 +117,7 @@ function castParams(entry, path) {
     ...((entry.age ?? base?.age) ? {age: entry.age ?? base.age} : {}),
     ...((entry.headwear ?? base?.headwear) ? {headwear: entry.headwear ?? base.headwear} : {}),
     ...((entry.mobility ?? base?.mobility) ? {mobility: entry.mobility ?? base.mobility} : {}),
+    ...((entry.flaw ?? base?.flaw) ? {flaw: entry.flaw ?? base.flaw} : {}),
     colors: {...(base ? {top: base.colors.top, bottom: base.colors.bottom, shoes: base.colors.shoes, accent: base.colors.accent} : {}), ...(entry.colors ?? {})}
   };
   // A new hair style keeps the starter's colour unless one is given.
