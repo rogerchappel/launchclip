@@ -141,7 +141,7 @@ function roomIr(tag) {
  * cue (an into: silence); wet, the reverb send's multiplier expression (null: unchanged).
  */
 export function directFilters(direct) {
-  const level = (points) => (points?.length ? `,volume='${levelExpression(points)}':eval=frame` : '');
+  const level = (points) => (points?.length ? `,asetnsamples=n=480:p=0,volume='${levelExpression(points)}':eval=frame` : '');
   return { beds: level(direct?.levels), gate: level(direct?.gate), wet: direct?.wet?.length ? `(${levelExpression(direct.wet)})` : null };
 }
 

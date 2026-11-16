@@ -111,14 +111,14 @@ test("the mixers multiply the curves into the beds, the room, the cues and the r
   const direct = directSound(story([scene("s1", 0, 3, { hush: { at: 2, for: 0.5 } }), scene("s2", 3, 6, { into: "silence", space: "hall" })]));
   const cue = { cue: "tick", at: 1, volume: 0.3, file: "t.wav" };
   const plain = mixGraph({ cues: [cue], duration: 6, hasVoice: false, hasMusic: true, hasAmbience: true, direct });
-  assert.match(plain, /volume=0\.42,volume='if\(lt\(t,/);
-  assert.match(plain, /volume=0\.5,volume='if\(lt\(t,/);
+  assert.match(plain, /volume=0\.42,asetnsamples=n=480:p=0,volume='if\(lt\(t,/);
+  assert.match(plain, /volume=0\.5,asetnsamples=n=480:p=0,volume='if\(lt\(t,/);
   assert.match(plain, /\[cuewetin\]\[cueir\]afir/);
   assert.equal(mixGraph({ cues: [cue], duration: 6, hasVoice: false, hasMusic: true }), mixGraph({ cues: [cue], duration: 6, hasVoice: false, hasMusic: true, direct: null }));
   const score = scoreGraph({ cues: [cue], duration: 6, hasVoice: false, room: [[0, 0.5]], direct });
-  assert.match(score, /volume='0\.5':eval=frame,volume='if/);
+  assert.match(score, /volume='0\.5':eval=frame,asetnsamples=n=480:p=0,volume='if/);
   assert.match(score, /volume='0\.07\*\(/);
-  assert.match(score, /level=0,volume='if\(lt\(t,/);
+  assert.match(score, /level=0,asetnsamples=n=480:p=0,volume='if\(lt\(t,/);
 });
 
 test("measured in a real mix: the hush is quiet and its hit lands, the prelap leads; without directing both fail", async () => {

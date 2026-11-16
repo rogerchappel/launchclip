@@ -197,7 +197,7 @@ export function measureDirecting(samples, rate, direct) {
   const mixMedian = median(db.filter((value) => value > -90));
   for (const hush of direct.hushes) {
     // The hush's inside: past its fade in, before the hit's own attack.
-    const inside = span(hush.from + DIRECTING.hushIn + win / 2, hush.to - win / 2 - 0.01);
+    const inside = span(hush.from + DIRECTING.hushIn + win / 2, hush.to - win / 2 - 0.03);
     const level = inside.length ? Math.max(...inside) : -120;
     const depth = round3(mixMedian - level);
     // The hit: the largest rise in level from inside the hush to 0.1 s after its end.
@@ -228,6 +228,7 @@ export function changeLead(db, hop, win, { cut, from, to }) {
   const at = (t) => Math.round((t - win / 2) / hop);
   const before = median(db.slice(Math.max(0, at(from - 0.6)), Math.max(1, at(from - 0.1))));
   const after = median(db.slice(at(to + 0.1), at(to + 0.6)));
+  if (Math.abs(after - before) < DIRECTING.contrastDb / 2) return null;
   const half = (before + after) / 2;
   const rising = after > before;
   for (let k = Math.max(0, at(from - 0.3)); k < Math.min(db.length, at(to + 0.3)); k += 1) {
