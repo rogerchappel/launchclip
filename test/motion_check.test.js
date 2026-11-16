@@ -7,7 +7,7 @@ import {resolveStory} from '@launchclip/core/story.mjs';
 import {GRAMMARS, GRAMMAR_NAMES, resolveGrammar} from '@launchclip/core/grammar.mjs';
 import {FEEL_NAMES} from '@launchclip/core/feel.mjs';
 import {STATE_BLOOM} from '@launchclip/core/shot-states.mjs';
-import {MOTION_CHECK, grammarMotionFindings, sceneMotionFindings} from '@launchclip/core/motion-check.mjs';
+import {MOTION_CHECK, grammarMotionFindings, halfTravel, sceneMotionFindings} from '@launchclip/core/motion-check.mjs';
 import {choreographyGate} from '../src/movement_guardrails.js';
 
 const tween = (target, start, duration, ease, from, to) => ({type: 'tween', target, start, duration, ease, from, to});
@@ -92,13 +92,33 @@ const example = (name, change = raw => raw) => {
   return resolveStory(change(JSON.parse(readFileSync(`examples/story/${name}/storyboard.json`, 'utf8'))), {words: Array.isArray(narration) ? narration : narration.words ?? []});
 };
 
+// late-beat stays a warning until the compiler starts moves early by their
+// half-travel time (docs/PLAN_AND_PACE_RFC.md §2); every state move lands late today.
+const settled = (findings) => findings.filter(f => f.rule !== 'late-beat');
+
 test('the example stories pass the gate with no findings', () => {
   assert.ok(examples.length > 30);
   for (const name of examples) {
     const gate = choreographyGate(example(name));
     assert.equal(gate.status, 'passed', `${name}: ${JSON.stringify(gate.findings)}`);
-    assert.deepEqual(gate.findings, [], name);
+    assert.deepEqual(settled(gate.findings), [], name);
   }
+});
+
+test('a move that starts on its beat lands late; one started early by its half-travel time does not', () => {
+  // GSAP's power3 is a quartic: half the travel at 1 − 0.5^(1/4) of the duration.
+  assert.equal(halfTravel('power3.out'), 0.159);
+  assert.equal(halfTravel('power2.inOut'), 0.5);
+  assert.equal(halfTravel('expo.out'), 0.101);
+  const move = (start) => tween('card-mark', start, 0.6, 'power3.out', {y: 30}, {y: 0});
+  const late = scene([move(4)], {states: [4]});
+  assert.deepEqual(rules(late), ['late-beat']);
+  assert.match(late[0].detail, /1 move in card starts on its beat and reaches half its travel up to 2\.9 frames after it/);
+  assert.equal(late[0].severity, 'warning');
+  assert.deepEqual(rules(scene([move(4 - 0.6 * halfTravel('power3.out'))], {states: [4]})), []);
+  assert.deepEqual(rules(scene([move(4)], {hits: [4]})), ['late-beat'], 'a hit is a beat too');
+  // A quick snap lands within a frame.
+  assert.deepEqual(rules(scene([tween('card-mark', 4, 0.15, 'power3.out', {y: 30}, {y: 0})], {states: [4]})), []);
 });
 
 test('the gate fails a story whose grammar reverses its entrance ease, and names the scenes', () => {
@@ -107,7 +127,7 @@ test('the gate fails a story whose grammar reverses its entrance ease, and names
   assert.ok(reversed.findings.some(f => f.rule === 'entrance-ease' && f.ids.length === 0), JSON.stringify(reversed.findings));
   assert.ok(reversed.findings.some(f => f.rule === 'entrance-ease' && f.ids.length > 0), 'and the scenes that arrive on it are named');
   // The largest stagger a grammar may set stays inside the budget: modules clamp their own cascades.
-  assert.deepEqual(choreographyGate(example('explainer-9x16', raw => ({...raw, motion: {...raw.motion, grammar: {stagger: 3}}}))).findings, []);
+  assert.deepEqual(settled(choreographyGate(example('explainer-9x16', raw => ({...raw, motion: {...raw.motion, grammar: {stagger: 3}}}))).findings), []);
 });
 
 test('an element that flashes on every beat is a flash, not a slow exit', () => {

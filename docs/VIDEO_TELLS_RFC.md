@@ -143,6 +143,55 @@ video), "a visual on every section" (a video needs one on every line), the
 4 px spacing scale and nav row heights, trailing periods on buttons, and
 cramped padding (`fitText` and panel insets own it).
 
+### Phase 2: what landed, and the calibration
+
+`kit/core/tells.mjs` holds every row above as a registry entry dated
+2026-11-16. `tellsGate(story, {words})` in `src/direction_guardrails.js` runs
+the plan rules on the resolved story, each scene's model, and the view tree
+and op list both renderers draw and play. finish files it as `gates.tells`
+(so `--plan-only` runs it), and `checkStoryboard` sends its errors to the
+storyboard repair pass and lists its warnings.
+
+Calibrated on the 40 stories under `examples/story/`: none has a tells
+error. Changes from the proposals above:
+
+| Rule | Change | Why |
+| --- | --- | --- |
+| gradient-text, emoji-icons, bounce | error | No example hits them |
+| kicker | warning (the refuse list says always) | Fires 17 times: module labels (`gauge-compare` "SAVED", `object-card`, `footage-callout`, `archive-card`) and planner `kicker`/`eyebrow` params on `hook-title`, `brand-lockup`, `section-card` |
+| ai-palette | warning | 19 examples still carry the old cyan-on-near-black brand |
+| glow, ghost-card | warning | Shipped modules (`node-graph`, `flow-compare`, `process-steps`, the 3D bars and rack, chart highlights) draw coloured halos and bordered shadowed panels |
+| every other plan rule | warning or advisory as marked | |
+| dissolve-everywhere | counted over the cuts, from the second scene | The first scene has no cut in |
+| identical-entrance | needs four or more scenes | Most examples share the grammar's one entrance, so this warns widely |
+| flat-hierarchy | sizes within 10% count as one before "over four sizes" | Perspective labels in the 3D charts |
+| centred-title-hook | text-only means no pictured scene overlaps it | |
+| bounce | `back.out`, `back.inOut`, `elastic`, `bounce` only | `back.in` is an anticipation on an exit, not an overshoot |
+| overused-font | only roles the planned text is set in | The `serif` role defaults to Instrument Serif, but most videos never use it |
+| mono-costume | `excerpt` exempt, with code and terminal modules | It quotes code verbatim |
+| quote-card-wide-set | at plan time: overlaps a `world` scene with no cast scene | The density gate's `lone-card` still measures the rects after layout |
+
+**The hero-metric template is fixed in the module.** The default `stat-card`
+sets flush left, so the figure leads a column instead of floating centred
+over a small label. Its source line uses the body face in every variant. The
+sub line under `odometer` and the other counters drops mono and its 0.06em
+tracking. One core view, so both renderers change; parity fixture
+`g-stat-card-flush-left`. The `hero-metric` rule still warns when a bare
+number is the hook or appears more than once.
+
+**Still to do:**
+
+- The frame rules: `accent-everywhere`, `buried-raster`, `unblended-media`
+  (registry entries with no detector yet; phase 3).
+- The on-screen copy rules of §2 (`exclaim`, `meta-dots`, `em-dash` labels,
+  buzzwords) in `tellsGate`, through the functions in `src/script_check.js`.
+- View trees for catalogue A, D and the character modules (`hook-title`,
+  `metric`, `cta`, …). The gate reads their params and ops but not their
+  type, so the type rules miss them.
+- `straggler` wraps with the text-fit advance model, not `fitText`'s own
+  breaks; move it onto `fitText` once that returns its lines.
+- Contrast on all text (the phase 2 row below) is not in this phase.
+
 ## 2. The copy check
 
 The words are the cheapest place to catch a tell, and `checkScript` already

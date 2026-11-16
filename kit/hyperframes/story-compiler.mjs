@@ -34,6 +34,7 @@ import { LIGHT_OVER_ID, LIGHT_Z, lightLayerActive, lightLayerCss, lightPlan, lig
 import { VFX_Z, vfxPlan } from '../core/vfx/plan.mjs';
 import { vfxWordBox } from '../core/vfx/paint.mjs';
 import { VFX_RUNTIME } from '../core/vfx/runtime.mjs';
+import { AUDIO_REACT_Z, audioReactCss, audioReactPlan } from '../core/audio-react.mjs';
 import { worldBackdrops } from '../core/world-backdrops.mjs';
 import { shotZooms, zoomOps } from '../core/zooms.mjs';
 import { feelGsap, feelPlan } from '../core/kinetic.mjs';
@@ -654,6 +655,19 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   tl.fromTo(clock, {t: 0}, {t: ${num(D)}, duration: ${num(D)}, ease: 'none', immediateRender: false, onUpdate: function () { paint(clock.t); }}, 0);
 })();`] : [];
 
+  // Audio-reactive layers (kit/core/audio-react.mjs): with the light's over
+  // group, each layer's per-frame values indexed at round(t × fps) from a
+  // proxy tween, as Remotion's AudioReact does per frame.
+  const audioReact = isolate ? null : audioReactPlan(story);
+  const audioReactHtml = audioReact ? `<div id="${audioReact.id}" data-launchclip-audio-react aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:${AUDIO_REACT_Z.hyperframes}">${audioReact.layers.map((layer) => `<div id="${audioReact.id}-${layer.id}" style="${attr(audioReactCss(layer, 0, audioReact.fps))}"></div>`).join('')}</div>` : '';
+  const audioReactLines = audioReact ? ['// audio-reactive layers', `(function () {
+  var plan = ${JSON.stringify({ id: audioReact.id, fps: audioReact.fps, layers: audioReact.layers.map((layer) => ({ id: layer.id, frames: layer.frames })) })}, clock = {t: 0};
+  var nodes = plan.layers.map(function (layer) { return document.getElementById(plan.id + '-' + layer.id); });
+  function paint(t) { plan.layers.forEach(function (layer, i) { var v = layer.frames[Math.max(0, Math.min(layer.frames.length - 1, Math.round(t * plan.fps)))]; nodes[i].style.opacity = v[0]; nodes[i].style.transform = 'scale(' + v[1] + ', ' + v[2] + ')'; }); }
+  paint(0);
+  tl.fromTo(clock, {t: 0}, {t: ${num(D)}, duration: ${num(D)}, ease: 'none', immediateRender: false, onUpdate: function () { paint(clock.t); }}, 0);
+})();`] : [];
+
   const fonts = brandFontStacks(story.brand);
   const fontCss = await projectFontFaces(story.brand, { sourceDir });
   warnings.push(...fontCss.warnings);
@@ -692,13 +706,13 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     ${audio}
     ${feelLines.length ? '<div id="lc-feel" class="lc-feel">' : ''}${plan ? cameraMarkup(plan, story.brand, world, worldField.html, !worldBackdrop && !covered, stack?.html ?? '') : ''}
     ${hoisted.join('\n    ')}
-    ${markup.join('\n    ')}${feelLines.length ? '\n    </div>' : ''}${lightOver ? `\n    <div id="${LIGHT_OVER_ID}" data-launchclip-light="over" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:${LIGHT_Z.hyperframes}">${lightOver.html}</div>` : ''}${vfx ? `\n    ${vfxCanvas('color')}${vfxCanvas('light')}${vfxWords}\n    <script>\n${VFX_RUNTIME}\n    </script>` : ''}${wipeMarkup.length ? `\n    ${wipeMarkup.join('\n    ')}` : ''}
+    ${markup.join('\n    ')}${feelLines.length ? '\n    </div>' : ''}${lightOver ? `\n    <div id="${LIGHT_OVER_ID}" data-launchclip-light="over" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:${LIGHT_Z.hyperframes}">${lightOver.html}</div>` : ''}${audioReactHtml ? `\n    ${audioReactHtml}` : ''}${vfx ? `\n    ${vfxCanvas('color')}${vfxCanvas('light')}${vfxWords}\n    <script>\n${VFX_RUNTIME}\n    </script>` : ''}${wipeMarkup.length ? `\n    ${wipeMarkup.join('\n    ')}` : ''}
     ${look?.under ? `${lookGradeMarkup(look)}\n    ` : ''}${medium ? `${mediumDefs(medium)}<div id="${MEDIUM_LAYER_ID}" data-launchclip-medium="${medium.kind}" aria-hidden="true"></div>\n    ` : ''}${look && (look.furniture || (look.grade && !look.under)) ? `${look.under ? '' : lookGradeMarkup(look)}${lookFurnitureMarkup(look)}\n    ` : ''}${frame ? `<div id="lc-frame-root" aria-hidden="true"></div>\n    <script>\n${brandFrameRuntime(frame)}</script>\n    ` : ''}${captions ? '<div id="lc-captions" class="lc-captions"></div>' : ''}
     ${captions ? `<script>\n${captionPlanRuntime(captions.plan)}</script>` : ''}
     <script>
       window.__timelines = window.__timelines || {};
       const tl = gsap.timeline({ paused: true });${stepped ? `\n      // look ${look.name}: the picture runs on its own timeline, held on ${look.step} drawings a second\n      const lcPicture = gsap.timeline({ paused: true });\n      ((tl) => {` : ''}
-${seamTweens([...motion, ...(lightOver ? ['// light (over the scenes)', ...lightOver.motion] : [])].join('\n').split('\n')).map((line) => `      ${line}`).join('\n')}${feelLines.length || wipes.length || handles.length || sweeps.length || vfxLines.length ? `\n${[...feelLines, ...vfxLines, ...wipes.flatMap((wipe) => [`// dot-wipe into ${wipe.sceneId}`, ...dotWipeGsap(wipe)]), ...handles.flatMap((wipe) => [`// before-after into ${wipe.sceneId}`, ...beforeAfterGsap(wipe)]), ...sweeps.flatMap((sweep) => [`// ${sweep.type ?? 'light-sweep'} into ${sweep.sceneId}`, ...lightSweepGsap(sweep)])].map((line) => `      ${line}`).join('\n')}` : ''}${stepped ? `\n      })(lcPicture);\n      lcPicture.render(0, true, true);\n      tl.fromTo(lcPicture, { time: 0 }, { time: ${num(D)}, duration: ${num(D)}, ease: ${lookStepEase(look)}, immediateRender: false }, 0);` : ''}
+${seamTweens([...motion, ...(lightOver ? ['// light (over the scenes)', ...lightOver.motion] : [])].join('\n').split('\n')).map((line) => `      ${line}`).join('\n')}${feelLines.length || wipes.length || handles.length || sweeps.length || vfxLines.length || audioReactLines.length ? `\n${[...feelLines, ...audioReactLines, ...vfxLines, ...wipes.flatMap((wipe) => [`// dot-wipe into ${wipe.sceneId}`, ...dotWipeGsap(wipe)]), ...handles.flatMap((wipe) => [`// before-after into ${wipe.sceneId}`, ...beforeAfterGsap(wipe)]), ...sweeps.flatMap((sweep) => [`// ${sweep.type ?? 'light-sweep'} into ${sweep.sceneId}`, ...lightSweepGsap(sweep)])].map((line) => `      ${line}`).join('\n')}` : ''}${stepped ? `\n      })(lcPicture);\n      lcPicture.render(0, true, true);\n      tl.fromTo(lcPicture, { time: 0 }, { time: ${num(D)}, duration: ${num(D)}, ease: ${lookStepEase(look)}, immediateRender: false }, 0);` : ''}
       ${look ? `${lookSteps(look, D).map((step) => `tl.set(${js(lookSelector(look))}, ${js(step.vars)}, ${num(step.time)});`).join('\n      ')}\n      ` : ''}${medium ? `${mediumSteps(medium, D).map((step) => `tl.set(${js(`#${MEDIUM_LAYER_ID}`)}, ${js({ '--lc-medium-filter': step.filter })}, ${num(step.time)});`).join('\n      ')}\n      ` : ''}${frame ? 'window.mountBrandFrame(tl, document.getElementById("lc-frame-root"));\n      ' : ''}${captions ? 'window.mountCaptions(tl, document.getElementById("lc-captions"));' : ''}${captions?.dips.length ? `\n      // captions dip out during sweeping camera moves (each dip out ends in a hard
       // set, so a seek past the fade, often onto a shot's start, finds them hidden)\n      ${captions.dips.map((dip) => `tl.fromTo('#lc-captions', { opacity: ${dip.from} }, { opacity: ${dip.to}, duration: ${num(dip.dur)}, ease: 'none', immediateRender: false }, ${num(dip.at)});${dip.to === 0 ? `\n      tl.set('#lc-captions', { opacity: 0 }, ${num(dip.at + dip.dur)});` : ''}`).join('\n      ')}` : ''}
       window.__timelines["${COMPOSITION_ID}"] = tl;

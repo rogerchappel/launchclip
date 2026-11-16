@@ -108,6 +108,65 @@ function gateResult(findings, extra = {}) {
  *   the hold a live mover (a state, a counter, a sweep, a cursor).
  */
 export function holdGate(story, { media = {} } = {}) {
+  const { duration, windows, live, drift } = motionSpans(story, { media });
+  const inside = (list, t) => list.some(([a, b]) => a <= t + 1e-6 && t < b - 1e-6);
+  const shown = (t) => windows.scenes.some((entry) => entry.start <= t + 1e-6 && t < entry.renderEnd - 1e-6);
+  const findings = [];
+  for (const [from, to] of runs(duration, (t) => shown(t) && !inside(live, t) && !inside(drift, t), MOVEMENT.still)) {
+    const ids = windows.scenes.filter((entry) => entry.start < to && entry.renderEnd > from).map((entry) => entry.id);
+    findings.push({ rule: "static-hold", severity: "error", at: from, ids, detail: `nothing moves for ${round(to - from, 1)} s (${from}–${to} s) on ${ids.join(", ")}; give the hold a slow dolly (ambient drift) and a live mover, or add a state` });
+  }
+  for (const [from, to] of runs(duration, (t) => shown(t) && !inside(live, t) && inside(drift, t), MOVEMENT.still)) {
+    const ids = windows.scenes.filter((entry) => entry.start < to && entry.renderEnd > from).map((entry) => entry.id);
+    findings.push({ rule: "drift-only", severity: "warning", at: from, ids, detail: `only the hold drift moves for ${round(to - from, 1)} s (${from}–${to} s) on ${ids.join(", ")}; add a live mover: a state, a counter, a sweeping highlight or a cursor` });
+  }
+  return gateResult(findings);
+}
+
+/**
+ * Frozen spans (docs/PLAN_AND_PACE_RFC.md §2, the pace gate's max_still):
+ * [[from, to, ids]] longer than `limit` seconds in which nothing on screen
+ * moves, not even the hold drift, sampled every MOVEMENT.step.
+ */
+export function frozenSpans(story, limit, { media = {} } = {}) {
+  const { duration, windows, live, drift } = motionSpans(story, { media });
+  const inside = (list, t) => list.some(([a, b]) => a <= t + 1e-6 && t < b - 1e-6);
+  const shown = (t) => windows.scenes.some((entry) => entry.start <= t + 1e-6 && t < entry.renderEnd - 1e-6);
+  return runs(duration, (t) => shown(t) && !inside(live, t) && !inside(drift, t), limit)
+    .map(([from, to]) => [from, to, windows.scenes.filter((entry) => entry.start < to && entry.renderEnd > from).map((entry) => entry.id)]);
+}
+
+/**
+ * The plan's visual events (the pace gate's clock): each scene's entrance
+ * and transition moves, its shot states, its module events (a build step,
+ * a count landing), its hits and zooms, and each element that enters inside
+ * it. → {events: sorted seconds, opaque: [[from, to]] spans of playing
+ * footage or a travelling camera, whose own events only the render shows}
+ */
+export function planEvents(story) {
+  const { windows, entries } = renderedModels(story);
+  const out = [], opaque = [];
+  for (const entry of windows.scenes) {
+    out.push(entry.start, ...stateTimes(entry.scene));
+    for (const tw of entry.tweens ?? []) if (tw.duration > 0) out.push(tw.at);
+    // Hits and camera zooms (a punch in and its release).
+    for (const hit of Array.isArray(entry.scene?.hits) ? entry.scene.hits : []) out.push(Number(hit?.at));
+    for (const zoom of Array.isArray(entry.scene?.zooms) ? entry.scene.zooms : []) out.push(Number(zoom?.at), Number(zoom?.until));
+    const model = entries.get(entry.id)?.model;
+    // Playing footage and a travelling camera make their own events, which only the render can count.
+    if (model?.layout?.live === true || model?.camera || entry.transitionIn?.camera) opaque.push([entry.start, entry.renderEnd]);
+    for (const event of model?.events ?? []) if (Number.isFinite(event?.time)) out.push(event.time);
+    // An element entering (fading up from nothing) or a word typed on is an entrance.
+    for (const op of (model && modelOps(model)) ?? []) {
+      if (op.type === "tween" && op.duration > 0 && (op.from?.opacity ?? 1) < 0.05 && (op.to?.opacity ?? 0) > 0.05) out.push(op.start);
+      else if (op.type === "set" && op.props && "text" in op.props) out.push(op.time);
+    }
+  }
+  return { events: out.filter(Number.isFinite).sort((a, b) => a - b), opaque };
+}
+
+// Where something moves: live motion (tweens, cameras, playing media) and the hold drift.
+function motionSpans(story, { media = {} } = {}) {
   const duration = Number(story?.resolved?.duration ?? story?.format?.duration) || 0;
   const { windows, entries } = renderedModels(story);
   const live = [], drift = [];
@@ -122,18 +181,7 @@ export function holdGate(story, { media = {} } = {}) {
     for (const [from, to] of media[entry.id]?.moving_spans ?? []) live.push([Math.max(entry.start, from), Math.min(entry.renderEnd, to)]);
     live.push(...opSpans(model));
   }
-  const inside = (list, t) => list.some(([a, b]) => a <= t + 1e-6 && t < b - 1e-6);
-  const shown = (t) => windows.scenes.some((entry) => entry.start <= t + 1e-6 && t < entry.renderEnd - 1e-6);
-  const findings = [];
-  for (const [from, to] of runs(duration, (t) => shown(t) && !inside(live, t) && !inside(drift, t), MOVEMENT.still)) {
-    const ids = windows.scenes.filter((entry) => entry.start < to && entry.renderEnd > from).map((entry) => entry.id);
-    findings.push({ rule: "static-hold", severity: "error", at: from, ids, detail: `nothing moves for ${round(to - from, 1)} s (${from}–${to} s) on ${ids.join(", ")}; give the hold a slow dolly (ambient drift) and a live mover, or add a state` });
-  }
-  for (const [from, to] of runs(duration, (t) => shown(t) && !inside(live, t) && inside(drift, t), MOVEMENT.still)) {
-    const ids = windows.scenes.filter((entry) => entry.start < to && entry.renderEnd > from).map((entry) => entry.id);
-    findings.push({ rule: "drift-only", severity: "warning", at: from, ids, detail: `only the hold drift moves for ${round(to - from, 1)} s (${from}–${to} s) on ${ids.join(", ")}; add a live mover: a state, a counter, a sweeping highlight or a cursor` });
-  }
-  return gateResult(findings);
+  return { duration, windows, live, drift };
 }
 
 /**
@@ -172,12 +220,12 @@ export function stateGate(story) {
  * The motion check (§8, kit/core/motion-check.mjs): the story's grammar and
  * every scene's timing and op list against the rules of good motion. Errors:
  * linear-move, entrance-ease, exit-ease, exit-longer, long-stagger. Warnings:
- * crowded-move, no-rest.
+ * crowded-move, no-rest, late-beat.
  */
 export function choreographyGate(story) {
   const { entries } = renderedModels(story);
   const findings = grammarMotionFindings(resolveGrammar(story));
-  for (const [id, { entry, model }] of entries) findings.push(...sceneMotionFindings({ id, motion: model.motion, ops: modelOps(model) ?? [], states: stateTimes(entry.scene) }));
+  for (const [id, { entry, model }] of entries) findings.push(...sceneMotionFindings({ id, motion: model.motion, ops: modelOps(model) ?? [], states: stateTimes(entry.scene), hits: (Array.isArray(entry.scene?.hits) ? entry.scene.hits : []).map((hit) => Number(hit?.at)) }));
   // Errors first, so the 40 kept are the ones that fail the gate.
   return gateResult(findings.sort((a, b) => (a.severity === "error" ? 0 : 1) - (b.severity === "error" ? 0 : 1)), { scenes: entries.size });
 }

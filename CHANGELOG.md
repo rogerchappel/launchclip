@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Added
+
+- **A treatment block in the direction map.** `DIRECTION.json` may carry
+  `treatment`: the film in one sentence, the one object that carries it,
+  what it must never do, the brief's locked words and claims, a worked
+  example's fixed numbers, what each transition shows and the one shot to
+  remember. Validation checks every field against the storyboard (a banned
+  crossfade, a reworded locked line, a forbidden phrase, an early logo). The
+  planner asks for it, and requires it on the bespoke tier; a style may set
+  `avoid` tokens to start the banned list.
+- **A pace gate.** `launchclip finish` adds `pace`: the opening holds more
+  events than the body, no gap after it passes the format's band, and
+  nothing freezes past its limit (`kit/core/pace-check.mjs`; bands in each
+  cadence format's `pace`). The motion check warns when a move starts on
+  its beat and so lands late (`late-beat`).
+
 ## 0.3.0 - 2026-11-16
 
 ### Highlights

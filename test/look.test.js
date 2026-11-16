@@ -481,11 +481,12 @@ test("Remotion draws a real still in a look and leaves the captions crisp", { sk
     await cp(MINIMAL, project, { recursive: true });
     const adapter = getRenderer("remotion");
     const plainFile = path.join(project, "qa", "plain.png");
-    await adapter.still(project, 1.5, plainFile);
+    // 1.7 s: "MINUTES." (1.46–1.9 s) has settled; at 1.5 s its 0.16 s power3.out entrance is still fading in.
+    await adapter.still(project, 1.7, plainFile);
     const file = path.join(project, "storyboard.json");
     await writeFile(file, JSON.stringify({ ...JSON.parse(await readFile(file, "utf8")), look: "thermal" }, null, 2));
     const lookFile = path.join(project, "qa", "thermal.png");
-    await adapter.still(project, 1.5, lookFile);
+    await adapter.still(project, 1.7, lookFile);
     const [plain, graded] = [decodePng(await readFile(plainFile)), decodePng(await readFile(lookFile))];
     const same = (i, d) => Math.abs(plain.pixels[i] - graded.pixels[i]) + Math.abs(plain.pixels[i + 1] - graded.pixels[i + 1]) + Math.abs(plain.pixels[i + 2] - graded.pixels[i + 2]) <= d;
     let changed = 0;

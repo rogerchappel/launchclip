@@ -36,6 +36,8 @@ export function animaticAdapters() {
     async synthKit(outDir, bed) { await touch(path.join(outDir, "AUDIO-KIT.json"), "{}"); if (bed) await touch(path.join(outDir, "music", "bed.wav")); return {}; },
     async renderTyping(schedule, banks, { out }) { await touch(out, "typing"); return { file: out, keystrokes: [], counts: {} }; },
     async buildMix(options) { await touch(options.out, `mix ${options.cues.length}`); return { cues: options.cues.map((cue) => ({ ...cue, file: path.join(options.sfxDir, `${cue.cue}.wav`) })) }; },
+    // The grade is a pixel pass (test/grade.test.js); the fakes hold no pixels.
+    async grade() { return null; },
     async hasAudio() { return true; },
     async master(input, output, target) { await touch(output, `mastered ${await readFile(input, "utf8")}`); return { target: { integrated_lufs: target.lufs, true_peak_dbtp: target.tp }, output: { integrated_lufs: -14.1, true_peak_dbtp: -1.4 }, compliant: true }; },
     async buildEvidence(project, options) {

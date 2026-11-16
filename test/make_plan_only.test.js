@@ -123,7 +123,7 @@ test("the checks that need no rendered pixels run at plan time, and the report s
   try {
     const { plan } = first.report;
     const names = Object.keys(plan.checks.gates);
-    for (const name of ["placeholders", "layout", "physics", "ghosting", "density", "variety", "holds", "states", "choreography", "direction", "acting", "coverage", "structure", "hook"]) assert.ok(names.includes(name), `${name} ran at plan time`);
+    for (const name of ["placeholders", "layout", "physics", "ghosting", "density", "variety", "tells", "holds", "states", "choreography", "direction", "acting", "coverage", "structure", "hook"]) assert.ok(names.includes(name), `${name} ran at plan time`);
     for (const name of RENDER_ONLY_GATES) assert.ok(!names.includes(name), `${name} needs the render`);
     assert.deepEqual(plan.checks.needs_render, [...RENDER_ONLY_GATES]);
     assert.equal(plan.checks.gates.layout.status, "passed");

@@ -40,7 +40,7 @@ import { tightlyFramed } from "./presenter_box.js";
 import { fitDirectionCast, normalizeCastCues, plannedCast } from "./cast_fit.js";
 import { bibleCast, bibleRef, directionWithBible } from "@launchclip/core/bible.mjs";
 import { castGate } from "./cast.js";
-import { actingGate } from "./direction_guardrails.js";
+import { actingGate, tellsGate } from "./direction_guardrails.js";
 import { placeActions } from "./acting_place.js";
 import { lipSyncGate } from "./quality_gates.js";
 import { SHORT_FORM_HOLD, fitDurations, paceErrors } from "./duration_fit.js";
@@ -177,7 +177,7 @@ export async function planStoryboard(options = {}) {
   if (wantsCast && options.explainerCast?.cast?.characters?.length) explainer = { cast: JSON.parse(JSON.stringify(options.explainerCast.cast)), roles: options.explainerCast.roles ?? [], dropped: [] };
   else if (wantsCast && options.seed?.storyboard?.cast?.characters?.length) explainer = { cast: JSON.parse(JSON.stringify(options.seed.storyboard.cast)), roles: [], dropped: [] };
   if (wantsMap) {
-    directionPlan = await planDirection({ client, model, brief, fixed, profile, words: wordList, subject, segments: style?.segments ?? null, now, constraints, cast: castPlan, script, explainer: wantsCast && !explainer });
+    directionPlan = await planDirection({ client, model, brief, fixed, profile, words: wordList, subject, segments: style?.segments ?? null, avoid: style?.avoid ?? null, tier, now, constraints, cast: castPlan, script, explainer: wantsCast && !explainer });
     direction = directionPlan.map;
     directionSource = direction ? "model" : null;
     if (wantsCast && !explainer) explainer = directionPlan.casting ?? defaultCasting();
@@ -834,6 +834,17 @@ export function checkStoryboard(raw, { words = [], beats = null, track = null, t
     const lips = lipSyncGate({ resolved, words });
     if (lips.status === "failed") errors.push(...lips.errors.slice(0, 6).map((entry) => `lip-sync: ${entry}`));
   }
+  // The plan tells (docs/VIDEO_TELLS_RFC.md §1): errors go to the repair
+  // pass; warnings are listed. Advisories stay in the finish report.
+  if (second.ok) {
+    try {
+      const tells = tellsGate(resolved, { words });
+      errors.push(...tells.findings.filter((finding) => finding.severity === "error").map((finding) => `tells: ${finding.rule}: ${finding.detail}`).slice(0, 6));
+      warnings.push(...tells.findings.filter((finding) => finding.severity === "warning").map((finding) => `tells: ${finding.rule}: ${finding.detail}`).slice(0, 8));
+    } catch (error) {
+      warnings.push(`tells: ${message(error)}`);
+    }
+  }
   // The app's constraints (src/constraints.js): hidden ranges covered,
   // must_use present, never_use absent; errors are prefixed "constraints:".
   if (second.ok && hasConstraints(constraints)) {
@@ -1137,11 +1148,11 @@ export function pinInputs(story, fixed) {
  * → {map | null, attempts, warnings, cast?, bound?}: cast is the story cast
  * the map's cues name (a style default cast with the story's names bound).
  */
-export async function planDirection({ client, model = null, brief, fixed, profile = null, words, subject = null, segments = null, now = () => Date.now(), constraints = null, cast = null, script = null, explainer = false }) {
+export async function planDirection({ client, model = null, brief, fixed, profile = null, words, subject = null, segments = null, avoid = null, tier = null, now = () => Date.now(), constraints = null, cast = null, script = null, explainer = false }) {
   // cast: plannedCast() (src/cast_fit.js), the cast the story will have, or
   // null when the storyboard defines it (its cues are then checked there).
   // explainer: the map casts the characters that carry the video (kit/core/explainer.mjs); → casting.
-  const instructions = directionPrompt({ lane: fixed.lane, format: fixed.format, profile, words, subject, segments, cast: cast ? { characters: cast.cast.characters, bindable: cast.bindable } : null, explainer });
+  const instructions = directionPrompt({ lane: fixed.lane, format: fixed.format, profile, words, subject, segments, avoid, tier, cast: cast ? { characters: cast.cast.characters, bindable: cast.bindable } : null, explainer });
   const rules = constraints ? constraintsPrompt(constraints, { words }) : "";
   const base = ["Write the direction map for this brief.", "", "## Brief", "", String(brief).trim(), "", `lane: ${fixed.lane}`, `profile: ${profile?.id ?? "(none)"}`, "", ...(rules ? [rules] : [])].join("\n");
   const attempts = [];
@@ -1179,7 +1190,7 @@ export async function planDirection({ client, model = null, brief, fixed, profil
       extracted.map = fit.map;
       const map = extracted.map;
       if (profile && !map.profile) map.profile = profile.id;
-      const check = validateDirection(map, { words, lane: fixed.lane, deferScenes: true, ...(cast ? { cast: fit.cast, validateCast: validateCastCues } : {}), ...(Array.isArray(segments) ? { segments } : {}), ...(script ? { script } : {}) });
+      const check = validateDirection(map, { words, lane: fixed.lane, deferScenes: true, tier, ...(cast ? { cast: fit.cast, validateCast: validateCastCues } : {}), ...(Array.isArray(segments) ? { segments } : {}), ...(script ? { script } : {}) });
       errors = check.errors;
     }
     attempts.push({ attempt, kind, ok: errors.length === 0, errors, warnings: fit?.warnings ?? [], layout: { errors: 0, warnings: 0 }, usage, cost_usd: cost.estimated_usd, cost_warning: cost.warning, model: result?.model ?? model, response_id: result?.response_id ?? null, elapsed_ms: now() - started });

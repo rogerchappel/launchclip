@@ -41,6 +41,20 @@ Write `DIRECTION.json` (launchclip.direction-map.v1) beside `storyboard.json` be
 | hook | is the first line (unless it is a call to action) |
 | claim | matches none of the above |
 
+## Treatment
+
+`treatment` sits beside `sections`: the film's idea and its rules, written before the storyboard (design: `docs/PLAN_AND_PACE_RFC.md` §1). `story validate` and the direction gate check every field against the storyboard. Optional on the structured and guided tiers; required on bespoke.
+
+- treatment (optional): one object beside sections that holds the film's idea and its rules. Each field is checked against the storyboard.
+- concept: the whole film as one sentence of at most 20 words. It names something that changes ("one cursor blink grows into every tool the agent can reach"), never a subject ("AI agents") and never the title.
+- throughline: {object, states: [{at, form, carry?}]}. Pick one object that stays on screen from the first section to the last and takes a new form in each. at is a section id, form is what the object looks like there, carry is the transition that hands it across (card-to-card, morph).
+- banned: short tokens for what this film must never do. Start from the style's list (crossfade, bounce-ease, lens-flare) and add whatever the brief rules out. Use these tokens where one fits, since each is checked: crossfade (no fade between two full-frame scenes); bounce-ease (no elastic ease and no back ease overshooting past 1.7); camera-shake (no camera kicks and no shake); brand-before-end (no logo or wordmark scene before the last 15% of the runtime); particles (no particle scene or particle effect); lens-flare (no light-leak transition and no flare effect); hold>N (nothing on screen freezes for more than N seconds (the pace gate's max_still)). Any other phrase goes to the critic.
+- locked_copy: {only?, lines: [...]}: the brief's exact words, in the order the brief gives them. Never reword, re-case or re-punctuate a locked line; a scene that shows it shows it exactly. With only: true, show no other slogan or headline.
+- guardrails: [{claim, forbid: [...]}]: each claim the film must not overstate, with the words that would overstate it ({"claim": "release status", "forbid": ["stable", "v1.0"]}). No scene text and no narration may use them.
+- locked_example: {label, values: {name: number}}: when the film works one example, fix its numbers here once. Every scene that shows one of them shows this value.
+- transitions: [{from, to, type, demonstrates}]: one entry for every scene change that is not a cut. demonstrates says in a few words what the change itself proves ("the stream stops mid-word and picks up where it stopped"); a change that proves nothing is a cut. At most one fade per 30 s.
+- signature: {at, describe}: the one shot a viewer will remember, in a section between a quarter and 85% of the way through. Describe what the viewer sees happen, with no effect names (no glow, blur, particles or transition names).
+
 ## Narrative maps
 
 A story told by characters uses story beats as sections (`beat`: setup, problem, attempt, turn, resolution, cta), and each line says who acts: `cast: [{id, pose, expression, at: "word:<text>"}]` and a `set`. Cast cues name characters from the story's cast and poses, expressions and sets from the character kit; validation checks them when the kit is present.

@@ -253,7 +253,7 @@ test("runFinish runs every stage, writes the resolved copy and report, then reus
     assert.equal(report.quality, "draft");
     assert.equal(report.voice, "test");
     assert.equal(report.final, path.join(project, "renders/draft.mp4"));
-    assert.deepEqual(Object.keys(report.gates), ["placeholders", "layout", "physics", "ghosting", "density", "variety", "holds", "states", "choreography", "captions", "loudness", "motion", "audio", "temporal_evidence", "direction", "acting", "coverage", "structure", "hook", "critic"]);
+    assert.deepEqual(Object.keys(report.gates), ["placeholders", "layout", "physics", "ghosting", "density", "variety", "tells", "holds", "states", "choreography", "captions", "loudness", "motion", "audio", "temporal_evidence", "direction", "acting", "coverage", "structure", "hook", "pace", "critic"]);
     assert.equal(report.gates.placeholders.status, "passed");
     assert.equal(report.gates.direction.status, "passed");
     assert.equal(report.gates.coverage.status, "passed");
@@ -402,6 +402,23 @@ test("repairLayout settles a caption-band clash a step further each pass: the ca
   assert.match(steps[2], /^layout: tooling hid captions 5\.18–5\.82 s under ask/);
   assert.equal(steps[3], "", "hidden once: there is nothing further to try");
   assert.deepEqual(ctx.copy.overlays[0].hide, [[5.18, 5.82]]);
+});
+
+test("repairLayout plates every caption line when fixed caption words lose contrast on the background", async () => {
+  // A production plan failed here after a 13-minute storyboard: brand-pinned white captions on a light texture.
+  const story = {
+    schema: "launchclip.story.v1", lane: "footage-led", format: { width: 1080, height: 1920, fps: 30, duration: 10 },
+    background: { kind: "texture" },
+    overlays: [{ id: "captions", type: "captions", preset: "kinetic-hierarchy", colors: { idle: "#ffffff", active: "primary" } }],
+    scenes: [{ id: "open", module: "hook-title", start: 0, end: 10, params: { headline: "Three boards" } }]
+  };
+  const layout = { findings: [{ rule: "background-contrast", severity: "error", ids: ["captions"], at: 0, detail: "caption words (#ffffff, preset kinetic-hierarchy) have 1.07:1 on the texture background's #e5fcfc; captions need 3:1. Give them an outline or plate, or change the caption colour" }] };
+  const repaired = await repairLayout({ copy: story }, layout, { resolveOptions: () => ({}) });
+  assert.equal(repaired.storyboard.overlays[0].plates, "all");
+  assert.deepEqual(repaired.changes, ["layout: tooling plated every caption line: caption words (#ffffff, preset kinetic-hierarchy) have 1.07:1 on the texture background's #e5fcfc"]);
+  // Once plated, a second pass has nothing to change.
+  const again = await repairLayout({ copy: repaired.storyboard }, layout, { resolveOptions: () => ({}) });
+  assert.deepEqual(again.changes, []);
 });
 
 test("repairLayout moves cards off the face and fits the caption band even beside an error it cannot fix", async () => {
@@ -1404,6 +1421,26 @@ test("finish --prototype renders only the opening 20–30 s, cut at a scene end,
   }
 });
 
+test("finish plates every caption line instead of failing when fixed white captions lose contrast on a light background", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-contrast-"));
+  try {
+    await cp(MINIMAL, project, { recursive: true });
+    const file = path.join(project, "storyboard.json");
+    const story = JSON.parse(await readFile(file, "utf8"));
+    story.brand.colors = { bg: "#f4fbfb", primary: "#0f766e", accent: "#b45309", ink: "#f4fbfb", paper: "#14201f" };
+    story.background = { kind: "texture" };
+    story.overlays = [{ type: "captions", preset: "kinetic-hierarchy", colors: { idle: "#ffffff" } }];
+    await writeFile(file, JSON.stringify(story));
+    const report = await runFinish(project, {}, fakeAdapters());
+    assert.equal(report.gates.layout.status, "passed", JSON.stringify(report.gates.layout.findings));
+    assert.ok(report.warnings.some((line) => /^layout: tooling plated every caption line: caption words \(#ffffff, preset kinetic-hierarchy\)/.test(line)), JSON.stringify(report.warnings));
+    const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
+    assert.equal(resolved.overlays.find((entry) => entry.type === "captions").plates, "all");
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
 test("finish plates caption lines that do not read on the render, renders once more, and the layout gate fails one that still does not", async () => {
   for (const stubborn of [false, true]) {
     const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-captions-"));
@@ -1673,7 +1710,7 @@ test("a master that still misses after the repairs fails the loudness gate", asy
     assert.equal(runs, 1 + MASTER_REPAIRS);
     assert.equal(report.gates.loudness.status, "failed");
     assert.equal(report.gates.loudness.repairs, MASTER_REPAIRS);
-    assert.match(report.gates.loudness.errors[0], /the master is -19 LUFS \/ -1\.5 dBTP after 2 re-masters; target -14 LUFS \(within 1\.5 LU\), ≤ -1 dBTP/);
+    assert.match(report.gates.loudness.errors[0], /the master is -19 LUFS \/ -1\.5 dBTP after 2 re-masters; target -14 LUFS \(within 1 LU\), ≤ -1 dBTP/);
     assert.equal(report.status, "needs-repair");
     assert.match(report.warnings.join("\n"), /loudness: the master is -19 LUFS .* The loudness gate fails/);
   } finally {
@@ -1686,8 +1723,8 @@ test("repairAim moves the level by the miss and lowers the ceiling by the oversh
   // Inside the tolerance the level stays; only the peak is repaired.
   assert.deepEqual(repairAim({ lufs: -14, tp: -1 }, { integrated_lufs: -13.2, true_peak_dbtp: -0.9 }), { lufs: -14, tp: -1.3 });
   assert.deepEqual(repairAim({ lufs: -14, tp: -1 }, { integrated_lufs: -40, true_peak_dbtp: -20 }), { lufs: -9, tp: -1 }, "the aim stays inside what loudnorm accepts");
-  assert.equal(loudnessCompliant({ integrated_lufs: -15.5, true_peak_dbtp: -1 }), true);
-  assert.equal(loudnessCompliant({ integrated_lufs: -15.6, true_peak_dbtp: -3 }), false);
+  assert.equal(loudnessCompliant({ integrated_lufs: -15, true_peak_dbtp: -1 }), true);
+  assert.equal(loudnessCompliant({ integrated_lufs: -15.1, true_peak_dbtp: -3 }), false);
   assert.equal(loudnessCompliant({ integrated_lufs: -14, true_peak_dbtp: -0.9 }), false);
   assert.equal(loudnessCompliant({}), false);
 });

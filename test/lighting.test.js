@@ -241,6 +241,6 @@ test("the Remotion story draws the same layers in the same places", async () => 
   assert.match(source, /lightLayerStyle\(layer, t\)/);
   assert.equal((source.match(/light=\{[^}]*lightFor\([^)]*\)[^}]*\}/g) ?? []).length, 4, "plates, cuts and world paths, and both loops");
   // The VFX layer (kit/core/vfx) sits on the light, under the wipes.
-  assert.match(source, /\{light\?\.over\.length \? <LightOver plan=\{light\} zIndex=\{LIGHT_Z\.remotion\} \/> : null\}\n\s*\{vfx \? <VfxCanvas [^\n]*\/> : null\}\n\s*\{wipeLayers\}/);
+  assert.match(source, /\{light\?\.over\.length \? <LightOver plan=\{light\} zIndex=\{LIGHT_Z\.remotion\} \/> : null\}\n\s*\{audioReact \? <AudioReact [^\n]*\/> : null\}\n\s*\{vfx \? <VfxCanvas [^\n]*\/> : null\}\n\s*\{wipeLayers\}/);
   assert.match(source, /\{light\?\.over\.length \? <LightOver plan=\{light\} zIndex=\{CAMERA_STACK\.scenes\} \/> : null\}/);
 });

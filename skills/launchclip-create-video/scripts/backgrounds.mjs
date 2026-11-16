@@ -694,7 +694,8 @@ export function cardFillStyles(plan) {
  *   - panel text (paper) on the story's panel fill composited over the tone,
  *     at 4.5:1 (an opaque panel is checked once, on its own fill);
  *   - caption words (idle colour) at 3:1, the large-type floor, unless they
- *     carry an outline of 4 px or more, a plate, a band or a chip behind them.
+ *     carry an outline of 4 px or more, a plate (the preset's, or a legibility
+ *     plate on every line), a band or a chip behind them.
  * captions: captionOptions() of the story's captions overlay, or null.
  */
 export function backgroundContrastFindings(story, { captions = null } = {}) {
@@ -719,7 +720,7 @@ export function backgroundContrastFindings(story, { captions = null } = {}) {
   if (onBg.ratio < floor) findings.push({ rule: 'background-contrast', severity: 'error', ids: ['background'], at: 0,
     detail: `text in paper (${colors.paper}) has ${onBg.ratio.toFixed(2)}:1 on the ${plan.kind} background's ${onBg.tone}; it needs ${TEXT_MIN}:1. Lower background.params.intensity or grain` });
   if (captions && captions.preset !== 'none') {
-    const backed = captions.plate || captions.layout === 'band' || captions.word === 'chip' || Number(captions.stroke) >= 4;
+    const backed = captions.plate || captions.plates === 'all' || captions.layout === 'band' || captions.word === 'chip' || Number(captions.stroke) >= 4;
     if (!backed && HEX.test(captions.colors?.idle ?? '')) {
       const onCaption = worst(captions.colors.idle, tones);
       if (onCaption.ratio < 3) findings.push({ rule: 'background-contrast', severity: 'error', ids: ['captions'], at: 0,

@@ -21,7 +21,7 @@ function captionBlock(b, p, width) {
   const text = p.label === undefined ? null : check.str(p.label, 'params.label', 60);
   const sub = p.sub === undefined ? null : check.str(p.sub, 'params.sub', 70);
   const labelFit = text ? fitText(check, 'params.label', text, {family: 'body', width, preferred: u(50), min: b.min.key, maxLines: 2}) : null;
-  const subFit = sub ? fitText(check, 'params.sub', sub, {family: 'meta', width, preferred: u(28), min: b.min.meta}) : null;
+  const subFit = sub ? fitText(check, 'params.sub', sub, {family: 'body', width, preferred: u(28), min: b.min.meta}) : null;
   const height = (labelFit ? labelFit.size * 1.2 * labelFit.lines + u(28) : 0) + (subFit ? subFit.size * 1.3 + u(14) : 0);
   return {label: labelFit ? {text, size: labelFit.size, lines: labelFit.lines} : null, sub: subFit ? {text: sub, size: subFit.size} : null, height: r2(height)};
 }
@@ -37,7 +37,8 @@ function captionNodes(model, y) {
     out.push(label(`${id}-label`, 0, r2(top), W, c.caption.label.text, {size: c.caption.label.size, family: fonts.body, color: theme.foreground, align: 'center', weight: 650, wrap: c.caption.label.lines > 1, extra: {opacity: 0}}));
     top += c.caption.label.size * 1.2 * c.caption.label.lines;
   }
-  if (c.caption.sub) out.push(label(`${id}-sub`, 0, r2(top + 14 * u), W, c.caption.sub.text, {size: c.caption.sub.size, family: fonts.meta, color: theme.muted, align: 'center', spacing: '0.06em', extra: {opacity: 0}}));
+  // The sub line (often a source) in the body face at normal tracking: mono is for figures and code.
+  if (c.caption.sub) out.push(label(`${id}-sub`, 0, r2(top + 14 * u), W, c.caption.sub.text, {size: c.caption.sub.size, family: fonts.body, color: theme.muted, align: 'center', extra: {opacity: 0}}));
   return out;
 }
 

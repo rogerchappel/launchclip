@@ -333,6 +333,7 @@ no render and runs with `--plan-only`.
 | `long-stagger` | error | three or more elements with the same tween, each starting before the one before has finished, run over 2 s from the first start to the last |
 | `crowded-move` | warning | in a scene of six or more elements, over three quarters of them are in a move of 1.5 s or less at one moment, from 0.5 s after the entrance to the exit |
 | `no-rest` | warning | two of a scene's states (`scene.states`) land less than 1.2 s apart |
+| `late-beat` | warning | a travel or scale tween starts exactly on a state or hit and reaches half its travel more than a frame after it (docs/PLAN_AND_PACE_RFC.md §2); it warns until the compiler starts moves early |
 
 Each finding names the scene and the element, says what is wrong and gives
 the fix, so a repair pass or a person can act on it.

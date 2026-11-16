@@ -112,7 +112,7 @@ node <skill>/scripts/master-loudness.mjs renders/draft-raw.mp4 renders/draft.mp4
 ```
 
 The script copies the video stream and targets −14 LUFS integrated with a
-−1 dBTP ceiling (`--lufs`, `--tp` and `--lra` override these). The AAC encode can add inter-sample peaks, so the script
+−1 dBTP ceiling (`--lufs`, `--tp` and `--lra` override these). A 4× oversampled limiter at −1.6 dBFS follows loudnorm. The AAC encode can add inter-sample peaks, so the script
 re-measures the encoded file and tightens the limiter until it complies, then
 reports `compliant`. `cinematic-check`
 fails a narrated render outside −14 ± 1.5 LUFS or above −1 dBTP.

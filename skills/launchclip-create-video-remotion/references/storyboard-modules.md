@@ -1705,11 +1705,12 @@ events: build
 variants: stroke (default), duotone, tiles
 
 ### map-highlight (keeps captions)
-A world map that fades in, zooms to the highlighted countries and pinned places when they sit close together, then fills the countries one by one with label pills and ×multiplier badges ("$20 · ×3.2"), drops pins on places by longitude and latitude with a label or a glass callout card (a photo card with an image), and draws a dashed travel route between the pins. Variants: plain fills, pins, glow, a glowing outline that traces itself, and a dot-matrix world.
+A world map that fades in, zooms to the highlighted countries and pinned places when they sit close together, then fills the countries one by one with label pills and ×multiplier badges ("$20 · ×3.2"), drops pins on places by longitude and latitude with a label or a glass callout card (a photo card with an image), and draws a dashed travel route between the pins, or a journey: one route with a glowing head that lights each country as it arrives while the camera follows it. Variants: plain fills, pins, glow, a glowing outline that traces itself, and a dot-matrix world.
 params:
-- highlight: [country | {country (name, common alias or ISO numeric code), label? ≤ 24, value? ≤ 12, badge? ≤ 8 ("×3.2"), color?}] 1–8 (one of highlight or pins, or both)
+- highlight: [country | {country (name, common alias or ISO numeric code), label? ≤ 24, value? ≤ 12, badge? ≤ 8 ("×3.2"), color?, arrive? "route" (default with a journey route: the country lights when the route reaches it, its border drawing over 1.6 s) | "order"}] 1–8 (one of highlight or pins, or both)
 - pins: [{lon, lat, label ≤ 28, sub? ≤ 20 ("Ph.D. 2008"), card?: {title ≤ 28, sub? ≤ 32, image? (assets/… photo)}, color?}] 1–4 places; at most two cards (events pin-<i>)
-- route: boolean: a dashed travel path from pin to pin, in order (default false; events route-<i>)
+- route: true: a dashed travel path from pin to pin, in order, each leg drawn as its pin lands | {head?: boolean (default true)}: the journey, one route that draws leg by leg with a bright glowing head, each pin landing as the route reaches it (default false; events route-<i>)
+- camera: "follow" (with a journey route: push in on the first pin, follow the head leg by leg, pull back to the whole route) | [{at, centre: [lon, lat], zoom? 1–8}] 1–6 keys the camera arrives at (optional; the drawn map moves as one image, slow → fast → slow, no overshoot)
 - focus: "auto" (zoom when the places are close; default) | "world"
 - tone: primary | accent | paper | #rrggbb
 - title: string ≤ 60 (optional)
@@ -2649,7 +2650,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | callout-arrow | 2 s | 0.5 s | scene − 0.65 s | the callout lands at at |
 | motion-title | 2 s | 0.5 s | scene − 0.65 s | the build ends before the exit; long text with a character effect compresses its stagger to 1.4 s |
 | icon-grid | 2 s | 0.5 s | scene − 0.65 s | icons pop 0.12 s apart (closer for many) from at |
-| map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35 (the dot matrix pushes in over 2 s); highlights, then pins, follow 0.12–0.5 s apart; each route leg draws as its pin lands |
+| map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35 (the dot matrix pushes in over 2 s); highlights, then pins, follow 0.12–0.5 s apart; each route leg draws as its pin lands; a journey route: legs take 1.2–2.4 s by length; a country lights when the head reaches it and its sequence takes 1.6 s, so the scene must run to the last arrival |
 | unit-grid | 2 s | 0.5 s | scene − 0.65 s | units pop in reading order within about 1.1 s from at; split or highlight comes after the build (default 0.45 s after it) |
 | number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges, the marker, the points and the zoom follow the build in that order, up to 1 s apart by default |
 | social-post | 2 s | 0.5 s | scene − 0.65 s | the card builds in about 0.9 s from at (default 0.2 s); the highlight sweeps 0.45–1.4 s across the phrase (default 0.35 s after the build); focus follows the highlight by 0.4 s |

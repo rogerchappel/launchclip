@@ -269,6 +269,30 @@ JavaScript, thresholds set per script for a spoken narration, and
 LaunchClip's own house phrases added. impeccable is not relicensed under
 LaunchClip's MIT License.
 
+The tells registry in `kit/core/tells.mjs` also draws on impeccable: its
+detector's rule ids and descriptions, its overused-font list and its craft
+floor. Changes: each rule rewritten for a video frame instead of a web page,
+thresholds set for video and calibrated on the example stories, and rules
+that do not transfer dropped (`docs/VIDEO_TELLS_RFC.md` §1 and §7).
+
+## unslop (tells registry)
+
+The signs of generated design and their fixes behind the tells registry in
+`kit/core/tells.mjs` are adapted from unslop by Damir Sokolovsky, licensed
+under the Creative Commons Attribution 4.0 International licence (CC BY 4.0,
+<https://creativecommons.org/licenses/by/4.0/>). Changes: translated from web
+pages to video frames, rewritten as detectors with thresholds for the plan,
+and the signs that do not transfer left out. This credit travels with any
+copy of the registry or any document that reprints the signs.
+
+## frontend-design skill (tells registry)
+
+The generated-design clusters and the accent-word and eyebrow tells in
+`kit/core/tells.mjs` are rewritten from the frontend-design skill, licensed
+under the Apache License, Version 2.0
+(<http://www.apache.org/licenses/LICENSE-2.0>). Changes: rewritten in our own
+words for video, with detectors and thresholds of our own.
+
 ## AI model providers (optional, paid)
 
 Planning, scripts, the headless critic and some assets can call OpenAI,

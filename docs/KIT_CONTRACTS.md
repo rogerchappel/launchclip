@@ -18,7 +18,9 @@ kit/
     grammar.mjs         motion grammars (editorial, snappy, smooth, playful, documentary, cinematic)
     transitions.mjs     typed transitions and scene render windows
     transition-frames.mjs  what a transition's two plates put on screen per frame; the cover, stall and pop check
-    motion-check.mjs    rules of good motion from the grammar and timeline ops: eases, cascades, exits, crowding, rests
+    motion-check.mjs    rules of good motion from the grammar and timeline ops: eases, cascades, exits, crowding, rests, late beats
+    treatment.mjs       the direction map's treatment block: concept, throughline, bans, locked copy, transitions, signature
+    pace-check.mjs      the plan's pace: front-loaded hook, longest event gap, frozen frames
     camera-world.mjs    world layout, camera path, parallax and motion blur
     ambient.mjs         frame-pure ambient motion: background field, hold drift
     editorial-core.mjs  editorial module spec → resolved model (no HTML)
@@ -937,11 +939,15 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
 
 `holds` and `states` in `launchclip finish` (docs/DIRECTION_GUARDRAILS.md §7):
 nothing still for over 3 s, no shot over 10 s without a change.
+`pace` (docs/PLAN_AND_PACE_RFC.md §2, `kit/core/pace-check.mjs`):
+`paceFindings({events, opaque, duration, frozen, pace, maxStill, source})` over
+the plan's events; the bands are each cadence format's `pace`.
 `choreography` (§8, `kit/core/motion-check.mjs`): `grammarMotionFindings(grammar)`
-and `sceneMotionFindings({id, motion, ops, states})` return
+and `sceneMotionFindings({id, motion, ops, states, hits})` return
 `{rule, severity, at, ids, detail}` findings for an entrance that eases in, an
 exit that eases out, a linear move, an exit slower than its entrance, a
-cascade over its budget, a crowded move and states with no rest between them;
+cascade over its budget, a crowded move, states with no rest between them and
+a move that starts on its beat and so lands late (`late-beat`, a warning);
 the thresholds are `MOTION_CHECK`.
 
 ### State events (`eval/scorecard.mjs`, `scripts/state-events.mjs`)
@@ -3038,6 +3044,20 @@ a pure function of time, in both renderers.
 
 Kinds: `cutout` (an object drawn from shapes, die-cut, with halftone or engraved `shade`, a part's `at` pops it on its word), `limb` (grows from its first point, outline until `fillAt`), `paper-fold` (hinged panels opening like a map), `paper-sheet` (a page with `flaps` folding up), `torn-strip` (`typeAt` types it like a prompt), `tape`, `callout-pin` (a leader line to `target`, projected through the rig). A cut-out's `d` takes only SVG path commands and numbers, and its text is escaped. The `paper-collage` style has no frame-blended motion blur, which would ghost the stepped paper, and is gated by the `paper-diorama` profile.
 
+## Colour grade (`kit/core/grade.mjs`, `src/grade.js`)
+
+`story.grade` (a style pack's `grade` when the story sets none) is `"off"`,
+a preset name or `{preset | cube, strength 0–1}`. Presets (`clean`,
+`warm-film`, `teal-amber`, `cool-tech`, `neon-crush`, `bleach`, `ink-mono`)
+are generated 33³ cubes from OKLab operations; `cube` is a path to a 3D
+`.cube` (domain 0–1). Strength mixes the cube with identity. `launchclip
+finish` writes the cube to `.launchclip/finish/grade.cube` and grades the
+finished render once with ffmpeg `lut3d` (tetrahedral), so both renderers
+match by construction; the caption legibility pass then measures the graded
+frames, and the render stage warns when the grade takes a brand colour pair
+from 4.5:1 or more to under it. Generated styles take the look's preset
+(`GRADE_LOOK_DEFAULTS`), else the tone's (`GRADE_TONE_DEFAULTS`).
+
 ## Motion blur (`src/motion_blur.js`, `kit/core/motion-blur.mjs`)
 
 `story.motion.blur`: `true` (`{samples: 3, shutter: 1}`) or `{samples?: 2–6,
@@ -3831,8 +3851,14 @@ and the motion gate still measures the render's first motion and hook events.
 ### Loudness repair (`src/finish.js`)
 
 The master targets −14 LUFS integrated and at most −1 dBTP
-(`LOUDNESS_TARGET`), and complies within 1.5 LU of the level
-(`LOUDNESS_TOLERANCE_LU`). A master that misses is repaired, not shipped with
+(`LOUDNESS_TARGET`), and complies within 1 LU of the level
+(`LOUDNESS_TOLERANCE_LU`). `src/scripts/master-loudness.mjs` aims loudnorm
+(linear) at −1.2 dBTP, then runs a 4× oversampled limiter at −1.6 dBFS
+(`latency=1`, so sounds stay on their frames); an encoded peak over −1 dBTP
+lowers the limiter by the overshoot plus 0.3 dB and encodes again. A mix
+louder than 0 LUFS is turned down to the target first, a silent mix (under
+−70 LUFS) is delivered unnormalised, and audio shorter than the picture is
+padded with silence; each says so in a `loudness:` warning. A master that misses is repaired, not shipped with
 a warning: the master step runs again from the raw render, aimed past the
 target by what the last pass missed by (`repairAim()`: the level moved by the
 miss, the peak ceiling lowered by the overshoot plus 0.2 dB), at most twice
@@ -6690,7 +6716,7 @@ components are in `kit/remotion/catalog/CatalogH.tsx` and `registry-h.ts`.
 | `sankey` | ribbons, lines | `flows` 2–14 `{from, to, value}` | build | Nodes in up to four columns (longest path); ribbons as wide as each flow draw column by column |
 | `heatmap` | squares, circles, rounded | `rows` 1–10, `columns` 2–14, `values`, `showValues`, `low`, `high`, `tone` | build | Cells pop in a diagonal wave, shaded panel → tone |
 | `leaderboard` | bars, rows, cards | `entries` 3–8 `{label, value, detail?, icon?}`, `sort`, `highlight` | build, highlight | Rows slide in from last place to first with rank badges and counting values |
-| `map-highlight` | fill, pins, glow, outline, dots | `highlight` 1–8 (country name, alias or ISO numeric code, or `{country, label?, value?, badge? ≤ 8, color?}`) and/or `pins` 1–4 `{lon, lat, label, sub?, card? {title, sub?, image?}, color?}` (at most two cards), `route`, `focus` auto/world, `tone` | build, zoom, highlight-&lt;i&gt;, pin-&lt;i&gt;, route-&lt;i&gt; | The world (Natural Earth 1:110m, Equal Earth, `kit/core/world-110m.mjs` from `scripts/vendor-world.mjs`) fades in; when the countries' and pins' bounds cover little of it, it zooms (up to 8×) to fill the area with them; each country fills in turn with a label pill beside it (above, below, right or left, clear of the others) and its ×badge; then pins (projected with the same Equal Earth, `projectLonLat`) drop with a pulse and a label, cards land on the far side of the map, and a dashed route draws leg by leg. pins drop on countries, glow fills with a glow, outline traces the country's glowing outline then tints it, dots draws the land as a dot matrix (point in polygon on the vendored paths, about 13 px apart at the final zoom, at most about 9,000 dots) lighting the highlighted countries' dots, with a slow push-in |
+| `map-highlight` | fill, pins, glow, outline, dots | `highlight` 1–8 (country name, alias or ISO numeric code, or `{country, label?, value?, badge? ≤ 8, color?}`) and/or `pins` 1–4 `{lon, lat, label, sub?, card? {title, sub?, image?}, color?}` (at most two cards), `route` (true or `{head?}`), `camera`, `highlight[].arrive`, `focus` auto/world, `tone` | build, zoom, highlight-&lt;i&gt;, pin-&lt;i&gt;, route-&lt;i&gt; | The world (Natural Earth 1:110m, Equal Earth, `kit/core/world-110m.mjs` from `scripts/vendor-world.mjs`) fades in; when the countries' and pins' bounds cover little of it, it zooms (up to 8×) to fill the area with them; each country fills in turn with a label pill beside it (above, below, right or left, clear of the others) and its ×badge; then pins (projected with the same Equal Earth, `projectLonLat`) drop with a pulse and a label, cards land on the far side of the map, and a dashed route draws leg by leg. pins drop on countries, glow fills with a glow, outline traces the country's glowing outline then tints it, dots draws the land as a dot matrix (point in polygon on the vendored paths, about 13 px apart at the final zoom, at most about 9,000 dots) lighting the highlighted countries' dots, with a slow push-in. A journey (`route: {head: true}`) is one route in map units that draws leg by leg (1.2–2.4 s each, `power2.inOut`) under a white core and a soft glow (the last 3 % of its length, a dash window); each pin lands as the route reaches it and each country lights when the head passes the point nearest its centroid, its border drawing over a constant 1.6 s, its fill blooming then settling, its label rising. `camera: "follow"` (push in, follow leg by leg, pull back) or `[{at, centre, zoom?}]` moves the drawn map as one transform, slow → fast → slow with no overshoot and blur only at peak speed; pins and labels ride in anchors moved by the same ease |
 | `comparison-table` | grid, striped, cards | `columns` 2–4, `rows` 2–8 `{label, values: true/false/null/string}`, `highlight` | build, highlight | Headers pop, rows land with ticks and crosses, the pick column is outlined |
 
 ### Counters (`catalog-h-numbers.mjs`)
