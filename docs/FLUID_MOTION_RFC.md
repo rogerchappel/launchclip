@@ -333,6 +333,15 @@ aimed at another scene's anchor (§7):
   anchors, an unknown anchor, a source that is gone before the sprout ends,
   an `at` before the anchor lands, labels that do not fit on the side.
 
+**Shipped.** As above, in `kit/core/catalog-i-graph.mjs` (node-graph's wires
+became the shared `wireNodes`, `wireOps` and `pulseOps`, with node-graph's
+output unchanged). The catalogue G card surface has an id (`<id>-card`), so a
+card can be pinned and aimed at. `sprout` is not standalone, so the single-scene
+element sheets and fixtures skip it, and story parity covers it:
+`examples/story/sprout-ad-card-9x16` grows Copy and Images out of an ad card,
+pins the card across a cut, and grows Video from the previous scene's anchor
+(SSIM 0.992–0.994 at six times).
+
 **Unproven.** Anchors are measured at rest, so a wire's end does not follow a
 source that moves (a carry's FLIP, a node's idle bob of a few pixels). A carried
 source is out until a wire end can follow its ops.
@@ -458,7 +467,8 @@ world kit), any icon from `kit/core/icons.mjs`, text that fits; nothing else.
    (§6.2), carry with the FLIP, including a plate that comes back after a
    footage cutaway, the `motion.flow` switch (§6.1), then a container-morph
    test (R&D only, verdict in §12).
-4. **Anchors and character reactions** (§7). Shipped.
+4. **Anchors and character reactions** (§7). Shipped. Growth from existing
+   elements (§6.4, `sprout` on anchors) builds on them. Shipped.
 5. **Planner-drawn graphics** (§10), then group patterns and idle on the other
    catalogue H modules that draw sets of things. The second half has shipped:
    `icon-grid` flocks out of the middle of the grid and breathes; `drop-grid`
