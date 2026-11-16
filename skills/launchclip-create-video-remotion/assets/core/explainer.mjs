@@ -37,7 +37,7 @@ export const EXPLAINER_CAST_STYLE = 'chibi';
 /** Scene modules that put a character on screen. */
 export const CHARACTER_SCENE_MODULES = Object.freeze(['cast-scene', 'character-cameo', 'sprite-scene']);
 /** Line and node diagrams: a sketch of lines, or dots joined in a row. */
-export const DIAGRAM_MODULES = Object.freeze(['line-diagram', 'process-steps', 'step-rail', 'focus-flow', 'flow-compare', 'compare', 'timeline', 'number-line', 'lineage-graph', 'feynman-diagram', 'doodle-outline', 'icon-row', 'icon-grid', 'checklist']);
+export const DIAGRAM_MODULES = Object.freeze(['line-diagram', 'process-steps', 'step-rail', 'focus-flow', 'flow-compare', 'compare', 'timeline', 'number-line', 'lineage-graph', 'feynman-diagram', 'doodle-outline', 'icon-row', 'icon-grid', 'checklist', 'item-list']);
 /** Cards that are only words. */
 export const TEXT_CARD_MODULES = Object.freeze(['hook-title', 'kinetic-words', 'motion-title', 'section-card', 'concept-card', 'glass-word', 'emphasis-caption', 'callout', 'quote-card', 'cta', 'subscribe-cta', 'masthead']);
 /** Diagrams and particle pieces that draw themselves from an empty plate: frame 0 of one is (nearly) blank. Title cards are the hook check's (src/short_form_checks.js). */
