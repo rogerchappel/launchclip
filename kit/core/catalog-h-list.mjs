@@ -9,7 +9,7 @@
 
 import {timingRules} from './catalog-b-base.mjs';
 import {grammarStagger} from './grammar.mjs';
-import {VARIANT_PARAM, createHBase, fitText, r2, rt, toneColor} from './catalog-h-base.mjs';
+import {VARIANT_PARAM, createHBase, fitText, r2, rt, textWidth, toneColor} from './catalog-h-base.mjs';
 import {chromeNodes, chromeOps, drawOps, el, label, set, strokePath, tw} from './catalog-h-view.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
@@ -71,8 +71,8 @@ function listResolve(params, ctx) {
     item.height = r2((showMarker && centred ? marker + u(14) : 0) + item.lines * size * 1.12 + (item.detailLines ? u(10) + item.detailLines * detailSize * 1.3 : 0));
   }
   const place = {stack: placeStack, fan: placeStack, scatter: placeScatter, orbit: placeOrbit}[layout];
-  const subjectFit = subject ? fitText(check, 'params.subject', subject, {family: 'display', width: W * (portrait ? 0.5 : 0.34), preferred: u(120), min: b.min.key, maxLines: 2}) : null;
-  place({items, W, top, H0, u, cols, rows, marker, showMarker, subjectFit, check});
+  const subjectFit = subject ? fitText(check, 'params.subject', subject, {family: 'display', width: W * 0.6, preferred: u(120), min: b.min.key, maxLines: 1}) : null;
+  place({items, W, top, H0, u, cols, rows, marker, showMarker, subjectFit, subject, check});
   if (layout === 'fan') fanOut(items, top, H0, u);
   for (const item of items) {
     if (item.y < top - 1 || item.y + item.height > H + 1 || item.x < -1 || item.x + item.width > W + 1) check.fail(`params.items[${item.index}]`, 'does not fit the rect; shorten the labels, use fewer items or another variant');
@@ -93,7 +93,7 @@ function placeStack({items, W, top, H0, u, marker, showMarker, check}) {
   if (gap < u(20)) check.fail('params.items', 'too many or too long for the rect; use fewer items or a taller rect');
   let y = top + (H0 - total - gap * (items.length - 1)) / 2;
   for (const item of items) {
-    Object.assign(item, {x: r2(showMarker ? marker + u(32) : 0), y: r2(y), rotation: 0, markerAt: {x: r2(-(marker + u(32))), y: r2((item.size * 1.12 - marker) / 2)}});
+    Object.assign(item, {x: r2(showMarker ? marker + u(32) : 0), y: r2(y), rotation: 0});
     y += item.height + gap;
   }
 }
@@ -121,22 +121,28 @@ function placeScatter({items, W, top, H0, cols, rows}) {
     const [jx, jy] = jitter(i);
     const cx = (W - inRow * cellW) / 2 + (col + 0.5) * cellW + jx * Math.max(0, cellW - item.width) * 0.8;
     const cy = top + (row + 0.5) * cellH + jy * Math.max(0, cellH - item.height) * 0.5;
-    Object.assign(item, {x: r2(cx - item.width / 2), y: r2(cy - item.height / 2), rotation: (i % 2 ? 1 : -1) * (2 + (i % 3)), markerAt: null});
+    Object.assign(item, {x: r2(cx - item.width / 2), y: r2(cy - item.height / 2), rotation: (i % 2 ? 1 : -1) * (2 + (i % 3))});
   }
 }
 
-// Items on an ellipse round the subject, the first at the top, clockwise.
-function placeOrbit({items, W, top, H0, subjectFit, check, u}) {
+// Items on an ellipse round the subject, clockwise.
+function placeOrbit({items, W, top, H0, subjectFit, subject, check, u}) {
   const cx = W / 2, cy = top + H0 / 2, n = items.length;
   const tallest = Math.max(...items.map(item => item.height));
   const rx = (W - items[0].width) / 2, ry = (H0 - tallest) / 2;
-  const subjectH = subjectFit.lines * subjectFit.size * 1.05;
-  if (ry < subjectH / 2 + tallest / 2 + u(10)) check.fail('params.items', 'the rect is too short to orbit the subject; use a taller rect or the stack variant');
-  for (const item of items) {
-    const a = -Math.PI / 2 + item.index * 2 * Math.PI / n;
+  const sw = Math.min(textWidth(subject, subjectFit.size, 'display') / subjectFit.lines, W * 0.6) / 2 + u(16), sh = subjectFit.lines * subjectFit.size * 1.05 / 2 + u(16);
+  // Two phases: the first item at the top, or half a step round; keep the first where nothing covers the subject.
+  const tryPhase = offset => items.map(item => {
+    const a = -Math.PI / 2 + offset + item.index * 2 * Math.PI / n;
     const x = cx + rx * Math.cos(a), y = cy + ry * Math.sin(a);
-    Object.assign(item, {x: r2(x - item.width / 2), y: r2(y - item.height / 2), rotation: 0, markerAt: null, from: {x: r2(cx - x), y: r2(cy - y)}});
-  }
+    const box = {x: r2(x - item.width / 2), y: r2(y - item.height / 2), rotation: 0, from: {x: r2(cx - x), y: r2(cy - y)}};
+    // A centred label covers only its own text width inside the box.
+    const half = Math.min(item.width, textWidth(item.label, item.size, 'body') / item.lines) / 2;
+    return {...box, clear: x - half > cx + sw || x + half < cx - sw || box.y > cy + sh || box.y + item.height < cy - sh};
+  });
+  const placed = [0, Math.PI / n].map(tryPhase).find(boxes => boxes.every(box => box.clear));
+  if (!placed) check.fail('params.items', 'would cover the subject; use a taller rect, shorter labels, a shorter subject or the stack variant');
+  items.forEach((item, i) => { const {clear, ...box} = placed[i]; Object.assign(item, box); });
 }
 
 function listView(model) {
@@ -149,18 +155,18 @@ function listView(model) {
   }
   for (const item of c.items) {
     const align = c.centred ? 'center' : 'left';
-    const inner = [];
-    let textTop = 0;
-    if (c.showMarker) {
-      const m = c.marker;
-      const mx = c.centred ? r2((item.width - m) / 2) : item.markerAt.x, my = c.centred ? 0 : item.markerAt.y;
-      if (c.numbered) inner.push(label(`${id}-num-${item.index}`, mx, r2(my + m * 0.18), m, item.number, {size: r2(m * 0.5), family: fonts.meta, color: c.color, align: 'center', weight: 600, spacing: '0.04em'}));
-      if (c.ticks) inner.push(el('svg', null, {position: 'absolute', left: mx, top: my, width: m, height: m, overflow: 'visible'},
-        [strokePath(`${id}-tick-${item.index}`, TICK, c.color, 3)], {viewBox: '0 0 24 24'}));
-      if (c.centred) textTop = r2(m + 14 * u);
-    }
-    inner.push(label(null, 0, textTop, item.width, item.label, {size: c.size, family: fonts.body, color: c.ink, align, weight: 700, lineHeight: 1.12, wrap: true}));
-    if (item.detail) inner.push(label(null, 0, r2(textTop + item.lines * c.size * 1.12 + 10 * u), item.width, item.detail, {size: c.detailSize, family: fonts.body, color: c.muted, align, weight: 450, lineHeight: 1.3, wrap: true}));
+    const m = c.marker;
+    const block = [];
+    // The marker: above the label when centred, else beside its first line.
+    const markerBox = c.centred ? {position: 'relative', margin: '0 auto', marginBottom: 14 * u, width: m, height: m} : {position: 'absolute', left: -(m + 32 * u), top: r2((c.size * 1.12 - m) / 2), width: m, height: m};
+    if (c.showMarker) block.push(el('div', null, markerBox, [
+      ...(c.numbered ? [label(`${id}-num-${item.index}`, 0, r2(m * 0.18), m, item.number, {size: r2(m * 0.5), family: fonts.meta, color: c.color, align: 'center', weight: 600, spacing: '0.04em'})] : []),
+      ...(c.ticks ? [el('svg', null, {position: 'absolute', left: 0, top: 0, width: m, height: m, overflow: 'visible'}, [strokePath(`${id}-tick-${item.index}`, TICK, c.color, 3)], {viewBox: '0 0 24 24'})] : [])
+    ]));
+    block.push(el('div', null, {margin: 0, fontFamily: fonts.body, fontWeight: 700, fontSize: c.size, lineHeight: '1.12', color: c.ink, textAlign: align}, [item.label]));
+    if (item.detail) block.push(el('div', null, {margin: 0, marginTop: 10 * u, fontFamily: fonts.body, fontWeight: 450, fontSize: c.detailSize, lineHeight: '1.3', color: c.muted, textAlign: align}, [item.detail]));
+    // The block centres in the item's measured box: a label that sets on fewer lines than measured keeps even gaps.
+    const inner = [el('div', null, {position: 'absolute', left: 0, top: r2(item.height / 2), width: item.width, transform: 'translateY(-50%)'}, block)];
     kids.push(el('div', `${id}-item-${item.index}`, {position: 'absolute', left: item.x, top: item.y, width: item.width, height: item.height, opacity: 0,
       transformOrigin: c.centred ? '50% 50%' : '0% 50%', ...(item.rotation ? {transform: `rotate(${item.rotation}deg)`} : {})}, inner));
   }
