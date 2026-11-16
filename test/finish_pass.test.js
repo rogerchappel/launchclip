@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { FINISH_PASS_NAMES, activeRects, finishParams, protectRects, resolveFinish } from "@launchclip/core/finish.mjs";
+import { FINISH_PASS_NAMES, activeRects, finishParams, finishTimes, protectRects, resolveFinish } from "@launchclip/core/finish.mjs";
 import { STORY_FINISH_PASSES, validateStory } from "@launchclip/core/story.mjs";
 import { cubeText, gradeErrors, mixCube, presetCube, resolveGrade, tintPreset, GRADE_PRESETS } from "@launchclip/core/grade.mjs";
 import { FINISH_SHADER_PASSES } from "../src/finish_shaders.js";
@@ -33,6 +33,25 @@ test("story.finish validation", () => {
   assert.match(errorsOf([{ pass: "aberration", glow: 1 }])[0], /not a aberration param/);
   assert.match(errorsOf([{ pass: "grade" }])[0], /needs a preset or a cube/);
   assert.match(errorsOf(Array.from({ length: 9 }, () => ({ pass: "grain" })))[0], /at most 8/);
+});
+
+test("story.finish validation: colours, choices, points and hit times", () => {
+  assert.deepEqual(errorsOf([{ pass: "bloom", tint: "#ffeecc" }, { pass: "zoom-blur", centre: [0.3, 0.7], at: [1, 2.5] }, { pass: "burn", at: "cuts" }, { pass: "crt", powerOn: true }, { pass: "halftone", mode: "duotone" }]), []);
+  assert.match(errorsOf([{ pass: "bloom", tint: "white" }])[0], /#rrggbb/);
+  assert.match(errorsOf([{ pass: "halftone", mode: "stipple" }])[0], /one of dot, line, duotone/);
+  assert.match(errorsOf([{ pass: "zoom-blur", centre: [0.5, 2] }])[0], /\[x, y\]/);
+  assert.match(errorsOf([{ pass: "burn", at: [-1] }])[0], /"cuts" or up to 32 times/);
+  assert.match(errorsOf([{ pass: "burn", at: Array(33).fill(1) }])[0], /up to 32/);
+});
+
+test("hit times: a list as given, or the track-0 cuts", () => {
+  const story = { scenes: [{ start: 0 }, { start: 3 }, { start: 3, track: 1 }, { start: 1.5, track: 1 }, { start: 6 }] };
+  assert.deepEqual(finishTimes(story, "cuts"), [3, 6]);
+  assert.deepEqual(finishTimes(story, [2, 1]), [1, 2]);
+  assert.deepEqual(resolveFinish({ ...story, finish: [{ pass: "burn" }] })[0].params.at, [3, 6]);
+  assert.deepEqual(resolveFinish({ ...story, finish: [{ pass: "zoom-blur" }] })[0].params.at, []);
+  assert.deepEqual(finishParams("halftone").mode, "dot");
+  assert.deepEqual(finishParams("zoom-blur").centre, [0.5, 0.5]);
 });
 
 test("the finish is off unless a story lists a shader pass", () => {
@@ -100,6 +119,18 @@ test("seek purity: frame N alone equals frame N in a sequence (grain, aberration
   await runFinishPass({ input: path.join(dir, "in005.png"), output: path.join(dir, "alone.png"), chain, width: W, height: H, fps: 30, frameStart: 4, kind: "image" });
   assert.ok(rgbOf(path.join(dir, "seq004.png")).equals(rgbOf(path.join(dir, "alone.png"))), "frame 4 differs between the sequence and a seek");
   assert.ok(!rgbOf(path.join(dir, "seq004.png")).equals(rgbOf(path.join(dir, "seq003.png"))), "grain is a fresh field each frame");
+});
+
+test("segment seam: burn and zoom-blur hits land on the same frames when finished in pieces", { skip: media, timeout: 120_000 }, async (t) => {
+  const dir = await scratch(t);
+  // Hits inside the clip: 0.1 s is frame 3 of 8.
+  const chain = resolveFinish({ finish: [{ pass: "zoom-blur", amount: 0.3, at: [0.1] }, { pass: "burn", at: [0.1], frames: 8 }] });
+  await runFinishPass({ input: path.join(dir, "in%03d.png"), output: path.join(dir, "seq%03d.png"), chain, width: W, height: H, fps: 30, kind: "image" });
+  // The second half alone, as a segment render starting at frame 4.
+  for (const n of [5, 6, 7, 8]) await (await import("node:fs/promises")).copyFile(path.join(dir, `in${String(n).padStart(3, "0")}.png`), path.join(dir, `tail${String(n - 4).padStart(3, "0")}.png`));
+  await runFinishPass({ input: path.join(dir, "tail%03d.png"), output: path.join(dir, "part%03d.png"), chain, width: W, height: H, fps: 30, frameStart: 4, kind: "image" });
+  for (const n of [4, 5, 6, 7]) assert.ok(rgbOf(path.join(dir, `seq${String(n).padStart(3, "0")}.png`)).equals(rgbOf(path.join(dir, `part${String(n).padStart(3, "0")}.png`))), `frame ${n} differs across the seam`);
+  assert.ok(!rgbOf(path.join(dir, "seq003.png")).equals(rgbOf(path.join(dir, "in004.png"))), "the hit frame is untouched");
 });
 
 test("strength 0 is identity, and the protect mask leaves caption pixels unchanged", { skip: media, timeout: 120_000 }, async (t) => {
