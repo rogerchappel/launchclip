@@ -82,13 +82,14 @@ for (const {id, times} of STORY_PARITY) {
 
 // Finish passes (src/finish_pass.js): each runs over both renderers' stills of
 // one story, so a pass that is not seek-pure or reads anything but the frame
-// shows up here (test/fixtures/parity-finish/).
+// shows up here (test/fixtures/parity-finish/). A fixture with patch and files
+// (pack-*.json) sets its finish through a style pack written into the project.
 const FINISH_DIR = path.join(ROOT, 'test', 'fixtures', 'parity-finish');
 for (const file of readdirSync(FINISH_DIR).filter(name => name.endsWith('.json')).sort()) {
   const name = file.replace(/\.json$/, '');
   test(`parity: finish ${name}`, {skip: enabled ? false : 'set LAUNCHCLIP_PARITY=1 to render finish parity', timeout: 600_000}, async () => {
-    const {story, times, finish} = JSON.parse(readFileSync(path.join(FINISH_DIR, file), 'utf8'));
-    const report = await runStoryParity(path.join(ROOT, 'examples', 'story', story), {times, patch: {finish}, out: path.join(ROOT, 'qa', 'parity', `finish-${name}`)});
+    const {story, times, finish, patch = {finish}, files = null} = JSON.parse(readFileSync(path.join(FINISH_DIR, file), 'utf8'));
+    const report = await runStoryParity(path.join(ROOT, 'examples', 'story', story), {times, patch, files, out: path.join(ROOT, 'qa', 'parity', `finish-${name}`)});
     for (const sample of report.samples) assert.ok(sample.pass, `finish ${name} t=${sample.time}: ssim ${sample.ssim} < ${report.threshold.ssim}`);
   });
 }
