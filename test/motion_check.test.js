@@ -109,3 +109,13 @@ test('the gate fails a story whose grammar reverses its entrance ease, and names
   // The largest stagger a grammar may set stays inside the budget: modules clamp their own cascades.
   assert.deepEqual(choreographyGate(example('explainer-9x16', raw => ({...raw, motion: {...raw.motion, grammar: {stagger: 3}}}))).findings, []);
 });
+
+test('an element that flashes on every beat is a flash, not a slow exit', () => {
+  const flash = at => [
+    {type: 'tween', target: 'card-lit', start: at, duration: 0.12, ease: 'power1.out', from: {opacity: 0}, to: {opacity: 1}},
+    {type: 'tween', target: 'card-lit', start: at + 0.12, duration: 0.5, ease: 'power2.out', from: {opacity: 1}, to: {opacity: 0}}
+  ];
+  assert.deepEqual(rules(scene([...flash(1), ...flash(3), ...flash(5)])), []);
+  // One fade in and a slow fade out much later is still a slow exit.
+  assert.deepEqual(rules(scene([flash(1)[0], {type: 'tween', target: 'card-lit', start: 4, duration: 0.5, ease: 'power2.in', from: {opacity: 1}, to: {opacity: 0}}])), ['exit-longer']);
+});
