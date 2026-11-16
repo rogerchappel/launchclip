@@ -113,3 +113,20 @@ test('validateDirection reports treatment errors with the map', () => {
   // Before the storyboard exists only the shape is checked.
   assert.equal(validateDirection({...map, treatment: {banned: ['crossfade']}}, {words, lane: 'motion', deferScenes: true}).ok, true);
 });
+
+test('the direction prompt asks for the treatment, starting banned from the style', async () => {
+  const {directionPrompt, treatmentLines} = await import('@launchclip/core/planning-prompt.mjs');
+  const prompt = directionPrompt({lane: 'motion', format: {width: 1080, height: 1920, duration: 30}, words, avoid: ['crossfade', 'camera-shake'], tier: 'bespoke'});
+  assert.match(prompt, /## Treatment \(the film's idea and rules\)/);
+  assert.match(prompt, /required on this tier/);
+  assert.match(prompt, /Start from the style's list \(crossfade, camera-shake\)/);
+  for (const token of Object.keys(BANNED_CHECKS)) assert.ok(prompt.includes(token), token);
+  assert.match(treatmentLines().join('\n'), /\(optional\).*\n.*Start from the style's list \(crossfade, bounce-ease, lens-flare\)/s);
+});
+
+test('a style may set avoid tokens; they must be strings', async () => {
+  const {validateStylePack} = await import('@launchclip/core/style.mjs');
+  const pack = JSON.parse(readFileSync('kit/styles/editorial-dark.json', 'utf8'));
+  assert.equal(validateStylePack({...pack, avoid: ['crossfade', 'hold>1.0']}).errors.filter((e) => /avoid/.test(e)).length, 0);
+  assert.match(validateStylePack({...pack, avoid: 'crossfade'}).errors.join('\n'), /avoid must be a list/);
+});

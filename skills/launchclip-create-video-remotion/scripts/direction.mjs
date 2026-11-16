@@ -4,7 +4,7 @@
 // the map says why each scene exists; the cadence profile says what the whole
 // should measure like.
 //
-//   validateDirection(map, {words, story, lane, validateCast, deferScenes, script})
+//   validateDirection(map, {words, story, lane, validateCast, deferScenes, script, tier})
 //                                    → {ok, errors, warnings}
 //   scriptLines(script)              → the lines of a SCRIPT.json, flat
 //   sceneCharacters(scene)           → the characters a scene draws
@@ -21,6 +21,7 @@ import { SPEAKING_MODULES, bibleRefErrors, storyBase } from './story.mjs';
 import { CAMERA_ONLY_MODULES, isGraphicScene, storyboardMeasures } from './cadence.mjs';
 import { ACTIONS } from './characters/actions.mjs';
 import { POSES } from './characters/rig.mjs';
+import { validateTreatment } from './treatment.mjs';
 
 // A line's key action (docs/DIRECTION_GUARDRAILS.md §2): what a character does
 // on screen to show the line: an acting cue or a pose.
@@ -125,6 +126,7 @@ export function intentHints(words) {
  *   segments: the style's segment formats; a section's `segment` must name one;
  *   script: the project's SCRIPT.json, when it has one: a line's `line` must
  *     name one of its spoken lines, and that line's speaker is who speaks;
+ *   tier: the planner tier; "bespoke" requires the treatment block;
  *   cast: the story's cast; validateCast(line, cast) → string[] | {errors,
  *     warnings}: the character kit's cue check (kit/core/characters/), called
  *     for each line with `cast` or `set` cues. Without it, cues pass through.
@@ -135,7 +137,7 @@ export function validateDirection(map, options = {}) {
   const err = (message) => errors.push(message);
   if (!isObject(map)) return { ok: false, errors: ['DIRECTION.json must be a JSON object'], warnings };
   if (map.schema !== DIRECTION_SCHEMA) err(`schema must be "${DIRECTION_SCHEMA}"`);
-  for (const key of Object.keys(map)) if (!['schema', 'profile', 'sections', 'notes', 'cast', 'bible'].includes(key)) err(`unknown field "${key}"`);
+  for (const key of Object.keys(map)) if (!['schema', 'profile', 'sections', 'notes', 'cast', 'bible', 'treatment'].includes(key)) err(`unknown field "${key}"`);
   // bible: the show bible the map was planned against (kit/core/bible.mjs).
   if (map.bible !== undefined) for (const message of bibleRefErrors(map.bible)) err(message);
   if (map.profile !== undefined && !nonEmpty(map.profile)) err('profile must be a cadence profile id');
@@ -174,6 +176,11 @@ export function validateDirection(map, options = {}) {
   const script = options.script ? new Map(scriptLines(options.script).map((entry) => [entry.id, entry])) : null;
   for (const { line, where } of lines) checkLine(line, where, { err, warnings, words, footage, scenes, story, options, script });
   checkWordCoverage(lines, words, err);
+  // treatment: the film's idea, carrier, bans and locked words (kit/core/treatment.mjs).
+  const sectionScenes = map.sections.filter(isObject).map((section) => ({ id: section.id, scenes: (Array.isArray(section.lines) ? section.lines : []).flatMap((line) => (Array.isArray(line?.scenes) ? line.scenes : [])) }));
+  const treatment = validateTreatment(map.treatment, { sections: sectionScenes, story, words, deferScenes: options.deferScenes, tier: options.tier ?? null });
+  errors.push(...treatment.errors);
+  warnings.push(...treatment.warnings);
   // A narrative (character) map keeps a speaking character on screen: while a
   // character speaks, a scene that draws them is up, unless the line says why
   // the picture is elsewhere (docs/ANIMATION_PIPELINE_RFC.md §4.3).
