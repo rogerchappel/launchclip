@@ -793,6 +793,16 @@ fill rather than overflow. A badge or count past three characters, or a
 `h-icon-grid-value-card-portrait`, `test/member_value_card.test.js`, and
 `examples/story/members-value-9x16` (the bakery's morning in numbers).
 
+**Member module: `sub-card`** (`kit/core/member-sub-card.mjs`).
+`{member: {module: "sub-card", label, sub ≤ 24, icon?, badge?}}`: the default card with a second line under its label, in the meta
+face and a muted ink, as map pins, grid-race and cell-grid carry theirs. The
+sub is the label's size, so the fit that keeps labels over the brand's meta
+floor keeps the sub over it too; the card is one line taller, and node-graph
+gives every node that height. A `sub`, `detail` or `subtitle` on a graphic
+now names it. Proof: `h-node-graph-sub-card-portrait`,
+`h-icon-grid-sub-card-portrait`, `test/member_sub_card.test.js`, and
+`examples/story/members-sub-9x16` (the bakery team, a line each).
+
 ## 11. Phases
 
 1. **`node-graph` and `fluid-motion.mjs`** (this PR): flock, wave, idle, impact

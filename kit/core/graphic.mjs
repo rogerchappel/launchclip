@@ -45,6 +45,7 @@ export const BEYOND = Object.freeze({
 });
 // Words past the list that a member module draws (kit/core/members.mjs): the item takes {member} instead.
 export const BEYOND_MEMBER = Object.freeze({
+  sub: 'sub-card', detail: 'sub-card', subtitle: 'sub-card', description: 'sub-card', caption: 'sub-card',
   value: 'value-card', figure: 'value-card', multiplier: 'value-card', price: 'value-card', amount: 'value-card'
 });
 const NESTED = new Set(['graphic', 'children', 'item', 'member', 'group', 'node']);
