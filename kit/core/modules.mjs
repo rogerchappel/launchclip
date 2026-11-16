@@ -33,6 +33,7 @@ import { subjectContext, subjectModelErrors } from './subject-layer.mjs';
 import { sceneLayoutAt, storySections } from './footage-layout.mjs';
 import { resolveShotStates, stateSpec, stateTargetRect } from './shot-states.mjs';
 import { scenePassage } from './media-passage.mjs';
+import { publishAnchors } from './anchors.mjs';
 
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
@@ -567,7 +568,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!definition) throw new Error(`module "${module}" is not a known module`);
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
-  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, look: story?.look ?? null, variants: story?.variants ?? null, world: story?.world ?? null, beneath: beneathWithWindow(story, scene), castAbove: castStandsIn(story, scene), propStates: propStatesBefore(story, scene), layer: Number.isInteger(scene.track) ? scene.track : 0, rides: rideOf(story, scene)?.plate ?? null, ride: rideOf(story, scene), bleed: plateBleed(story), castNeighbours: castNeighbours(story, scene), passage: scenePassage(story, scene), captions: storyCaptionPosition(story), audio: story?.audio?.features ?? null, footage: sceneOnFootage(story, scene) }); }
+  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, look: story?.look ?? null, variants: story?.variants ?? null, world: story?.world ?? null, beneath: beneathWithWindow(story, scene), castAbove: castStandsIn(story, scene), propStates: propStatesBefore(story, scene), layer: Number.isInteger(scene.track) ? scene.track : 0, rides: rideOf(story, scene)?.plate ?? null, ride: rideOf(story, scene), bleed: plateBleed(story), castNeighbours: castNeighbours(story, scene), passage: scenePassage(story, scene), captions: storyCaptionPosition(story), audio: story?.audio?.features ?? null, footage: sceneOnFootage(story, scene), anchorsOf: anchorLookup(story) }); }
   catch (error) { throw Object.assign(new Error(`module "${module}" params: ${error.message}`), error.timing ? { timing: error.timing } : {}); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });
@@ -579,6 +580,34 @@ function resolveModuleInner(scene, story, { track, end }) {
   // Catalogue B/C timelines remap their pop eases from model.grammar.
   if (styled) finished.grammar = grammar;
   return finished;
+}
+
+/**
+ * The anchors a scene publishes (kit/core/anchors.mjs; docs/FLUID_MOTION_RFC.md
+ * §7): its module's declared points on the plate with the time each lands.
+ * → {name: {x, y, time}}. Throws a message when the scene is not in the story
+ * or its module publishes none.
+ */
+export function sceneAnchors(story, sceneId) {
+  const scene = Array.isArray(story?.scenes) ? story.scenes.find((entry) => entry?.id === sceneId) : null;
+  if (!scene) throw new Error(`scene "${sceneId}" is not in the story`);
+  const definition = isEditorialKind(scene.module) ? null : catalogModules()[scene.module];
+  if (typeof definition?.anchors !== 'function') {
+    const publishers = Object.entries(catalogModules()).filter(([, entry]) => typeof entry.anchors === 'function').map(([id]) => id);
+    throw new Error(`scene "${sceneId}" (${scene.module}) publishes no anchors (modules with anchors: ${publishers.join(', ')})`);
+  }
+  const model = resolveModule(scene, story);
+  // shortcut: measured at rest, so a camera push inside the module (node-graph's 1 → 1.05) is not followed; map through it when one grows large.
+  return publishAnchors(model, modelView(model), definition.anchors(model));
+}
+
+// A scene's ctx.anchorsOf: each referenced scene resolves once per resolve.
+function anchorLookup(story) {
+  const seen = new Map();
+  return (sceneId) => {
+    if (!seen.has(sceneId)) seen.set(sceneId, sceneAnchors(story, sceneId));
+    return seen.get(sceneId);
+  };
 }
 
 // Whether a scene sits on footage of its own (a video or image plate): a card
