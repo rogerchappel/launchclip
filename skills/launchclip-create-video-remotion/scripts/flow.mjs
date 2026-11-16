@@ -54,13 +54,16 @@ export function carrySource(story, scene) {
 
 /** Camera moves a carry rides: they keep zoom and roll, so the element's world travel is a straight line on screen. */
 export const CARRY_MOVES = Object.freeze(['pan', 'whip-pan']);
+/** Typed transitions a carry rides: B's layer slides in on one axis (and may blur), which is a camera move in all but name. */
+export const CARRY_SLIDES = Object.freeze(['push', 'whip']);
 
 /** Why a scene's arrival cannot take a carry, or null (a cut, or a pan or whip-pan of the camera). */
 export function stillPlateProblem(story, scene) {
   const transition = scene?.in, type = transition?.type;
   if (!transition || type === 'cut') return null;
-  if (isCameraTransition(transition, resolveCamera(story).mode)) return CARRY_MOVES.includes(type) ? null : `it arrives by a ${type} camera move, which changes zoom or roll; carry rides cuts, pans and whip-pans`;
-  return `it arrives by a ${type ?? 'typed'} transition; carry needs a cut (no in), a pan or a whip-pan`;
+  if (isCameraTransition(transition, resolveCamera(story).mode)) return CARRY_MOVES.includes(type) ? null : `it arrives by a ${type} camera move, which changes zoom or roll; carry rides cuts, pans, whip-pans, pushes and whips`;
+  if (CARRY_SLIDES.includes(type)) return null;
+  return `it arrives by a ${type ?? 'typed'} transition; carry needs a cut (no in), a pan, a whip-pan, a push or a whip`;
 }
 
 /**
@@ -69,8 +72,18 @@ export function stillPlateProblem(story, scene) {
  * the move does not come from A or changes zoom or roll (a rebalanced pan).
  */
 function arrivalMove(story, A, B, resolveBare) {
-  if (!B.in || B.in.type === 'cut' || !cameraActive(story)) return null;
-  const plan = memo(story, 'camera', () => cameraPlan(story, {windows: sceneWindows(story), objects: sceneObjectLookup(story, scene => resolveBare(scene))}));
+  if (!B.in || B.in.type === 'cut') return null;
+  const windows = memo(story, 'windows', () => sceneWindows(story));
+  if (!isCameraTransition(B.in, resolveCamera(story).mode)) {
+    // A slide (push, whip): B's layer starts offset on one axis and eases home while A's leaves, so map A's
+    // rect by that offset and travel with the layer's ease (docs/rd/carry-moving-camera.md §4).
+    const slide = windows.scenes.find(entry => entry.id === B.id)?.tweens.find(tween => tween.role === 'in' && (tween.prop === 'x' || tween.prop === 'y'));
+    if (!slide) return null;
+    const rest = {x: 0, y: 0, scale: 1, rotation: 0};
+    return {move: {start: slide.at, duration: slide.duration, ease: slide.ease}, from: rest, to: {...rest, [slide.prop]: slide.from}};
+  }
+  if (!cameraActive(story)) return null;
+  const plan = memo(story, 'camera', () => cameraPlan(story, {windows, objects: sceneObjectLookup(story, scene => resolveBare(scene))}));
   const move = plan?.moves.find(entry => entry.sceneId === B.id && !entry.zoom);
   if (!move) return null;
   const order = plan.order, at = order.indexOf(B.id);

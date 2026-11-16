@@ -77,6 +77,7 @@ test('the source is the last op-list scene on the track; a footage cutaway betwe
 
 test('carry needs a cut, a pan or a whip-pan, and real elements', () => {
   const fade = twoGraphs(undefined, {in: {type: 'fade', dur: 0.4}});
+  assert.equal(stillPlateProblem(fade, {in: {type: 'push', dur: 0.6}}), null);
   assert.match(stillPlateProblem(fade, fade.scenes[1]), /fade/);
   assert.throws(() => resolveModule(fade.scenes[1], fade), /carry needs a cut/);
   const push = {...twoGraphs(undefined, {in: {type: 'push', dur: 0.8}}), camera: {mode: 'world'}};
@@ -236,19 +237,30 @@ test('style packs carry flow: calm and premium seeds always have it, and applySt
 import {cameraPlan, screenPoint, sceneObjectLookup, worldPoint} from '@launchclip/core/camera-world.mjs';
 import {sceneWindows} from '@launchclip/core/transitions.mjs';
 import {sceneRenderEnd} from '@launchclip/core/modules.mjs';
+import {getEase} from '@launchclip/core/motion.mjs';
 
+// A slide moves B's layer, not the camera: its offset at t from the window's in-tweens.
+const layerAt = (story, id, t) => {
+  const tweens = sceneWindows(story).scenes.find(entry => entry.id === id).tweens.filter(tw => tw.role === 'in' && (tw.prop === 'x' || tw.prop === 'y'));
+  const out = {x: 0, y: 0};
+  for (const tw of tweens) { const p = Math.min(1, Math.max(0, (t - tw.at) / tw.duration)); out[tw.prop] = tw.from + (tw.to - tw.from) * (p >= 1 ? 1 : getEase(tw.ease)(p)); }
+  return out;
+};
 const movingStory = (transition, camera) => ({...flipStory(), camera, scenes: flipStory().scenes.map((scene, k) => (k ? {...scene, in: transition} : scene))});
 
 /** Screen centre of each id on scene B's plate at t, through the camera. */
 function onScreen(story, b, ids, t) {
   const plan = cameraPlan(story, {windows: sceneWindows(story), objects: sceneObjectLookup(story, (scene, value) => resolveModule(scene, value))});
   const {children, ops} = opList(b), boxes = visualBoxes(b, children, ops, t, ids);
-  return Object.fromEntries(ids.map(id => [id, screenPoint(plan, worldPoint(plan.placements[b.id], {x: boxes[id].cx, y: boxes[id].cy}), t)]));
+  const layer = layerAt(story, b.id, t);
+  return Object.fromEntries(ids.map(id => [id, (({x, y}) => ({x: x + layer.x, y: y + layer.y}))(plan ? screenPoint(plan, worldPoint(plan.placements[b.id], {x: boxes[id].cx, y: boxes[id].cy}), t) : {x: boxes[id].cx, y: boxes[id].cy})]));
 }
 
 for (const [name, transition, camera] of [
   ['a whip-pan in a cuts story', {type: 'whip-pan', dur: 0.3, direction: 'left'}, {mode: 'cuts'}],
-  ['a pan in a world-camera story', {type: 'pan', dur: 0.9}, {mode: 'world'}]
+  ['a pan in a world-camera story', {type: 'pan', dur: 0.9}, {mode: 'world'}],
+  ['a push in a cuts story', {type: 'push', dur: 0.6, direction: 'up'}, {mode: 'cuts'}],
+  ['a whip in a cuts story', {type: 'whip', dur: 0.4, direction: 'left'}, {mode: 'cuts'}]
 ]) {
   test(`carry rides ${name}: a straight line on screen with the camera's ease, a held title stays put`, () => {
     const story = movingStory(transition, camera);
