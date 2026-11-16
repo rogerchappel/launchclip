@@ -3,10 +3,8 @@
 // to a contrast target. Shared by the seeded generator (style-seed.mjs) and
 // its brand inputs (style-brand.mjs).
 //
-// Pure ESM that imports only kit/core siblings. Canonical copy:
-// kit/core/oklch.mjs.
-
-import { contrastRatio } from './style.mjs';
+// Plain ESM with no imports (story.mjs reaches it through palette.mjs).
+// Canonical copy: kit/core/oklch.mjs.
 
 const toLinear = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
 const toGamma = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
@@ -16,6 +14,20 @@ function oklabToLinear([L, a, b]) {
   const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
   const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
   return [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s];
+}
+
+const hexChannels = (hex) => { const value = String(hex).replace('#', ''); return [0, 2, 4].map((i) => parseInt(value.slice(i, i + 2), 16) / 255); };
+
+/** WCAG relative luminance of a hex colour. */
+export function luminance(hex) {
+  const [r, g, b] = hexChannels(hex).map((s) => (s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** WCAG contrast ratio between two hex colours (1–21). */
+export function contrastRatio(a, b) {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
 }
 
 /** #rrggbb → [L, a, b] in OKLab. */

@@ -1074,7 +1074,7 @@ A style pack is `.launchclip/styles/<name>/style.json`:
 
 ```
 {schema: "launchclip.style.v3", name, description?,
- brand?: {colors: {bg, paper, ink, primary, accent, ...}, fonts: {display, body, meta}},
+ brand?: {colors: {bg, paper, ink, primary, accent, ...}, fonts: {display, body, meta}, palette?: auto|as-given},
  motion?: {grammar: name | {base, ...overrides}, ...},   // pass-through data
  camera?: {mode, ...}, ambient?: {level: off|subtle|standard|lively, ...},
  captions?: {preset, ...caption options,
@@ -3067,6 +3067,32 @@ a pure function of time, in both renderers.
 `params.stage.rig` {keys [{at, rx, ry, rz, scale, x, y, ease: back|smooth}], explode {at, dur}, steps, float} turns the scene into real 3D: one camera over planes at their own heights. An element takes `lift` (px off the base; the exploded view spreads it to 3×) and `screen: true` keeps it flat on the screen. The camera is smooth at the frame rate; `steps` (15) holds the paper for two frames, like stop motion. `float` (deg, 1.6) is a hand-held drift so the diorama never rests. On a rig only `screen` elements have a box for the layout checks; the world counts as one part that fills the stage.
 
 Kinds: `cutout` (an object drawn from shapes, die-cut, with halftone or engraved `shade`, a part's `at` pops it on its word), `limb` (grows from its first point, outline until `fillAt`), `paper-fold` (hinged panels opening like a map), `paper-sheet` (a page with `flaps` folding up), `torn-strip` (`typeAt` types it like a prompt), `tape`, `callout-pin` (a leader line to `target`, projected through the rig). A cut-out's `d` takes only SVG path commands and numbers, and its text is escaped. The `paper-collage` style has no frame-blended motion blur, which would ghost the stepped paper, and is gated by the `paper-diorama` profile.
+
+## Working palette (`kit/core/palette.mjs`)
+
+Brand colours are inputs, not surfaces. `resolveStory` hands both renderers
+`brand.colors` through `workingBrand`, so Remotion and HyperFrames draw the
+same palette by construction.
+
+- `brand.palette`: `"auto"` (default) or `"as-given"`. A style pack's
+  `brand.palette` fills a story's when the story sets none.
+- `tonalRamp(colors)` → `{deep, mid, light}` from the brand hue (primary,
+  else accent, else any given colour, chroma capped at 0.06). The deep step
+  is the brand's own darkest colour when it has one at OKLCH L ≤ 0.3, else
+  L 0.22; mid is L 0.36; light is L 0.95. Deep to light spans at least 0.6.
+- `"auto"`: a pale `bg` (OKLCH L ≥ 0.85, chroma < 0.1: a tint, paper or
+  white) is never the full-frame ground. The deep step becomes `bg` and the
+  pale colour becomes `paper` (type and cards) when it has 4.5:1 on it, else
+  the old paper or the light step. `ink` that loses 4.5:1 on the new paper
+  becomes `bg`. `primary` and `accent` are lifted to 4.5:1 on the new `bg` (highlight words are type). The
+  ramp is added as `colors.deep`, `colors.mid` and `colors.light` (roles a
+  panel or background can name). A story with no `bg` (a one-colour brand)
+  gets the same. Dark, mid and saturated grounds (a yellow) stay as given.
+- `"as-given"`: the colours as written. A light look on purpose sets it
+  (`kit/styles/minimal-tech.json` does).
+- Plan check (`paleSurfaceFindings`, in the layout gate): a `pale-surface`
+  warning when 60 % or more of the frame area over the runtime sits bare on a
+  pale `bg` (footage elements cover their share of the canvas).
 
 ## Colour grade (`kit/core/grade.mjs`, `src/grade.js`)
 

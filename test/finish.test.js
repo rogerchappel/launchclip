@@ -1428,6 +1428,8 @@ test("finish gives white captions on a light background surface colours instead 
     const file = path.join(project, "storyboard.json");
     const story = JSON.parse(await readFile(file, "utf8"));
     story.brand.colors = { bg: "#f4fbfb", primary: "#0f766e", accent: "#b45309", ink: "#f4fbfb", paper: "#14201f" };
+    // As given: the auto palette would move this pale ground off the full frame (kit/core/palette.mjs).
+    story.brand.palette = "as-given";
     story.background = { kind: "texture" };
     story.overlays = [{ type: "captions", preset: "kinetic-hierarchy", colors: { idle: "#ffffff" } }];
     await writeFile(file, JSON.stringify(story));

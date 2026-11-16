@@ -10,6 +10,7 @@
       "primary": "#2257e8",
       "accent": "#00866a"
     },
+    "palette": "as-given",
     "fonts": {
       "display": "space-grotesk",
       "body": "inter",
