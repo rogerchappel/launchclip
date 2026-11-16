@@ -8,6 +8,9 @@ import {VARIANT_PARAM, FORMAT_PARAM, contrastRatio, createHBase, dataRows, fitTe
 import {abs, chromeNodes, chromeOps, countOps, countSamples, drawOps, el, fadeOps, label, popOps, riseOps, set, strokePath, tw} from './catalog-h-view.mjs';
 import {iconNode, isIcon} from './icons.mjs';
 import {glassSurface} from './panels.mjs';
+import {beatGrid, idleAmplitude, idleFor, idleOps, shakeOps} from './fluid-motion.mjs';
+import {loopHome} from './loop.mjs';
+import {TICK} from './catalog-h-list.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
 const rect = '{x, y, width, height} canvas px inside the safe zone (optional)';
@@ -547,7 +550,35 @@ export const leaderboard = {
 // ---------------------------------------------------------------------------
 // comparison-table
 
-const TABLE_VARIANTS = Object.freeze(['grid', 'striped', 'cards']);
+// The free variants have no panel, so they sit on whatever plate or footage is
+// under the scene: scorecard (rows of free type over hairlines, each row's
+// pick lighting as a primary disc), pills (each row its own chip, a disc per
+// column that fills and ticks) and verdict (scorecard rows, then the pick's
+// name lands as a stamp). Rows land on beats and then breathe.
+const FREE_TABLES = ['scorecard', 'pills', 'verdict'];
+const TABLE_VARIANTS = Object.freeze(['grid', 'striped', 'cards', ...FREE_TABLES]);
+const ticks = (rows, j) => rows.filter(r => r.values[j] === true).length;
+
+// A pill per row, each starting a step further right with its right edge
+// aligned, so the discs stay in columns under their headers.
+function pillGeometry(b, rows, columns, {W, n, m, rowH, colW, cellSize, labelSize}) {
+  const {check, u} = b;
+  const h = r2(rowH * 0.8), d = r2(Math.min(h * 0.62, u(64)));
+  const widest = Math.max(0, ...rows.flatMap(r => r.values.filter(v => typeof v === 'string').map(v => textWidth(v, cellSize, 'display'))));
+  // A header sets in two lines at most, so its longest word must fit the cell.
+  const word = Math.max(...columns.flatMap(col => col.toUpperCase().split(/\s+/).map(w => textWidth(w, Math.max(b.min.meta, u(24)), 'meta'))));
+  const cellW = r2(Math.min(colW, Math.max(d + u(24), widest + u(28), word + u(16)))), padL = r2(h * 0.4), padR = u(8);
+  // The cascade gives up its step when the labels need the room.
+  const steps = [r2(Math.min(u(28), W * 0.03)), 0];
+  for (const [k, step] of steps.entries()) {
+    const labelW = r2(W - (n - 1) * step - padL - padR - m * cellW);
+    try {
+      const fits = rows.map((r, i) => fitText(check, `params.rows[${i}].label`, r.label, {family: 'body', width: labelW, preferred: labelSize, min: b.min.meta, maxLines: 2}));
+      const size = Math.min(...fits.map(f => f.size));
+      return {h, d, step, cellW, padL, padR, labelW, size, lines: rows.map((r, i) => fitText(check, `params.rows[${i}].label`, r.label, {family: 'body', width: labelW, preferred: size, min: size, maxLines: 2}).lines)};
+    } catch (error) { if (k === steps.length - 1) throw error; }
+  }
+}
 
 function tableResolve(params, ctx) {
   const b = createHBase('comparison-table', params, ctx, {allowed: ['columns', 'rows', 'title', 'source', 'at', 'highlight', 'highlightAt'], required: ['columns', 'rows'], variants: TABLE_VARIANTS});
@@ -563,8 +594,13 @@ function tableResolve(params, ctx) {
   });
   const highlight = p.highlight === undefined ? null : check.int(p.highlight, 'params.highlight', 0, columns.length - 1);
   const tb = titleBlock(b, {title: p.title, source: p.source});
-  const W = rect.width, H = rect.height - tb.top - tb.bottom;
+  const fresh = FREE_TABLES.includes(b.variant);
   const n = rows.length, m = columns.length;
+  // verdict: the pick (highlight, else the column with the most ticks) lands as a stamp under the rows.
+  const winner = b.variant === 'verdict' ? highlight ?? columns.reduce((best, _, j) => (ticks(rows, j) >= ticks(rows, best) ? j : best), 0) : highlight;
+  const stampFit = b.variant === 'verdict' ? fitText(check, `params.columns[${winner}]`, columns[winner].toUpperCase(), {family: 'display', width: rect.width * 0.72, preferred: u(b.portrait ? 150 : 96), min: b.min.key, maxLines: 1}) : null;
+  const stampH = stampFit ? r2(stampFit.size * 1.1 + u(44)) : 0, stampGap = stampFit ? u(b.portrait ? 64 : 32) : 0;
+  const W = rect.width, H = rect.height - tb.top - tb.bottom - stampH - stampGap;
   const headH = r2(u(96));
   const rowH = r2(Math.min(u(120), (H - headH) / n));
   if (rowH < u(64)) check.fail('params.rows', 'has too many rows for the height');
@@ -577,14 +613,120 @@ function tableResolve(params, ctx) {
   for (const [i, r] of rows.entries()) r.values.forEach((v, j) => { if (typeof v === 'string') fitText(check, `params.rows[${i}].values[${j}]`, v, {family: 'display', width: colW - u(12), preferred: cellSize, min: b.min.meta}); });
   const totalH = headH + rowH * n;
   const y0 = r2(tb.top + (H - totalH) / 2);
-  const {buildAt, buildEnd, highlightAt} = buildTimes(b, p, 0.5 + n * 0.16 + 0.4, {highlight: highlight !== null});
-  const content = {variant: b.variant, title: tb.title, source: tb.source, columns, rows: rows.map((r, i) => ({...r, y: r2(y0 + headH + i * rowH), time: rt(buildAt + 0.3 + i * 0.16)})),
+  // The free variants land a row per beat (120 bpm), else per half beat, when the scene has room.
+  const grid = beatGrid(120, b.start);
+  const gap = fresh ? [grid.beat, grid.beat / 2].find(g => 0.5 + 0.8 + (n - 1) * g + 0.6 <= b.lastEvent) ?? 0.16 : 0.16;
+  const {buildAt, buildEnd, highlightAt} = buildTimes(b, p, fresh ? 0.8 + (n - 1) * gap + 0.6 : 0.5 + n * 0.16 + 0.4, {highlight: winner !== null});
+  const firstRow = fresh ? Math.min(grid.snap(buildAt + 0.3), buildAt + 0.5) : buildAt + 0.3;
+  const content = {variant: b.variant, title: tb.title, source: tb.source, columns, rows: rows.map((r, i) => ({...r, y: r2(y0 + headH + i * rowH), time: rt(Math.min(firstRow + i * gap, b.start + b.lastEvent))})),
     y0, headH, rowH, labelW, colW, W, labelSize, headSize, cellSize, highlight, highlightAt, buildAt, buildEnd,
     yes: b.colors.primary, no: mixColor(b.colors.paper, b.colors.bg, 0.45), panel: b.theme.panel, border: b.theme.border, ink: b.theme.foreground, muted: b.theme.muted, primary: b.colors.primary};
+  if (fresh) {
+    for (const [i, row] of content.rows.entries()) b.events.push({id: `${b.id}-row-${i}`, name: `row-${i}`, time: row.time, endTime: rt(row.time + 0.45), role: 'emphasis', cue: 'tick'});
+    const pill = b.variant === 'pills' ? pillGeometry(b, rows, columns, {W, n, m, rowH, colW, cellSize, labelSize}) : null;
+    const cellW = pill ? pill.cellW : colW;
+    // Headers in small caps over their column, up to two lines.
+    const heads = columns.map((col, j) => fitText(check, `params.columns[${j}]`, col.toUpperCase(), {family: 'meta', width: r2(cellW - u(8)), preferred: u(28), min: b.min.meta, maxLines: 2}));
+    const metaSize = Math.min(...heads.map(f => f.size));
+    Object.assign(content, {winner, footage: ctx?.footage === true, ink2: inkOn(b.colors, b.colors.primary), cellW, metaSize, headLines: columns.map((col, j) => fitText(check, `params.columns[${j}]`, col.toUpperCase(), {family: 'meta', width: r2(cellW - u(8)), preferred: metaSize, min: metaSize, maxLines: 2}).lines),
+      idle: idleFor(idleAmplitude(ctx?.grammar ?? null, b.unit), rowH), pill, pillFill: `${mixColor(b.colors.primary, b.colors.bg, 0.1)}e6`, pillEdge: mixColor(b.colors.primary, b.colors.bg, 0.4),
+      stamp: stampFit ? {text: columns[winner].toUpperCase(), size: stampFit.size, width: r2(Math.min(W, textWidth(columns[winner].toUpperCase(), stampFit.size, 'display') + u(80))), height: stampH, y: r2(y0 + totalH + stampGap)} : null});
+  }
   return b.finish(content, {minTextPx: tb.title ? tb.title.size : b.min.key});
 }
 
+// One cell of a free table, centred on cx: a tick (on a lit primary disc for
+// the pick), a cross, a dash or a short value; pills ring every mark.
+function freeCell(model, v, i, j, cx, shadow) {
+  const {id, fonts, unit: u} = model;
+  const c = model.content, P = c.pill, H = c.rowH;
+  const d = P ? P.d : r2(H * 0.5), lit = j === c.winner || (c.winner === null && v === true), cid = `${id}-cell-${i}-${j}`;
+  if (typeof v === 'string' || v === null) return label(cid, r2(cx - c.cellW / 2), r2(H / 2 - c.cellSize * 0.6), c.cellW, v ?? '—', {size: c.cellSize, family: fonts.display, color: v === null ? c.no : lit ? c.primary : c.ink, align: 'center', extra: {opacity: 0, ...shadow}});
+  const ring = color => el('div', null, abs(0, 0, d, d, {boxSizing: 'border-box', borderRadius: '50%', border: `${r2(3 * u)}px solid ${color}`}));
+  const mark = v ? el('svg', null, abs(r2(d * 0.2), r2(d * 0.2), r2(d * 0.6), r2(d * 0.6), {overflow: 'visible'}), [strokePath(`${id}-tick-${i}-${j}`, TICK, lit ? c.ink2 : c.primary, 3.2)], {viewBox: '0 0 24 24'})
+    : iconNode('x', {x: r2(d * 0.25), y: r2(d * 0.25), size: r2(d * 0.5), color: c.no, stroke: 2.2});
+  const under = v && lit ? [el('div', null, abs(0, 0, d, d, {borderRadius: '50%', background: c.primary, boxShadow: `0 0 ${r2(28 * u)}px ${c.primary}99`}))] : P ? [ring(v ? c.primary : c.no)] : [];
+  return el('div', cid, {...abs(r2(cx - d / 2), r2((H - d) / 2), d, d), opacity: 0}, [...under, mark]);
+}
+
+function freeTableView(model) {
+  const {id, fonts, unit: u} = model;
+  const c = model.content, P = c.pill, m = c.columns.length;
+  const kids = chromeNodes(model);
+  // Over footage the type carries a soft shadow; there is no panel to read against.
+  const shadow = c.footage ? {textShadow: `0 ${r2(2 * u)}px ${r2(16 * u)}px #000000a6`} : {};
+  const colX = j => r2(P ? c.W - P.padR - (m - j - 0.5) * c.cellW : c.labelW + (j + 0.5) * c.colW);
+  // The glass role (story.panel rim-glass): pills turn to glass; the rows sit on one glass sheet with their labels stepped in.
+  const glass = glassSurface(model, {radius: 22}), inset = glass && !P ? r2(28 * u) : 0;
+  if (inset) kids.push(el('div', `${id}-glass`, {...abs(0, r2(c.y0 - 12 * u), c.W, r2(c.headH + c.rowH * c.rows.length + 24 * u)), ...glass, opacity: 0}));
+  c.columns.forEach((col, j) => {
+    const lines = c.headLines[j], top = r2(c.y0 + c.headH / 2 - c.metaSize * 0.65 * lines);
+    kids.push(label(`${id}-head-${j}`, r2(colX(j) - c.cellW / 2), top, c.cellW, col.toUpperCase(), {size: c.metaSize, family: fonts.meta, color: j === c.winner ? c.primary : c.muted, align: 'center', weight: 600, spacing: '0.08em', lineHeight: 1.3, wrap: lines > 1, extra: {opacity: 0, ...shadow}}));
+    if (j === c.winner) kids.push(el('div', `${id}-under`, abs(r2(colX(j) - c.cellW * 0.3), r2(top + c.metaSize * 1.3 * lines + 8 * u), r2(c.cellW * 0.6), r2(4 * u), {borderRadius: r2(2 * u), background: c.primary, transformOrigin: '50% 50%', transform: 'scale(0, 1)'})));
+  });
+  c.rows.forEach((row, i) => {
+    const inner = [];
+    if (P) {
+      const x = r2(i * P.step), w = r2(c.W - x);
+      inner.push(el('div', `${id}-pill-${i}`, abs(x, r2((c.rowH - P.h) / 2), w, P.h, {...(glass ?? {boxSizing: 'border-box', background: c.pillFill, border: `${r2(2 * u)}px solid ${c.pillEdge}`, boxShadow: `0 ${r2(12 * u)}px ${r2(30 * u)}px #00000066`}), borderRadius: r2(P.h / 2)})));
+      inner.push(label(null, r2(x + P.padL), r2(c.rowH / 2 - P.size * 0.6 * P.lines[i]), P.labelW, row.label, {size: P.size, family: fonts.body, color: c.ink, weight: 650, wrap: P.lines[i] > 1}));
+    } else {
+      inner.push(el('div', `${id}-rule-${i}`, abs(inset, r2(c.rowH - u), r2(c.W - inset * 2), r2(2 * u), {background: c.border, transformOrigin: '0% 50%', transform: 'scale(0, 1)'})));
+      inner.push(label(null, r2(4 * u + inset), r2(c.rowH / 2 - c.labelSize * 0.6 * row.lines), r2(c.labelW - 24 * u - inset), row.label, {size: c.labelSize, family: fonts.body, color: c.ink, weight: 650, wrap: row.lines > 1, extra: shadow}));
+    }
+    row.values.forEach((v, j) => inner.push(freeCell(model, v, i, j, colX(j), shadow)));
+    kids.push(el('div', `${id}-row-${i}`, {...abs(0, row.y, c.W, c.rowH), opacity: 0, transformOrigin: '100% 50%'}, [el('div', `${id}-row-${i}-idle`, abs(0, 0, c.W, c.rowH, {transformOrigin: '50% 50%'}), inner)]));
+  });
+  if (c.stamp) {
+    const S = c.stamp;
+    kids.push(el('div', `${id}-stamp`, {...abs(r2((c.W - S.width) / 2), S.y, S.width, S.height), opacity: 0, transformOrigin: '50% 50%'}, [
+      el('div', `${id}-stamp-shake`, abs(0, 0, S.width, S.height, {boxSizing: 'border-box', border: `${r2(7 * u)}px solid ${c.primary}`, borderRadius: r2(16 * u), boxShadow: `0 0 ${r2(40 * u)}px ${c.primary}55`, display: 'flex', alignItems: 'center', justifyContent: 'center'}), [
+        el('div', null, {margin: 0, whiteSpace: 'nowrap', fontFamily: fonts.display, fontSize: S.size, lineHeight: '1.1', color: c.primary, ...shadow}, [S.text])])]));
+  }
+  return kids;
+}
+
+function freeTableTimeline(model, ops) {
+  const {id, start, unit: u, motion} = model;
+  const c = model.content, P = c.pill;
+  const settle = rt(motion.exitStart - 0.05);
+  chromeOps(model, ops);
+  if (glassSurface(model) && !P) riseOps(ops, `${id}-glass`, start, c.buildAt, r2(24 * u), {duration: 0.55});
+  c.columns.forEach((_, j) => riseOps(ops, `${id}-head-${j}`, start, rt(c.buildAt + j * 0.08), r2(14 * u), {duration: 0.4}));
+  if (c.winner !== null) {
+    set(ops, `${id}-under`, start, {scaleX: 0, scaleY: 1});
+    tw(ops, `${id}-under`, c.highlightAt, 0.45, 'power3.out', {scaleX: 0}, {scaleX: 1});
+  }
+  c.rows.forEach((row, i) => {
+    const from = {opacity: 0, x: r2((P ? 80 : -48) * u), y: 0, scaleX: P ? 0.92 : 1, scaleY: P ? 0.92 : 1};
+    set(ops, `${id}-row-${i}`, start, from);
+    tw(ops, `${id}-row-${i}`, row.time, 0.2, 'power1.out', {opacity: 0}, {opacity: 1});
+    tw(ops, `${id}-row-${i}`, row.time, 0.5, 'power3.out', {x: from.x, scaleX: from.scaleX, scaleY: from.scaleY}, {x: 0, scaleX: 1, scaleY: 1});
+    // Wide rows only bob: a tilt swings their far ends.
+    idleOps(ops, `${id}-row-${i}-idle`, start, rt(row.time + 0.7), settle, {bob: c.idle.bob, tilt: P ? r2(c.idle.tilt * 0.25) : 0}, loopHome(model));
+    if (!P) {
+      set(ops, `${id}-rule-${i}`, start, {scaleX: 0, scaleY: 1});
+      tw(ops, `${id}-rule-${i}`, row.time, 0.55, 'power2.out', {scaleX: 0}, {scaleX: 1});
+    }
+    row.values.forEach((v, j) => {
+      const at = rt(row.time + 0.12 + j * 0.08);
+      popOps(ops, `${id}-cell-${i}-${j}`, start, at, {from: v === true ? 0.3 : 0.5, duration: 0.4});
+      if (v === true) drawOps(ops, `${id}-tick-${i}-${j}`, start, rt(at + 0.08), 0.3, 'power2.out');
+    });
+  });
+  if (c.stamp) {
+    // The stamp drops onto the frame (speeding up to the hit), then the impact shakes it.
+    const S = `${id}-stamp`, from = {opacity: 0, x: 0, y: 0, scaleX: 1.8, scaleY: 1.8, rotation: -12};
+    set(ops, S, start, from);
+    tw(ops, S, c.highlightAt, 0.12, 'power1.out', {opacity: 0}, {opacity: 1});
+    tw(ops, S, c.highlightAt, 0.3, 'power3.in', {scaleX: 1.8, scaleY: 1.8, rotation: -12}, {scaleX: 1, scaleY: 1, rotation: -5});
+    set(ops, `${S}-shake`, start, {x: 0, y: 0});
+    shakeOps(ops, `${S}-shake`, rt(c.highlightAt + 0.3), r2(14 * u));
+  }
+}
+
 function tableView(model) {
+  if (FREE_TABLES.includes(model.content.variant)) return freeTableView(model);
   const {id, fonts, unit: u} = model;
   const c = model.content;
   const kids = chromeNodes(model);
@@ -615,6 +757,7 @@ function tableView(model) {
 }
 
 function tableTimeline(model, ops) {
+  if (FREE_TABLES.includes(model.content.variant)) return freeTableTimeline(model, ops);
   const {id, start, unit: u} = model;
   const c = model.content;
   chromeOps(model, ops);
@@ -630,9 +773,9 @@ function tableTimeline(model, ops) {
 
 export const comparisonTable = {
   id: 'comparison-table',
-  describe: 'A feature comparison table: headers pop, rows land one by one with ticks, crosses and short values, and one column can be outlined as the pick.',
+  describe: 'A feature comparison table: headers pop, rows land one by one with ticks, crosses and short values, and one column can be outlined as the pick. The free variants have no panel and sit on the footage or plate under the scene: scorecard (rows of free type, each row\'s pick lit on a primary disc), pills (a chip per row with a disc per column) and verdict (scorecard rows, then the pick\'s name lands as a stamp); their rows land on beats and then breathe.',
   params: {columns: '[string ≤ 16] 2–4, the things compared', rows: '[{label ≤ 28, values: [true | false | null | string ≤ 10 per column]}] 2–8', highlight: 'column index to outline after the build (optional)', highlightAt: at, ...COMMON},
-  events: ['build', 'highlight'], timing: TIMING, variants: TABLE_VARIANTS,
+  events: ['build', 'highlight', 'row-<i> (free variants)'], timing: TIMING, variants: TABLE_VARIANTS,
   resolve: tableResolve, view: tableView, timeline: tableTimeline
 };
 

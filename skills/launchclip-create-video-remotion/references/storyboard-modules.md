@@ -347,7 +347,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | states a real figure with its source in the brief or assets ("87% of", "saves $1,400", "3× faster"): the figure counts up with a label and a source line (no source, no stat-card) | stat-card |
 | quotes a named person or outlet, with the exact words in the brief ("as Ada put it", "said", "wrote"): the quote with its attribution (never "a customer") | quote-card |
 | shows real lines from code, a README, docs, a changelog or an article, supplied verbatim: the lines in a window with the key ones highlighted | excerpt |
-| contrasts the old way and the new, or two options ("before", "instead of", "the old way", "X versus Y"): two panels, before and after (or two columns) | compare |
+| contrasts the old way and the new, or two options ("before", "instead of", "the old way", "X versus Y"): two panels, before and after (or two columns); on footage or a backdrop give it variant halves, versus or verdict (free type, no panel; verdict stamps the right side as the pick) | compare |
 | walks through steps in order, a history or a roadmap ("first… then… finally", "day one", "by week three", "next quarter"): nodes along a line that land on their words | timeline |
 | names the product or the one idea the video is about ("meet X", "this is X", "it's called X"): one word behind the presenter's head [footage-led] (needs the subject) | masthead |
 | lands a realisation, reveal or turn ("that's when", "it hit me", "everything changed"): the room moves, the presenter holds [footage-led] (needs the subject) | dolly-zoom |
@@ -381,7 +381,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | shows where something flows ("where the money goes", "how traffic splits"): ribbons from sources to destinations | sankey |
 | shows when or where activity peaks across two dimensions ("busiest day and hour"): cells shade in a wave | heatmap |
 | ranks things ("top five", "the most popular", "number one"): rows land from last place to first | leaderboard |
-| compares products feature by feature ("unlike X, it…", "the only one that"): a table of ticks and crosses with the pick outlined | comparison-table |
+| compares products feature by feature ("unlike X, it…", "the only one that"): a table of ticks and crosses with the pick outlined; on footage or a backdrop give it variant scorecard, pills or verdict (no panel; verdict stamps the pick under the rows) | comparison-table |
 | gives a big running total ("so far", "all time", "and counting"): every digit rolls on its own reel to the figure | odometer |
 | counts down to a moment ("in 3, 2, 1", "launches in", "doors open"): each number punches in, then the end word | countdown |
 | turns a date, year or time over ("from 2024 to 2026", "at midnight"): split-flap cards flip to the new value | flip-clock |
@@ -1277,7 +1277,7 @@ events: lines, highlight
 variants: window (default), terminal, document, stack
 
 ### compare (keeps captions)
-A comparison in two panels: before and after (the old way with crosses, an arrow, the new way with ticks on a primary-edged panel) or two neutral columns. Side by side when it fits, else stacked. For a claim that contrasts two ways, tools or states.
+A comparison in two panels: before and after (the old way with crosses, an arrow, the new way with ticks on a primary-edged panel) or two neutral columns. Side by side when it fits, else stacked. For a claim that contrasts two ways, tools or states. The free variants draw no panel and sit on the footage or plate under the scene: halves (free type on the two halves of the frame, a divider wiping between them), versus (poster-size titles on opposite corners, a big VS punched in between) and verdict (the left side struck through, the right side's title stamped as the pick); they leave out side icons, land the right side on a beat and then breathe.
 params:
 - left: {title ≤ 24, items: [≤ 40] 1–4, icon?}
 - right: {title ≤ 24, items: [≤ 40] 1–4, icon?}
@@ -1288,7 +1288,7 @@ params:
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: left, right
-variants: panels (default), split, table, cards
+variants: panels (default), split, table, cards, halves, versus, verdict
 
 ### timeline (keeps captions)
 Two to six steps along a line: numbered (or icon) nodes that pop as each step is said while a primary line runs on to them, with a label and optional detail. Vertical in 9:16, across in 16:9 when the labels fit. For a process, a history or a roadmap.
@@ -1493,7 +1493,7 @@ events: build, highlight
 variants: bars (default), rows, cards
 
 ### comparison-table (keeps captions)
-A feature comparison table: headers pop, rows land one by one with ticks, crosses and short values, and one column can be outlined as the pick.
+A feature comparison table: headers pop, rows land one by one with ticks, crosses and short values, and one column can be outlined as the pick. The free variants have no panel and sit on the footage or plate under the scene: scorecard (rows of free type, each row's pick lit on a primary disc), pills (a chip per row with a disc per column) and verdict (scorecard rows, then the pick's name lands as a stamp); their rows land on beats and then breathe.
 params:
 - columns: [string ≤ 16] 2–4, the things compared
 - rows: [{label ≤ 28, values: [true | false | null | string ≤ 10 per column]}] 2–8
@@ -1504,8 +1504,8 @@ params:
 - at: build start: seconds from scene start (optional; else a matching hit, else a default)
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
-events: build, highlight
-variants: grid (default), striped, cards
+events: build, highlight, row-<i> (free variants)
+variants: grid (default), striped, cards, scorecard, pills, verdict
 
 ### odometer (keeps captions)
 A rolling odometer: every digit spins on its own reel and the figure lands, lower places turning faster; plain, tiles or mechanical counter.

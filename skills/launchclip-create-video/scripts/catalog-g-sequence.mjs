@@ -1,10 +1,12 @@
 // Catalogue G sequence cards: compare and timeline (docs/VIDEO_QUALITY_RFC.md
 // §8). Same shape and layout approach as catalog-g-cards.mjs.
 
-import {fitText, r2, rt} from './catalog-b-base.mjs';
-import {abs, el, set, tw} from './catalog-b-view.mjs';
+import {fitText, r2, rt, textWidth} from './catalog-b-base.mjs';
+import {abs, el, hex2, set, tw} from './catalog-b-view.mjs';
 import {CARD_PARAMS, cardTiming, column, createCardBase, flow, flowText, iconParam, pick, pop, rise, solidFill, spread, tintBehind} from './catalog-g-base.mjs';
 import {iconNode} from './icons.mjs';
+import {beatGrid, idleAmplitude, idleOps, shakeOps} from './fluid-motion.mjs';
+import {loopHome} from './loop.mjs';
 
 const hidden = {opacity: 0};
 
@@ -22,8 +24,14 @@ function side(check, value, path) {
 // the halves sliding in from their sides), table (a header row of the two
 // titles over aligned rows that reveal pair by pair) and cards (each item on
 // its own card, dealt in; the before side dashed and muted, the after side
-// edged in primary).
-export const COMPARE_VARIANTS = Object.freeze(['panels', 'split', 'table', 'cards']);
+// edged in primary). The free variants draw no panel, so they sit on the
+// footage or plate under the scene: halves (free type on the two halves of the
+// frame, a divider wiping between them and the before half dimming as the
+// after lands), versus (both titles at poster size on opposite corners and a
+// big outlined VS punched in between) and verdict (the left side struck
+// through, then the right side's title lands as a stamp: the pick).
+const FREE_COMPARE = ['halves', 'versus', 'verdict'];
+export const COMPARE_VARIANTS = Object.freeze(['panels', 'split', 'table', 'cards', ...FREE_COMPARE]);
 
 function resolveCompare(params, ctx) {
   const b = createCardBase('compare', params, ctx, {allowed: ['left', 'right', 'mode', 'stagger', 'at'], required: ['left', 'right'], variants: COMPARE_VARIANTS});
@@ -94,23 +102,73 @@ function resolveCompare(params, ctx) {
     const colH = columns.map(list => r2(pillH + pillGap + list.reduce((a_, r_) => a_ + r_, 0) + gap * (list.length - 1)));
     return {mode: 'cards', across, gapX, colW, pad, gap, mark, markGap, textW, heads, size, columns, pillH, pillGap, sideGap, colH, height: across ? Math.max(...colH) : r2(colH[0] + sideGap + colH[1])};
   };
-  const shaped = {split, table, cards}[b.variant];
+  const fill = maxHeight => (b.fills ? maxHeight : 0);
+  const mark = k => u(40 * Math.max(0.8, Math.min(1.2, k))), markGap = u(16);
+  const block = (head, rows, headGap, gap) => r2(head.size * 1.06 * head.lines + headGap + rows.reduce((a_, r_) => a_ + r_, 0) + gap * (rows.length - 1));
+  // halves: each side centred in its half of the frame, across in 16:9 and over each other in 9:16.
+  const halves = (width, k, maxHeight) => {
+    const across = !portrait, pad = u(40 * Math.min(1.2, k)), half = across ? r2(width / 2) : width, inner = r2(half - pad * 2);
+    const parts = sides.map((s_, i) => {
+      const head = fitText(check, `${sideKey(i)}.title`, s_.title, {family: 'display', width: inner, preferred: Math.max(b.min.key, u(96 * k)), min: b.min.key, maxLines: 2});
+      const items = fitItems(s_, i, inner - mark(k) - markGap, k), size = Math.min(...items.map(f => f.size));
+      const rows = items.map(f => r2(Math.max(mark(k), f.lines * size * 1.2))), gap = u(14 * k), headGap = u(26 * k);
+      return {head, size, rows, gap, headGap, mark: mark(k), markGap, height: block(head, rows, headGap, gap)};
+    });
+    const need = r2((Math.max(...parts.map(part => part.height)) + pad * 2) * (across ? 1 : 2));
+    return {mode: 'halves', across, pad, half, inner, parts, height: Math.max(need, fill(maxHeight))};
+  };
+  // versus: poster-size titles on opposite corners, a big VS between them.
+  const versus = (width, k, maxHeight) => {
+    const across = !portrait, vs = r2(u((across ? 180 : 210) * k)), vsW = r2(textWidth('VS', vs, 'display') + u(40));
+    const colW = across ? r2((width - vsW) / 2) : r2(width * 0.94);
+    const parts = sides.map((s_, i) => {
+      const head = fitText(check, `${sideKey(i)}.title`, s_.title.toUpperCase(), {family: 'display', width: colW, preferred: Math.max(b.min.key, u(124 * k)), min: b.min.key, maxLines: 2});
+      const items = fitItems(s_, i, colW, k), size = Math.min(...items.map(f => f.size));
+      const rows = items.map(f => r2(f.lines * size * 1.22)), gap = u(8 * k), headGap = u(20 * k);
+      return {head, size, rows, gap, headGap, height: block(head, rows, headGap, gap)};
+    });
+    const need = r2(across ? Math.max(vs, ...parts.map(part => part.height)) : parts[0].height + parts[1].height + vs);
+    return {mode: 'versus', across, vs, vsW, colW, parts, height: Math.max(need, fill(maxHeight))};
+  };
+  // verdict: the loser over the pick, the pick's title in a stamp.
+  const verdict = (width, k) => {
+    const head = fitHead(sides[0], 0, width, k, 84), items0 = fitItems(sides[0], 0, width, k);
+    const pad = u(26 * k), stampText = sides[1].title.toUpperCase();
+    const stamp = fitText(check, 'params.right.title', stampText, {family: 'display', width: r2(width * 0.86 - pad * 2), preferred: Math.max(b.min.key, u(124 * k)), min: b.min.key, maxLines: 1});
+    const items1 = fitItems(sides[1], 1, width - mark(k) - markGap, k);
+    const size = Math.min(...[...items0, ...items1].map(f => f.size)), gap = u(12 * k), headGap = u(22 * k), between = u(72 * k);
+    const rows0 = items0.map(f => r2(f.lines * size * 1.2)), rows1 = items1.map(f => r2(Math.max(mark(k), f.lines * size * 1.2)));
+    const stampW = r2(Math.min(width, textWidth(stampText, stamp.size, 'display') + pad * 2)), stampH = r2(stamp.size * 1.12 + pad * 1.2);
+    const top = block(head, rows0, headGap, gap), bottom = block({size: stampH / 1.06, lines: 1}, rows1, headGap + u(12 * k), gap);
+    return {mode: 'verdict', head, strikeW: r2(Math.min(width, textWidth(sides[0].title, head.size, 'display'))), stampGap: r2(headGap + u(12 * k)), stamp: {size: stamp.size, text: stampText, width: stampW, height: stampH}, size, rows: [rows0, rows1], gap, headGap, between, mark: mark(k), markGap, top, height: r2(top + between + bottom)};
+  };
+  const shaped = {split, table, cards, halves, versus, verdict}[b.variant];
   const measure = (width, maxHeight) => {
-    const out = pick([...(shaped ? b.scales.map(k => () => shaped(width, k)) : []), ...b.scales.map(k => () => variant(width, k, 'columns')), ...b.scales.map(k => () => variant(width, k, 'stacked'))], maxHeight);
+    const out = pick([...(shaped ? b.scales.map(k => () => shaped(width, k, maxHeight)) : []), ...b.scales.map(k => () => variant(width, k, 'columns')), ...b.scales.map(k => () => variant(width, k, 'stacked'))], maxHeight);
     return out?.layout === 'stacked' && b.fills ? spread(out, maxHeight, {between: [1, u(120)]}) : out;
   };
   const box = b.place(measure, {maxWidth: u(portrait ? 940 : 1500)});
   const L = box.layout;
+  const fresh = FREE_COMPARE.includes(b.variant);
   const leftAt = b.timeOf('left', p.at, 'params.at', 0.05);
-  const rightAt = b.timeOf('right', undefined, 'params.at', Math.min(leftAt - b.start + 0.25 + stagger * sides[0].items.length, b.lastEvent));
-  const placed = sides.map((s, i) => ({...s, index: i, time: i ? rightAt : leftAt, items: s.items.map((text, j) => ({index: j, text, time: rt((i ? rightAt : leftAt) + 0.2 + j * stagger)}))}));
+  // The free variants land the right side on the next beat (120 bpm) with room for the left to read.
+  const after = leftAt - b.start + Math.max(fresh ? 0.6 : 0, 0.25 + stagger * sides[0].items.length);
+  const rightAt = b.timeOf('right', undefined, 'params.at', Math.min(fresh ? beatGrid(120, b.start).snap(b.start + after) - b.start : after, b.lastEvent));
+  // A verdict's pick items wait for the stamp.
+  const itemLead = i => (i && b.variant === 'verdict' ? 0.6 : 0.2);
+  const placed = sides.map((s, i) => ({...s, index: i, time: i ? rightAt : leftAt, items: s.items.map((text, j) => ({index: j, text, time: rt(Math.min((i ? rightAt : leftAt) + itemLead(i) + j * stagger, b.start + b.lastEvent))}))}));
   b.events.push({id: `${b.id}-left`, name: 'left', time: leftAt, endTime: rt(leftAt + 0.5), role: 'title'});
   b.events.push({id: `${b.id}-right`, name: 'right', time: rightAt, endTime: rt(rightAt + 0.5), role: 'emphasis', cue: 'whoosh'});
   const after_ = mode === 'before-after';
   const tones = [{mark: after_ ? 'x' : null, color: after_ ? theme.muted : colors.primary, border: theme.border}, {mark: after_ ? 'check' : null, color: colors.primary, border: after_ ? colors.primary : theme.border}];
   const content = {box: {x: box.x, y: box.y, width: box.width}, layout: L, mode, sides: placed, tones, panel: theme.panel, textColor: theme.foreground, mutedText: theme.muted, arrow: colors.primary, leftAt, rightAt};
   if (L.mode) Object.assign(content, {border: theme.border, bg: theme.bg, tint: tintBehind(b, 'primary', theme.foreground, {alpha: 0.18})});
-  const sizes = L.mode === 'table' ? [L.size, ...L.heads.map(h => h.size)] : L.mode === 'cards' ? [L.size] : L.parts.flatMap(part => [part.size, part.head.size]);
+  if (fresh) {
+    const R = b.model.rect;
+    // The frame relative to the box, for the halves' washes and the divider that cross the whole frame.
+    Object.assign(content, {frame: {x: r2(-R.x - box.x), y: r2(-R.y - box.y), width: b.canvas.width, height: b.canvas.height}, footage: ctx?.footage === true, idle: idleAmplitude(ctx?.grammar ?? null, b.unit)});
+  }
+  const sizes = L.mode === 'table' ? [L.size, ...L.heads.map(h => h.size)] : L.mode === 'cards' ? [L.size] : L.mode === 'verdict' ? [L.size, L.head.size, L.stamp.size] : L.parts.flatMap(part => [part.size, part.head.size]);
   return b.finish(content, {minTextPx: Math.min(...sizes)});
 }
 
@@ -194,6 +252,153 @@ const COMPARE_VIEWS = {
   }
 };
 
+// ---- the free variants: no panel, type on whatever is under the scene.
+
+// Over footage the type carries a soft shadow.
+const shadowOf = model => (model.content.footage ? {textShadow: `0 ${r2(2 * model.unit)}px ${r2(18 * model.unit)}px #000000a6`} : {});
+const freeText = (style, value) => el('div', null, {margin: 0, whiteSpace: 'normal', overflowWrap: 'break-word', ...style}, [value]);
+// An entrance wrapper (`id`) round a breathing wrapper (`id-idle`).
+const breathing = (id, box, children, style = {}) => el('div', id, {...box, opacity: 0, ...style}, [el('div', `${id}-idle`, abs(0, 0, box.width, box.height), children)]);
+
+Object.assign(COMPARE_VIEWS, {
+  halves(model) {
+    const {id, fonts, unit} = model;
+    const c = model.content, L = c.layout, B = c.box, F = c.frame, sh = shadowOf(model), before = c.mode === 'before-after';
+    const seam = L.across ? r2(B.width / 2) : r2(L.height / 2), bleed = r2(80 * unit);
+    const kids = [];
+    // The before half dims under a wash; the after half warms with a primary tint.
+    if (before) [[hex2(c.bg, 0.5)], [hex2(c.arrow, 0.12)]].forEach(([background], i) => kids.push(el('div', `${id}-wash-${i}`, L.across
+      ? abs(i ? seam : r2(F.x - bleed), r2(F.y - bleed), r2(i ? F.x + F.width + bleed - seam : seam - F.x + bleed), r2(F.height + bleed * 2), {background, opacity: 0})
+      : abs(r2(F.x - bleed), i ? seam : r2(F.y - bleed), r2(F.width + bleed * 2), r2(i ? F.y + F.height + bleed - seam : seam - F.y + bleed), {background, opacity: 0}))));
+    c.sides.forEach((s_, i) => {
+      const part = L.parts[i], color = before && !i ? c.mutedText : c.textColor;
+      const halfH = L.across ? L.height : r2(L.height / 2);
+      const x = L.across && i ? r2(L.half + L.pad) : L.pad, y = r2((L.across || !i ? 0 : halfH) + (halfH - part.height) / 2);
+      let top = r2(part.head.size * 1.06 * part.head.lines + part.headGap);
+      const items = s_.items.map((item, j) => {
+        const node = el('div', `${id}-item-${i}-${j}`, abs(0, top, L.inner, part.rows[j], {opacity: 0, display: 'flex', alignItems: 'center', gap: part.markGap}), [
+          flow(null, part.mark, part.mark, {}, [markNode(c.tones[i], part.mark)]),
+          flowText(null, r2(L.inner - part.mark - part.markGap), {fontFamily: fonts.body, fontWeight: 600, fontSize: part.size, lineHeight: '1.2', color, ...sh}, item.text)]);
+        top = r2(top + part.rows[j] + part.gap);
+        return node;
+      });
+      kids.push(breathing(`${id}-side-${i}`, abs(x, y, L.inner, part.height), [freeText({position: 'absolute', left: 0, top: 0, width: L.inner, fontFamily: fonts.display, fontSize: part.head.size, lineHeight: '1.06', color, ...sh}, s_.title), ...items]));
+    });
+    const line = r2(4 * unit);
+    kids.push(el('div', `${id}-divider`, L.across ? abs(r2(seam - line / 2), F.y, line, F.height) : abs(F.x, r2(seam - line / 2), F.width, line)));
+    Object.assign(kids.at(-1).style, {background: c.arrow, boxShadow: `0 0 ${r2(22 * unit)}px ${c.arrow}`, transformOrigin: L.across ? '50% 0%' : '0% 50%', transform: L.across ? 'scale(1, 0)' : 'scale(0, 1)'});
+    return [el('div', null, abs(B.x, B.y, B.width, L.height), kids)];
+  },
+  versus(model) {
+    const {id, fonts, unit} = model;
+    const c = model.content, L = c.layout, B = c.box, sh = shadowOf(model), before = c.mode === 'before-after';
+    const kids = c.sides.map((s_, i) => {
+      const part = L.parts[i], right = i === 1, align = right ? 'right' : 'left';
+      const x = right ? r2(B.width - L.colW) : 0, y = L.across ? r2((L.height - part.height) / 2) : right ? r2(L.height - part.height) : 0;
+      let top = r2(part.head.size * 1.06 * part.head.lines + part.headGap);
+      const items = s_.items.map((item, j) => {
+        const node = freeText({position: 'absolute', left: 0, top, width: L.colW, textAlign: align, fontFamily: fonts.body, fontWeight: 500, fontSize: part.size, lineHeight: '1.22', color: before && !i ? c.mutedText : c.textColor, opacity: 0, ...sh}, item.text);
+        node.id = `${id}-item-${i}-${j}`;
+        top = r2(top + part.rows[j] + part.gap);
+        return node;
+      });
+      return breathing(`${id}-side-${i}`, abs(x, y, L.colW, part.height), [freeText({position: 'absolute', left: 0, top: 0, width: L.colW, textAlign: align, fontFamily: fonts.display, fontSize: part.head.size, lineHeight: '1.06',
+        color: right ? c.arrow : before ? c.mutedText : c.textColor, ...sh}, s_.title.toUpperCase()), ...items]);
+    });
+    const vsH = r2(L.vs * 1.1);
+    kids.push(el('div', `${id}-vs`, {...abs(r2((B.width - L.vsW) / 2), r2((L.height - vsH) / 2), L.vsW, vsH), opacity: 0, transformOrigin: '50% 50%'}, [el('div', `${id}-vs-shake`, abs(0, 0, L.vsW, vsH), [
+      freeText({position: 'absolute', left: 0, top: 0, width: L.vsW, whiteSpace: 'nowrap', textAlign: 'center', fontFamily: fonts.display, fontSize: L.vs, lineHeight: '1.1', color: 'transparent', WebkitTextStroke: `${r2(4 * unit)}px ${c.arrow}`}, 'VS')])]));
+    return [el('div', null, abs(B.x, B.y, B.width, L.height), kids)];
+  },
+  verdict(model) {
+    const {id, fonts, unit} = model;
+    const c = model.content, L = c.layout, B = c.box, sh = shadowOf(model), w = B.width;
+    const lead = r2(L.head.size * 1.06);
+    let top = r2(lead + L.headGap);
+    const lost = c.sides[0].items.map((item, j) => {
+      const node = freeText({position: 'absolute', left: 0, top, width: w, fontFamily: fonts.body, fontWeight: 500, fontSize: L.size, lineHeight: '1.2', color: c.mutedText, opacity: 0, ...sh}, item.text);
+      node.id = `${id}-item-0-${j}`;
+      top = r2(top + L.rows[0][j] + L.gap);
+      return node;
+    });
+    const S = L.stamp, pickTop = r2(L.top + L.between);
+    top = r2(S.height + L.stampGap);
+    const won = c.sides[1].items.map((item, j) => {
+      const node = el('div', `${id}-item-1-${j}`, abs(0, top, w, L.rows[1][j], {opacity: 0, display: 'flex', alignItems: 'center', gap: L.markGap}), [
+        flow(null, L.mark, L.mark, {}, [markNode(c.tones[1], L.mark)]),
+        flowText(null, r2(w - L.mark - L.markGap), {fontFamily: fonts.body, fontWeight: 600, fontSize: L.size, lineHeight: '1.2', color: c.textColor, ...sh}, item.text)]);
+      top = r2(top + L.rows[1][j] + L.gap);
+      return node;
+    });
+    const stamp = el('div', `${id}-stamp`, {...abs(0, 0, S.width, S.height), opacity: 0, transformOrigin: '30% 50%'}, [el('div', `${id}-stamp-shake`, abs(0, 0, S.width, S.height, {boxSizing: 'border-box',
+      border: `${r2(7 * unit)}px solid ${c.arrow}`, borderRadius: r2(14 * unit), boxShadow: `0 0 ${r2(36 * unit)}px ${c.arrow}55`, display: 'flex', alignItems: 'center', justifyContent: 'center'}), [
+      freeText({whiteSpace: 'nowrap', fontFamily: fonts.display, fontSize: S.size, lineHeight: '1.1', color: c.arrow, ...sh}, S.text)])]);
+    return [el('div', null, abs(B.x, B.y, w, L.height), [
+      breathing(`${id}-side-0`, abs(0, 0, w, L.top), [freeText({position: 'absolute', left: 0, top: 0, width: w, whiteSpace: 'nowrap', fontFamily: fonts.display, fontSize: L.head.size, lineHeight: '1.06', color: c.textColor, ...sh}, c.sides[0].title),
+        el('div', `${id}-strike`, abs(r2(-8 * unit), r2(lead * 0.5), r2(L.strikeW + 16 * unit), r2(6 * unit), {borderRadius: r2(3 * unit), background: c.textColor, transformOrigin: '0% 50%', transform: 'scale(0, 1)'})), ...lost]),
+      el('div', `${id}-pick`, abs(0, pickTop, w, r2(L.height - pickTop)), [el('div', `${id}-pick-idle`, abs(0, 0, w, r2(L.height - pickTop)), [stamp, ...won])])])];
+  }
+});
+
+// The free variants' motion: entrances on the side times (the right side on a
+// beat), then each block breathes until the exit.
+const FREE_TIMELINES = {
+  halves(model, ops) {
+    const {id, start, unit, motion} = model;
+    const c = model.content, L = c.layout, settle = rt(motion.exitStart - 0.05);
+    set(ops, `${id}-divider`, start, L.across ? {scaleX: 1, scaleY: 0} : {scaleX: 0, scaleY: 1});
+    tw(ops, `${id}-divider`, rt(Math.max(start, c.leftAt - 0.1)), 0.7, 'power3.inOut', L.across ? {scaleY: 0} : {scaleX: 0}, L.across ? {scaleY: 1} : {scaleX: 1});
+    if (c.mode === 'before-after') c.sides.forEach(s_ => { set(ops, `${id}-wash-${s_.index}`, start, {opacity: 0}); tw(ops, `${id}-wash-${s_.index}`, s_.index ? c.rightAt : c.leftAt, 0.6, 'power2.out', {opacity: 0}, {opacity: 1}); });
+    for (const s_ of c.sides) {
+      const d = r2((s_.index ? 60 : -60) * unit), from = L.across ? {opacity: 0, x: d, y: 0} : {opacity: 0, x: 0, y: d};
+      set(ops, `${id}-side-${s_.index}`, start, from);
+      tw(ops, `${id}-side-${s_.index}`, s_.time, 0.6, 'power3.out', from, {opacity: 1, x: 0, y: 0});
+      for (const item of s_.items) rise(ops, model, `${id}-item-${s_.index}-${item.index}`, item.time, {distance: 14, duration: 0.4});
+      idleOps(ops, `${id}-side-${s_.index}-idle`, start, rt(s_.time + 0.75), settle, {bob: c.idle.bob, tilt: r2(c.idle.tilt * 0.4)}, loopHome(model));
+    }
+    // The before side steps back as the after side lands.
+    if (c.mode === 'before-after') tw(ops, `${id}-side-0`, rt(c.rightAt + 0.1), 0.5, 'power2.out', {opacity: 1}, {opacity: 0.6});
+  },
+  versus(model, ops) {
+    const {id, start, unit, motion} = model;
+    const c = model.content, settle = rt(motion.exitStart - 0.05);
+    for (const s_ of c.sides) {
+      const from = {opacity: 0, x: r2((s_.index ? 160 : -160) * unit), y: 0};
+      set(ops, `${id}-side-${s_.index}`, start, from);
+      tw(ops, `${id}-side-${s_.index}`, s_.time, 0.15, 'power1.out', {opacity: 0}, {opacity: 1});
+      tw(ops, `${id}-side-${s_.index}`, s_.time, 0.55, 'power4.out', {x: from.x}, {x: 0});
+      for (const item of s_.items) rise(ops, model, `${id}-item-${s_.index}-${item.index}`, item.time, {distance: 14, duration: 0.4});
+      idleOps(ops, `${id}-side-${s_.index}-idle`, start, rt(s_.time + 0.7), settle, {bob: c.idle.bob, tilt: r2(c.idle.tilt * 0.4)}, loopHome(model));
+    }
+    // The VS punches in on the beat between the sides and shakes on impact.
+    const at = rt((c.leftAt + c.rightAt) / 2);
+    set(ops, `${id}-vs`, start, {opacity: 0, x: 0, y: 0, scaleX: 2.4, scaleY: 2.4, rotation: -8});
+    tw(ops, `${id}-vs`, at, 0.1, 'power1.out', {opacity: 0}, {opacity: 1});
+    tw(ops, `${id}-vs`, at, 0.28, 'power3.in', {scaleX: 2.4, scaleY: 2.4}, {scaleX: 1, scaleY: 1});
+    set(ops, `${id}-vs-shake`, start, {x: 0, y: 0, rotation: 0});
+    shakeOps(ops, `${id}-vs-shake`, rt(at + 0.28), r2(16 * unit));
+    idleOps(ops, `${id}-vs-shake`, start, rt(at + 0.8), settle, {bob: c.idle.bob, tilt: c.idle.tilt}, loopHome(model));
+  },
+  verdict(model, ops) {
+    const {id, start, unit, motion} = model;
+    const c = model.content, settle = rt(motion.exitStart - 0.05);
+    rise(ops, model, `${id}-side-0`, c.leftAt, {distance: 30, duration: 0.5});
+    for (const s_ of c.sides) for (const item of s_.items) rise(ops, model, `${id}-item-${s_.index}-${item.index}`, item.time, {distance: 14, duration: 0.4});
+    // On the right beat the loser is struck through and steps back, then the pick stamps down.
+    set(ops, `${id}-strike`, start, {scaleX: 0, scaleY: 1});
+    tw(ops, `${id}-strike`, c.rightAt, 0.35, 'power2.inOut', {scaleX: 0}, {scaleX: 1});
+    tw(ops, `${id}-side-0`, rt(c.rightAt + 0.15), 0.45, 'power2.out', {opacity: 1}, {opacity: 0.55});
+    const at = rt(c.rightAt + 0.25), S = `${id}-stamp`;
+    set(ops, S, start, {opacity: 0, x: 0, y: 0, scaleX: 1.9, scaleY: 1.9, rotation: -12});
+    tw(ops, S, at, 0.1, 'power1.out', {opacity: 0}, {opacity: 1});
+    tw(ops, S, at, 0.3, 'power3.in', {scaleX: 1.9, scaleY: 1.9, rotation: -12}, {scaleX: 1, scaleY: 1, rotation: -4});
+    set(ops, `${S}-shake`, start, {x: 0, y: 0});
+    shakeOps(ops, `${S}-shake`, rt(at + 0.3), r2(14 * unit));
+    idleOps(ops, `${id}-side-0-idle`, start, rt(c.leftAt + 0.7), settle, {bob: c.idle.bob, tilt: r2(c.idle.tilt * 0.3)}, loopHome(model));
+    idleOps(ops, `${id}-pick-idle`, start, rt(at + 0.9), settle, {bob: c.idle.bob, tilt: r2(c.idle.tilt * 0.3)}, loopHome(model));
+  }
+};
+
 function compareView(model) {
   const {id, fonts, unit} = model;
   const c = model.content, L = c.layout, B = c.box;
@@ -230,6 +435,7 @@ function compareView(model) {
 function compareTimeline(model, ops) {
   const {id, start, unit} = model;
   const c = model.content, mode = c.layout.mode;
+  if (FREE_TIMELINES[mode]) return FREE_TIMELINES[mode](model, ops);
   if (mode === 'split') {
     const L = c.layout;
     const lead = rt(Math.max(start, c.leftAt - 0.1));
@@ -283,7 +489,7 @@ function compareTimeline(model, ops) {
 
 export const compare = {
   id: 'compare',
-  describe: 'A comparison in two panels: before and after (the old way with crosses, an arrow, the new way with ticks on a primary-edged panel) or two neutral columns. Side by side when it fits, else stacked. For a claim that contrasts two ways, tools or states.',
+  describe: 'A comparison in two panels: before and after (the old way with crosses, an arrow, the new way with ticks on a primary-edged panel) or two neutral columns. Side by side when it fits, else stacked. For a claim that contrasts two ways, tools or states. The free variants draw no panel and sit on the footage or plate under the scene: halves (free type on the two halves of the frame, a divider wiping between them), versus (poster-size titles on opposite corners, a big VS punched in between) and verdict (the left side struck through, the right side\'s title stamped as the pick); they leave out side icons, land the right side on a beat and then breathe.',
   params: {left: '{title ≤ 24, items: [≤ 40] 1–4, icon?}', right: '{title ≤ 24, items: [≤ 40] 1–4, icon?}', mode: 'before-after (default) | columns', stagger: 'seconds between items (default 0.16)', at: 'left panel time', ...CARD_PARAMS},
   events: ['left', 'right'],
   timing: cardTiming(['the right panel lands 0.25 s plus stagger × left items after the left (or on a right hit)']),
