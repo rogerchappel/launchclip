@@ -2093,6 +2093,7 @@ imports only `./ambient.mjs`, `./panels.mjs` and `./icons.mjs`, and
 | `logo-pattern` | scale, spacing, offset, opacity, speed | the tile sways |
 | `motif` | shape, scale, weight 0.5–3 (1.5), opacity 0.02–0.2 (0.08), angle 0–180 (45, hatch only), speed, color | the motif sways |
 | `texture` | type, amount 0–1 (0.5), scale | still |
+| `weather` | type, intensity 0–1 (0.6), speed, color (primary) | a pixel weather loop plays (rain, snow, fog …); still at level off |
 
 `color` is `primary`, `accent` or `paper` (each kind has its own default).
 Density, intensity and grain default to 0.5 unless the table says otherwise.
@@ -2106,6 +2107,16 @@ Option params:
 - **`shape`** (`motif`): `plus`, `circle`, `chevron`, `wave`, `hatch` or
   `crosshatch`.
 - **`type`** (`texture`): `noise`, `fibre`, `canvas` or `linen`.
+- **`type`** (`weather`): `aurora`, `blizzard`, `cherry-blossoms`, `clouds`,
+  `falling-leaves`, `fireflies`, `fog`, `god-rays`, `rain` (the default),
+  `shooting-stars`, `snow` or `storm`: the VFX layer's weather loops
+  (`kit/core/vfx/catalog.mjs` `VFX_WEATHER`, docs/VFX_LAYER_RFC.md §3e). The
+  layer carries a one-cue VFX plan (`layer.vfx`) that both renderers paint
+  on a colour and a light canvas (`plus-lighter`) with `paintVfx`, at
+  absolute time × speed, in a ramp of `color` from the background. The
+  320 × 180 art screen scales up by a whole number to cover the frame,
+  centred, so a portrait frame crops its sides. Its opacity is `intensity`,
+  clamped by the text-contrast rule like any layer. It cannot be a panel fill.
 - **`icons`** (`icon-pattern`, `icon-scatter`): `"auto"` (the default) or 1–8
   icon names from `kit/core/icons.mjs`. `patternIcons(story, icons)` resolves
   `"auto"` to the icons the scenes name, at most 6, else
