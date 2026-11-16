@@ -184,6 +184,36 @@ furniture, so it needs no GL; the two marked GL wait for E.1.
 | `stained-glass` | cells bounded by thick lead lines, backlit glass with streaks and bubbles, bloom eating into the lead | GL: edge detect + Voronoi lead + `bloom` (E.1) |
 | `silkscreen` | ≤ 6 flat inks, halftone in the mid-tones, slight registration | `halftone` pass + posterize (GL) |
 
+Built (phase 6): all six, opt-in by `story.look` only (the seed never draws
+one). Where they differ from the table:
+
+- `risograph`: three inks (pink, blue, yellow), each plate one colour matrix
+  from the channel it absorbs, grained, nudged off register and multiplied
+  onto the paper. The offset jumps at each **cut**, not on beats (the look
+  plan has shots, not the beat grid). The knocked-out halo around the cast
+  is not built: a whole-frame filter cannot tell the cast apart.
+- `one-bit`: the 8 × 8 Bayer tile at 2 px a threshold (1080p), so the
+  pattern survives an encode. No error diffusion, stills included.
+- `pen-plotter`: not a stroke-order draw mode. The grade turns the frame into
+  outline and hatching; at each cut a gantry pen uncovers the frame in ten
+  rows, back and forth, at a trapezoidal speed with pen-up travel between
+  rows. Its `honest` note says the plot is a row sweep. No pen rack.
+- `lidar`: SVG, not a painter. Points are a square lattice coloured by
+  brightness (its `honest` note: not measured depth); the scan plane, its
+  afterglow and the label are furniture.
+- `stained-glass` and `silkscreen` are **finish looks**: no SVG grade; the
+  look's `finish` list (`lookFinish`) joins `story.finish`, the story's own
+  entries winning pass by pass. Two new GL passes run first in the chain:
+  `stained-glass` (seeded Voronoi panes at each site's colour, lead on pane
+  borders and on Sobel edges, streaks and bubbles; the look adds `bloom`)
+  and `silkscreen` (nearest of up to six inks, a halftone of the second
+  ink in the mid-tones read off register; the look adds light `grain`).
+  Halftone is inside the silkscreen pass, not the `halftone` pass.
+
+Parity: `test/fixtures/parity-backgrounds/look-*.json` (world-cast-16x9 with
+the look patched in); `scripts/look-sheet.mjs` now runs a finish look's
+passes on its stills.
+
 Two techniques are not looks: a **transit map** (octilinear lines drawn by
 pen tips, stations lit as the line arrives) is a variant of E.5, and
 **text-flash cuts** (full-frame title cards on beats, colour inversion) is a

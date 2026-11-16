@@ -86,7 +86,7 @@ export const STORY_MEDIUM_KINDS = ["none", "oil", "watercolour", "pastel", "ink"
 export const STORY_MEDIUM_KEYS = ["kind", "strength", "boil", "grain"];
 // story.look names and keys (kit/core/look.mjs LOOK_NAMES, LOOK_KEYS; kept in
 // step by test/look.test.js).
-export const STORY_LOOK_NAMES = ["none", "blueprint", "hologram", "thermal", "neon-night", "paper-cutout", "watercolour", "anime-cel", "ascii-terminal", "clay-2d", "isometric-layers", "pixel-arcade"];
+export const STORY_LOOK_NAMES = ["none", "blueprint", "hologram", "thermal", "neon-night", "paper-cutout", "watercolour", "anime-cel", "ascii-terminal", "clay-2d", "isometric-layers", "pixel-arcade", "risograph", "one-bit", "pen-plotter", "lidar", "stained-glass", "silkscreen"];
 export const STORY_LOOK_KEYS = ["name", "strength", "step", "furniture", "palette", "labels"];
 // story.grade presets (kit/core/grade.mjs GRADE_PRESET_NAMES; kept in step by
 // test/grade.test.js, which also runs gradeErrors against validateGrade).
@@ -102,6 +102,8 @@ export const STORY_GRADE_KEYS = ["preset", "cube", "strength", "tint"];
 export const STORY_FINISH_MAX = 8;
 export const STORY_FINISH_TIMES = 32;
 export const STORY_FINISH_PASSES = Object.freeze({
+  "stained-glass": Object.freeze({ cell: [16, 160, 48], lead: [1, 12, 4], glow: [0, 1, 0.6], edges: [0, 1, 0.5], seed: [0, 999999, 0] }),
+  silkscreen: Object.freeze({ inks: [2, 6, 6], cell: [4, 32, 9], angle: [0, 90, 22], registration: [0, 4, 1.5], paper: "#f2ead8", ink: "#1d1b26", one: "#e4572e", two: "#2b6cb0", three: "#f2c14e", four: "#3aa17e", seed: [0, 999999, 0] }),
   bloom: Object.freeze({ threshold: [0.5, 0.95, 0.75], radius: [0.5, 2, 1], strength: [0, 2, 0.6], tint: "#ffffff" }),
   aberration: Object.freeze({ px: [0.5, 4, 1.5], falloff: [0, 1, 1] }),
   "zoom-blur": Object.freeze({ amount: [0, 0.5, 0.12], centre: [0, 1, [0.5, 0.5]], samples: [4, 24, 16], at: Object.freeze({ times: STORY_FINISH_TIMES, default: [] }) }),
