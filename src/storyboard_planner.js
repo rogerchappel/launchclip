@@ -40,7 +40,7 @@ import { tightlyFramed } from "./presenter_box.js";
 import { fitDirectionCast, normalizeCastCues, plannedCast } from "./cast_fit.js";
 import { bibleCast, bibleRef, directionWithBible } from "@launchclip/core/bible.mjs";
 import { castGate } from "./cast.js";
-import { actingGate } from "./direction_guardrails.js";
+import { actingGate, tellsGate } from "./direction_guardrails.js";
 import { placeActions } from "./acting_place.js";
 import { lipSyncGate } from "./quality_gates.js";
 import { SHORT_FORM_HOLD, fitDurations, paceErrors } from "./duration_fit.js";
@@ -833,6 +833,17 @@ export function checkStoryboard(raw, { words = [], beats = null, track = null, t
     errors.push(...(acting?.findings ?? []).filter((finding) => finding.rule === "action-missing").map((finding) => `acting: ${finding.detail}`).slice(0, 6));
     const lips = lipSyncGate({ resolved, words });
     if (lips.status === "failed") errors.push(...lips.errors.slice(0, 6).map((entry) => `lip-sync: ${entry}`));
+  }
+  // The plan tells (docs/VIDEO_TELLS_RFC.md §1): errors go to the repair
+  // pass; warnings are listed. Advisories stay in the finish report.
+  if (second.ok) {
+    try {
+      const tells = tellsGate(resolved, { words });
+      errors.push(...tells.findings.filter((finding) => finding.severity === "error").map((finding) => `tells: ${finding.rule}: ${finding.detail}`).slice(0, 6));
+      warnings.push(...tells.findings.filter((finding) => finding.severity === "warning").map((finding) => `tells: ${finding.rule}: ${finding.detail}`).slice(0, 8));
+    } catch (error) {
+      warnings.push(`tells: ${message(error)}`);
+    }
   }
   // The app's constraints (src/constraints.js): hidden ranges covered,
   // must_use present, never_use absent; errors are prefixed "constraints:".

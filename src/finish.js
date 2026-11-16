@@ -33,7 +33,7 @@ import { useProjectTemp } from "./render_temp.js";
 import { checkStorage, interruptedByStorage } from "./storage_check.js";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
-import { actingGate, densityGate, ghostingGate, physicsGate, varietyGate } from "./direction_guardrails.js";
+import { actingGate, densityGate, ghostingGate, physicsGate, tellsGate, varietyGate } from "./direction_guardrails.js";
 import { choreographyGate, holdGate, stateGate } from "./movement_guardrails.js";
 import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, lipSyncGate, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
@@ -1972,6 +1972,12 @@ async function runGates(ctx, { pixels = true } = {}) {
     gates.variety = varietyGate(ctx.resolved);
   } catch (error) {
     gates.density ??= { status: "failed", error: error.message };
+  }
+  // The plan tells (docs/VIDEO_TELLS_RFC.md §1): no pixels, so --plan-only runs them too.
+  try {
+    gates.tells = tellsGate(ctx.resolved, { words: ctx.words ?? [] });
+  } catch (error) {
+    gates.tells = { status: "failed", error: error.message };
   }
   try {
     gates.holds = holdGate(ctx.resolved, { media: ctx.layout?.media ?? {} });
