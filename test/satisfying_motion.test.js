@@ -166,3 +166,19 @@ test('drop-grid: the schema takes times as a list of seconds, one per item', asy
   assert.deepEqual(validateModuleParams('drop-grid', {items: ['Mon', 'Tue', 'Wed'], times: [0.5, 0.9, 1.3]}), []);
   assert.notDeepEqual(validateModuleParams('drop-grid', {count: 3, times: 0.5}), []);
 });
+
+test('drop-grid: landed items rock on their base out of step, the full grid ripples once, and all rest before the exit', () => {
+  const model = {...MODULES['drop-grid'].resolve({count: 6, cadence: 0.2}, {...ctx(), duration: 9}), module: 'drop-grid'};
+  const c = model.content, ops = catalogHTimeline(model);
+  const rippleAt = c.buildEnd + TACTILE.squash + TACTILE.settle + 0.06;
+  const lifted = c.cells.map((_, i) => frameState(ops, rippleAt + 0.6).get(`scene-i${i}`).y);
+  assert.ok(lifted.some(y => y < -0.5) && Math.max(...lifted) <= 0, 'the ripple lifts, never sinks');
+  assert.ok(c.cells.every((_, i) => frameState(ops, rippleAt + 1.5).get(`scene-i${i}`).y === 0), 'the ripple settles');
+  const mid = frameState(ops, model.start + 5.5);
+  const rocks = c.cells.map((_, i) => mid.get(`scene-i${i}-idle`));
+  assert.ok(rocks.filter(s => Math.abs(s.rotation) > 0.05).length >= 5, 'landed items rock');
+  assert.ok(rocks.every(s => Math.abs(s.y) <= c.idle.bob + 1e-6 && Math.abs(s.rotation) <= c.idle.tilt + 1e-6));
+  assert.equal(new Set(rocks.map(s => Math.sign(s.rotation))).size, 2, 'out of step');
+  const rest = frameState(ops, model.motion.exitStart - 0.04);
+  c.cells.forEach((_, i) => assert.deepEqual([rest.get(`scene-i${i}-idle`).y, rest.get(`scene-i${i}-idle`).rotation], [0, 0]));
+});
