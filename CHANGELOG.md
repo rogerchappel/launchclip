@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-11-16
+
+### Highlights
+
+- **Motion that is checked before you see it.** A motion check fails a plan
+  whose entrances, exits, staggers or holds break the rules of good motion,
+  and every grammar now sets travel, exit ratio, follow-through, parallax
+  and hero dim.
+- **More to draw with.** An exploded-view object scene, nineteen backdrop
+  plates, hand-drawn marks on a title, a light leak over a cut, and scale
+  that eases evenly to the eye.
+- **More to find.** Research reads Openverse for openly licensed images,
+  with no key.
+- **Remotion 4.0.543**, with fixes for renders that hung.
+- **First release on npm**, as four packages versioned together:
+  `launchclip`, `@launchclip/core`, `@launchclip/remotion` and
+  `@launchclip/engine`.
+
 ### Added
 
 - `launchclip reel <project>`: the breakdown reel. A 10 s loop on a 120 BPM
@@ -44,6 +62,11 @@
   sources, or one with a grade on one side, the handle resting and reversing
   at its stops). The planner reaches for it for redesigns, filters and grades
   and raw-versus-edited takes.
+- A spring can be chosen by how it looks: `springByFeel(duration, bounce)`
+  returns the `{damping, stiffness, mass}` for a spring that lands within 1 %
+  of its target after `duration` seconds and first overshoots by `bounce` (0
+  never passes the target). `springVisibleDuration(config)` is the inverse,
+  so a follower can start as a spring lands (`kit/core/motion.mjs`).
 - `exploded-view`: one object as an isometric drawing of solid parts, in
   four tones with a single lit part and ink outlines, that comes apart along
   its axes, holds with its labels beside it and snaps back. Three built-in
@@ -179,302 +202,9 @@
   `milestones` (seconds to the script, the voice and the plan). See docs/guide/headless.md and benchmarks/MAKE_FAST_DRAFT.md.
 - The OpenAI client streams a call that passes `onDelta`, and the cost
   tracker counts a streamed call when its stream ends.
-
-### Changed
-
-- `picture-in-picture` is drawn as a `split-screen` on a 9:16 or square
-  frame (footage across the top for a top corner, the bottom for a bottom
-  one). A corner card there shrank the footage to a thumbnail and left the
-  panel beside it empty. The planner is told it is for 16:9; on 16:9 nothing
-  changes, and a stored portrait plan that names it still builds.
-- HyperFrames moves from 0.7.58 to 0.7.111, which clears its `adm-zip` and
-  `@hono/node-server` advisories. That release copies a mono sound to both
-  sides at full level, 3 dB above what Remotion renders, so the HyperFrames
-  compiler now declares a mono mix, voice or base recording at 0.7071 of its
-  volume and the two renders sit at the same loudness again.
-- **Breaking for stored plans and exported schemas:** the backdrop plates
-  that depicted a subject are removed: `strands` (a DNA helix), `hex-shell`
-  (a globe of hex cells) and `starfield` (deep space). A picture behind a
-  video changes what the video seems to be about. `PLATE_KINDS` and
-  `STORY_PLATE_KINDS` no longer list them, so a host that exports those
-  enums stops offering them on its next pin. A storyboard, cycle list or
-  style pack that still names one validates and builds: `strands` draws as
-  `silk`, `hex-shell` as `smoke`, `starfield` as `bokeh`
-  (`RETIRED_PLATE_KINDS`), and `validateStory` warns at each place.
-- `bokeh` spreads its points evenly instead of along a diagonal lane.
-- `launchclip make` no longer picks plates by the brief's topic:
-  `PLATE_MOTIFS`, `MOTIF_PLATE_KINDS` and `plateMotif` are gone,
-  `fallbackPlates(story)` takes no text, and every brief rotates the same
-  eight neutral, brand-lit plates. `plate.cycle: true` walks `silk`, `veil`,
-  `smoke`, `bokeh`. The beat director, the seeded looks and the
-  `glass-explainer` pack draw from the neutral kinds, so a given style seed
-  now gives different plates.
-- A visual explainer fills the frame. The picture now runs edge to edge and
-  to the bottom, where every scene had stopped above the captions and left
-  the lower 40% of a 9:16 frame empty. Captions sit on top of the picture,
-  one or two words at a time, and the director may hide them in a scene
-  whose own type carries the words (never the opening, at most half the
-  scenes). The camera punches in on the director's hits as well as pushing
-  through each scene, labels are larger, and headings keep a clear band.
-- A visual explainer's planning wastes less: props code that cannot be used
-  is corrected on its own instead of the whole plan being directed again,
-  and a scene call the provider refused (a rate limit, an account's
-  in-flight ceiling) is sent again once the other scenes are drawn instead
-  of becoming a heading card.
-
-### Changed
-
-- An exported preview is light enough to stream. `launchclip preview
-  --export` now writes each clip as a small H.264 proxy (fitted in 960 pixels
-  a side, a keyframe every half second) and a WAV soundtrack as AAC; a real
-  plan with eight stock clips was 34 MB of media a host had to stream before
-  it played smoothly. `--media original` keeps the files as they are, as a
-  preview served on this machine does. The player also waits for a clip that
-  has not buffered, where it ran on and then jumped the clip forward, and
-  reports ready once the sound and the first clips can play.
-
-### Fixed
-
-- The preview player no longer jerks a clip whose file ends before its scene
-  does. The player asked the ended clip to play again, which started it
-  over, then pulled it back to its end, on every frame. The clip now holds
-  its last frame.
-- While the preview waits for a clip to buffer, every clip on screen waits
-  with it. A clip left running was ahead of the clock when it resumed and
-  jumped back.
-- A clip that is still to come waits at its first frame, so a cut to a clip
-  that starts part-way into its file no longer begins with a seek.
-- A fast draft (`--speed draft`) no longer fails when its seeded look has
-  stacked captions (`kinetic-stack`). Those stand too tall to clear a
-  character card, so tooling hid them and the captions gate failed the plan,
-  on about one seed in ten. The draft now takes one-line captions
-  (`word-highlight`), keeps the rest of the look and says so in a warning.
-- Two plans that failed on arithmetic a model could not fix now pass.
-  A zoom with under 1.2 s to hold after its move (squeezed against the
-  shot's end, the next zoom or its own `until`) is taken out by the plan's
-  tooling and the shot plays unzoomed; a storyboard failed five attempts on
-  two such zooms. And `finish` settles a caption-band clash a step further
-  each pass (the card moves, then the captions move, then they hide): it
-  had moved the same card on every pass, cleared nothing, and failed the
-  plan on a 0.6 s overlap when its passes ran out.
-
-- The concept and story stage runs on Google's models. Their hosts answer
-  400 "Request contains an invalid argument" to a response schema with array
-  bounds (`minItems`, `maxItems`), which the router passes on as "Provider
-  returned error". The stage failed in a second and the script was quietly
-  written in one pass. The client now sends the request again without the
-  bounds and keeps them off for that model; the stage still checks the
-  answer against its own contract.
-
-- `equation-lockup` sets an equation that is too long for one line on two,
-  broken before the equals sign, or before the operator that leaves the two
-  lines nearest in width. A planned video whose formula ran long failed its
-  storyboard checks after every repair; in one run that left a draft that
-  could not be refined. An equation that fits a line is set as before.
-
-- The preview player runs inside a sandboxed frame. `index.html` held the
-  video in a nested frame and read into it, which a host that embeds the
-  preview as untrusted content (a sandbox with no origin of its own, a
-  frame-ancestors policy) forbids: the player never started. It is now one
-  document, the composition's own markup scaled to fit with the controls
-  beside it, and is driven by postMessage alone. `composition.html` is still
-  written.
-
-- Model calls sent together through OpenRouter are answered together. Node's
-  fetch sends later requests down the connection an earlier one opened, and
-  OpenRouter answers the requests on one connection in turn, so from the
-  second call of a run onwards work the model gate had in flight at once (a
-  visual explainer's scenes, the long-form chunks, the asset descriptions)
-  came back one call at a time: ten scenes took 260 s where the slowest took
-  45 s. The CLI now gives each such call its own connection
-  (`src/own_connection_fetch.js`); six calls that took 122 s take 20 s. A
-  host that passes its own `fetch` keeps it.
-
-- A hosted model that thinks by default no longer fails a stage by spending
-  its whole output limit on reasoning: the call is made again with a small
-  reasoning budget, which the run then keeps for that model.
-- Storyboard: two slips that each cost a whole repair call are now tooling's
-  to fix. A character scene a little under its module's shortest length is
-  lengthened like any other scene (the cast check reports it under its own
-  prefix, which the fit did not read), and a call to action that names an
-  icon without a handle loses the icon. On real runs each repair resent the
-  full storyboard prompt and took over a minute.
-- Captions stay on screen when a style puts them in the middle of the frame
-  (or at the top, low, or at a large size). Tooling used to hide them under
-  every card that sat in their band, so a delivered video could have none
-  for most of its narration. Hiding is now the last resort, scene by scene:
-  the scene's own text or card moves out of the band (a card is moved or
-  re-fitted above or below it; a clip's label takes its other slot); content
-  that cannot move keeps its place and the captions move for that scene to
-  the nearest free band, at their size; with no band tall enough they shrink,
-  to 70% at least; only then are they hidden, and the warning says why
-  (`layout: tooling cleared the caption band: …`, `layout: tooling placed
-  captions …`, `layout: tooling hid captions …`). The planner, make's
-  storyboard stage and finish all settle this way, and both renderers draw
-  the moved captions from the same plan.
-- A video whose captions are on but hidden under cards for more than 15% of
-  its narration now fails: the storyboard check reports `captions: …` with
-  the scenes (so a repair can fix it), and finish has a `captions` gate.
-- The planner is told to plan scene text clear of the band the captions take.
-- A transition between two full-frame footage scenes no longer drops the
-  picture. On the world camera a `push` into a `clip` showed the new clip
-  whole and inset for the first 40 % of the move, removed it, showed the
-  empty background for a frame or two, then faded it up at full frame (both
-  renderers); a `pull`, `fade`, `iris` and `glow-wipe` showed the background
-  in the same way. A clip now counts as a full-frame picture, like a photo
-  plate: it arrives over the outgoing scene, which stays whole under it, an
-  incoming fade that starts late is hidden until it starts, and a push grows
-  the new picture out of the old one on the camera's ease. Crossfades into a
-  picture (morph, light-sweep, push-blur) no longer dip to the background.
-  Between two footage scenes `card-to-card`, `rack-focus` and `morph` play as
-  a fade, `story validate` warns, and the planner is told not to pick them.
-  `kit/core/transition-frames.mjs` checks every transition type for a frame
-  the two scenes do not cover, a scene that sits still mid-move, and a pop.
-- `make` no longer fails the storyboard stage when a style puts the captions
-  in the middle of the frame (or at the top, or low, or at a large size). A
-  plan kept on a cadence near miss was never laid out, so every card in the
-  caption band surfaced only when make checked the storyboard again, as "the
-  storyboard failed its checks after make filled in audio". The layout check
-  now runs whenever every module resolves and measures the band the captions
-  really take; the planner is told where that band is; and the storyboard
-  stage settles a card in the band, as the planner and finish do.
-- A rerun or `--replan` no longer treats clips the asset provider wrote into
-  `--assets` as handed-in media. They are recognised by content
-  (`.launchclip/provided-files.json`), described from the provider's answer
-  with no model call, and left out of routing (`routing.provided`), so the
-  concept, the story, the script and the voice are reused.
-
-### Added
-
 - A captions overlay takes `zones: [{start, end, rect, scale?}]`: for those
   seconds its lines sit in the rect instead of the band, at `scale` (0.7–1)
   of their size. Tooling writes them; a storyboard may too.
-
-### Changed
-
-- The storyboard planner corrects a plan's mechanical slips itself, before
-  the checks and without a model call, and reports each one as a
-  `normalise:` warning in `.launchclip/storyboard-plan.json`: a character
-  alone in a cast scene with a side position stands in the centre; scenes
-  overlapping on a track are trimmed to meet; a cue time just outside its
-  scene moves to the scene's edge; a target naming a character who is not in
-  the shot becomes the side they stand on (or they join a wide shot with
-  room); a cut that leaves a speaker off screen for a small part of their
-  line moves so their shot covers it; a direction line naming a scene that
-  is not on its words names the one character scene that is. A speaker
-  absent for most of a line, a cue far outside its scene and scenes that
-  cannot both keep their minimum length still fail.
-- A storyboard repair pass redoes only the scenes its findings reach (named
-  in a finding, on a line a finding names, or on screen at a time a finding
-  gives); every other scene keeps the params it had, so a pass no longer
-  fixes one finding and breaks a shot that passed. Findings about the plan as
-  a whole (cadence, the hook, the card mix) leave the whole storyboard open.
-  A failed attempt's plan is saved with its errors (`attempts[].candidate`).
-- `make --animation` delivers a character story as a Short: with no
-  `--aspect` it is 9:16 (it was 16:9). Pass `--aspect 16:9` or `1:1`, or
-  name the shape in the brief ("a landscape cartoon", "16:9", "widescreen").
-  Every other video keeps 16:9.
-- A character story (a story made with a show bible) no longer takes its
-  style's caption preset, which could lay a full-width band over the
-  characters. Its captions are white outlined lines in sentence case, up to
-  four words a line, placed where no character reaches; a style sets its
-  own with `captions.lanes.characters`. The style gate fails a band or a
-  plate over the cast.
-- Every cast scene of a character story moves the camera for as long as it
-  is up (a slow push-in on a speaker, a gentle drift on a wide shot, a
-  punch-in on a reaction), in both renderers. A scene's own `zooms` replace
-  it and `"camera": {"moves": false}` turns it off.
-- The style gate measures what a style governs in a character story: the
-  colours the storyboard sets itself (captions, brand frame, cards) against
-  the brand colours, in place of the render's colour clusters, which are the
-  show bible's world and cast. The motion grammar's shot range is not
-  reported there. Other stories are checked as before.
-- A character story's captions keep a phrase's last word with its phrase: a
-  line cut for size one word short of a full stop or a comma hands words to
-  that word ("The foal watched the" / "starting gate." where it was "The
-  foal watched the starting" / "gate."). Other videos' captions are chunked
-  as before.
-- A `wide` shot on the `standing` set moves a character in from the side of
-  the safe zone when its reach passes it. In 9:16 the right-hand place of a
-  two-shot reached under the platform's buttons, so a wide two-shot failed
-  the cast check whatever the planner wrote. Such a scene failed the cast
-  gate before, so no video that rendered changes.
-- In a character story the captions count as content for the density gate
-  in the third of the frame they sit in.
-- Reference sheets, cast sheets and demo recordings also find the headless
-  shell a renderer already installed (Remotion's, then HyperFrames'), after
-  `LAUNCHCLIP_CHROMIUM`, Playwright's Chromium and a system Chrome. When no
-  browser is found the error lists every place it looked.
-- A one-prompt explainer from `launchclip make` is carried by characters.
-  With no media in `--assets`, an explainer or short-form script and make's
-  seeded style, the direction map casts one to three characters for the idea
-  (the subject as an object with a face, its parts as mascots), the
-  storyboard is built from `character-cameo` and `cast-scene` shots with
-  diagrams and cards as support, and the plan is checked for a character on
-  screen for at least half the runtime and in the opening. The seeded style
-  takes a playful tone when the prompt names none. `MAKE.json` `explainer`
-  records the cast. A style you choose, supplied footage, `--animation`,
-  promos and long form are unchanged.
-- The planner catches three finish-gate failures before the render: a card
-  with more words than its time on screen allows (`reading:`), an opening
-  that draws itself from an empty plate (`opening:`), and a video of only
-  line diagrams, step rows and text cards (`variety:`; the `variety` gate
-  fails it too, as `abstract-only`).
-- `make`'s concept and story stage succeeds on a bare prompt: the story may
-  cite general knowledge of the subject (never a figure, a date, a name or a
-  quote), the writer is told the structure the check holds it to, and the
-  stage stops at a 300 s budget instead of running on.
-- `make`'s script fits its word ceiling and ends on a call to action: an
-  overshoot is cut by whole sentences, and a narration with no call to
-  action ends on the writer's own, or a plain one ("Save this for later.").
-
-### Fixed
-
-- The ghosting gate counted a diagram's wiring (`from`, `to`, `point`,
-  `weight`, `style` values) as words to read: a 10-word `line-diagram` failed
-  as 33 words. Only copy is counted now.
-- The script check did not know "Save this …" as a call to action, though
-  the short-video rules ask the writer for it, and reported `cta-missing`.
-- A take that ran short of its target was reported as words that "cannot be
-  read" in the seconds the voice had just read them in (`fits-clock`).
-- A `character-cameo` drew a wide character (a blob, a cup) or a wide
-  gesture (a cheer) past the safe zone, failing the cast gate; it is moved
-  and, where needed, drawn smaller to fit its area.
-
-### Changed
-
-- `make` runs independent work at the same time: the descriptions of the
-  files in `--assets`, the planner's opening while the second opening is
-  designed, the two candidates of a comparison, and a show bible's reference
-  sheets. The files a run writes and its progress lines are unchanged.
-  `--model-concurrency <n>` (default 4, or `LAUNCHCLIP_MODEL_CONCURRENCY`)
-  limits how many model calls are in flight; `1` sends one at a time. A
-  rate-limit answer is waited out instead of failing the stage, and
-  `MAKE.json` `model_calls` says where calls overlapped.
-- An OpenAI model's answer is picked up sooner. A background response was
-  polled every 5 s, so each finished answer waited 2.5 s on average to be
-  seen; it is now polled after 1 s, 1 s, then every 2 s, and every 5 s once a
-  call has run two minutes. That is about 1.5 s less per call, or about 18 s
-  over the dozen calls of a `make` run, with the same answers.
-- The spending limit (`--max-cost-usd`) holds when calls overlap: a paid call
-  starts beside others only when the most they can all cost fits under the
-  limit, and otherwise waits its turn.
-- `make` treats `--duration` as a ceiling. It still trims a script or a
-  chapter that runs more than 15% over, but it no longer asks the model to
-  add words to one that runs short: the video is shorter instead. In a long
-  video the outline is no longer stretched to the duration, and the seconds
-  a short chapter did not use go to the later chapters with the most facts.
-  `MAKE.json` notes it when a video runs well under its target.
-- `launchclip make` exits 2 when the video rendered but a gate still fails
-  (`MAKE.json` `status: "needs-repair"`), so a caller can tell it from a
-  finished video (0) and a failed run (1). It used to exit 0.
-  `--allow-needs-repair` keeps the old exit code.
-- `make` gives the critic up to three repair rounds by default
-  (`--critic-repairs`, was one). A round that is no better is still undone and
-  stops the rounds.
-
-### Added
-
 - Racing worlds and story props. Three new worlds, drawn at the cast's
   scale: `racetrack` (turf, the running rail, a grandstand in the distance,
   the winning post), `stable-yard` (stalls with half doors, hay, a water
@@ -978,6 +708,172 @@
 
 ### Changed
 
+- `picture-in-picture` is drawn as a `split-screen` on a 9:16 or square
+  frame (footage across the top for a top corner, the bottom for a bottom
+  one). A corner card there shrank the footage to a thumbnail and left the
+  panel beside it empty. The planner is told it is for 16:9; on 16:9 nothing
+  changes, and a stored portrait plan that names it still builds.
+- HyperFrames moves from 0.7.58 to 0.7.111, which clears its `adm-zip` and
+  `@hono/node-server` advisories. That release copies a mono sound to both
+  sides at full level, 3 dB above what Remotion renders, so the HyperFrames
+  compiler now declares a mono mix, voice or base recording at 0.7071 of its
+  volume and the two renders sit at the same loudness again.
+  Known with this release: HyperFrames' audio is less exact than before in
+  its first 21 ms and, on FFmpeg 8.0.1, for about 50 ms in one test story;
+  and the older HyperFrames lane (`src/hyperframes_assembler.js`) plays a
+  mono sound 3 dB louder. Remotion renders are not affected.
+- `onnxruntime-node` moves to 1.31.1 (from 1.27.0), with compatible updates
+  to the packages under the other dependencies. `npm audit --omit=dev` goes
+  from fourteen findings to three, all one advisory: `sharp`, through
+  `kokoro-js`, with no fix upstream.
+- Remotion is pinned at 4.0.543 (from 4.0.536), for every `remotion` and
+  `@remotion/*` package, and the kit and engine peer ranges follow it. The
+  release fixes renders that hung after a browser crash or a failed
+  download, and moves to Chrome 158.
+- The create-video skills run `launchclip finish <project> --plan-only`
+  before a hand-run render, so the direction and motion checks also apply to
+  a project that never goes through `launchclip finish`.
+- **Breaking for stored plans and exported schemas:** the backdrop plates
+  that depicted a subject are removed: `strands` (a DNA helix), `hex-shell`
+  (a globe of hex cells) and `starfield` (deep space). A picture behind a
+  video changes what the video seems to be about. `PLATE_KINDS` and
+  `STORY_PLATE_KINDS` no longer list them, so a host that exports those
+  enums stops offering them on its next pin. A storyboard, cycle list or
+  style pack that still names one validates and builds: `strands` draws as
+  `silk`, `hex-shell` as `smoke`, `starfield` as `bokeh`
+  (`RETIRED_PLATE_KINDS`), and `validateStory` warns at each place.
+- `bokeh` spreads its points evenly instead of along a diagonal lane.
+- `launchclip make` no longer picks plates by the brief's topic:
+  `PLATE_MOTIFS`, `MOTIF_PLATE_KINDS` and `plateMotif` are gone,
+  `fallbackPlates(story)` takes no text, and every brief rotates the same
+  eight neutral, brand-lit plates. `plate.cycle: true` walks `silk`, `veil`,
+  `smoke`, `bokeh`. The beat director, the seeded looks and the
+  `glass-explainer` pack draw from the neutral kinds, so a given style seed
+  now gives different plates.
+- A visual explainer fills the frame. The picture now runs edge to edge and
+  to the bottom, where every scene had stopped above the captions and left
+  the lower 40% of a 9:16 frame empty. Captions sit on top of the picture,
+  one or two words at a time, and the director may hide them in a scene
+  whose own type carries the words (never the opening, at most half the
+  scenes). The camera punches in on the director's hits as well as pushing
+  through each scene, labels are larger, and headings keep a clear band.
+- A visual explainer's planning wastes less: props code that cannot be used
+  is corrected on its own instead of the whole plan being directed again,
+  and a scene call the provider refused (a rate limit, an account's
+  in-flight ceiling) is sent again once the other scenes are drawn instead
+  of becoming a heading card.
+- An exported preview is light enough to stream. `launchclip preview
+  --export` now writes each clip as a small H.264 proxy (fitted in 960 pixels
+  a side, a keyframe every half second) and a WAV soundtrack as AAC; a real
+  plan with eight stock clips was 34 MB of media a host had to stream before
+  it played smoothly. `--media original` keeps the files as they are, as a
+  preview served on this machine does. The player also waits for a clip that
+  has not buffered, where it ran on and then jumped the clip forward, and
+  reports ready once the sound and the first clips can play.
+- The storyboard planner corrects a plan's mechanical slips itself, before
+  the checks and without a model call, and reports each one as a
+  `normalise:` warning in `.launchclip/storyboard-plan.json`: a character
+  alone in a cast scene with a side position stands in the centre; scenes
+  overlapping on a track are trimmed to meet; a cue time just outside its
+  scene moves to the scene's edge; a target naming a character who is not in
+  the shot becomes the side they stand on (or they join a wide shot with
+  room); a cut that leaves a speaker off screen for a small part of their
+  line moves so their shot covers it; a direction line naming a scene that
+  is not on its words names the one character scene that is. A speaker
+  absent for most of a line, a cue far outside its scene and scenes that
+  cannot both keep their minimum length still fail.
+- A storyboard repair pass redoes only the scenes its findings reach (named
+  in a finding, on a line a finding names, or on screen at a time a finding
+  gives); every other scene keeps the params it had, so a pass no longer
+  fixes one finding and breaks a shot that passed. Findings about the plan as
+  a whole (cadence, the hook, the card mix) leave the whole storyboard open.
+  A failed attempt's plan is saved with its errors (`attempts[].candidate`).
+- `make --animation` delivers a character story as a Short: with no
+  `--aspect` it is 9:16 (it was 16:9). Pass `--aspect 16:9` or `1:1`, or
+  name the shape in the brief ("a landscape cartoon", "16:9", "widescreen").
+  Every other video keeps 16:9.
+- A character story (a story made with a show bible) no longer takes its
+  style's caption preset, which could lay a full-width band over the
+  characters. Its captions are white outlined lines in sentence case, up to
+  four words a line, placed where no character reaches; a style sets its
+  own with `captions.lanes.characters`. The style gate fails a band or a
+  plate over the cast.
+- Every cast scene of a character story moves the camera for as long as it
+  is up (a slow push-in on a speaker, a gentle drift on a wide shot, a
+  punch-in on a reaction), in both renderers. A scene's own `zooms` replace
+  it and `"camera": {"moves": false}` turns it off.
+- The style gate measures what a style governs in a character story: the
+  colours the storyboard sets itself (captions, brand frame, cards) against
+  the brand colours, in place of the render's colour clusters, which are the
+  show bible's world and cast. The motion grammar's shot range is not
+  reported there. Other stories are checked as before.
+- A character story's captions keep a phrase's last word with its phrase: a
+  line cut for size one word short of a full stop or a comma hands words to
+  that word ("The foal watched the" / "starting gate." where it was "The
+  foal watched the starting" / "gate."). Other videos' captions are chunked
+  as before.
+- A `wide` shot on the `standing` set moves a character in from the side of
+  the safe zone when its reach passes it. In 9:16 the right-hand place of a
+  two-shot reached under the platform's buttons, so a wide two-shot failed
+  the cast check whatever the planner wrote. Such a scene failed the cast
+  gate before, so no video that rendered changes.
+- In a character story the captions count as content for the density gate
+  in the third of the frame they sit in.
+- Reference sheets, cast sheets and demo recordings also find the headless
+  shell a renderer already installed (Remotion's, then HyperFrames'), after
+  `LAUNCHCLIP_CHROMIUM`, Playwright's Chromium and a system Chrome. When no
+  browser is found the error lists every place it looked.
+- A one-prompt explainer from `launchclip make` is carried by characters.
+  With no media in `--assets`, an explainer or short-form script and make's
+  seeded style, the direction map casts one to three characters for the idea
+  (the subject as an object with a face, its parts as mascots), the
+  storyboard is built from `character-cameo` and `cast-scene` shots with
+  diagrams and cards as support, and the plan is checked for a character on
+  screen for at least half the runtime and in the opening. The seeded style
+  takes a playful tone when the prompt names none. `MAKE.json` `explainer`
+  records the cast. A style you choose, supplied footage, `--animation`,
+  promos and long form are unchanged.
+- The planner catches three finish-gate failures before the render: a card
+  with more words than its time on screen allows (`reading:`), an opening
+  that draws itself from an empty plate (`opening:`), and a video of only
+  line diagrams, step rows and text cards (`variety:`; the `variety` gate
+  fails it too, as `abstract-only`).
+- `make`'s concept and story stage succeeds on a bare prompt: the story may
+  cite general knowledge of the subject (never a figure, a date, a name or a
+  quote), the writer is told the structure the check holds it to, and the
+  stage stops at a 300 s budget instead of running on.
+- `make`'s script fits its word ceiling and ends on a call to action: an
+  overshoot is cut by whole sentences, and a narration with no call to
+  action ends on the writer's own, or a plain one ("Save this for later.").
+- `make` runs independent work at the same time: the descriptions of the
+  files in `--assets`, the planner's opening while the second opening is
+  designed, the two candidates of a comparison, and a show bible's reference
+  sheets. The files a run writes and its progress lines are unchanged.
+  `--model-concurrency <n>` (default 4, or `LAUNCHCLIP_MODEL_CONCURRENCY`)
+  limits how many model calls are in flight; `1` sends one at a time. A
+  rate-limit answer is waited out instead of failing the stage, and
+  `MAKE.json` `model_calls` says where calls overlapped.
+- An OpenAI model's answer is picked up sooner. A background response was
+  polled every 5 s, so each finished answer waited 2.5 s on average to be
+  seen; it is now polled after 1 s, 1 s, then every 2 s, and every 5 s once a
+  call has run two minutes. That is about 1.5 s less per call, or about 18 s
+  over the dozen calls of a `make` run, with the same answers.
+- The spending limit (`--max-cost-usd`) holds when calls overlap: a paid call
+  starts beside others only when the most they can all cost fits under the
+  limit, and otherwise waits its turn.
+- `make` treats `--duration` as a ceiling. It still trims a script or a
+  chapter that runs more than 15% over, but it no longer asks the model to
+  add words to one that runs short: the video is shorter instead. In a long
+  video the outline is no longer stretched to the duration, and the seconds
+  a short chapter did not use go to the later chapters with the most facts.
+  `MAKE.json` notes it when a video runs well under its target.
+- `launchclip make` exits 2 when the video rendered but a gate still fails
+  (`MAKE.json` `status: "needs-repair"`), so a caller can tell it from a
+  finished video (0) and a failed run (1). It used to exit 0.
+  `--allow-needs-repair` keeps the old exit code.
+- `make` gives the critic up to three repair rounds by default
+  (`--critic-repairs`, was one). A round that is no better is still undone and
+  stops the rounds.
 - `launchclip finish` stops at the render stage, before anything renders,
   when a custom module has no form for the chosen renderer (or its
   HyperFrames fragment is missing or refused), and names the scene, the
@@ -986,6 +882,134 @@
 
 ### Fixed
 
+- A fast draft (`--speed draft`) keeps its direction call's plan when the
+  look's captions stack a word a line. The cards would hide those captions,
+  and the directed plan was dropped for it; it now takes one-line captions,
+  as the rule-made plan already did. About one generated look in fifteen was
+  affected.
+- Two renders started in sibling project folders at the same moment no
+  longer fail with `ENOENT` on the shared `.launchclip-tmp` folder.
+- `springValue` with `overshootClamping` and `from` above `to` no longer
+  returns its end value from the first frame. It matches Remotion's
+  `spring()` again.
+- The preview player no longer jerks a clip whose file ends before its scene
+  does. The player asked the ended clip to play again, which started it
+  over, then pulled it back to its end, on every frame. The clip now holds
+  its last frame.
+- While the preview waits for a clip to buffer, every clip on screen waits
+  with it. A clip left running was ahead of the clock when it resumed and
+  jumped back.
+- A clip that is still to come waits at its first frame, so a cut to a clip
+  that starts part-way into its file no longer begins with a seek.
+- A fast draft (`--speed draft`) no longer fails when its seeded look has
+  stacked captions (`kinetic-stack`). Those stand too tall to clear a
+  character card, so tooling hid them and the captions gate failed the plan,
+  on about one seed in ten. The draft now takes one-line captions
+  (`word-highlight`), keeps the rest of the look and says so in a warning.
+- Two plans that failed on arithmetic a model could not fix now pass.
+  A zoom with under 1.2 s to hold after its move (squeezed against the
+  shot's end, the next zoom or its own `until`) is taken out by the plan's
+  tooling and the shot plays unzoomed; a storyboard failed five attempts on
+  two such zooms. And `finish` settles a caption-band clash a step further
+  each pass (the card moves, then the captions move, then they hide): it
+  had moved the same card on every pass, cleared nothing, and failed the
+  plan on a 0.6 s overlap when its passes ran out.
+
+- The concept and story stage runs on Google's models. Their hosts answer
+  400 "Request contains an invalid argument" to a response schema with array
+  bounds (`minItems`, `maxItems`), which the router passes on as "Provider
+  returned error". The stage failed in a second and the script was quietly
+  written in one pass. The client now sends the request again without the
+  bounds and keeps them off for that model; the stage still checks the
+  answer against its own contract.
+
+- `equation-lockup` sets an equation that is too long for one line on two,
+  broken before the equals sign, or before the operator that leaves the two
+  lines nearest in width. A planned video whose formula ran long failed its
+  storyboard checks after every repair; in one run that left a draft that
+  could not be refined. An equation that fits a line is set as before.
+
+- The preview player runs inside a sandboxed frame. `index.html` held the
+  video in a nested frame and read into it, which a host that embeds the
+  preview as untrusted content (a sandbox with no origin of its own, a
+  frame-ancestors policy) forbids: the player never started. It is now one
+  document, the composition's own markup scaled to fit with the controls
+  beside it, and is driven by postMessage alone. `composition.html` is still
+  written.
+
+- Model calls sent together through OpenRouter are answered together. Node's
+  fetch sends later requests down the connection an earlier one opened, and
+  OpenRouter answers the requests on one connection in turn, so from the
+  second call of a run onwards work the model gate had in flight at once (a
+  visual explainer's scenes, the long-form chunks, the asset descriptions)
+  came back one call at a time: ten scenes took 260 s where the slowest took
+  45 s. The CLI now gives each such call its own connection
+  (`src/own_connection_fetch.js`); six calls that took 122 s take 20 s. A
+  host that passes its own `fetch` keeps it.
+
+- A hosted model that thinks by default no longer fails a stage by spending
+  its whole output limit on reasoning: the call is made again with a small
+  reasoning budget, which the run then keeps for that model.
+- Storyboard: two slips that each cost a whole repair call are now tooling's
+  to fix. A character scene a little under its module's shortest length is
+  lengthened like any other scene (the cast check reports it under its own
+  prefix, which the fit did not read), and a call to action that names an
+  icon without a handle loses the icon. On real runs each repair resent the
+  full storyboard prompt and took over a minute.
+- Captions stay on screen when a style puts them in the middle of the frame
+  (or at the top, low, or at a large size). Tooling used to hide them under
+  every card that sat in their band, so a delivered video could have none
+  for most of its narration. Hiding is now the last resort, scene by scene:
+  the scene's own text or card moves out of the band (a card is moved or
+  re-fitted above or below it; a clip's label takes its other slot); content
+  that cannot move keeps its place and the captions move for that scene to
+  the nearest free band, at their size; with no band tall enough they shrink,
+  to 70% at least; only then are they hidden, and the warning says why
+  (`layout: tooling cleared the caption band: …`, `layout: tooling placed
+  captions …`, `layout: tooling hid captions …`). The planner, make's
+  storyboard stage and finish all settle this way, and both renderers draw
+  the moved captions from the same plan.
+- A video whose captions are on but hidden under cards for more than 15% of
+  its narration now fails: the storyboard check reports `captions: …` with
+  the scenes (so a repair can fix it), and finish has a `captions` gate.
+- The planner is told to plan scene text clear of the band the captions take.
+- A transition between two full-frame footage scenes no longer drops the
+  picture. On the world camera a `push` into a `clip` showed the new clip
+  whole and inset for the first 40 % of the move, removed it, showed the
+  empty background for a frame or two, then faded it up at full frame (both
+  renderers); a `pull`, `fade`, `iris` and `glow-wipe` showed the background
+  in the same way. A clip now counts as a full-frame picture, like a photo
+  plate: it arrives over the outgoing scene, which stays whole under it, an
+  incoming fade that starts late is hidden until it starts, and a push grows
+  the new picture out of the old one on the camera's ease. Crossfades into a
+  picture (morph, light-sweep, push-blur) no longer dip to the background.
+  Between two footage scenes `card-to-card`, `rack-focus` and `morph` play as
+  a fade, `story validate` warns, and the planner is told not to pick them.
+  `kit/core/transition-frames.mjs` checks every transition type for a frame
+  the two scenes do not cover, a scene that sits still mid-move, and a pop.
+- `make` no longer fails the storyboard stage when a style puts the captions
+  in the middle of the frame (or at the top, or low, or at a large size). A
+  plan kept on a cadence near miss was never laid out, so every card in the
+  caption band surfaced only when make checked the storyboard again, as "the
+  storyboard failed its checks after make filled in audio". The layout check
+  now runs whenever every module resolves and measures the band the captions
+  really take; the planner is told where that band is; and the storyboard
+  stage settles a card in the band, as the planner and finish do.
+- A rerun or `--replan` no longer treats clips the asset provider wrote into
+  `--assets` as handed-in media. They are recognised by content
+  (`.launchclip/provided-files.json`), described from the provider's answer
+  with no model call, and left out of routing (`routing.provided`), so the
+  concept, the story, the script and the voice are reused.
+- The ghosting gate counted a diagram's wiring (`from`, `to`, `point`,
+  `weight`, `style` values) as words to read: a 10-word `line-diagram` failed
+  as 33 words. Only copy is counted now.
+- The script check did not know "Save this …" as a call to action, though
+  the short-video rules ask the writer for it, and reported `cta-missing`.
+- A take that ran short of its target was reported as words that "cannot be
+  read" in the seconds the voice had just read them in (`fits-clock`).
+- A `character-cameo` drew a wide character (a blob, a cup) or a wide
+  gesture (a cheer) past the safe zone, failing the cast gate; it is moved
+  and, where needed, drawn smaller to fit its area.
 - Character stories: a cue anchored to a word (`at: "word:<text>"`) now means
   the word as it is said during the cue's scene, not the first time the
   narration says it, and a word that starts just outside the scene plays at

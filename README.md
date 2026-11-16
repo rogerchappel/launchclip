@@ -6,9 +6,6 @@ LaunchClip turns one prompt, plus whatever you have (a logo, a product demo, scr
 
 Built for founders launching a product, and anyone who'd rather ship than spend a week in an editor.
 
-<!-- Launch video: replace this comment with the embedded video or a link once it's published. -->
-> 🎬 **Watch the launch video:** *coming soon*
-
 ---
 
 ## Why people use it
@@ -33,7 +30,7 @@ You need [Node.js 22+](https://nodejs.org) and FFmpeg (`brew install ffmpeg` on 
 **1. Install**
 
 ```bash
-npm install --global github:rogerchappel/launchclip
+npm install --global launchclip
 launchclip doctor
 ```
 

@@ -46,7 +46,7 @@ review its terms before redistributing a bundle that includes it.
 ## Person cut-out models (optional, subject stage)
 
 `launchclip subject` cuts the presenter out of a recording with a person
-segmentation model run through `onnxruntime-node` 1.27.0 (MIT, by Microsoft),
+segmentation model run through `onnxruntime-node` 1.31.1 (MIT, by Microsoft),
 declared as an optional dependency. LaunchClip does not bundle any model: the
 chosen one is downloaded on first use (or by `launchclip subject setup`) into
 `$LAUNCHCLIP_HOME/models` (default `~/.launchclip/models`) and checked against
@@ -223,7 +223,7 @@ copyleft licences. LaunchClip does not modify or bundle either:
 
 ## Other direct dependencies
 
-At the time of the 0.2.0 release, HyperFrames declares Apache-2.0;
+At the time of the 0.3.0 release, HyperFrames declares Apache-2.0;
 React, React DOM, Three.js, React Three Fiber, and the Anthropic SDK declare
 MIT. Each installed package contains the authoritative licence information for
 its version. Transitive dependencies may use additional licences.

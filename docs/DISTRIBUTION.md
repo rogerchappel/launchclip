@@ -9,7 +9,8 @@ LaunchClip has four complementary distribution paths:
    workflows that do not require a LaunchClip model API key.
 
 The GitHub-only `v0.1.0` source preview and the `0.1.1` release candidate were
-not published to npm. Version `0.2.0` is the first npm release and must be
+not published to npm, and `0.2.0` was never published or tagged. Version `0.3.0`
+is the first npm release and must be
 tagged from the exact reviewed commit that is published.
 
 ## Release gates
@@ -146,7 +147,7 @@ symlinked. Replace the version and checksum below after npm publication:
 class Launchclip < Formula
   desc "Create reviewable launch videos and OSS promotion packets"
   homepage "https://github.com/rogerchappel/launchclip"
-  url "https://registry.npmjs.org/launchclip/-/launchclip-0.2.0.tgz"
+  url "https://registry.npmjs.org/launchclip/-/launchclip-0.3.0.tgz"
   sha256 "REPLACE_WITH_PUBLISHED_TARBALL_SHA256"
   license "MIT"
 
@@ -167,9 +168,9 @@ end
 Release and verify it in this order:
 
 ```bash
-npm view launchclip@0.2.0 dist.tarball dist.integrity
-curl -L "https://registry.npmjs.org/launchclip/-/launchclip-0.2.0.tgz" -o launchclip-0.2.0.tgz
-shasum -a 256 launchclip-0.2.0.tgz
+npm view launchclip@0.3.0 dist.tarball dist.integrity
+curl -L "https://registry.npmjs.org/launchclip/-/launchclip-0.3.0.tgz" -o launchclip-0.3.0.tgz
+shasum -a 256 launchclip-0.3.0.tgz
 brew audit --strict --online rogerchappel/tap/launchclip
 brew install --build-from-source rogerchappel/tap/launchclip
 brew test rogerchappel/tap/launchclip

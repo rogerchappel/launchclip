@@ -1,6 +1,6 @@
 {
   "name": "@launchclip/core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "LaunchClip's storyboard engine: the launchclip.story.v1 contract, its module registry and JSON Schemas, migrations, story patches, captions, transitions, camera and layout checks. Pure ESM, browser-safe, no Node built-ins.",
   "type": "module",
   "sideEffects": false,

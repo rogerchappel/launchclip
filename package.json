@@ -1,6 +1,6 @@
 {
   "name": "launchclip",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Describe your video, drop in your stuff, get the finished video: launch videos, product demos and edits from one prompt, with your AI agent or headless.",
   "type": "module",
   "bin": {
@@ -103,7 +103,7 @@
     "@fontsource/instrument-serif": "5.3.0",
     "@fontsource/stix-two-math": "5.3.0",
     "@fontsource/young-serif": "5.3.0",
-    "@launchclip/core": "0.2.0",
+    "@launchclip/core": "0.3.0",
     "@react-three/fiber": "9.8.2",
     "@remotion/cli": "4.0.543",
     "@remotion/google-fonts": "4.0.543",
@@ -132,7 +132,7 @@
   "optionalDependencies": {
     "gpt-tokenizer": "3.4.0",
     "kokoro-js": "1.2.1",
-    "onnxruntime-node": "1.27.0",
+    "onnxruntime-node": "1.31.1",
     "playwright": "1.64.1"
   }
 }

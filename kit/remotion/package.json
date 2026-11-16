@@ -1,6 +1,6 @@
 {
   "name": "@launchclip/remotion",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "LaunchClip's Remotion kit: StoryComposition, the module components and registries, captions, brand frame and the bundled fonts, for apps that render launchclip.story.v1 stories in their own Remotion bundle or @remotion/player.",
   "type": "module",
   "exports": {
@@ -49,7 +49,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@launchclip/core": "0.2.0",
+    "@launchclip/core": "0.3.0",
     "@fontsource-variable/big-shoulders-display": "5.3.0",
     "@fontsource-variable/bricolage-grotesque": "5.3.0",
     "@fontsource-variable/dm-sans": "5.3.0",
