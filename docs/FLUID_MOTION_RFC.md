@@ -157,12 +157,138 @@ Because both sides are ordinary ops on ordinary ids, the renderers need nothing
 new. The transition between A and B for carried elements is a cut on the
 same frame (A's copy hides as B's shows), so they never double.
 
+### 6.1 The switch: `story.motion.flow`
+
+Carry is an enhancement a feel or a style turns on, not something the planner
+has to write per scene.
+
+```json
+{"motion": {"feel": "steady", "flow": true}}
+{"motion": {"flow": {"carry": "auto", "pin": true}}}
+```
+
+- `motion.flow`: `true` (the same as `{carry: "auto", pin: true}`), `false`,
+  or `{carry: "auto" | false, pin: true | false}`. Nothing else is accepted,
+  and the story schema says so.
+- **Feel defaults.** `kinetic` and `steady` turn flow on; `snap` leaves it off
+  (snap is about hard jumps); no feel leaves it off. An explicit
+  `motion.flow` (`false` included) beats the feel's default.
+- **Style packs.** Seeded styles draw flow with the rest of the motion feel
+  (`drawMotionFeel`, kit/core/style-feel.mjs): calm and premium tones always
+  have it, the other tones by a seeded chance. It is written as
+  `motion.flow` in the pack, and `storyMotionOf` (kit/core/style.mjs) passes
+  it to the story with the grammar and feel, so a style turns it on with no
+  planner work.
+- **Per scene.** A scene's own `carry` map replaces the automatic pairing at
+  its boundary; `carry: false` opts that scene out.
+- **Planner.** The prompt gets one sentence: with flow on, leave the boundary
+  between two scenes that share elements a cut (no `in`), and the engine
+  carries what they share.
+
+### 6.2 Pairing (a resolve pass)
+
+With flow on, every scene B is paired with its **source** A: the last earlier
+scene on the same track whose module is an op-list module (catalogue B, G or
+H), when only footage or a gap lies between them. That covers both a scene
+that follows another directly and a graphics plate that comes back after a
+footage cutaway: B resumes where A left off instead of rebuilding.
+
+Pairing needs a **still plate** at the boundary, and skips the boundary
+otherwise (an explicit `carry` map that breaks one of these is a validation
+error that names it):
+
+- A and B are on the same track and both are op-list modules;
+- B arrives by a cut: no `in`, or `in.type` `"cut"`. A whip, push or any
+  typed transition with motion keeps its own look;
+- the story's camera is not a world camera (`camera.mode` `"world"` moves
+  between plates). A feel's ambient camera and kicks are fine: they move the
+  whole composition, so A and B still share one coordinate space;
+- a module's own camera (node-graph's slow push, a zoom inside the shot) is
+  allowed, because rects are measured through it (below).
+
+The candidates on each side are the module's **elements**: nodes with an id
+and a box whose nearest id-bearing ancestor is the module root or a wrapper
+that fills the module's rect (node-graph's `-cam`). Inner parts (`-idle`,
+`-lit`, a label inside a card) travel with their element. An element's
+**kind** is its id after the scene prefix with a trailing indexed token
+dropped (`node-n0` → `node`, `item-3` → `item`, `hub-label` stays
+`hub-label`).
+
+1. **Pins** (with `pin` on): an element of A and one of B with the same id
+   suffix, the same subtree (ids aside) and the same rect on screen at the
+   boundary stay on the plate: no exit, no entrance, no tween.
+2. **Carries** (with `carry: "auto"`): of what is left, elements of the same
+   kind with the same text pair greedily, nearest centres first.
+
+An explicit map names full DOM ids on both sides, as above, with an optional
+`from` (the source by default). An entry whose two rects match is a pin; any
+other is a carry. A map may pair elements whose text differs: B's content then
+shows on the boundary frame inside the moving box (a swap, not a morph).
+
+### 6.3 What the pass does to the two models
+
+Everything below is a change to the shared view tree and op list, made in
+kit/core (`resolveModule` tags the models; the catalogue B, G and H view and
+timeline functions apply it), so both renderers draw it with no new code.
+
+- **The root's exit and entrance are lifted.** A module's root normally fades
+  and slides as one, which would take a held element with it. When A hands
+  elements on, A's root no longer exits: every element that is not handed on
+  and not on the way to one is wrapped in a layer (`<id>-lift`, the size of
+  its parent, its transform origin at the module's centre) that plays the
+  root's exit instead, so the rest leaves exactly as it did. B's root entrance
+  is lifted the same way.
+- **A holds.** Handed elements and their ancestors drop their own ops from
+  the exit on, so they stay in their last pose until A's last frame.
+- **B skips the entrance of what it receives.** For each received element and
+  its ancestors, each prop that starts away from its rest value (hidden,
+  offset, undrawn) is set at B's start to where its first move takes it, and
+  that first move is dropped. Later moves (idle, a wave, a shot state, a
+  pulse lighting the card) still play.
+- **Rects at the boundary** are visual: the element's layout box mapped
+  through its own and every ancestor's transform at A's last frame (the
+  module root at rest), and at B's first frame for the slot. That is what
+  lets a module's own camera stay on.
+- **Pin:** nothing more; A's copy hides and B's shows on the same frame.
+- **Carry:** B's element starts at A's rect, as an `x`, `y`, `scaleX`,
+  `scaleY` and `rotation` offset from its slot, and tweens to the slot over
+  0.7 s (the grammar's move duration when it has one): slow → fast → slow,
+  `x` on `power2.inOut` and `y` on `power3.inOut` so the path arcs slightly,
+  scale and rotation on `power3.inOut`, no overshoot. Members leave in order
+  of distance a hashed 0.04–0.1 s apart, so a group arrives as a flock. There
+  is no per-element blur; a story's `motion.blur` smears the fast middle of
+  the move and leaves the ends sharp.
+
 **Unproven.** The two scenes must share a coordinate space at the boundary: no
 camera move in either across it, the same canvas, both rendered on the same
 plate. World-camera scenes and typed transitions with motion (push, whip) are
 out until a rect can be mapped through the camera at the boundary frame. Text
 that reflows between layouts (a card that grows) is a cross-fade inside the
 moving card, not a morph.
+
+**Reference notes (2026-11-17).** A second reel shows carry working through a
+talking-head video: graphics sit on a dark dot-grid plate above the speaker,
+with cutaways to the speaker full frame between beats. What makes it read as
+one continuous piece, and what it adds to this section:
+
+- **The plate survives footage cutaways.** When the cut returns to the
+  graphics, they resume where they left off rather than rebuilding. The plate
+  never moves its camera, so it meets the "same coordinate space" condition
+  above by construction. That makes it a good first target for phase 3.
+- **Pinned elements.** A hub mark at the top stays put across several beats
+  while content below it changes. This is simpler than carry (same rect on
+  both sides, so no FLIP) and could ship first: a carried id whose slot equals
+  its last rect.
+- **Container morph.** A URL pill becomes a node; a search pill streaks in
+  (motion blur at peak speed), becomes a command bar, then three empty rows
+  drop in under it and fill in turn. The shape itself changes, which this
+  section currently rules out. Worth testing a rect-only morph (tween width,
+  height and corner radius of the box, cross-fade the contents) before
+  deciding it stays out.
+- **Growth from what's already there.** Labels branch out of an ad card on
+  wires and icons branch out of the hub, so nothing new appears unattached.
+  `node-graph` wires already do this; the gap is wires from an arbitrary
+  element of another module, which needs the anchors in §7.
 
 ## 7. Characters reacting to graphics (phase 4)
 
@@ -239,11 +365,26 @@ pass it as designed, and it learns two things:
   `pulse`. An element that flashes on every beat used to be read as one long
   life from its first fade-in to its last fade-out; the check now reads each
   fade-in and the fade-out after it as one flash (shipped in phase 1).
-- **New findings** (phase 2): `static-hold` (warning) when a scene longer than
-  3 s has a settled stretch over 1.5 s where nothing on screen moves, which is
-  what this whole entry is against; `loop-seam` (error) when `loop: true` and
-  frame 0 differs from the last frame; `shake-overshoot` (error) when a camera
-  shake's steps do not decay.
+- **New findings** (phase 2, shipped): `static-hold` (warning) when a scene
+  longer than 3 s has a settled stretch over 1.5 s where nothing on screen
+  moves, which is what this whole entry is against; `loop-seam` (error) when
+  `loop: true` and frame 0 differs from the last frame; `shake-overshoot`
+  (error) when a camera shake's steps do not decay.
+
+  **As shipped.** The idle suffix is in: an `-idle` target is neither an
+  element nor a gesture for `crowded-move`. `static-hold` reads the ops, states
+  and hits from the end of the entrance to the start of the exit; a scene with
+  no op list is not measured, since its motion is not visible to the check.
+  `shake-overshoot` reads three or more abutting x/y steps of 0.1 s or less on
+  one target that reverse direction as a shake, and fails one whose step lands
+  further from rest than the step before (by over half a pixel), that does
+  not end at rest, or that runs over 0.3 s. `loop-seam` compares `frameState`
+  at the model's start and one frame before its end, within half a pixel or
+  degree and 1 % for opacity and scale; it runs on a model with `loop: true`,
+  which nothing sets until phase 6. The phase-1 `node-graph` sample has no
+  still gap at all and its shake runs 0.24 s. Most older catalogue modules
+  hold still after their entrance and warn `static-hold` until phase 5 gives
+  them idle motion.
 
 ## 10. Planner-drawn graphics (phase 5)
 
@@ -264,9 +405,12 @@ world kit), any icon from `kit/core/icons.mjs`, text that fits; nothing else.
 1. **`node-graph` and `fluid-motion.mjs`** (this PR): flock, wave, idle, impact
    shake, beat grid, glowing wires with pulses, hub lit on arrival; schema,
    both renderers, parity fixtures, tests, a 9:16 sample.
-2. **Motion check additions**: `static-hold`, `loop-seam`, `shake-overshoot`;
-   the idle suffix in crowding.
-3. **Carry across scenes** (§6) on still-camera plates.
+2. **Motion check additions** (shipped): `static-hold`, `loop-seam`,
+   `shake-overshoot`; the idle suffix in crowding.
+3. **Carry across scenes** (§6) on still-camera plates, in four steps: pins
+   (§6.2), carry with the FLIP, including a plate that comes back after a
+   footage cutaway, the `motion.flow` switch (§6.1), then a container-morph
+   test (R&D only, verdict in §12).
 4. **Anchors and character reactions** (§7). Shipped.
 5. **Planner-drawn graphics** (§10), then group patterns and idle on the other
    catalogue H modules that draw sets of things (icon-grid, drop-grid,
@@ -276,6 +420,8 @@ world kit), any icon from `kit/core/icons.mjs`, text that fits; nothing else.
 ## 12. What is unproven
 
 - Carry through a moving camera or a moving transition (§6).
+- Whether a container morph (tween only the box's width, height and corner
+  radius, cross-fade its contents) reads well enough to join auto-pairing.
 - Whether idle on every element of a busy scene reads as alive or as nervous;
   the amplitude table is a first guess, to be tuned against renders.
 - Whether two staggered arcs hold eight labels in every brand's display font;
