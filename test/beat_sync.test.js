@@ -156,3 +156,16 @@ test("align never changes the story: transformGrid only moves the music", () => 
   assert.equal(nearest(grid.downbeats, 4).value, 3.75);
   assert.ok(scoreMoments([{ at: 3.75, weight: 1, downbeat: true }], grid) > 0.99);
 });
+
+test("snap: over footage, a cut takes the calmest moment in the tolerance, weighed against the beat", () => {
+  const story = motionStory();
+  story.scenes[1].params.countAt = 0.9;
+  const grid = gridFromBpm(120, 12);
+  // Footage busy everywhere but a still moment at 3.75 s (a beat is at 3.5 and 4).
+  const values = Array.from({ length: 121 }, (_, i) => (Math.abs(i / 12 - 3.75) < 0.05 ? 0 : 10));
+  const result = snapStory(story, grid, { mode: "cuts", motion: { fps: 12, values } });
+  assert.deepEqual(result.changes.map((change) => [change.scene, change.from, change.to, change.grid]), [["s2", 3.9, 3.75, "calm"], ["s3", 7.1, 7, "beat"]]);
+  // Unknown motion (no footage there) snaps to the grid as before.
+  const blind = snapStory(story, grid, { mode: "cuts", motion: { fps: 12, values: values.map(() => null) } });
+  assert.deepEqual(blind.changes.map((change) => [change.scene, change.to, change.grid]), [["s2", 4, "downbeat"], ["s3", 7, "beat"]]);
+});

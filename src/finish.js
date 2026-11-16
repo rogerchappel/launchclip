@@ -99,6 +99,7 @@ import { fitSceneTimings } from "./timing_fit.js";
 // face; a card moved off the face lands in the caption band).
 const LAYOUT_REPAIR_PASSES = 6;
 import { analyzeBeatsFile, beatsDocument, gridFromBpm, transformGrid } from "./music/beats.js";
+import { storyMotionCurve } from "./motion_curve.js";
 import { BEAT_SYNC_SCHEMA, chooseAlignment, keyMoments, momentReport, snapStory, summarizeMoments, syncStrategy } from "./music/beat_sync.js";
 
 const execFileAsync = promisify(execFile);
@@ -2533,7 +2534,9 @@ async function beatSync(ctx, plan, track, { duration }) {
   let changed = false;
   if (storyGrid && strategy === "snap" && mode !== "off") {
     const before = ctx.copy;
-    const result = snapStory(ctx.copy, storyGrid, { mode, words: ctx.words ?? [], beats: beatsForAnchors });
+    // Footage the story plays gives its cuts a motion curve: they snap to calm moments (§4.4).
+    const motion = mode === "hits" ? null : await (ctx.adapters.storyMotion ?? storyMotionCurve)(ctx.resolved, ctx.project).catch((error) => { ctx.warnings.push(`beat sync: the footage's motion could not be read (${firstLine(error.message)}); cuts snap to the grid only`); return null; });
+    const result = snapStory(ctx.copy, storyGrid, { mode, words: ctx.words ?? [], beats: beatsForAnchors, motion });
     ({ changes, reverted, skipped } = result);
     if (changes.length) {
       // Re-validate and re-run layout-check on the snapped copy; fall back
@@ -2584,7 +2587,7 @@ async function beatSync(ctx, plan, track, { duration }) {
     changes,
     reverted,
     skipped,
-    notes: strategy === "align" ? ["Narration timing is fixed: the music moved (offset/tempo); no story time changed."] : strategy === "snap" ? ["Second-timed cuts snap to downbeats and hits to beats within 0.25 s; word and beat anchors never move."] : ["Beat sync is off."]
+    notes: strategy === "align" ? ["Narration timing is fixed: the music moved (offset/tempo); no story time changed."] : strategy === "snap" ? ["Second-timed cuts snap to downbeats and hits to beats within 0.25 s (over footage, to the calmest moment there, weighed against the beat); word and beat anchors never move."] : ["Beat sync is off."]
   };
   await writeJson(path.join(ctx.project, PATHS.beatSync), report);
   return {

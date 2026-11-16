@@ -55,3 +55,17 @@ test("motionEnergy reads grey frames and masks overlay boxes", () => {
   // The changing corner is an overlay: masked, nothing moves.
   assert.deepEqual(motionEnergy(raw, w, h, { mask: [{ x: 0.5, y: 0.5, w: 0.5, h: 0.5 }] }).values, [0, 0, 0]);
 });
+
+test("storyMotionCurve places each footage scene's motion on the story clock", async () => {
+  const { storyMotionCurve } = await import("../src/motion_curve.js");
+  const resolved = { resolved: { duration: 4 }, scenes: [
+    { id: "a", start: 0, end: 2, params: { headline: "no footage" } },
+    { id: "b", start: 2, end: 4, params: { media: { src: "assets/clip.mp4", sourceStart: 10 } } },
+    { id: "c", start: 2, end: 4, track: 1, params: { media: "assets/overlay.mp4" } }
+  ] };
+  const read = async (file) => { assert.match(file, /assets\/clip\.mp4$/); return { fps: 12, values: Array.from({ length: 12 * 20 }, (_, i) => i / 12) }; };
+  const curve = await storyMotionCurve(resolved, "/project", { read });
+  assert.equal(curve.values[12], null);
+  assert.ok(Math.abs(curve.values[36] - 11) < 1e-9); // 3 s on the story clock is 11 s into the clip
+  assert.equal(await storyMotionCurve({ resolved: { duration: 2 }, scenes: [resolved.scenes[0]] }, "/project", { read }), null);
+});
