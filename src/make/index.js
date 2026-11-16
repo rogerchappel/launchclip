@@ -2426,7 +2426,7 @@ async function stagePlan(ctx) {
     const failed = stages.find((stage) => stage.status === "failed");
     throw new Error(`the plan failed at the ${failed?.name ?? "unknown"} step: ${errorSummary(failed?.error ?? "finish wrote no plan")}`);
   }
-  const gates = Object.fromEntries(Object.entries(finish.plan.checks.gates ?? {}).map(([name, gate]) => [name, { status: gate.status, ...(gate.error ? { error: String(gate.error).split("\n")[0] } : {}), ...(gate.reason ? { reason: gate.reason } : {}), ...(gate.errors?.length ? { errors: gate.errors.slice(0, 8) } : {}), ...(gate.findings?.length ? { findings: gate.findings.slice(0, 8) } : {}) }]));
+  const gates = Object.fromEntries(Object.entries(finish.plan.checks.gates ?? {}).map(([name, gate]) => [name, { status: gate.status, ...(gate.error ? { error: String(gate.error).split("\n")[0] } : {}), ...(gate.reason ? { reason: gate.reason } : {}), ...(gate.errors?.length ? { errors: gate.errors.slice(0, 8) } : {}), ...(gate.findings?.length ? { findings: gate.findings.slice(0, 8) } : {}), ...(gate.summary ? { summary: gate.summary, at: gate.at } : {}) }]));
   if (ctx.baseEditQa) gates.base_edit_qa = ctx.baseEditQa;
   if (ctx.researchGate) gates.research = ctx.researchGate;
   const failedChecks = Object.entries(gates).filter(([, gate]) => gate.status === "failed").map(([name]) => name);
@@ -2474,7 +2474,7 @@ async function stageFinish(ctx) {
   const finish = await run(project, finishOptions, finishAdapters);
   ctx.finish = finish;
   report.finish = { status: finish.status, report: "finish.json", seconds: finish.seconds, stages: finish.stages.map((stage) => ({ name: stage.name, status: stage.status, seconds: stage.seconds, ...(stage.error ? { error: stage.error.split("\n")[0] } : {}) })) };
-  report.gates = Object.fromEntries(Object.entries(finish.gates ?? {}).map(([name, gate]) => [name, { status: gate.status, ...(gate.error ? { error: String(gate.error).split("\n")[0] } : {}), ...(gate.reason ? { reason: gate.reason } : {}) }]));
+  report.gates = Object.fromEntries(Object.entries(finish.gates ?? {}).map(([name, gate]) => [name, { status: gate.status, ...(gate.error ? { error: String(gate.error).split("\n")[0] } : {}), ...(gate.reason ? { reason: gate.reason } : {}), ...(gate.summary ? { summary: gate.summary, at: gate.at } : {}) }]));
   if (ctx.baseEditQa) report.gates.base_edit_qa = ctx.baseEditQa;
   if (ctx.researchGate) report.gates.research = ctx.researchGate;
   report.final = finish.final ? path.relative(project, finish.final) : null;
