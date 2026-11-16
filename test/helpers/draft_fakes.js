@@ -35,6 +35,9 @@ const usage = { input_tokens: 1000, output_tokens: 200, total_tokens: 1200 };
 // Only a long wait is unref'd: a short one is awaited by the run, and on Node 22 an awaited unref'd timer lets the test's event loop end.
 const wait = (ms) => (ms > 0 ? new Promise((resolve) => { const timer = setTimeout(resolve, ms); if (ms >= 1000) timer.unref(); }) : Promise.resolve());
 
+/** The look the draft tests run on unless they ask for another: its captions sit on one line. */
+export const DRAFT_SEED = "0a0a0a0a";
+
 /**
  * A run of make on the recorded answers.
  * options: {direction (the direction call's answer; a function is called
@@ -82,7 +85,10 @@ export async function draftRun({ direction = DRAFT_DIRECTION, directionMs = 0, e
   };
   const run = async (options = {}, adapters = {}) => {
     const lines = [];
-    const report = await runMake(DRAFT_PROMPT, { voice: "test", cwd, out: "video", ...options }, {
+    // A fixed look, so a test does not pass or fail with the look a random seed draws (one in fifteen stacks its
+    // captions, which the character cards hide). A test of another look passes its own seed or style.
+    const look = options.seed == null && options.style == null && !options.refine ? { seed: DRAFT_SEED } : {};
+    const report = await runMake(DRAFT_PROMPT, { voice: "test", cwd, out: "video", ...look, ...options }, {
       env,
       client: { client, provider: "openai", model: "gpt-5.6-luna", spec: "openai:gpt-5.6-luna", vision: true },
       voiceProvider,
