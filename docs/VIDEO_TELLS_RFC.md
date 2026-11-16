@@ -232,8 +232,48 @@ dimmed photo can slip by. The frame thresholds are set on synthetic frames
 renders of the example stories.
 
 **Left for later:** calibrating the frame thresholds on rendered examples;
-the plate blur in buried-raster; the critic reading `motion.thesis` and the
-template check (phase 4, the `specificity` category).
+the plate blur in buried-raster. (The critic reading `motion.thesis` and the
+template check landed in phase 4.)
+
+### Phase 4: what landed
+
+All in `runHeadlessCritic` (`src/make/critic.js`) and the repair loop
+(`src/make/critic_repair.js`, `criticRepairs` in `src/make/index.js`), as §4
+describes:
+
+- **The split.** Pass A (`launchclip_make_critic`) sees the sheets, the
+  shot list, the rules and the storyboard's `direction` and `motion.thesis`,
+  never the tooling. Its schema puts `template {swappable, why}` first, so the
+  model answers the template question before it lists findings; a swappable
+  video is a `specificity` finding. Pass B (`launchclip_make_critic_check`)
+  runs only when finish's coverage gate or tells gate found something: it gets
+  A's findings and each tooling finding and marks it `agree` or
+  `false-positive`. The answers land in `qa/critic.json` under
+  `tooling_checks` (`unchecked` when pass B failed or skipped one). The
+  coverage findings still count toward the verdict as before; a false positive
+  is a note for threshold tuning, not a waiver.
+- **`recapture`.** A verdict of the final review (not the animatic's). The
+  model may give it, and tooling sets it when the sheets are partial (a sheet
+  missing on disk, a sample with no evidence) and the model said ship. In
+  `make`, a recapture round deletes `qa/temporal-evidence` and
+  `qa/critic-sheets`, reruns finish (the render is cached, so only evidence and
+  gates run) and asks pass A again. The planner is not called.
+- **The verdict pass.** A repair or replan round calls the critic with
+  `prior` (the critique it answers). Its blocking and major findings are scored
+  `resolved | partial | unresolved` (`launchclip_make_critic_verdict`), with at
+  most three regressions and no new hunt. A finding the model did not score
+  counts as unresolved. Anything short of resolved stays a finding at its
+  severity, so it forbids ship. Only the new sheets are sent, never the
+  planner's account of its fix. The scores land in `verdict_pass`.
+- **`keep`.** Up to five lines, from pass A or the verdict pass (else carried
+  from the prior). They reach the planner as `keep (it works; do not lose
+  it): …` lines in a repair's seed errors, a "Keep these, they work" list in a
+  replan brief, and every chunk a long-form round directs.
+
+**Left for later:** the character-story retake rounds (`src/make/retakes.js`)
+still ask the critic afresh each round; a recapture there has no shot to aim
+at and stops the rounds. Nothing yet collects `tooling_checks` across runs for
+threshold tuning.
 
 ## 2. The copy check
 
