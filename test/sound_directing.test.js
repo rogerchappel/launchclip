@@ -152,3 +152,11 @@ test("measured in a real mix: the hush is quiet and its hit lands, the prelap le
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("finish turns into into cues on the cut: a riser and a softer swell end on it, a tape stop runs out on it, a hit lands on it", async () => {
+  const { intoCues } = await import("../src/finish.js");
+  const direct = directSound(story([scene("s1", 0, 3), scene("s2", 3, 6, { into: "riser" }), scene("s3", 6, 9, { into: "swell" }), scene("s4", 9, 12, { into: "tape-stop" }), scene("s5", 12, 15, { into: "hit" }), scene("s6", 15, 18, { into: "silence" })]));
+  const cues = intoCues(direct);
+  assert.deepEqual(cues.map((cue) => [cue.cue, cue.at, cue.lands_at ?? null, cue.source]), [["riser", 1.67, 3, "directing"], ["riser", 4.67, 6, "directing"], ["tape-stop", 8.3, null, "directing"], ["impact", 12, null, "directing"]]);
+  assert.ok(cues[1].volume < cues[0].volume);
+});

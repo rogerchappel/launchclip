@@ -52,6 +52,8 @@ import { storyChapters } from "@launchclip/core/story.mjs";
 import { vfxSounds } from "@launchclip/core/vfx/plan.mjs";
 import { VFX_EFFECTS } from "@launchclip/core/vfx/catalog.mjs";
 import { pairsCheck, storyVisuals } from "@launchclip/core/sound/pairs.mjs";
+import { directCues, directSound, measureDirecting, storySoundWarnings } from "@launchclip/core/sound/directing.mjs";
+import { decodeAudio } from "./music/beats.js";
 import { ffmetadataChapters, youtubeChapterProblems, youtubeChapters } from "@launchclip/core/long-form.mjs";
 import { directionFileFor, moduleParamErrors, readScriptBeside, validateStory } from "./story_cli.js";
 import { ANIMATIC_FILE, ANIMATIC_VIDEO, writeAnimatic } from "./animatic.js";
@@ -360,6 +362,33 @@ export function cuePairNotes(story, cues, modelFor = () => null) {
   const sounds = cues.filter((cue) => cue.source !== "transition").map((cue) => ({ at: cue.lands_at ?? cue.at, cue: cue.cue }));
   const { errors, warnings } = pairsCheck({ hits, changes, sounds });
   return [...errors.map((error) => `pairs: ${error}`), ...(warnings.length ? [`pairs: ${warnings.length} warning${warnings.length === 1 ? "" : "s"}, first: ${warnings[0]}`] : [])];
+}
+
+/**
+ * A scene's `into` (kit/core/sound/directing.mjs) as cues on its cut: a riser
+ * or a softer swell ending on it, a tape stop running out on it, an impact on
+ * it. A silence is a gap in the mix, not a cue.
+ */
+export function intoCues(direct) {
+  const make = { riser: ["riser", 1], swell: ["riser", 0.6], "tape-stop": ["tape-stop", 1], hit: ["impact", 1] };
+  return (direct?.into ?? []).filter((entry) => make[entry.type]).map(({ type, cut, shot }) => {
+    const [cue, gain] = make[type];
+    const at = round3(Math.max(0, cue === "riser" ? cut - CUE_DURATIONS.riser * 0.95 : cue === "tape-stop" ? cut - CUE_DURATIONS["tape-stop"] : cut));
+    return { cue, at, volume: round3(CUE_LEVELS[cue] * gain), shot, intent: `into ${type}`, source: "directing", event: `into-${type}`, ...(cue === "riser" ? { lands_at: cut } : {}) };
+  });
+}
+
+const storyFpsOf = (story) => Number(story?.resolved?.fps ?? story?.format?.fps ?? 30);
+
+/** measureDirecting on the mix file; null when it cannot be read (a stubbed mix). */
+async function checkDirecting(file, direct) {
+  if (!existsSync(file)) return null;
+  try {
+    const { samples, sampleRate } = await decodeAudio(file);
+    return measureDirecting(samples, sampleRate, direct);
+  } catch {
+    return null;
+  }
 }
 
 // Cue pacing. Most catalogue modules tag their title and emphasis events
@@ -780,7 +809,7 @@ export function defaultAdapters() {
     async buildMix(options) {
       const { buildMix, normalizeCues } = await import("./scripts/build-mix.mjs");
       const cues = normalizeCues(options.cues, options.sfxDir).map((cue, i) => (options.score ? { ...cue, pan: options.cues[i].pan, sweep: options.cues[i].sweep, ...(options.cues[i].take?.dur ? { sweep_seconds: options.cues[i].take.dur } : {}) } : cue));
-      buildMix({ score: options.score ?? null, voice: options.voice, music: options.music, ambience: options.ambience, cues, duration: options.duration, out: options.out, musicVolume: options.musicVolume, musicDuck: options.musicDuck ?? null, ambienceVolume: options.ambienceVolume, key: options.key, keySegments: options.keySegments });
+      buildMix({ score: options.score ?? null, voice: options.voice, music: options.music, ambience: options.ambience, cues, duration: options.duration, out: options.out, musicVolume: options.musicVolume, musicDuck: options.musicDuck ?? null, ambienceVolume: options.ambienceVolume, key: options.key, keySegments: options.keySegments, direct: options.direct ?? null });
       return { cues };
     },
     async audioFeatures(out, buses, options) {
@@ -1319,11 +1348,14 @@ const STAGES = [
       const bound = score ? { cues: score.cues, warnings: [] } : sfxOn ? bindCues(ctx.resolved, { models, palette: Boolean(sound.palette), sonify: Boolean(sound.sonify) }) : { cues: [], warnings: [] };
       if (!score) bound.cues = paceCues(applyDensity(bound.cues, density, storyId), density, storyId);
       if (sfxOn && !score) ctx.warnings.push(...cuePairNotes(ctx.resolved, bound.cues, models));
+      // Sound directing (scenes[i].sound): the story's planned silences, early sound and held breath.
+      const direct = directSound(ctx.resolved, { fps: storyFpsOf(ctx.resolved) });
+      if (direct) ctx.warnings.push(...storySoundWarnings(ctx.resolved, { words: ctx.words ?? [] }));
       const typing = sfxOn ? typingSchedule(collectTyping(ctx.resolved, { models }), { seed: storyId, ...densityTyping(density) }) : [];
       const libraries = sfxOn ? await resolveLibraries({ project: ctx.project, library: ctx.options.sfxLibrary ?? (audio.sfx_library ? path.resolve(ctx.project, audio.sfx_library) : undefined), home: ctx.options.sfxHome }) : [];
       // One line when a cue family is missing from every SFX library and falls
       // back to the procedural kit (it would sound unlike the library's set).
-      const used = [...(score ? SCORE_FAMILIES : []), ...bound.cues.map((cue) => cue.cue), ...(typing.length ? ["keystroke", "keystroke-space", "keystroke-enter", "click"] : [])];
+      const used = [...(score ? SCORE_FAMILIES : []), ...bound.cues.map((cue) => cue.cue), ...(sfxOn ? intoCues(direct).map((cue) => cue.cue) : []), ...(typing.length ? ["keystroke", "keystroke-space", "keystroke-enter", "click"] : [])];
       const fallbacks = libraryFallbacks(used, libraries);
       if (fallbacks.length) ctx.warnings.push(`sfx: ${fallbacks.join(", ")} ${fallbacks.length === 1 ? "is" : "are"} not in the SFX library (${libraries.map((library) => library.dir === userLibraryDir({ home: ctx.options.sfxHome }) ? "~/.launchclip/sfx" : library.dir).join(", ")}), so ${fallbacks.length === 1 ? "it uses" : "they use"} the procedural kit; fill only the missing families with: launchclip sfx seed --missing`);
       const voice = audio.voice && existsSync(path.join(ctx.project, audio.voice)) ? audio.voice : null;
@@ -1387,6 +1419,7 @@ const STAGES = [
         scripts: [await fileHash(SCRIPT.synth), await treeFingerprint(SOUND_DIR), await fileHash(SCRIPT.mix), await fileHash(SCRIPT.features), await fileHash(path.join(ROOT, "src", "music", "beats.js")), await fileHash(path.join(ROOT, "src", "music", "beat_sync.js"))],
         ...(score ? { score: { room: score.room, earshot: Boolean(findEarshot(ctx.adapters.env ?? process.env)), sounds: [await fileHash(path.join(ROOT, "src", "sfx", "score.js")), await fileHash(path.join(ROOT, "src", "sfx", "score_sounds.js"))] } } : {}),
         kit: kit ?? undefined,
+        ...(direct ? { direct, directing: await fileHash(path.join(ROOT, "kit", "core", "sound", "directing.mjs")) } : {}),
         ...(sound.sonify ? { sonify: true } : {}),
         sfx: { mode: sfxMode, ...(sfxMode === "earshot" ? { earshot: await fileHash(path.join(ROOT, "src", "sfx", "earshot.js")) } : {}), density, typing, libraries: libraries.map((library) => ({ scope: library.scope, dir: library.dir, families: hashValue(library.manifest.families) })) }
       });
@@ -1437,6 +1470,9 @@ const STAGES = [
         typingPlan = typingSchedule(collectTyping(ctx.resolved, { models }), { seed: plan.storyId, ...densityTyping(plan.density) });
       }
       const mixFile = path.join(ctx.project, PATHS.mix);
+      // Scene times may have moved with the beat: direct the sound on the story as it now stands.
+      const direct = directSound(ctx.resolved, { fps: storyFpsOf(ctx.resolved) });
+      if (direct && plan.sfxOn) boundCues = [...boundCues, ...intoCues(direct)];
       // SFX cue → file: library first (explicit, project, user), then the kit.
       const kit = kitLibrary(path.join(kitDir, "sfx"), await readOptionalJson(path.join(kitDir, "AUDIO-KIT.json")));
       // No hiss or noise wash under the voice: a failing file gives way to a variant that passes, or its cue is dropped.
@@ -1479,8 +1515,12 @@ const STAGES = [
         typing = { file: path.join(ctx.project, PATHS.typing), keystrokes: rendered.keystrokes, counts: rendered.counts };
         cues.push({ cue: "typing", at: 0, volume: 1, shot: null, intent: `typing track (${rendered.keystrokes.length} keys)`, source: "typing", file: typing.file });
       }
+      cues = directCues(cues, direct);
       await writeJson(path.join(ctx.project, PATHS.cues), cues);
-      const mixed = await ctx.adapters.buildMix({ voice: voiceFile, music: musicFile, ambience: ambienceFile, cues, sfxDir: path.join(kitDir, "sfx"), duration, out: mixFile, musicVolume: plan.bed?.volume ?? 0.42, ...(plan.music.duck != null ? { musicDuck: plan.music.duck } : {}), ...(ambienceFile ? { ambienceVolume: AMBIENCE_VOLUME } : {}), ...(speechKey ? { key: speechKey.file, keySegments: speechKey.segments } : {}), ...(scorePlan ? { score: { room: scorePlan.room } } : {}) });
+      const mixed = await ctx.adapters.buildMix({ voice: voiceFile, music: musicFile, ambience: ambienceFile, cues, sfxDir: path.join(kitDir, "sfx"), duration, out: mixFile, musicVolume: plan.bed?.volume ?? 0.42, ...(plan.music.duck != null ? { musicDuck: plan.music.duck } : {}), ...(ambienceFile ? { ambienceVolume: AMBIENCE_VOLUME } : {}), ...(speechKey ? { key: speechKey.file, keySegments: speechKey.segments } : {}), ...(scorePlan ? { score: { room: scorePlan.room } } : {}), ...(direct ? { direct } : {}) });
+      // The mix check: each hush quiet with its hit on the end, each prelap or tail where it was planned.
+      const directing = direct ? await checkDirecting(mixFile, direct) : null;
+      if (directing) ctx.warnings.push(...directing.errors.map((error) => `sound: ${error}`));
       // Only for a story with audio.react: the final mix and its buses, measured once per video frame for the
       // audio-reactive layers (kit/core/audio-react.mjs); both renderers read it.
       if (audioFeatureNeeds(ctx.copy).length) await ctx.adapters.audioFeatures?.(path.join(ctx.project, PATHS.audioFeatures), { mix: mixFile, music: musicFile, voice: voiceFile }, { fps: Number(ctx.resolved.resolved?.fps ?? ctx.resolved.format?.fps ?? 30), duration });
@@ -1499,6 +1539,7 @@ const STAGES = [
         typing: typing ? { file: typing.file, counts: typing.counts, keystrokes: typing.keystrokes } : null,
         density: plan.density,
         ...(scorePlan ? { score: { key: scorePlan.key, source: scoreSounds.source, room: scorePlan.room, silences: scorePlan.silences } } : {}),
+        ...(direct ? { directing: { into: direct.into, hushes: direct.hushes, cuts: direct.cuts, measured: directing } } : {}),
         timbre_refused: guarded.findings,
         libraries: plan.libraries.map((library) => ({ scope: library.scope, manifest: library.file }))
       });
