@@ -21,6 +21,9 @@ test("fail: material three's card leads the list, unlabelled", () => {
   const errors = storyboardOrderErrors(board);
   assert.equal(errors.length, 1);
   assert.match(errors[0], /^order: scene loop shows list item three before item one/);
+  // A callout on footage is on-screen text too.
+  board.scenes[1] = { id: "loop", module: "clip", params: { media: "assets/a.mp4", callouts: [{ text: "Material three" }] } };
+  assert.equal(storyboardOrderErrors(board).length, 1);
 });
 
 test("pass: the same card labelled as a teaser, and the list in order", () => {

@@ -52,7 +52,8 @@ const TEXT_KEYS = ["kicker", "eyebrow", "label", "title", "headline", "heading",
 // A scene's on-screen words, label first (a kicker names the item).
 function sceneText(scene) {
   const params = scene?.params ?? {};
-  return TEXT_KEYS.map((key) => params[key]).filter((entry) => typeof entry === "string" && entry.trim()).join(" · ");
+  const callouts = Array.isArray(params.callouts) ? params.callouts.map((entry) => (typeof entry === "string" ? entry : entry?.text)) : [];
+  return [...TEXT_KEYS.map((key) => params[key]), ...callouts].filter((entry) => typeof entry === "string" && entry.trim()).join(" · ");
 }
 
 /** The planner's notes for cards that show a later list item before the earlier ones, unlabelled. Scenes are taken in story order (track 0 first, as planned). */
