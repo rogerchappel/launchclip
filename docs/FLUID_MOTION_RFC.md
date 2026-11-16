@@ -402,6 +402,41 @@ error the planner can fix, never free-form HTML.
 this RFC: shapes from a closed list (card, chip, badge, ribbon, prop from the
 world kit), any icon from `kit/core/icons.mjs`, text that fits; nothing else.
 
+**Shipped (first half).** `kit/core/graphic.mjs` holds the spec, the fit and
+the painter:
+
+| Kind | Fields | Drawn as |
+|---|---|---|
+| `card` | `icon?`, `label?`, `badge?` (≤ 3 chars); one of icon or label | node-graph's card (it now draws through the painter, byte for byte the same), with a count disc on its corner |
+| `chip` | `label`, `icon?` | a pill in the member's colour over the panel |
+| `badge` | `icon` or `text` (≤ 3 chars), `label?` | a glowing disc in the member's colour, ink on it |
+| `ribbon` | `label`, `icon?` | a banner with notched tails, ink on the colour |
+| `prop` | `prop` (a world-kit prop id), `state?`, `label?` | the world kit's drawing (`drawProp`) in the brand's colours |
+
+- **Validation.** `graphicSpec` rejects an unknown kind, a key the kind does
+  not take, a missing required field, an unknown icon (with near names) or
+  prop (with the list), a state the prop does not have, and text over its
+  length or with angle brackets. Every error names the path and what to
+  change, so the planner can repair it like any module param.
+- **Text that fits.** Widths are measured in label sizes (`graphicWidth`), so
+  a module sizes its member to the widest graphic (node-graph) or fits the
+  label to its cell (`fitGraphic`, icon-grid) and fails under the brand's
+  meta size instead of clipping.
+- **Members.** A `node-graph` node and an `icon-grid` item take
+  `{graphic}` in place of their label and icon; the graphic sits inside the
+  module's own layout and `-idle` wrappers, so it flocks, breathes, carries
+  its wire and lights like the default member. A badge or prop has no face, so
+  its label sits on a plate of the panel (a wire running under it stays
+  hidden) and its lit rim is a glow from behind.
+- **Planner.** The motion and voiceover-motion lane rules carry one paragraph
+  on drawn graphics (`DRAWN_GRAPHICS` in `planning-prompt.mjs`), and both
+  modules' param lines list the spec.
+- **Proof.** Parity fixtures `h-node-graph-graphics-portrait` and
+  `h-icon-grid-graphics-portrait` (every kind; min SSIM 0.996),
+  `test/graphic.test.js`, and the sample `examples/story/graphics-9x16` (a
+  robot in a kitchen, its team drawn as a card with a badge, a chip, two
+  badges, a ribbon and a loaf).
+
 ## 11. Phases
 
 1. **`node-graph` and `fluid-motion.mjs`** (this PR): flock, wave, idle, impact
@@ -415,7 +450,9 @@ world kit), any icon from `kit/core/icons.mjs`, text that fits; nothing else.
    test (R&D only, verdict in §12).
 4. **Anchors and character reactions** (§7). Shipped.
 5. **Planner-drawn graphics** (§10), then group patterns and idle on the other
-   catalogue H modules that draw sets of things. The second half has shipped:
+   catalogue H modules that draw sets of things. Both halves have shipped. The
+   first: the spec, the shared painter, and `node-graph` nodes and
+   `icon-grid` items that take a graphic (§10). The second:
    `icon-grid` flocks out of the middle of the grid and breathes; `drop-grid`
    keeps its word-timed fall, rocks on its base once landed and ripples when
    full; `social-wall`'s field arrives as one wave along the drift and its
@@ -451,6 +488,13 @@ world kit), any icon from `kit/core/icons.mjs`, text that fits; nothing else.
   their base at 0.3 of the bob and 0.7 of the tilt instead of floating off
   their contact shadow. Sets of tiny units (unit-grid) get no idle at all.
   Still unproven: a whole short where every scene breathes.
+- How far a graphic spec can go before it is a custom module. The closed
+  list held for the bakery sample, but a set that mixes kinds reads less
+  evenly than one kind: a chip or ribbon is shorter than a card and floats in
+  the middle of its slot, and a prop's visual weight depends on the drawing.
+  Not yet tried: a graphic as a member of the other set modules (item-list,
+  drop-grid, social-wall), graphics carried across scenes (§6), and a
+  per-graphic colour (today the module's palette decides it).
 - Whether two staggered arcs hold eight labels in every brand's display font;
   the module fails validation rather than overlap them, which may make it
   refuse some fonts at eight nodes.
