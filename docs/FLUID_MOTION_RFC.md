@@ -281,7 +281,7 @@ timeline functions apply it), so both renderers draw it with no new code.
   the move and leaves the ends sharp.
 
 **Unproven.** Camera moves that change zoom or roll (push, pull, orbit,
-overview) are out (§6.5). Text
+overview) need a layer that cancels the camera (§6.6). Text
 that reflows between layouts (a card that grows) is a cross-fade inside the
 moving card, not a morph.
 
@@ -399,6 +399,99 @@ the camera travelling past it.
 
 Samples: `examples/story/flow-camera-9x16` (a pan at 4 s, a whip-pan at
 8 s), `examples/story/flow-slide-9x16` (a push at 4 s, a whip at 8 s).
+
+### 6.6 Carry through zoom and roll (R&D)
+
+Status: R&D, open for review (2026-11-17). Push, pull, orbit and overview
+change the camera's zoom or roll, so §6.5's rule (travel in the world with
+the camera's timing and ease) no longer lands on a straight line: through a
+2× dolly an element that should hold still bulges about 6% off its place
+mid-move and comes back, which is an overshoot on screen. This subsection
+proposes the **ride layer** from the R&D note, and what it decides.
+
+**Mapping a rect at every frame.** The camera draws a world point `w` at
+`screen = c + Z(t)·Rot(r(t))·(w − C(t))` (kit/core/camera-world.mjs
+`screenPoint`; `c` the canvas centre, `C` the camera's world centre, `Z` the
+zoom, `r` the roll, drift aside). B's plate puts its canvas px `p` in the
+world by its placement `Pb` (scale `Sb`, rotation `ρb`). So B's canvas px
+reach the screen through
+
+```
+screen = c + k(t)·Rot(θ(t))·(p − q(t))
+k = Z·Sb    θ = r + ρb    q = Pb⁻¹(C)                (identity at B's rest)
+```
+
+The ride layer is a wrapper around each carried element of B that applies the
+inverse, `p = q(t) + Rot(−θ)·(screen − c)/k`, so inside it B's canvas px are
+screen px on every frame of the move, not only at its ends. As a transform
+about the canvas centre that is a translate of `q(t) − c`, a rotation of
+`−θ(t)` and a scale of `1/k(t)`, and each part is cheap to tween:
+
+- `q(t)` is `Pb⁻¹` (affine) of the camera's centre, which lerps on the move's
+  ease, so the translate is **one tween with the camera's own timing and
+  ease**; the same goes for the rotation.
+- `1/k(t)` is the reciprocal of the camera's zoom. A wide zoom lerps on a log
+  scale (motion.mjs `scaleLerp`), whose reciprocal is the same curve, but a
+  narrow one is linear and its reciprocal is not. The ride samples the
+  camera's own `scaleStepAt` 60 times a second and joins the samples with
+  straight tweens (as `scaleTweenOps` does for the camera), well under a pixel
+  off at 1080 px.
+- The wrapper sits inside the element's module ancestors (node-graph's
+  `-cam` push). Their transform at B's start is a similarity, which commutes
+  with a rotation and a scale, so only the wrapper's origin and translate are
+  converted into the parent's px; the rotation and scale tweens are unchanged.
+  A module's own slow push keeps moving under it, as it moves the slot.
+
+On the boundary frame the camera rests on A, so A's canvas px are screen px
+and the box needs no mapping. B's element then does an ordinary FLIP inside
+the ride from A's rect to its slot, timed to the move as in §6.5 (its start,
+duration and ease, all members at once), so on screen a held title stays put
+and a card that changes slot slides straight to it, slow → fast → slow, with
+no bulge. At the move's end the ride is the identity and stays so.
+
+**Depth: the glass plane.** A carried element lives on the screen plane (the
+glass), not on a plate: it holds its screen size while the world zooms under
+it, and its size changes only by its own FLIP (A's rect → B's slot). Scaling
+it with the world is the uncarried case (it is part of A or B's plate and
+zooms with it), and it breaks the hand-off: through a push B's plate starts
+1.6–3.2× smaller than A's, so B's copy would start a fraction of A's size.
+The cost is parallax order: on the glass a held element moves less than the
+backdrops (0.3×) and the plates (1×) while it is drawn over them, so it reads
+as interface over the world, not an object in it. That is already how a held
+title reads across a pan (§6.5), and it is what the reference reels do.
+
+**Roll and orbit.** The ride cancels the camera's roll, so a carried element
+stays upright on screen while the plates turn 9° under it (and the backdrop
+by its share of the roll). Its own rotation goes from A's on-screen angle to
+the slot's, normally both 0. Counter-rotating it is the only reading that
+keeps type level; a carried card that rolled with the camera would land
+tilted against a slot that is upright.
+
+**Overview.** Out, hold, in: two camera moves with one hold. The ride takes
+both legs (one translate and rotation tween each, the zoom sampled across
+each). The FLIP spans from the first leg's start to the second's end on the
+camera's ease, so a held title sits still over the whole overview while the
+span of plates shrinks and grows under it.
+
+**Motion blur.** The camera's directional blur sits on the camera container,
+and a ridden element is inside it, so it takes the camera's smear: right for
+an element that changes slot with the move, a little wrong for one that holds
+still. On a push or pull the grammar's `moveBlur` is 0–0.5 and below the
+threshold at the ends; on an orbit the radial part is small. Per-element
+blur from the element's own screen velocity still needs it drawn outside the
+camera container (§6.5), which breaks its stacking with the plate it lands in.
+
+**First slice.** Push and pull (world mode; a cuts-mode pull is a camera move
+too), one ride wrapper per carried element of B, in kit/core only: the
+wrapper is a view node and its tweens are ordinary ops, so neither renderer
+changes. Pans, whip-pans, slides, cuts and still plates keep their exact ops.
+Then orbit (the rotation tween), then overview (two legs).
+
+**Unproven.** A pan that rebalances the scale after a chain of pushes
+(`besidePlacement`) also changes zoom; the ride would handle it, but it stays
+refused so pans keep their ops. A module ancestor that is not a similarity
+(a non-uniform scale) at B's start: refused. Per-element blur. Riders and
+overlays carried between plates.
 
 ## 7. Characters reacting to graphics (phase 4)
 
@@ -687,7 +780,8 @@ cake sinking to fail and back; finish's motion and pace gates pass).
   whip-pans and the push and whip slides shipped (§6.5).** Still open
   ([rd/carry-moving-camera.md](rd/carry-moving-camera.md)): moves that zoom or
   roll (push, pull, orbit, overview), where the same world travel bulges about
-  6% off its line mid-move and needs a layer that cancels the camera; blur
+  6% off its line mid-move and needs a layer that cancels the camera (the
+  ride layer, proposed in §6.6); blur
   from the element's own screen velocity rather than the camera's.
 - ~~Whether a container morph (tween only the box's width, height and corner
   radius, cross-fade its contents) reads well enough to join auto-pairing.~~
