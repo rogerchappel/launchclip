@@ -4,13 +4,14 @@
 // anchor resolution. story validate/resolve/compile, layout-check, finish, the
 // renderer adapters, cinematic checks and the renderer eval all call this, so
 // they see the same merged story. The frame's logo is measured here too
-// (src/logo_mark.js), so every reader picks the same plate for it, and cast
+// (src/logo_mark.js), so every reader picks the same plate for it, a
+// brand-lockup's dark mark is tinted to read on a dark card, and cast
 // entries that name a saved character are filled from its file
 // (src/character_store.js: the project's cast/ folder, then the user library).
 import path from "node:path";
 import { applyStyle, storyStyleRequest } from "@launchclip/core/style.mjs";
 import { applySavedCharacters } from "./character_store.js";
-import { withLogoMark } from "./logo_mark.js";
+import { withLockupTints, withLogoMark } from "./logo_mark.js";
 import { resolveStyleV2 } from "./style_store.js";
 
 /**
@@ -23,7 +24,8 @@ export async function applyProjectStyle(story, options = {}) {
   const merged = await mergeProjectStyle(story, options);
   const cast = await applySavedCharacters(merged.story, { projectDir: path.resolve(options.projectDir ?? process.cwd()), home: options.home });
   const result = cast.used.length ? { ...merged, story: cast.story, characters: cast.used } : merged;
-  const measured = await withLogoMark(result.story, path.resolve(options.projectDir ?? process.cwd()));
+  const dir = path.resolve(options.projectDir ?? process.cwd());
+  const measured = await withLockupTints(await withLogoMark(result.story, dir), dir);
   return measured === result.story ? result : { ...result, story: measured };
 }
 
