@@ -145,7 +145,7 @@ export function busFeatures(left, right, { fps, frames }) {
   return Object.fromEntries(SERIES.map((name) => [name, follow(raw[name], fps)]));
 }
 
-async function decode(file, seconds) {
+export async function decode(file, seconds) {
   const { stdout } = await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', file, '-t', String(seconds), '-ac', '2', '-ar', String(RATE), '-f', 'f32le', '-'], { encoding: 'buffer', maxBuffer: 1 << 30 });
   const all = new Float32Array(stdout.buffer, stdout.byteOffset, stdout.byteLength / 4);
   const left = new Float32Array(all.length / 2), right = new Float32Array(all.length / 2);
