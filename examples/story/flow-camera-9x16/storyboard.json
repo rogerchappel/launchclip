@@ -1,0 +1,27 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Flow through a moving camera (golden, 9:16 carry across a pan and a whip)",
+  "notes": "Golden story for carry through a moving camera (docs/rd/carry-moving-camera.md): three node-graph plates in one world-camera space. The camera pans to the second plate and whip-pans to the third; with flow on from the steady feel, the title and hub ride each move and hold still on screen while the plates slide past, and the cards glide from one fan into the next with the camera's own ease. No narration and no paid calls.",
+  "lane": "motion",
+  "format": {"width": 1080, "height": 1920, "fps": 30, "duration": 12, "platform": "youtube-shorts"},
+  "brand": {
+    "colors": {"bg": "#0b0d1a", "primary": "#ffb547", "accent": "#46d4ff", "ink": "#0b0d1a", "paper": "#f6f3ee"},
+    "fonts": {"display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono"}
+  },
+  "motion": {"feel": "steady"},
+  "camera": {"mode": "world", "layout": "row"},
+  "scenes": [
+    {"id": "plan", "module": "node-graph", "start": 0, "end": 4, "params": {
+      "title": "One brief, a whole team", "hub": {"label": "Director", "icon": "clapperboard"},
+      "nodes": [{"id": "research", "label": "Research", "icon": "search"}, {"id": "script", "label": "Script", "icon": "pen-line"}, {"id": "voice", "label": "Voice", "icon": "mic"}, {"id": "camera", "label": "Camera", "icon": "camera"}],
+      "bpm": 120}},
+    {"id": "ship", "module": "node-graph", "start": 4, "end": 8, "in": {"type": "pan", "dur": 0.9}, "params": {
+      "title": "One brief, a whole team", "hub": {"label": "Director", "icon": "clapperboard"},
+      "nodes": [{"id": "research", "label": "Research", "icon": "search"}, {"id": "script", "label": "Script", "icon": "pen-line"}, {"id": "voice", "label": "Voice", "icon": "mic"}, {"id": "camera", "label": "Camera", "icon": "camera"}, {"id": "edit", "label": "Edit", "icon": "scissors"}],
+      "bpm": 120}},
+    {"id": "wrap", "module": "node-graph", "start": 8, "end": 12, "in": {"type": "whip-pan", "dur": 0.35}, "params": {
+      "title": "One brief, a whole team", "hub": {"label": "Director", "icon": "clapperboard"},
+      "nodes": [{"id": "research", "label": "Research", "icon": "search"}, {"id": "edit", "label": "Edit", "icon": "scissors"}, {"id": "publish", "label": "Publish", "icon": "megaphone"}],
+      "bpm": 120}}
+  ]
+}

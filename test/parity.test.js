@@ -73,6 +73,8 @@ const STORY_PARITY = Object.freeze([
   {id: 'flow-carry-9x16', times: [3.9, 4, 4.35, 10, 10.4]},
   // The flow switch: the same story with no carry maps, flow on from the steady feel.
   {id: 'flow-auto-9x16', times: [4, 4.35, 10.4]},
+  // Carry through a moving camera (docs/rd/carry-moving-camera.md): the last frame before a pan, its first frame, mid-pan, landed, mid-whip at peak blur, landed.
+  {id: 'flow-camera-9x16', times: [3.95, 4, 4.45, 5, 8.17, 8.5]},
   // Interface scenes on signal-ui (the CI smoke's times, scripts/parity-ci.mjs).
   {id: 'ui-parity-9x16', times: [...CI_UI_STORY.times]},
   // Anchors (docs/FLUID_MOTION_RFC.md §7): a robot looks at each node-graph card as it lands and cheers at converge.
