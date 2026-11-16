@@ -12,8 +12,8 @@
 // for frame), and in world mode it rides its plate when it shares the
 // plate's window (kit/core/camera-world.mjs RIDER_MODULES).
 //
-// Entrance: cut | fade | pop (a scale from 0.6 about its base, with a little
-// overshoot) | from-left | from-right (slides in along its line from outside
+// Entrance: cut | fade | pop (a scale from 0.6 about its base, easing out
+// with no overshoot) | from-left | from-right (slides in along its line from outside
 // the frame) | drop (falls in from above and settles). By default a prop that
 // arrives with the plate beneath (or on the video's first frame) is simply
 // there; one that arrives mid-shot pops in. Exit: cut | fade | pop; by
@@ -161,7 +161,8 @@ function resolveSetProp(params, ctx) {
 
   // One sample per frame: the follow (x, scale about the canvas centre), the
   // entrance (scale e about the pivot, offset d) and the opacity.
-  const ease = {pop: getEase('back.out(1.7)'), slide: getEase('power3.out'), drop: getEase('bounce.out'), fade: getEase('power2.out'), out: getEase('power2.in')};
+  // Kept: drop is an entrance a story names on purpose; its bounce on landing is what it asks for.
+  const ease = {pop: getEase('power3.out'), slide: getEase('power3.out'), drop: getEase('bounce.out'), fade: getEase('power2.out'), out: getEase('power2.in')};
   const centre = {x: canvas.width / 2, y: canvas.height / 2};
   const samples = [];
   const first = Math.ceil(start * fps - 1e-6), last = Math.floor(end * fps + 1e-6);

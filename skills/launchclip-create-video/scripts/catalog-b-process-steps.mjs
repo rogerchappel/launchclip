@@ -128,7 +128,7 @@ function timeline(model, ops) {
   for (const s of c.steps) {
     set(ops, `${id}-node-${s.index}`, start, {opacity: 0, x: 0, y: 0, scaleX: 0.6, scaleY: 0.6});
     tw(ops, `${id}-node-${s.index}`, s.time, 0.18, 'power1.out', {opacity: 0}, {opacity: 1});
-    tw(ops, `${id}-node-${s.index}`, s.time, 0.45, 'back.out(2)', {scaleX: 0.6, scaleY: 0.6}, {scaleX: 1, scaleY: 1});
+    tw(ops, `${id}-node-${s.index}`, s.time, 0.45, 'power3.out', {scaleX: 0.6, scaleY: 0.6}, {scaleX: 1, scaleY: 1});
     set(ops, `${id}-halo-${s.index}`, start, {opacity: 0, x: 0, y: 0, scaleX: 0.7, scaleY: 0.7});
     tw(ops, `${id}-halo-${s.index}`, s.time + 0.05, 0.5, 'power3.out', {opacity: 0, scaleX: 0.7, scaleY: 0.7}, {opacity: 1, scaleX: 1, scaleY: 1});
     if (s.doneTime !== null) tw(ops, `${id}-halo-${s.index}`, s.doneTime, 0.35, 'power2.out', {opacity: 1}, {opacity: 0});

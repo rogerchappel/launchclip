@@ -593,7 +593,7 @@ function resolveHookTitle(params, ctx) {
   if (kicker) {
     const at = s + kickerAt;
     anim.add('kicker', at, .16, 'power1.out', {opacity: 0}, {opacity: 1});
-    anim.add('kicker', at, .5, 'back.out(2.2)', {scale: .3, rotation: -14}, {scale: 1, rotation: -4});
+    anim.add('kicker', at, .5, 'power3.out', {scale: .3, rotation: -14}, {scale: 1, rotation: -4});
     events.push({id: `${base.id}-kicker`, time: at, role: 'kicker', cue: 'pop'});
   }
 
@@ -1023,7 +1023,7 @@ function resolveEquationLockup(params, ctx) {
   if (highlight !== null) {
     const time = s + highlightAt, node = `term-${highlight}`;
     anim.add(`${node}-box`, time, .25, 'power1.out', {opacity: 0}, {opacity: 1});
-    anim.add(`${node}-box`, time, .45, 'back.out(1.6)', {scale: .86}, {scale: 1});
+    anim.add(`${node}-box`, time, .45, 'power3.out', {scale: .86}, {scale: 1});
     anim.add(`${node}-text`, time, .3, 'power2.out', {color: theme.paper}, {color: theme.emphasis});
     events.push({id: `${base.id}-highlight`, time, role: 'highlight', cue: 'pop'});
   }
@@ -1186,7 +1186,7 @@ function resolveCta(params, ctx) {
   if (handle) {
     pillTime = Math.min(s + .6, exit.exitStart - .6);
     anim.add('pill', pillTime, .2, 'power1.out', {opacity: 0}, {opacity: 1});
-    anim.add('pill', pillTime, .5, 'back.out(1.7)', {scale: .5}, {scale: 1});
+    anim.add('pill', pillTime, .5, 'power3.out', {scale: .5}, {scale: 1});
     events.push({id: `${base.id}-handle`, time: pillTime, role: 'handle', cue: 'pop'});
     // Pulse: grow and fade, reset scale while invisible, fade back in. Every
     // segment starts where the previous ended (seek-safe).
