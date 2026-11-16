@@ -119,10 +119,7 @@ export function applyFlow(model, scene, story, resolveBare) {
   });
   const {children, ops} = opList(model);
   const slots = visualBoxes(model, children, ops, model.start, items.map(item => item.id));
-  model.carry.in.items = items.map(({id, from}) => {
-    const box = before[from];
-    if (!sameBox(box, slots[id])) throw new Error(`scenes ${scene.id}.carry: ${from} → ${id} moves (from ${JSON.stringify(box)} to ${JSON.stringify(slots[id])}); only pins (the same rect on both sides) are supported so far`);
-    return {id, box, pin: true};
-  });
+  // The same rect on both sides is a pin; any other is a carry (the FLIP, kit/core/carry.mjs).
+  model.carry.in.items = items.map(({id, from}) => ({id, box: before[from], pin: sameBox(before[from], slots[id])}));
   return model;
 }

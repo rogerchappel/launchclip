@@ -157,6 +157,11 @@ Because both sides are ordinary ops on ordinary ids, the renderers need nothing
 new. The transition between A and B for carried elements is a cut on the
 same frame (A's copy hides as B's shows), so they never double.
 
+![Carry: the title pinned, four cards fly into a five-card fan, a host cutaway, then the plate resumes and settles into three](images/flow-carry.jpg)
+
+Sample: `examples/story/flow-carry-9x16` (top row 3.5–5.2 s across the first
+cut, bottom row 9.9–12 s across the cutaway and back).
+
 ### 6.1 The switch: `story.motion.flow`
 
 Carry is an enhancement a feel or a style turns on, not something the planner
@@ -245,8 +250,10 @@ timeline functions apply it), so both renderers draw it with no new code.
 - **B skips the entrance of what it receives.** For each received element and
   its ancestors, each prop that starts away from its rest value (hidden,
   offset, undrawn) is set at B's start to where its first move takes it, and
-  that first move is dropped. Later moves (idle, a wave, a shot state, a
-  pulse lighting the card) still play.
+  that first move is dropped. Rest is the value the prop holds for most of
+  the scene, so an overlay that rests hidden and only flashes (node-graph's
+  lit rim, the hub's ring) is not an entrance. Later moves (idle, a wave, a
+  shot state, a pulse lighting the card) still play.
 - **Rects at the boundary** are visual: the element's layout box mapped
   through its own and every ancestor's transform at A's last frame (the
   module root at rest), and at B's first frame for the slot. That is what
@@ -254,7 +261,7 @@ timeline functions apply it), so both renderers draw it with no new code.
 - **Pin:** nothing more; A's copy hides and B's shows on the same frame.
 - **Carry:** B's element starts at A's rect, as an `x`, `y`, `scaleX`,
   `scaleY` and `rotation` offset from its slot, and tweens to the slot over
-  0.7 s (the grammar's move duration when it has one): slow → fast → slow,
+  0.7 s (scaled by the grammar's camera duration, 0.5–1 s): slow → fast → slow,
   `x` on `power2.inOut` and `y` on `power3.inOut` so the path arcs slightly,
   scale and rotation on `power3.inOut`, no overshoot. Members leave in order
   of distance a hashed 0.04–0.1 s apart, so a group arrives as a flock. There

@@ -18,11 +18,20 @@
 // - in: the received elements and their ancestors skip their entrance: a prop
 //   that starts away from rest is set at the start to where its first move
 //   takes it, and that move is dropped. Later moves still play.
+// - in, carry (an item with a box that is not a pin): the FLIP. The element
+//   starts at the source's rect as an x, y, scale and rotation offset from its
+//   slot and settles on the slot, slow → fast → slow with no overshoot; members
+//   leave nearest first, a hashed 0.04–0.1 s apart.
 //
-// Plain ESM; imports only catalog-b-view.mjs and shot-states.mjs.
+// Plain ESM; imports only catalog-b-view.mjs, shot-states.mjs, grammar.mjs and fluid-motion.mjs.
 
 import {abs, el, frameState} from './catalog-b-view.mjs';
 import {indexView} from './shot-states.mjs';
+import {grammarDuration} from './grammar.mjs';
+import {hashUnit} from './fluid-motion.mjs';
+
+/** The hand-off move: duration (s, scaled by the grammar's camera role), eases, the gap between members. */
+export const CARRY_MOVE = Object.freeze({duration: 0.7, x: 'power2.inOut', y: 'power3.inOut', scale: 'power3.inOut', gap: Object.freeze([0.04, 0.1])});
 
 const EPS = 1e-6;
 const KEYS = ['opacity', 'x', 'y', 'scaleX', 'scaleY', 'rotation', 'strokeDashoffset', 'blur', 'clipT', 'clipR', 'clipB', 'clipL'];
@@ -126,18 +135,80 @@ export function applyCarry(model, ops, children) {
     const held = plan.out.targets;
     for (let i = ops.length - 1; i >= 0; i -= 1) if (held.has(ops[i].target) && opTime(ops[i]) >= m.exitStart - EPS) ops.splice(i, 1);
   }
-  if (c.in) skipEntrances(model, ops, plan.into.targets, plan.index);
+  if (c.in) {
+    skipEntrances(model, ops, plan.into.targets, plan.index);
+    flipOps(model, ops, children);
+  }
   return ops;
+}
+
+/**
+ * The FLIP for each carried (not pinned) item: an offset that puts the
+ * element on the source's rect at the start, tweened to its slot.
+ */
+function flipOps(model, ops, children) {
+  const moving = (model.carry.in.items ?? []).filter(item => item.box && !item.pin);
+  if (!moving.length) return;
+  const index = indexView(children);
+  const start = model.start;
+  const duration = grammarDuration(model.grammar ?? null, 'camera', CARRY_MOVE.duration, {min: 0.5, max: 1});
+  const rest = frameState(ops, start);
+  const slotOf = (id, props) => visualBoxes(model, children, props ? [...ops, {type: 'set', target: id, time: start, props}] : ops, start, [id])[id];
+  const plans = moving.map(item => {
+    const own = {x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, ...pick(rest.get(item.id))};
+    const slot = slotOf(item.id);
+    const from = {...own, scaleX: own.scaleX * ratio(item.box.w, slot.w), scaleY: own.scaleY * ratio(item.box.h, slot.h), rotation: own.rotation + item.box.rotation - slot.rotation};
+    // The ancestors' linear map at the start turns a canvas offset into the element's own x/y.
+    const inverse = invert(ancestorLinear(index.byId.get(item.id), rest));
+    // Scale and rotation about a transform origin off-centre move the centre too: correct twice.
+    for (let k = 0; k < 3; k += 1) {
+      const at = slotOf(item.id, from);
+      const [dx, dy] = apply(inverse, [item.box.cx - at.cx, item.box.cy - at.cy]);
+      from.x += dx; from.y += dy;
+    }
+    return {item, own, from: roundProps(from), distance: Math.hypot(item.box.cx - slot.cx, item.box.cy - slot.cy)};
+  }).sort((a, b) => a.distance - b.distance || (a.item.id < b.item.id ? -1 : 1));
+  let at = start;
+  for (const [k, plan] of plans.entries()) {
+    if (k) at += CARRY_MOVE.gap[0] + (CARRY_MOVE.gap[1] - CARRY_MOVE.gap[0]) * hashUnit(plan.item.id);
+    const t = Math.round(at * 1e6) / 1e6, {from, own} = plan, id = plan.item.id;
+    // The move owns the element's transform until it lands: drop what is left of its own entrance.
+    for (const op of ops) if (op.target === id && op.type !== 'loop' && opTime(op) < t + duration - EPS) for (const key of ['x', 'y', 'scaleX', 'scaleY', 'rotation']) strip(op, key);
+    for (let i = ops.length - 1; i >= 0; i -= 1) if (isEmpty(ops[i])) ops.splice(i, 1);
+    ops.push({type: 'set', target: id, time: start, props: {...from}});
+    ops.push({type: 'tween', target: id, start: t, duration, ease: CARRY_MOVE.x, from: {x: from.x}, to: {x: own.x}});
+    ops.push({type: 'tween', target: id, start: t, duration, ease: CARRY_MOVE.y, from: {y: from.y}, to: {y: own.y}});
+    ops.push({type: 'tween', target: id, start: t, duration, ease: CARRY_MOVE.scale, from: {scaleX: from.scaleX, scaleY: from.scaleY, rotation: from.rotation}, to: {scaleX: own.scaleX, scaleY: own.scaleY, rotation: own.rotation}});
+  }
+}
+
+const pick = (props = {}) => Object.fromEntries(['x', 'y', 'scaleX', 'scaleY', 'rotation'].filter(key => typeof props[key] === 'number').map(key => [key, props[key]]));
+const ratio = (a, b) => (b > 0 ? a / b : 1);
+const roundProps = props => Object.fromEntries(Object.entries(props).map(([key, value]) => [key, key.startsWith('scale') ? Math.round(value * 1e4) / 1e4 : Math.round(value * 100) / 100]));
+const invert = ([a, b, c, d]) => { const det = a * d - b * c || 1; return [d / det, -b / det, -c / det, a / det]; };
+
+/** The linear part (rotation and scale) of an entry's ancestors at a frame state. */
+function ancestorLinear(entry, state) {
+  let linear = [1, 0, 0, 1];
+  for (let at = entry?.parent; at && at.parent; at = at.parent) {
+    const p = state.get(at.id) ?? {};
+    const r = ((p.rotation ?? 0) * Math.PI) / 180, cos = Math.cos(r), sin = Math.sin(r);
+    linear = mul(mul([cos, -sin, sin, cos], [p.scaleX ?? 1, 0, 0, p.scaleY ?? 1]), linear);
+  }
+  return linear;
 }
 
 /**
  * For each target and prop that starts away from rest (the sets at the
  * model's start, else the view's opacity), set it at the start to where its
- * first move takes it and drop that move. Loops are left alone.
+ * first move takes it and drop that move. Rest is the value the prop holds for
+ * most of the scene, so an overlay that rests hidden and only flashes (a lit
+ * rim, a ring) is not an entrance. Loops are left alone.
  */
 function skipEntrances(model, ops, targets, index) {
   const start = model.start;
   const settles = new Map();
+  const rests = restValues(model, ops, targets);
   for (const target of targets) {
     const mine = ops.map((op, i) => ({op, i})).filter(({op}) => op.target === target).sort((a, b) => opTime(a.op) - opTime(b.op) || a.i - b.i);
     for (const key of KEYS) {
@@ -146,7 +217,7 @@ function skipEntrances(model, ops, targets, index) {
       let k = 0;
       while (k < touching.length && touching[k].op.type === 'set' && touching[k].op.time <= start + EPS) lead.push(touching[k++].op);
       const initial = lead.length ? lead.at(-1).props[key] : key === 'opacity' ? index.byId.get(target)?.opacity : undefined;
-      if (initial === undefined || typeof initial !== 'number' || Math.abs(initial - REST[key]) < 1e-3) continue;
+      if (initial === undefined || typeof initial !== 'number' || Math.abs(initial - (rests.get(target)?.[key] ?? REST[key])) < 1e-3) continue;
       const first = touching[k]?.op;
       if (!first || first.type === 'loop') continue;
       const value = first.type === 'set' ? first.props[key] : first.to[key];
@@ -156,6 +227,28 @@ function skipEntrances(model, ops, targets, index) {
   }
   for (let i = ops.length - 1; i >= 0; i -= 1) if (isEmpty(ops[i])) ops.splice(i, 1);
   for (const [target, props] of settles) ops.push({type: 'set', target, time: start, props});
+}
+
+/** target → {key: the value it holds for most of the scene (sampled up to the exit)}. */
+function restValues(model, ops, targets) {
+  const counts = new Map();
+  const end = model.motion.exitStart, samples = 48;
+  for (let k = 0; k <= samples; k += 1) {
+    const state = frameState(ops, model.start + ((end - model.start) * k) / samples);
+    for (const target of targets) {
+      const props = state.get(target);
+      if (!props) continue;
+      const mine = counts.get(target) ?? counts.set(target, {}).get(target);
+      for (const key of KEYS) if (typeof props[key] === 'number') {
+        const value = Math.round(props[key] * 100) / 100;
+        const tally = mine[key] ?? (mine[key] = new Map());
+        tally.set(value, (tally.get(value) ?? 0) + 1);
+      }
+    }
+  }
+  const out = new Map();
+  for (const [target, keys] of counts) out.set(target, Object.fromEntries(Object.entries(keys).map(([key, tally]) => [key, [...tally].sort((a, b) => b[1] - a[1])[0][0]])));
+  return out;
 }
 
 function strip(op, key) {
