@@ -363,9 +363,10 @@ Built (first PR):
 
 - **Glyph scramble** is a `motion-title` variant (`scramble`, a character
   effect) with `params.charset` (`latin`, `hex`, `binary`). The glyph sits
-  absolutely over the letter's own box, so the line never reflows, and each
-  letter cycles only through glyphs no wider than about 1.15× itself (a wide
-  `M` over an `i` spilled onto its neighbours). A glyph changes every 3
+  absolutely over the letter's own box and is clipped to it, so the line
+  never reflows and a wide `M` over an `i` never spills onto its neighbours
+  (the advance model gives every display glyph one width, so glyphs cannot
+  be picked by width). A glyph changes every 3
   frames, chosen by `hashUnit(id|i|floor(t / cycle))`, as `text` set ops.
 - **Persistent chrome**: `frame.figure` (`true` or `{label}`) only. It is
   turned into plain `labels` and `counter` by `storyFrame`, so it adds no
