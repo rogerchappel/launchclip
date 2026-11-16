@@ -14,6 +14,15 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 | guided | the above plus enum variants and `rect`, `theme`, `accent`, `motion`, `presentation`, `track` | `custom` |
 | bespoke | the above plus `custom` modules (pure functions of time with a catalogue fallback) | bypassing gates |
 
+## Art direction (write it before any scene)
+
+- Write the direction block first, before any scene: direction {product: what the subject is and who the video is for, one sentence; character: two or three concrete words ("exact, a little warm"); world: the place or material the subject belongs to, which sets the plate, the neutral tint and the accent (a note app lives near paper and ink); moments: one or two scene ids where colour and detail may be rich, everywhere else is quiet; signature: {detail, element}, one small detail only this video has, drawn on at least three scenes under the same element id}.
+- Never describe the character as clean, modern, sleek, minimal, premium, dynamic, engaging, vibrant, stunning, professional or bold: they describe every template, and validate refuses them.
+- Template check: if you swapped the subject for another, would the video still fit? If yes, push the copy, the world and the signature harder.
+- One bright element, quiet chrome: each scene names its one hero element in scene.hero (an element id, like "s2.price"). It carries the colour and the biggest move; captions, labels and panels stay in the neutrals. Use the accent once or twice a frame, outside the moments.
+- Motion thesis, before scenes: motion.thesis {focal: the one focal moment of the video, from this subject; continuity: what carries between scenes; emphasis: which words get a beat; budget: what is expensive and how often}.
+- Refuse: eyebrows and kickers above headlines, gradient text, glass and glow as decoration, identical card grids, a bare big number as the hero, sparklines standing in for content, emoji as icons, mono type as costume, and one identical entrance on every scene. Each may be earned by the brief's own words, except the kicker.
+
 ## Contract
 
 - schema: "launchclip.story.v1" (exactly). lane: one of motion, voiceover-motion, footage-led (given; never change it).
@@ -2731,6 +2740,26 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
       "meta": "jetbrains-mono"
     }
   },
+  "direction": {
+    "product": "A build cache for small teams whose CI runs take most of an hour.",
+    "character": "exact, impatient",
+    "world": "a CI log scrolling in a dark terminal",
+    "moments": [
+      "s2"
+    ],
+    "signature": {
+      "detail": "every figure is read in CI minutes",
+      "element": "min"
+    }
+  },
+  "motion": {
+    "thesis": {
+      "focal": "The run time dropping from 40 to 12 minutes in s2.",
+      "continuity": "The minute figure stays in one place across s1 and s2.",
+      "emphasis": "Beats on \"40\", \"12\" and each change ticked off.",
+      "budget": "One big count in s2; everything else enters quietly."
+    }
+  },
   "audio": {
     "music": {
       "provider": "synth",
@@ -2747,6 +2776,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
       "start": 0,
       "end": 3,
       "energy": 1,
+      "hero": "s1.value",
       "params": {
         "value": 40,
         "suffix": " min",
@@ -2766,6 +2796,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
       "start": 3,
       "end": 6.5,
       "energy": 2,
+      "hero": "s2.value",
       "in": {
         "type": "push",
         "dur": 0.4,
@@ -2790,13 +2821,14 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
       "start": 6.5,
       "end": 11,
       "energy": 2,
+      "hero": "s3.rows",
       "in": {
         "type": "whip",
         "dur": 0.3,
         "direction": "up"
       },
       "params": {
-        "title": "Three changes",
+        "title": "Three changes, 28 min saved",
         "rows": [
           {
             "label": "Cache dependencies",
@@ -2822,6 +2854,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
       "start": 11,
       "end": 14,
       "energy": 1,
+      "hero": "s4.action",
       "in": {
         "type": "fade",
         "dur": 0.3
