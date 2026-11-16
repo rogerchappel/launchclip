@@ -26,8 +26,18 @@
   },
   "motion": {
     "feel": {
-      "preset": "steady",
-      "kicks": false
+      "preset": "kinetic",
+      "ambient": {
+        "scale": [
+          1.03,
+          1.07
+        ],
+        "shift": 0.016,
+        "period": [
+          3,
+          5
+        ]
+      }
     }
   },
   "scenes": [
@@ -35,7 +45,7 @@
       "id": "hook",
       "module": "clip",
       "start": 0,
-      "end": 3.5,
+      "end": 1.9,
       "energy": 2,
       "params": {
         "media": "assets/shots/deck.mp4",
@@ -43,12 +53,24 @@
         "callouts": [
           {
             "text": "Pine, hardwood or composite?",
-            "at": 0.3,
-            "until": 1.5
-          },
+            "at": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "id": "hook-2",
+      "module": "clip",
+      "start": 1.9,
+      "end": 4,
+      "energy": 2,
+      "params": {
+        "media": "assets/shots/oil.mp4",
+        "move": "push-in",
+        "callouts": [
           {
             "text": "One picks your weekends",
-            "at": 1.65
+            "at": 0.3
           }
         ]
       }
@@ -56,8 +78,8 @@
     {
       "id": "teaser",
       "module": "concept-card",
-      "start": 3.5,
-      "end": 5.5,
+      "start": 4,
+      "end": 6,
       "energy": 1,
       "in": {
         "type": "push",
@@ -78,7 +100,7 @@
     {
       "id": "pine",
       "module": "clip",
-      "start": 5.5,
+      "start": 6,
       "end": 9,
       "energy": 2,
       "in": {
@@ -90,11 +112,8 @@
         "move": "push-in",
         "callouts": [
           {
-            "text": "#1 Treated pine",
+            "text": "#1 Treated pine: cheapest to lay",
             "at": 0.3
-          },
-          {
-            "text": "Cheapest to lay"
           }
         ]
       }
@@ -196,12 +215,13 @@
             "text": "Pay more up front",
             "at": 2
           }
-        ]
+        ],
+        "variant": "bottom"
       }
     },
     {
       "id": "tradeoff",
-      "module": "media-compare",
+      "module": "clip",
       "start": 22.5,
       "end": 25.5,
       "energy": 2,
@@ -210,16 +230,14 @@
         "dur": 0.45
       },
       "params": {
-        "title": "Save now or free weekends?",
-        "left": {
-          "media": "assets/shots/oil.mp4",
-          "label": "Weekend oiling"
-        },
-        "right": {
-          "media": "assets/shots/railing.mp4",
-          "label": "Pay upfront"
-        },
-        "pick": "right"
+        "media": "assets/shots/oil.mp4",
+        "move": "push-in",
+        "callouts": [
+          {
+            "text": "Save now or free weekends?",
+            "at": 0.3
+          }
+        ]
       }
     },
     {
@@ -290,5 +308,48 @@
         "handle": "@deckschool"
       }
     }
-  ]
+  ],
+  "camera": {
+    "kicks": [
+      {
+        "at": 0.9
+      },
+      {
+        "at": 2.6
+      },
+      {
+        "at": 4.6
+      },
+      {
+        "at": 7.2
+      },
+      {
+        "at": 9.4
+      },
+      {
+        "at": 11.4
+      },
+      {
+        "at": 13.8
+      },
+      {
+        "at": 17.2
+      },
+      {
+        "at": 20.2
+      },
+      {
+        "at": 23.4
+      },
+      {
+        "at": 26.1
+      },
+      {
+        "at": 28.0
+      },
+      {
+        "at": 29.6
+      }
+    ]
+  }
 }
