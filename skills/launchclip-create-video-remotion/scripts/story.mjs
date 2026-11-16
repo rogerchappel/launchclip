@@ -102,7 +102,7 @@ export const STORY_GRADE_KEYS = ["preset", "cube", "strength", "tint"];
 export const STORY_FINISH_MAX = 8;
 export const STORY_FINISH_TIMES = 32;
 export const STORY_FINISH_PASSES = Object.freeze({
-  "stained-glass": Object.freeze({ cell: [16, 160, 48], lead: [1, 12, 4], glow: [0, 1, 0.6], edges: [0, 1, 0.5], seed: [0, 999999, 0] }),
+  "stained-glass": Object.freeze({ cell: [16, 160, 36], lead: [1, 12, 4], glow: [0, 1, 0.6], edges: [0, 1, 0.5], seed: [0, 999999, 0] }),
   silkscreen: Object.freeze({ inks: [2, 6, 6], cell: [4, 32, 9], angle: [0, 90, 22], registration: [0, 4, 1.5], paper: "#f2ead8", ink: "#1d1b26", one: "#e4572e", two: "#2b6cb0", three: "#f2c14e", four: "#3aa17e", seed: [0, 999999, 0] }),
   bloom: Object.freeze({ threshold: [0.5, 0.95, 0.75], radius: [0.5, 2, 1], strength: [0, 2, 0.6], tint: "#ffffff" }),
   aberration: Object.freeze({ px: [0.5, 4, 1.5], falloff: [0, 1, 1] }),
