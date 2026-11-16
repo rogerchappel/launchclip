@@ -14,6 +14,7 @@ import {grammarStagger} from './grammar.mjs';
 import {VARIANT_PARAM, createHBase, fitText, inkOn, mixColor, r2, rt, textWidth, toneColor} from './catalog-h-base.mjs';
 import {chromeNodes, chromeOps, drawOps, el, label, set, strokePath, tw} from './catalog-h-view.mjs';
 import {idleAmplitude, idleFor, idleOps} from './fluid-motion.mjs';
+import {loopHome} from './loop.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
 const rect = '{x, y, width, height} canvas px inside the safe zone (optional)';
@@ -252,7 +253,7 @@ function listTimeline(model, ops) {
     set(ops, target, start, {opacity: 0, ...from});
     tw(ops, target, item.time, 0.2, 'power1.out', {opacity: 0}, {opacity: 1});
     tw(ops, target, item.time, ENTER, c.variant === 'scatter' || c.variant === 'pills' ? 'power3.out' : 'power3.out', from, rest);
-    idleOps(ops, `${target}-idle`, start, rt(item.time + ENTER + 0.15), settle, c.idle);
+    idleOps(ops, `${target}-idle`, start, rt(item.time + ENTER + 0.15), settle, c.idle, loopHome(model));
     if (item.tickTime !== null && c.pill) {
       // The disc fills and pops, then its check draws on.
       set(ops, `${id}-tick-${item.index}`, start, {opacity: 0, x: 0, y: 0, scaleX: 0.4, scaleY: 0.4});
