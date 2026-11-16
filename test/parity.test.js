@@ -81,6 +81,8 @@ const STORY_PARITY = Object.freeze([
   {id: 'flow-zoom-9x16', times: [3.95, 4, 4.45, 5, 8, 8.45, 9]},
   // Through a roll: the ride layer keeps the title upright. Before an orbit, its first frame, mid-orbit, landed, the same back the other way.
   {id: 'flow-orbit-9x16', times: [3.95, 4, 4.45, 5, 8, 8.45, 9]},
+  // Through an overview: before it, its first frame, zoomed out, the hold, on the way in, landed.
+  {id: 'flow-overview-9x16', times: [7.95, 8, 8.5, 9.2, 9.9, 10.6]},
   // Interface scenes on signal-ui (the CI smoke's times, scripts/parity-ci.mjs).
   {id: 'ui-parity-9x16', times: [...CI_UI_STORY.times]},
   // Anchors (docs/FLUID_MOTION_RFC.md §7): a robot looks at each node-graph card as it lands and cheers at converge.
