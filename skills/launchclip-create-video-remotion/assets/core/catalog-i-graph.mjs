@@ -16,6 +16,7 @@ import {iconNode, isIcon} from './icons.mjs';
 import {GRAPHIC_PARAM, graphicNodes, graphicSpec, graphicWidth} from './graphic.mjs';
 import {AT, RECT, r2, revealId, rt} from './catalog-i-base.mjs';
 import {beatGrid, flockOps, hashUnit, idleAmplitude, idleOps, shakeOps, waveOps} from './fluid-motion.mjs';
+import {anchorOf} from './anchors.mjs';
 
 const GRAPH_VARIANTS = Object.freeze(['fan']);
 // Pulse: dash length (share of the wire) and travel time; a pulse lands on a beat.
@@ -148,6 +149,40 @@ function graphResolve(params, ctx) {
   return b.finish(content, {minTextPx: Math.min(hubSize, tb.title ? tb.title.size : Infinity)});
 }
 
+const glow = (color, px, u) => `drop-shadow(0 0 ${r2(px * u)}px ${color})`;
+
+/**
+ * One wire on path d (RFC §5, §6.4), drawn from its start: a dim base stroke
+ * with a soft glow that draws on, a dotted copy the flow streams down and a
+ * bright pulse dash. Ids <id>-wire-<key>, -flow-<key>, -pulse-<key>; play it
+ * with wireOps and pulseOps.
+ */
+export function wireNodes(id, key, d, color, u) {
+  const path = (pid, style, stroke, width) => el('path', pid, style, [], {d, stroke, strokeWidth: r2(width * u), strokeLinecap: 'round', fill: 'none', pathLength: 1});
+  return [
+    path(`${id}-wire-${key}`, {strokeDasharray: 1, strokeDashoffset: 1, opacity: 0, filter: glow(hex2(color, 0.7), 7, u)}, hex2(color, 0.6), 4),
+    path(`${id}-flow-${key}`, {strokeDasharray: '0.012 0.03', strokeDashoffset: 0, opacity: 0}, mixColor(color, '#ffffff', 0.3), 5),
+    path(`${id}-pulse-${key}`, {strokeDasharray: `${PULSE.length} 2`, strokeDashoffset: PULSE.length, opacity: 0, filter: `${glow(color, 10, u)} ${glow(hex2(color, 0.8), 4, u)}`}, mixColor(color, '#ffffff', 0.55), 10)
+  ];
+}
+
+/** A wire draws on at drawAt (0.45 s), then dots stream down it until end. */
+export function wireOps(ops, id, key, {start, drawAt, end}) {
+  set(ops, `${id}-wire-${key}`, start, {opacity: 0, strokeDashoffset: 1});
+  tw(ops, `${id}-wire-${key}`, drawAt, 0.45, 'power2.inOut', {opacity: 1, strokeDashoffset: 1}, {opacity: 1, strokeDashoffset: 0});
+  set(ops, `${id}-pulse-${key}`, start, {opacity: 0, strokeDashoffset: PULSE.length});
+  // Work flowing along it all the time: dots stream down the wire once it is drawn (continuous, so linear).
+  set(ops, `${id}-flow-${key}`, start, {opacity: 0, strokeDashoffset: 0});
+  tw(ops, `${id}-flow-${key}`, rt(drawAt + 0.3), 0.3, 'power1.out', {opacity: 0}, {opacity: 0.85});
+  tw(ops, `${id}-flow-${key}`, rt(drawAt + 0.3), rt(end - drawAt - 0.3), 'none', {strokeDashoffset: 0}, {strokeDashoffset: r2(-PULSE.flow * (end - drawAt - 0.3))});
+}
+
+/** A pulse leaves the wire's start at go and reaches its end travel later. */
+export function pulseOps(ops, id, key, go, travel) {
+  set(ops, `${id}-pulse-${key}`, go, {opacity: 1});
+  tw(ops, `${id}-pulse-${key}`, go, travel, PULSE.ease, {strokeDashoffset: PULSE.length}, {strokeDashoffset: -1});
+}
+
 const wirePath = (n, hub) => {
   const my = r2((n.cy + hub.y) / 2);
   return `M${n.cx} ${n.cy} C${n.cx} ${my} ${r2(hub.x + (n.cx - hub.x) * 0.3)} ${r2(hub.y - (hub.y - n.cy) * 0.2)} ${hub.x} ${hub.y}`;
@@ -157,16 +192,7 @@ function graphView(model) {
   const {id, fonts, unit: u} = model;
   const c = model.content, h = c.hub, C = c.card;
   const W = model.rect.width, H = model.rect.height;
-  const glow = (color, px) => `drop-shadow(0 0 ${r2(px * u)}px ${color})`;
-  const wires = svgRoot(W, H, c.nodes.flatMap(n => {
-    const d = wirePath(n, h);
-    return [
-      el('path', `${id}-wire-${n.id}`, {strokeDasharray: 1, strokeDashoffset: 1, opacity: 0, filter: glow(hex2(n.color, 0.7), 7)}, [], {d, stroke: hex2(n.color, 0.6), strokeWidth: r2(4 * u), strokeLinecap: 'round', fill: 'none', pathLength: 1}),
-      el('path', `${id}-flow-${n.id}`, {strokeDasharray: '0.012 0.03', strokeDashoffset: 0, opacity: 0}, [], {d, stroke: mixColor(n.color, '#ffffff', 0.3), strokeWidth: r2(5 * u), strokeLinecap: 'round', fill: 'none', pathLength: 1}),
-      el('path', `${id}-pulse-${n.id}`, {strokeDasharray: `${PULSE.length} 2`, strokeDashoffset: PULSE.length, opacity: 0, filter: `${glow(n.color, 10)} ${glow(hex2(n.color, 0.8), 4)}`}, [],
-        {d, stroke: mixColor(n.color, '#ffffff', 0.55), strokeWidth: r2(10 * u), strokeLinecap: 'round', fill: 'none', pathLength: 1})
-    ];
-  }));
+  const wires = svgRoot(W, H, c.nodes.flatMap(n => wireNodes(id, n.id, wirePath(n, h), n.color, u)));
   const R = h.r;
   const ring = (rid, r, dash, opacity) => el('div', rid, {...abs(r2(R * 2 - r), r2(R * 2 - r), r2(r * 2), r2(r * 2)), boxSizing: 'border-box', borderRadius: '50%', border: `${r2(2 * u)}px ${dash} ${hex2(h.color, opacity)}`, transformOrigin: '50% 50%'});
   const hubNode = el('div', `${id}-hub`, {...abs(r2(h.x - R * 2), r2(h.y - R * 2), r2(R * 4), r2(R * 4)), opacity: 0, transformOrigin: '50% 50%'}, [
@@ -225,19 +251,12 @@ function graphTimeline(model, ops) {
   c.nodes.forEach(n => {
     idleOps(ops, `${id}-node-${n.id}-idle`, start, rt(n.landAt + 0.35), settle, c.idle);
     set(ops, `${id}-node-${n.id}-lit`, start, {opacity: 0});
-    set(ops, `${id}-wire-${n.id}`, start, {opacity: 0, strokeDashoffset: 1});
-    tw(ops, `${id}-wire-${n.id}`, n.wireAt, 0.45, 'power2.inOut', {opacity: 1, strokeDashoffset: 1}, {opacity: 1, strokeDashoffset: 0});
-    set(ops, `${id}-pulse-${n.id}`, start, {opacity: 0, strokeDashoffset: PULSE.length});
-    // Work flowing into the hub all the time: dots stream down the wire once it is drawn (continuous, so linear).
-    set(ops, `${id}-flow-${n.id}`, start, {opacity: 0, strokeDashoffset: 0});
-    tw(ops, `${id}-flow-${n.id}`, rt(n.wireAt + 0.3), 0.3, 'power1.out', {opacity: 0}, {opacity: 0.85});
-    tw(ops, `${id}-flow-${n.id}`, rt(n.wireAt + 0.3), rt(model.end - n.wireAt - 0.3), 'none', {strokeDashoffset: 0}, {strokeDashoffset: r2(-PULSE.flow * (model.end - n.wireAt - 0.3))});
+    wireOps(ops, id, n.id, {start, drawAt: n.wireAt, end: model.end});
   });
   // Pulses: each runs node → hub and lands on its beat; the node's rim lights as it leaves, the hub as it lands.
   for (const pulse of c.pulses) {
     const n = c.nodes[pulse.node], go = rt(pulse.arrive - c.travel);
-    set(ops, `${id}-pulse-${n.id}`, go, {opacity: 1});
-    tw(ops, `${id}-pulse-${n.id}`, go, c.travel, PULSE.ease, {strokeDashoffset: PULSE.length}, {strokeDashoffset: -1});
+    pulseOps(ops, id, n.id, go, c.travel);
     tw(ops, `${id}-node-${n.id}-lit`, go, 0.12, 'power1.out', {opacity: 0}, {opacity: 1});
     tw(ops, `${id}-node-${n.id}-lit`, rt(go + 0.12), 0.5, 'power2.out', {opacity: 1}, {opacity: 0});
   }
@@ -263,4 +282,151 @@ export const nodeGraph = {
   resolve: graphResolve, view: graphView, timeline: graphTimeline
 };
 
-export const GRAPHS = [nodeGraph];
+// ---------------------------------------------------------------------------
+// sprout: labels that branch out of another scene's element on node-graph's
+// wires (docs/FLUID_MOTION_RFC.md §6.4), so nothing new appears unattached.
+// An overlay: it draws only the wires and the labels, aimed at an anchor.
+
+const SPROUT_SIDES = Object.freeze(['auto', 'below', 'above', 'left', 'right']);
+const LAND = 0.4;
+
+function sproutResolve(params, ctx) {
+  const b = createHBase('sprout', params, ctx, {allowed: ['from', 'branches', 'side', 'tone', 'at', 'bpm'], required: ['from', 'branches'], variants: ['default']});
+  const {check, u, rect} = b;
+  const p = b.params;
+  const from = check.obj(p.from, 'params.from', ['scene', 'anchor'], ['scene', 'anchor']);
+  let anchor = null;
+  try { anchor = anchorOf({scene: check.str(from.scene, 'params.from.scene', 60), anchor: check.str(from.anchor, 'params.from.anchor', 40)}, ctx?.anchorsOf); } catch (error) { check.fail('params.from', error.message); }
+  const named = `anchor "${from.anchor}" of scene "${from.scene}"`;
+  // The source must stay on screen while its wires do: its own scene, or a pin into the next (RFC §6.4).
+  if (Number.isFinite(anchor.until) && anchor.until < b.end - 1e-3) check.fail('params.from', `${named} leaves at ${anchor.until} s, before this scene ends at ${b.end} s; pin ${anchor.element} into the next scene (carry.map) or end this scene sooner`);
+  check.arr(p.branches, 'params.branches', 1, 4);
+  const seen = new Set();
+  const color = toneColor(b, p.tone, 'params.tone', 'accent');
+  const branches = p.branches.map((raw, i) => {
+    const path = `params.branches[${i}]`;
+    const entry = typeof raw === 'string' ? {label: raw} : check.obj(raw, path, ['id', 'label', 'icon'], ['label']);
+    if (entry.icon !== undefined && !isIcon(entry.icon)) check.fail(`${path}.icon`, `must be an icon name from kit/core/icons.mjs (got ${JSON.stringify(entry.icon)})`);
+    return {id: revealId(check, entry.id, `${path}.id`, `b${i}`, seen), label: check.str(entry.label, `${path}.label`, 16), icon: entry.icon ?? null, index: i};
+  });
+  const sideIn = p.side === undefined ? 'auto' : check.oneOf(p.side, 'params.side', SPROUT_SIDES);
+  const bpm = p.bpm === undefined ? 120 : check.num(p.bpm, 'params.bpm', 60, 200);
+
+  // Labels: pills sized to their text; the source box in this rect's space.
+  const size = r2(Math.max(b.min.key, u(40))), pillH = r2(size * 1.25 + u(30)), pad = u(28);
+  for (const n of branches) n.w = r2(textWidth(n.label, size, 'body') + u(60) + (n.icon ? size * 1.15 + u(14) : 0));
+  const src = {x: anchor.x - rect.x, y: anchor.y - rect.y, hw: (anchor.width ?? 0) / 2, hh: (anchor.height ?? 0) / 2};
+  const W = rect.width, H = rect.height, minRun = u(90), maxRun = u(200);
+  const rowW = branches.reduce((sum, n) => sum + n.w, 0) + pad * (branches.length - 1), colH = branches.length * pillH + pad * (branches.length - 1);
+  const room = {below: H - (src.y + src.hh), above: src.y - src.hh, left: src.x - src.hw, right: W - (src.x + src.hw)};
+  const extent = {below: pillH, above: pillH, left: Math.max(...branches.map(n => n.w)), right: Math.max(...branches.map(n => n.w))};
+  const fits = side => room[side] - extent[side] >= minRun - 1e-6 && (side === 'below' || side === 'above' ? rowW <= W + 1e-6 : colH <= H + 1e-6);
+  const side = sideIn !== 'auto' ? sideIn : ['below', 'right', 'left', 'above'].filter(fits).sort((a, c) => room[c] - room[a])[0];
+  if (!side || !fits(side)) check.fail(sideIn === 'auto' ? 'params.branches' : 'params.side', `do not fit ${sideIn === 'auto' ? 'on any side' : sideIn} of ${named}; use fewer or shorter labels, another side or a larger rect`);
+  const run = r2(Math.min(maxRun, room[side] - extent[side]));
+  const vertical = side === 'below' || side === 'above', dir = side === 'below' || side === 'right' ? 1 : -1;
+  // Across the growth: centred on the source, kept inside the rect.
+  const span = vertical ? rowW : colH, axis = vertical ? src.x : src.y, limit = vertical ? W : H;
+  let at = Math.min(Math.max(axis - span / 2, 0), limit - span);
+  for (const n of branches) {
+    const across = vertical ? n.w : pillH;
+    const mid = r2(at + across / 2);
+    at += across + pad;
+    // The wire leaves the source's facing edge, spread over its middle, and meets the label's near edge.
+    const half = vertical ? src.hw : src.hh;
+    const leave = r2(axis + Math.max(-half * 0.6, Math.min(half * 0.6, (mid - axis) * 0.5)));
+    const edge = r2((vertical ? src.y : src.x) + dir * (vertical ? src.hh : src.hw)), near = r2(edge + dir * run);
+    const far = r2(near + dir * (vertical ? pillH : n.w) / 2);
+    Object.assign(n, vertical ? {cx: mid, cy: far, sx: leave, sy: edge, ex: mid, ey: near} : {cx: far, cy: mid, sx: edge, sy: leave, ex: near, ey: mid});
+    n.color = color;
+  }
+
+  // Timing on the beat grid: wires leave half a beat after the anchor lands, nearest first.
+  const grid = beatGrid(bpm, b.start), beat = grid.beat;
+  const rel = t => rt(t - b.start);
+  const growAt = b.timeOf('build', p.at, 'params.at', rel(grid.snap(Math.max(anchor.time, b.start) + beat / 2)));
+  if (growAt < anchor.time - 1e-6) check.fail('params.at', `grows at ${growAt} s, before ${named} lands at ${anchor.time} s`);
+  b.events.push({id: `${b.id}-build`, name: 'build', time: growAt, endTime: rt(growAt + 0.45), role: 'emphasis', cue: 'whoosh-soft'});
+  const gap = grammarStagger(ctx?.grammar ?? null, beat / 4, {min: 0.06, max: 0.3});
+  const order = [...branches].sort((a, c) => Math.abs((vertical ? a.cx : a.cy) - axis) - Math.abs((vertical ? c.cx : c.cy) - axis) || a.index - c.index);
+  order.forEach((n, k) => {
+    n.landAt = b.timeOf(`branch-${n.id}`, undefined, `params.branches[${n.index}]`, rel(growAt + k * gap + LAND), {min: rel(growAt) + LAND});
+    n.wireAt = rt(n.landAt - LAND);
+    b.events.push({id: `${b.id}-branch-${n.id}`, name: `branch-${n.id}`, time: n.landAt, endTime: rt(n.landAt + 0.4), role: 'emphasis', cue: 'pop'});
+  });
+  // Pulses: from the source to one label per beat, round the labels in growth order, once all have landed.
+  const travel = rt(Math.min(PULSE.travel, beat * 0.9)), pulses = [];
+  const landed = Math.max(...branches.map(n => n.landAt)) + 0.3;
+  for (let arrive = grid.snap(landed + travel), k = 0; arrive <= b.motion.exitStart - 0.1 + 1e-6; arrive = rt(arrive + beat), k++) pulses.push({branch: order[k % order.length].index, arrive});
+
+  // An overlay on its source: the root only fades, so a wire never slides off the element it grows from.
+  b.model.motion.enterFrom = {opacity: 0, x: 0, y: 0, scale: 1};
+  b.model.motion.exitTo = {opacity: 0, x: 0, y: 0, scale: 1};
+  const ink = b.theme.foreground;
+  b.requireContrast('branch/label', ink, b.theme.panel, 'params.branches labels on their pills');
+  const content = {from: {...from, element: anchor.element}, side, branches, pillH, size, pulses, travel, growAt, idle: idleAmplitude(ctx?.grammar ?? null, b.unit), ink, panel: b.theme.panel, color};
+  return b.finish(content, {minTextPx: size});
+}
+
+// A cubic with its tangents along the growth, from the source's edge to the label's near edge.
+function sproutWire(n, vertical) {
+  if (vertical) { const my = r2((n.sy + n.ey) / 2); return `M${n.sx} ${n.sy} C${n.sx} ${my} ${n.ex} ${my} ${n.ex} ${n.ey}`; }
+  const mx = r2((n.sx + n.ex) / 2);
+  return `M${n.sx} ${n.sy} C${mx} ${n.sy} ${mx} ${n.ey} ${n.ex} ${n.ey}`;
+}
+
+function sproutView(model) {
+  const {id, fonts, unit: u} = model;
+  const c = model.content, vertical = c.side === 'below' || c.side === 'above';
+  const wires = svgRoot(model.rect.width, model.rect.height, c.branches.flatMap(n => wireNodes(id, n.id, sproutWire(n, vertical), n.color, u)));
+  const pills = c.branches.map(n => {
+    const icon = n.icon ? r2(c.size * 1.15) : 0, inner = r2(n.w - r2(60 * u) - (icon ? icon + r2(14 * u) : 0));
+    return el('div', `${id}-label-${n.id}`, {...abs(r2(n.cx - n.w / 2), r2(n.cy - c.pillH / 2), n.w, c.pillH), opacity: 0, transformOrigin: '50% 50%'}, [
+      el('div', `${id}-label-${n.id}-idle`, {...abs(0, 0, n.w, c.pillH), transformOrigin: '50% 50%'}, [
+        el('div', null, {...abs(0, 0, n.w, c.pillH), boxSizing: 'border-box', borderRadius: 999, background: `linear-gradient(165deg, ${mixColor(n.color, c.panel, 0.18)}, ${c.panel} 75%)`,
+          border: `${r2(2.5 * u)}px solid ${hex2(n.color, 0.75)}`, boxShadow: `0 ${r2(12 * u)}px ${r2(30 * u)}px ${hex2('#000000', 0.45)}, 0 0 ${r2(22 * u)}px ${hex2(n.color, 0.3)}`}),
+        el('div', `${id}-label-${n.id}-lit`, {...abs(0, 0, n.w, c.pillH), boxSizing: 'border-box', borderRadius: 999, border: `${r2(4 * u)}px solid ${mixColor(n.color, '#ffffff', 0.4)}`, boxShadow: `0 0 ${r2(36 * u)}px ${n.color}, inset 0 0 ${r2(20 * u)}px ${hex2(n.color, 0.5)}`, opacity: 0}),
+        ...(icon ? [iconNode(n.icon, {x: r2(30 * u), y: r2((c.pillH - icon) / 2), size: icon, color: n.color, mode: 'duotone'})] : []),
+        label(null, r2(r2(30 * u) + (icon ? icon + r2(14 * u) : 0)), r2((c.pillH - c.size * 1.25) / 2), inner, n.label, {size: c.size, family: fonts.body, color: c.ink, align: 'left', weight: 700, lineHeight: 1.25})
+      ])
+    ]);
+  });
+  return [wires, ...pills];
+}
+
+function sproutTimeline(model, ops) {
+  const {id, start, unit: u, motion} = model;
+  const c = model.content, settle = rt(motion.exitStart - 0.05);
+  const vertical = c.side === 'below' || c.side === 'above', dir = c.side === 'below' || c.side === 'right' ? 1 : -1;
+  const back = r2(-dir * 40 * u);
+  for (const n of c.branches) {
+    wireOps(ops, id, n.id, {start, drawAt: n.wireAt, end: model.end});
+    // The label slides out along its wire as the wire reaches it.
+    const from = {opacity: 0, scaleX: 0.7, scaleY: 0.7, x: vertical ? 0 : back, y: vertical ? back : 0};
+    set(ops, `${id}-label-${n.id}`, start, from);
+    tw(ops, `${id}-label-${n.id}`, rt(n.landAt - 0.2), 0.45, 'power3.out', from, {opacity: 1, scaleX: 1, scaleY: 1, x: 0, y: 0});
+    set(ops, `${id}-label-${n.id}-lit`, start, {opacity: 0});
+    idleOps(ops, `${id}-label-${n.id}-idle`, start, rt(n.landAt + 0.35), settle, c.idle);
+  }
+  // Each pulse runs source → label; the label's rim lights as it arrives.
+  for (const pulse of c.pulses) {
+    const n = c.branches[pulse.branch];
+    pulseOps(ops, id, n.id, rt(pulse.arrive - c.travel), c.travel);
+    tw(ops, `${id}-label-${n.id}-lit`, rt(pulse.arrive - 0.06), 0.06, 'power1.out', {opacity: 0}, {opacity: 1});
+    tw(ops, `${id}-label-${n.id}-lit`, pulse.arrive, 0.5, 'power2.out', {opacity: 1}, {opacity: 0});
+  }
+}
+
+export const sprout = {
+  id: 'sprout',
+  describe: 'Labels that branch out of an element another scene already shows (an ad card, a hub), on glowing wires with pulses, so nothing new appears unattached: an overlay on a higher track aimed at that scene\'s anchor. Each wire grows from the element\'s edge and its label lands as it arrives; pulses then run out to the labels on the beat and light them.',
+  params: {from: '{scene, anchor}: an anchor another scene publishes (required; that element must stay on screen for this whole scene, pinned across a cut if needed)', branches: '[label ≤ 16 | {label ≤ 16, icon? (kit/core/icons.mjs), id? (default b<i>)}] 1–4 (events branch-<id>)',
+    side: 'auto (default: the side of the element with the most room) | below | above | left | right', tone: 'wires and rims: primary | accent (default) | paper | #rrggbb', at: `when the first wire leaves: ${AT}; default half a beat after the anchor lands`,
+    bpm: 'beats per minute for default timing, 60–200 (default 120)', variant: VARIANT_PARAM, rect: RECT},
+  events: ['build', 'branch-<id>'], timing: timingRules({rules: ['wires leave half a beat after the anchor lands, nearest first, a quarter beat apart; each label lands 0.4 s after its wire leaves', 'a pulse reaches one label per beat once all have landed']}), variants: ['default'],
+  // Not standalone: it needs another scene's anchor, so single-scene harnesses (element sheets and fixtures) skip it; story parity covers it.
+  standalone: false,
+  resolve: sproutResolve, view: sproutView, timeline: sproutTimeline
+};
+
+export const GRAPHS = [nodeGraph, sprout];

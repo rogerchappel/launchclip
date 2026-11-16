@@ -1440,7 +1440,7 @@
        "params": {
         "text": "part is checking it",
         "highlight": "part",
-        "variant": "spring-scale-in"
+        "variant": "per-word-crossfade"
        },
        "why": "concept: nothing specific draws it; the line itself (\"part is checking it\")"
       }
@@ -1705,7 +1705,7 @@
        "params": {
         "text": "a single release",
         "highlight": "single",
-        "variant": "blur-out-up"
+        "variant": "shared-axis-y"
        },
        "why": "concept: nothing specific draws it; the line itself (\"a single release\")"
       },
@@ -1770,7 +1770,7 @@
        "params": {
         "text": "some of the detail",
         "highlight": "detail",
-        "variant": "kinetic-center-build"
+        "variant": "blur-out-up"
        },
        "why": "documents: nothing specific draws it; the line itself (\"some of the detail\")"
       },
@@ -2121,7 +2121,7 @@
        "params": {
         "text": "step before they ask",
         "highlight": "step",
-        "variant": "short-slide-down"
+        "variant": "short-slide-right"
        },
        "why": "process: nothing specific draws it; the line itself (\"step before they ask\")"
       },
@@ -2271,7 +2271,7 @@
        "params": {
         "text": "a tool feel broken",
         "highlight": "tool",
-        "variant": "depth-parallax-words"
+        "variant": "short-slide-down"
        },
        "why": "concept: nothing specific draws it; the line itself (\"a tool feel broken\")"
       },
@@ -2417,7 +2417,7 @@
        "params": {
         "text": "printed its first line",
         "highlight": "printed",
-        "variant": "mask-reveal-up"
+        "variant": "depth-parallax-words"
        },
        "why": "list: nothing specific draws it; the line itself (\"printed its first line\")"
       },
@@ -2634,7 +2634,7 @@
        "params": {
         "text": "an entire codebase",
         "highlight": "entire",
-        "variant": "micro-scale-fade"
+        "variant": "line-by-line-slide"
        },
        "why": "chain: nothing specific draws it; the line itself (\"an entire codebase\")"
       },
@@ -2686,7 +2686,7 @@
        "params": {
         "text": "model actually uses it",
         "highlight": "model",
-        "variant": "shimmer-sweep"
+        "variant": "micro-scale-fade"
        },
        "why": "concept: nothing specific draws it; the line itself (\"model actually uses it\")"
       }
@@ -2900,7 +2900,7 @@
        "params": {
         "text": "capability, not a guarantee",
         "highlight": "capability",
-        "variant": "fade-through"
+        "variant": "shimmer-sweep"
        },
        "why": "concept: nothing specific draws it; the line itself (\"capability, not a guarantee\")"
       }
@@ -3228,7 +3228,7 @@
        "params": {
         "text": "The rest is probably margin",
         "highlight": "rest",
-        "variant": "scale-down-fade"
+        "variant": "shared-axis-z"
        },
        "why": "concept: nothing specific draws it; the line itself (\"The rest is probably margin\")"
       },
@@ -3345,7 +3345,7 @@
        "params": {
         "text": "least for now",
         "highlight": "least",
-        "variant": "focus-blur-resolve"
+        "variant": "scale-down-fade"
        },
        "why": "money: nothing specific draws it; the line itself (\"least for now\")"
       }
@@ -3515,7 +3515,7 @@
        "params": {
         "text": "Halcyon 2",
         "highlight": "Halcyon",
-        "variant": "per-character-rise"
+        "variant": "shared-axis-x"
        },
        "evidence": {
         "claim": "c-swe",
@@ -4023,7 +4023,7 @@
        "params": {
         "text": "command line tool overnight",
         "highlight": "command",
-        "variant": "typewriter"
+        "variant": "soft-blur-in"
        },
        "why": "terminal: nothing specific draws it; the line itself (\"command line tool overnight\")"
       },
@@ -4160,7 +4160,7 @@
        "params": {
         "text": "refactored a whole codebase",
         "highlight": "refactored",
-        "variant": "bottom-up-letters"
+        "variant": "typewriter"
        },
        "why": "social: nothing specific draws it; the line itself (\"refactored a whole codebase\")"
       },
@@ -4201,7 +4201,7 @@
        "params": {
         "text": "answers, invented citations",
         "highlight": "answers",
-        "variant": "top-down-letters"
+        "variant": "bottom-up-letters"
        },
        "why": "social: nothing specific draws it; the line itself (\"answers, invented citations\")"
       },
@@ -4734,7 +4734,7 @@
        "params": {
         "text": "That is a good sign",
         "highlight": "good",
-        "variant": "stagger-from-edges"
+        "variant": "stagger-from-center"
        },
        "why": "concept: nothing specific draws it; the line itself (\"That is a good sign\")"
       }
@@ -5189,7 +5189,7 @@
        "params": {
         "text": "the others catch up",
         "highlight": "others",
-        "variant": "spring-scale-in"
+        "variant": "scramble"
        },
        "why": "process: nothing specific draws it; the line itself (\"the others catch up\")"
       }
@@ -5253,7 +5253,7 @@
        "params": {
         "text": "use the best one",
         "highlight": "use",
-        "variant": "shared-axis-y"
+        "variant": "per-word-crossfade"
        },
        "evidence": {
         "claim": "c-swe",
@@ -5423,7 +5423,7 @@
        "params": {
         "text": "becoming a competitive feature",
         "highlight": "becoming",
-        "variant": "kinetic-center-build"
+        "variant": "shared-axis-y"
        },
        "why": "list: nothing specific draws it; the line itself (\"becoming a competitive feature\")"
       },
@@ -5550,7 +5550,7 @@
        "params": {
         "text": "weeks rather than years",
         "highlight": "weeks",
-        "variant": "short-slide-right"
+        "variant": "blur-out-up"
        },
        "why": "ranking: nothing specific draws it; the line itself (\"weeks rather than years\")"
       },
@@ -5602,7 +5602,7 @@
        "params": {
         "text": "Measure on your own tasks",
         "highlight": "Measure",
-        "variant": "short-slide-down"
+        "variant": "kinetic-center-build"
        },
        "why": "concept: nothing specific draws it; the line itself (\"Measure on your own tasks\")"
       }
@@ -5710,7 +5710,7 @@
    ],
    "start": 0.3,
    "end": 71.663,
-   "key": "b9b30ca79deb7a01",
+   "key": "145223f1b1e69297",
    "shots": [
     "the-launch-nobody-saw-coming-1-sh1",
     "the-launch-nobody-saw-coming-1-sh2",
@@ -5759,7 +5759,7 @@
    ],
    "start": 73.327,
    "end": 157.404,
-   "key": "ddd4b9883fb1ed2a",
+   "key": "108756dace1d3008",
    "shots": [
     "a-short-history-of-halcyon-1-sh1",
     "a-short-history-of-halcyon-1-sh2",
@@ -5819,7 +5819,7 @@
    ],
    "start": 159.059,
    "end": 241.355,
-   "key": "9754a8f6e3b1365c",
+   "key": "4e34f0b4eae29a1e",
    "shots": [
     "inside-the-training-run-1-sh1",
     "inside-the-training-run-1-sh2",
@@ -5889,7 +5889,7 @@
    ],
    "start": 242.999,
    "end": 321.23,
-   "key": "b1de94b872c4988e",
+   "key": "29bc903ea702aba8",
    "shots": [
     "what-northlight-actually-announced-1-sh1",
     "what-northlight-actually-announced-1-sh2",
@@ -5966,7 +5966,7 @@
    ],
    "start": 322.888,
    "end": 407.015,
-   "key": "fc2256d2309a8334",
+   "key": "defa57941233f3d2",
    "shots": [
     "why-speed-changed-everything-1-sh1",
     "why-speed-changed-everything-1-sh2",
@@ -6050,7 +6050,7 @@
    ],
    "start": 408.665,
    "end": 489.154,
-   "key": "6aba08de31b897b4",
+   "key": "46073a54bc85e70e",
    "shots": [
     "the-context-window-doubled-1-sh1",
     "the-context-window-doubled-1-sh2",
@@ -6140,7 +6140,7 @@
    ],
    "start": 490.818,
    "end": 569.226,
-   "key": "97a77754575e64e6",
+   "key": "afea458e1b779ecc",
    "shots": [
     "the-price-cut-and-who-pays-for-it-1-sh1",
     "the-price-cut-and-who-pays-for-it-1-sh2",
@@ -6235,7 +6235,7 @@
    ],
    "start": 570.872,
    "end": 652.654,
-   "key": "5437bdf3d69c9891",
+   "key": "f3f36ae124c3a3d3",
    "shots": [
     "reading-the-benchmarks-honestly-1-sh1",
     "reading-the-benchmarks-honestly-1-sh2",
@@ -6335,7 +6335,7 @@
    ],
    "start": 654.3,
    "end": 734.708,
-   "key": "13d47dd5525332ff",
+   "key": "ba905c5f874045c5",
    "shots": [
     "what-developers-found-in-week-one-1-sh1",
     "what-developers-found-in-week-one-1-sh2",
@@ -6442,7 +6442,7 @@
    ],
    "start": 736.36,
    "end": 812.706,
-   "key": "95e4377b99fb96ad",
+   "key": "72ffe335f116d763",
    "shots": [
     "the-failure-table-and-what-it-admits-1-sh1",
     "the-failure-table-and-what-it-admits-1-sh2",
@@ -6555,7 +6555,7 @@
    ],
    "start": 814.355,
    "end": 894.442,
-   "key": "88ef94ceca6c1444",
+   "key": "b840952c0476ef66",
    "shots": [
     "how-the-rivals-answered-1-sh1",
     "how-the-rivals-answered-1-sh2",
@@ -6674,7 +6674,7 @@
    ],
    "start": 896.088,
    "end": 975.877,
-   "key": "7309ec8884bd4e3e",
+   "key": "8ccb723608b91dc0",
    "shots": [
     "what-this-means-for-the-next-year-1-sh1",
     "what-this-means-for-the-next-year-1-sh2",

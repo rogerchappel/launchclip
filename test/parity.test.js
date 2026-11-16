@@ -76,7 +76,9 @@ const STORY_PARITY = Object.freeze([
   // Interface scenes on signal-ui (the CI smoke's times, scripts/parity-ci.mjs).
   {id: 'ui-parity-9x16', times: [...CI_UI_STORY.times]},
   // Anchors (docs/FLUID_MOTION_RFC.md §7): a robot looks at each node-graph card as it lands and cheers at converge.
-  {id: 'node-graph-anchors-9x16', times: [1.5, 2.7, 3.3, 4.8]}
+  {id: 'node-graph-anchors-9x16', times: [1.5, 2.7, 3.3, 4.8]},
+  // Growth from existing elements (§6.4): wires drawing out of the ad card, the labels landed, a pulse on its way, the pinned cut, the next scene's wire growing, a label lit.
+  {id: 'sprout-ad-card-9x16', times: [0.75, 1.3, 2.3, 3.5, 4.2, 5.5]}
 ]);
 
 for (const {id, times} of STORY_PARITY) {

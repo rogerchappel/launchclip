@@ -230,6 +230,9 @@ export const conceptCard = {
   timing: cardTiming(['with no at, the word lands at 0.05 s; the icon pops up to 0.15 s before it and the sub-line follows it by 0.35 s']),
   mood: ['editorial', 'launch', 'bold'],
   variants: CONCEPT_VARIANTS,
+  // Anchors (FLUID_MOTION_RFC §6.4, §7): the card (its surface, else the rect) as the word lands, and the icon.
+  anchors: model => [{name: 'card', element: model.surface === 'card' ? `${model.id}-card` : model.id, event: 'word'},
+    ...(model.content.icon ? [{name: 'icon', element: `${model.id}-icon`, event: 'icon'}] : [])],
   resolve: resolveConcept, view: conceptView, timeline: conceptTimeline
 };
 

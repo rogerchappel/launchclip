@@ -299,6 +299,61 @@ one continuous piece, and what it adds to this section:
   `node-graph` wires already do this; the gap is wires from an arbitrary
   element of another module, which needs the anchors in §7.
 
+### 6.4 Growth from existing elements
+
+New things branch out of something already on screen, on wires, instead of
+appearing unattached: labels sprout from an ad card, icons from a hub. A
+catalogue I module, `sprout`, draws the growth as an overlay on a higher track,
+aimed at another scene's anchor (§7):
+
+```json
+{"id": "grow", "module": "sprout", "track": 1, "start": 0.6, "end": 5,
+ "params": {"from": {"scene": "ad", "anchor": "card"}, "branches": [{"label": "Copy", "icon": "pen-line"}, {"label": "Images", "icon": "image"}]}}
+```
+
+- **Params.** `from` `{scene, anchor}` (required); `branches` 1–4, each a label
+  ≤ 16 or `{label, icon?, id?}`; `side` `auto` (default: the side of the
+  source with the most room), `below`, `above`, `left` or `right`; `tone`;
+  `at` (when the first wire leaves; default half a beat after the anchor
+  lands, on the beat grid); `bpm`.
+- **Wires are node-graph's.** The base stroke with its glow that draws on, the
+  dots that stream down it and the pulse are one shared drawer in
+  `catalog-i-graph.mjs`, used by both modules. A sprout wire runs from the
+  source's edge (the edge facing the labels, spread across its middle) to the
+  near edge of its label, as a cubic with tangents along the growth.
+- **Growth.** Wires leave the source a quarter beat apart, nearest the anchor
+  first; each draws over 0.45 s (`power2.inOut`) and its label lands as the
+  wire reaches it (fades and scales up from 0.7 and slides out along the wire,
+  `power3.out`), then breathes. Once all have landed, a pulse runs from the
+  source to one label per beat, and the label's rim lights as it arrives.
+- **Events:** `build` (the first wire leaves), `branch-<id>` (each landing). A hit can move them.
+- **Anchors carry a box.** `publishAnchors` adds the element's `width` and
+  `height`, so a sprout leaves from the source's edge, and `concept-card`
+  publishes `card` (its rect, at `word`) and `icon` (at `icon`).
+- **The source must be on screen** for the sprout's whole run. In one scene:
+  the anchor's scene covers it. Across scenes on a shared still plate: the
+  anchor's element is pinned (§6.2, by an explicit `carry.map` or by
+  `motion.flow`) into the next scene, and the chain of pins covers it. A
+  carry that moves the element (the FLIP) ends the chain. An anchor that is published
+  with an `until` before the sprout ends is a validation error that names the
+  time it leaves.
+- **Errors** name the param: an unknown scene, a scene that publishes no
+  anchors, an unknown anchor, a source that is gone before the sprout ends,
+  an `at` before the anchor lands, labels that do not fit on the side.
+
+**Shipped.** As above, in `kit/core/catalog-i-graph.mjs` (node-graph's wires
+became the shared `wireNodes`, `wireOps` and `pulseOps`, with node-graph's
+output unchanged). The catalogue G card surface has an id (`<id>-card`), so a
+card can be pinned and aimed at. `sprout` is not standalone, so the single-scene
+element sheets and fixtures skip it, and story parity covers it:
+`examples/story/sprout-ad-card-9x16` grows Copy and Images out of an ad card,
+pins the card across a cut, and grows Video from the previous scene's anchor
+(SSIM 0.992–0.994 at six times).
+
+**Unproven.** Anchors are measured at rest, so a wire's end does not follow a
+source that moves (a carry's FLIP, a node's idle bob of a few pixels). A carried
+source is out until a wire end can follow its ops.
+
 ## 7. Characters reacting to graphics (phase 4)
 
 Cast scenes already direct gaze and gestures at targets
@@ -458,7 +513,8 @@ the painter:
    (§6.2), carry with the FLIP, including a plate that comes back after a
    footage cutaway, the `motion.flow` switch (§6.1), then a container-morph
    test (R&D only, verdict in §12).
-4. **Anchors and character reactions** (§7). Shipped.
+4. **Anchors and character reactions** (§7). Shipped. Growth from existing
+   elements (§6.4, `sprout` on anchors) builds on them. Shipped.
 5. **Planner-drawn graphics** (§10), then group patterns and idle on the other
    catalogue H modules that draw sets of things. Both halves have shipped. The
    first: the spec, the shared painter, and `node-graph` nodes and
