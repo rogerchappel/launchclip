@@ -187,9 +187,8 @@ has to write per scene.
 - **Per scene.** A scene's own `carry` map replaces the automatic pairing at
   its boundary; `carry: false` opts that scene out.
 - **Planner.** The prompt gets one sentence: with flow on, leave the boundary
-  between two scenes that share elements a cut (no `in`), a pan or a
-  whip-pan, and the engine
-  carries what they share.
+  between two scenes that share elements a cut (no `in`), a pan, a
+  whip-pan, a push or a whip, and the engine carries what they share.
 
 ### 6.2 Pairing (a resolve pass)
 
@@ -204,10 +203,11 @@ and skips the boundary otherwise (an explicit `carry` map that breaks one of
 these is a validation error that names it):
 
 - A and B are on the same track and both are op-list modules;
-- B arrives by a cut (no `in`, or `in.type` `"cut"`), or by a `pan` or
-  `whip-pan` of the camera, in a world-camera story or a cuts story. Across a
-  camera move A's rect is mapped through the two plates' world placements
-  and the element travels with the move (§6.5). A push, pull, orbit or
+- B arrives by a cut (no `in`, or `in.type` `"cut"`), by a `pan` or
+  `whip-pan` of the camera (world-camera or cuts story), or by a `push` or
+  `whip` slide. Across a camera move A's rect is mapped through the two
+  plates' world placements, across a slide by B's layer offset, and the
+  element travels with the move (§6.5). A push, pull, orbit or
   overview changes the camera's zoom or roll, and they and every other typed
   transition keep their own look. A world-camera cut stacks B on A's
   placement, so it is a still plate. A feel's ambient camera and kicks are
@@ -274,7 +274,7 @@ timeline functions apply it), so both renderers draw it with no new code.
   the move and leaves the ends sharp.
 
 **Unproven.** Camera moves that change zoom or roll (push, pull, orbit,
-overview) and the cuts-mode push (a typed slide) are out (§6.5). Text
+overview) are out (§6.5). Text
 that reflows between layouts (a card that grows) is a cross-fade inside the
 moving card, not a morph.
 
@@ -379,12 +379,19 @@ the camera travelling past it.
   move together.
 - **A's side.** A is drawn on through the move (its `renderEnd`), so its
   handed copies hide with an `opacity: 0` set on the boundary.
+- **Slides.** A `push` or `whip` in a cuts story (and a typed `whip` in a
+  world one) does not move the camera: B's layer starts a frame's width or
+  height away and eases home while A's leaves. That is a camera move in all
+  but name, so A's rect is offset by B's layer at the boundary and the
+  element travels with the layer's tween (its timing and ease). The whip's
+  layer blur takes the element with it, as the camera blur does.
 - **Blur.** The camera's directional blur is on the camera container, so a
   carried element takes the camera's smear at peak speed: right for a card
   that glides with the camera, a 2–4 frame smear on a whip for one that holds
   still on screen.
 
-Sample: `examples/story/flow-camera-9x16` (a pan at 4 s, a whip-pan at 8 s).
+Samples: `examples/story/flow-camera-9x16` (a pan at 4 s, a whip-pan at
+8 s), `examples/story/flow-slide-9x16` (a push at 4 s, a whip at 8 s).
 
 ## 7. Characters reacting to graphics (phase 4)
 
@@ -569,12 +576,11 @@ the painter:
 
 ## 12. What is unproven
 
-- ~~Carry through a moving camera or a moving transition (§6).~~ **Pans and
-  whip-pans shipped (§6.5).** Still open
+- ~~Carry through a moving camera or a moving transition (§6).~~ **Pans,
+  whip-pans and the push and whip slides shipped (§6.5).** Still open
   ([rd/carry-moving-camera.md](rd/carry-moving-camera.md)): moves that zoom or
   roll (push, pull, orbit, overview), where the same world travel bulges about
-  6% off its line mid-move and needs a layer that cancels the camera; the
-  cuts-mode push (a typed slide); blur from the element's own screen velocity
+  6% off its line mid-move and needs a layer that cancels the camera; blur from the element's own screen velocity
   rather than the camera's.
 - ~~Whether a container morph (tween only the box's width, height and corner
   radius, cross-fade its contents) reads well enough to join auto-pairing.~~
