@@ -1,0 +1,193 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Card looks beyond the box (9:16)",
+  "notes": "Sample for the concept-card and icon-row looks (kit/core/catalog-g-looks.mjs): free type with a rule as wide as the word, a scrim, glass plates, a sticker, chips, ticks and tags over two deck stills, in a dark teal and green brand with a condensed display face. Icons appear only where one names the idea; the timber names carry none. No narration and no paid calls.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 24,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0e2420",
+      "primary": "#8fe0d2",
+      "accent": "#a9d86e",
+      "ink": "#0e2420",
+      "paper": "#f4f1ea"
+    },
+    "fonts": {
+      "display": "oswald",
+      "body": "outfit",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "scenes": [
+    {
+      "id": "deck-a",
+      "module": "clip",
+      "start": 0,
+      "end": 12,
+      "params": {
+        "media": "assets/shots/garden.svg",
+        "move": "push-in"
+      }
+    },
+    {
+      "id": "deck-b",
+      "module": "clip",
+      "start": 12,
+      "end": 24,
+      "params": {
+        "media": "assets/shots/boards.svg",
+        "move": "push-in"
+      }
+    },
+    {
+      "id": "free-concept",
+      "module": "concept-card",
+      "track": 1,
+      "start": 0,
+      "end": 3,
+      "params": {
+        "text": "Really oil it?",
+        "icon": "droplet",
+        "sub": "Be honest about your weekends",
+        "variant": "free"
+      }
+    },
+    {
+      "id": "chips-icon",
+      "module": "icon-row",
+      "track": 1,
+      "start": 3,
+      "end": 6,
+      "params": {
+        "title": "Aussie hardwoods",
+        "items": [
+          {
+            "label": "Merbau"
+          },
+          {
+            "label": "Spotted gum"
+          },
+          {
+            "label": "Blackbutt"
+          },
+          {
+            "label": "Jarrah"
+          }
+        ],
+        "variant": "chips"
+      }
+    },
+    {
+      "id": "scrim-concept",
+      "module": "concept-card",
+      "track": 1,
+      "start": 6,
+      "end": 9,
+      "params": {
+        "text": "Every summer",
+        "sub": "Or the boards grey out",
+        "variant": "scrim"
+      }
+    },
+    {
+      "id": "ticks-icon",
+      "module": "icon-row",
+      "track": 1,
+      "start": 9,
+      "end": 12,
+      "params": {
+        "title": "Composite",
+        "items": [
+          {
+            "label": "No oiling"
+          },
+          {
+            "label": "No splinters"
+          },
+          {
+            "label": "Free weekends"
+          }
+        ],
+        "variant": "ticks"
+      }
+    },
+    {
+      "id": "glass-concept",
+      "module": "concept-card",
+      "track": 1,
+      "start": 12,
+      "end": 15,
+      "params": {
+        "text": "Pay upfront",
+        "icon": "wallet",
+        "sub": "Then forget the brush",
+        "variant": "glass"
+      }
+    },
+    {
+      "id": "glass-icon",
+      "module": "icon-row",
+      "track": 1,
+      "start": 15,
+      "end": 18,
+      "params": {
+        "title": "The trade-off",
+        "items": [
+          {
+            "label": "Weathers well",
+            "icon": "sun"
+          },
+          {
+            "label": "Oil yearly",
+            "icon": "droplet"
+          },
+          {
+            "label": "Mid price",
+            "icon": "wallet"
+          }
+        ],
+        "variant": "glass"
+      }
+    },
+    {
+      "id": "sticker-concept",
+      "module": "concept-card",
+      "track": 1,
+      "start": 18,
+      "end": 21,
+      "params": {
+        "text": "Be honest",
+        "sub": "Will you really oil it?",
+        "variant": "sticker"
+      }
+    },
+    {
+      "id": "tags-icon",
+      "module": "icon-row",
+      "track": 1,
+      "start": 21,
+      "end": 24,
+      "params": {
+        "title": "Pick one",
+        "items": [
+          {
+            "label": "Pine"
+          },
+          {
+            "label": "Hardwood"
+          },
+          {
+            "label": "Composite"
+          }
+        ],
+        "variant": "tags"
+      }
+    }
+  ]
+}

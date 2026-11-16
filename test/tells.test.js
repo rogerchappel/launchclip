@@ -4,8 +4,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {existsSync, readFileSync, readdirSync} from 'node:fs';
 import {resolveStory} from '@launchclip/core/story.mjs';
-import {FRAME_TELLS, PLAN_TELLS, TELL_REGISTRY, frameTells, planTells} from '@launchclip/core/tells.mjs';
-import {tellsGate} from '../src/direction_guardrails.js';
+import {FRAME_TELLS, PLAN_TELLS, TELL_REGISTRY, UNBOXED_VARIANTS, boxRepair, frameTells, planTells} from '@launchclip/core/tells.mjs';
+import {moduleVariants} from '@launchclip/core/modules.mjs';
+import {boxedOnFlatBackdrops, tellsGate} from '../src/direction_guardrails.js';
 
 const fonts = {display: '"Anton", sans-serif', body: '"Manrope", sans-serif', meta: '"JetBrains Mono", monospace', serif: '"Instrument Serif", serif'};
 const model = (extra = {}) => ({fonts, unit: 1, theme: {panel: '#1c1a17', muted: '#8a8378'}, motion: {enterEase: 'power3.out', enterFrom: {opacity: 0, y: 40}}, ...extra});
@@ -198,6 +199,59 @@ test('a finding ends in its fix and carries the date the tell was added', () => 
   assert.equal(finding.severity, 'error');
   assert.equal(finding.added, '2026-11-16');
   assert.match(finding.detail, /back\.out\(1\.7\); expo or quart out/);
+});
+
+// The triage render: one boxed card on the flat plate while the story has footage.
+const PALETTE = {bg: '#0b1020', primary: '#ff7a59', accent: '#7ce7ff', ink: '#0b1020', paper: '#f5f1ea'};
+const triage = (cards, extra = []) => ({schema: 'launchclip.story.v1', lane: 'motion', format: {width: 1080, height: 1920, fps: 30, duration: 20}, brand: {colors: PALETTE}, scenes: [...cards, ...extra]});
+const CLIP = {id: 'cl', module: 'clip', start: 16, end: 19, params: {media: 'assets/shots/boards.svg'}};
+const flat = (gate) => gate.findings.filter(f => f.rule === 'boxed-on-flat');
+
+test('boxed-on-flat: with footage in the story one filled box is a plan error with a repair', () => {
+  const cards = [
+    {id: 'cc', module: 'concept-card', start: 0, end: 3, params: {surface: 'card', text: 'Really oil it?', sub: 'Be honest'}},
+    {id: 'cmp', module: 'compare', start: 3, end: 6, params: {surface: 'card', left: {title: 'Save now', items: ['Weekend oiling']}, right: {title: 'Pay upfront', items: ['Free weekends']}}},
+    {id: 'tab', module: 'comparison-table', start: 6, end: 9, params: {variant: 'striped', columns: ['Pine', 'Composite'], rows: [{label: 'No brush', values: [false, true]}, {label: 'Cheap', values: [true, false]}]}},
+    {id: 'ir', module: 'icon-row', start: 9, end: 12, params: {surface: 'card', variant: 'list', title: 'Aussie hardwoods', items: [{icon: 'tree', label: 'Merbau'}, {icon: 'tree', label: 'Spotted gum'}]}},
+    {id: 'sp', module: 'split-screen', start: 12, end: 16, params: {media: 'assets/shots/boards.svg', kicker: 'Coming up', title: 'One question picks yours'}}
+  ];
+  const found = flat(tellsGate(triage(cards, [CLIP])));
+  assert.deepEqual(found.map(f => f.ids[0]), ['cc', 'cmp', 'tab', 'ir', 'sp']);
+  assert.ok(found.every(f => f.severity === 'error' && f.repair));
+  assert.deepEqual(found.find(f => f.ids[0] === 'ir').repair, {backdrop: true, modules: ['item-list', 'media-grid']});
+  assert.deepEqual(found.find(f => f.ids[0] === 'cmp').repair.modules, ['media-compare', 'before-after']);
+  assert.equal(found.find(f => f.ids[0] === 'sp').repair.backdrop, false);
+  assert.match(found[0].detail, /footage backdrop/);
+  // Near misses: no footage anywhere; the card on a footage backdrop; the repairs themselves.
+  assert.deepEqual(flat(tellsGate(triage(cards.slice(0, 4)))), []);
+  const backed = cards.slice(0, 4).map(c => ({...c, backdrop: {kind: 'video', params: {src: 'assets/shots/boards.mp4'}}}));
+  assert.deepEqual(flat(tellsGate(triage(backed, [CLIP]))), []);
+  assert.deepEqual(flat(tellsGate(triage([{id: 'sp', module: 'split-screen', start: 0, end: 4, params: {media: 'assets/shots/boards.svg', title: 'Three jobs a year', items: ['Wash the deck', 'Oil the boards', 'Seal the ends']}}], [CLIP]))), []);
+  assert.deepEqual(flat(tellsGate(triage([{id: 'il', module: 'item-list', start: 0, end: 3, params: {items: ['Merbau', 'Spotted gum']}}], [CLIP]))), []);
+});
+
+test('boxed-on-flat: tooling puts a flagged card on the story\'s own footage, never the shot beside it', () => {
+  const clip = (id, start, src) => ({id, module: 'clip', start, end: start + 3, params: {media: `assets/shots/${src}.mp4`}});
+  const plan = triage([clip('a', 0, 'saw'), {id: 'cc', module: 'concept-card', start: 3, end: 6, params: {surface: 'card', text: 'Really oil it?', sub: 'Be honest'}}, clip('b', 6, 'deck'), clip('c', 9, 'oil')]);
+  const {storyboard, changes} = boxedOnFlatBackdrops(plan, resolveStory(plan));
+  assert.equal(changes.length, 1);
+  const backdrop = storyboard.scenes[1].backdrop;
+  assert.equal(backdrop.kind, 'video');
+  assert.equal(backdrop.params.src, 'assets/shots/oil.mp4', 'not the saw or deck shot either side');
+  assert.deepEqual(flat(tellsGate(resolveStory(storyboard))), []);
+  assert.equal(plan.scenes[1].backdrop, undefined, 'the plan passed in is left as it was');
+  // Nothing to do without footage, or with nothing flagged.
+  assert.deepEqual(boxedOnFlatBackdrops(storyboard, resolveStory(storyboard)).changes, []);
+});
+
+test('boxed-on-flat: the repair names an unboxed variant when the module has one', () => {
+  for (const [module, names] of Object.entries(moduleVariants())) {
+    const variant = (UNBOXED_VARIANTS[module] ?? UNBOXED_VARIANTS['*']).find(name => names.includes(name));
+    assert.equal(boxRepair(module).variant, variant, module);
+  }
+  // icon-row's boxed pills never count: its list is its own.
+  assert.ok(!UNBOXED_VARIANTS['icon-row'].includes('pills'));
+  assert.equal(boxRepair('no-such-module').variant, undefined);
 });
 
 const examples = readdirSync('examples/story').filter(name => existsSync(`examples/story/${name}/storyboard.json`));

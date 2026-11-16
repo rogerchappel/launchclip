@@ -49,7 +49,8 @@ function llm(boards) {
   };
 }
 
-const plan = (client, extra) => planStoryboard({ brief: "A calm morning coffee short.", words: WORDS, lane: "voiceover-motion", format: FORMAT, audio: AUDIO, tier: "structured", model: "app-model", client, ...extra });
+// Shots only: card backdrops (on by default with a provider) have tests of their own.
+const plan = (client, extra) => planStoryboard({ brief: "A calm morning coffee short.", words: WORDS, lane: "voiceover-motion", format: FORMAT, audio: AUDIO, tier: "structured", model: "app-model", client, cardBackdrops: "off", ...extra });
 
 test("without a provider the planner offers no shot requests", async () => {
   const client = llm([story(null)]);

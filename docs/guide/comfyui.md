@@ -40,8 +40,10 @@ Takes are cached by their exact inputs (prompt, model files, seed and every othe
 
 ```bash
 launchclip make "a 30 second explainer on tides" --asset-provider comfy
-launchclip make "…" --asset-provider comfy --comfy-plate plate-sdxl --card-backdrops footage
+launchclip make "…" --asset-provider comfy --comfy-plate plate-sdxl --card-backdrops off
 ```
+
+With any provider, card scenes the plan leaves on a stock plate ask for a calm backdrop clip (`--card-backdrops footage`, the default); `--card-backdrops off` keeps the stock plates.
 
 With `--asset-provider comfy`, the planner may ask for shots as it does with an app's provider (`--asset-provider-cmd`). A request for a still, or for "any", gets a plate from `plate-flux-schnell` (or `--comfy-plate plate-sdxl`) at about one megapixel in the video's aspect. A request for video gets a `draft-wan-5b` clip at about 480p, 24 fps, as long as the scene up to 5 s. Prompts are the request's description plus "no text, no lettering"; backdrop requests ask for an empty, steady wide shot.
 

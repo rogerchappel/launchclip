@@ -6643,6 +6643,13 @@ THIRD_PARTY_NOTICES.md). 1,935 names in all: 141 Lucide names match LaunchClip's
   stroke, then any solid dots), so both renderers draw icons through the
   shared view tree. Modules tint icons from brand colours; the stroke is
   in box units, so the weight scales with the size.
+- `relevantIcon(text)` returns the icon the words name outright, or null: a
+  word (or its singular) that is a key of `ICON_ALIASES` (`oil` → `droplet`,
+  `weekend` → `calendar`, `security` → `shield`; every target is an icon
+  name) or a whole one-word icon name. Icon names that are also loose
+  everyday words (`save`, `key`, `type`, `tag`, …) never match. Nothing
+  partial and nothing hashed: no match draws no icon. The capability
+  builders give `concept-card` and `icon-row` icons this way.
 - `node scripts/icon-sheet.mjs out.png` renders every icon for a check by eye
   (`--html`, `--color`, `--bg`, `--mode duotone`, `--source launchclip|lucide`,
   `--cols`, `--cell`).
@@ -6754,7 +6761,8 @@ existed.
 - The variant comes from a scene's `params.variant`, else the story's
   `variants` (`{"<module>": "<variant>"}`, which a style pack fills), else the
   default. An unknown name fails with the module's list of names:
-  `params.variant must be one of stacked, side-icon, banner, marker (the
+  `params.variant must be one of stacked, side-icon, banner, marker, free,
+  scrim, glass, sticker (the
   concept-card variants); got "sparkly"`.
 - A variant that has no room for its own shape (a short overlay, a small rect)
   falls back to the default layout rather than failing; `model.variant` still
@@ -6766,8 +6774,8 @@ existed.
 
 | Module | Variants (default first) |
 | --- | --- |
-| `concept-card` | `stacked` (icon over the word); `side-icon` (a solid icon tile, or a bar with no icon, beside the word, a rule that draws and the sub-line; the tile slides and turns in); `banner` (the word on a brand band with a notched end that wipes in, the icon on a disc over its start); `marker` (a big left-set word, a highlighter band that sweeps under each line, the icon spinning in above) |
-| `icon-row` | `tiles` (tinted tiles in a row or a list); `pills` (capsules with the icon on a solid disc, one row when every label fits a line, else a column; they slide in and the discs pop); `orbit` (nodes on a dashed ring around a hub, flying out from its centre, labels outside the ring; in 16:9 the title stands to its left); `list` (numbered rows between rules that draw, the icon at the row end) |
+| `concept-card` | `stacked` (icon over the word); `side-icon` (a solid icon tile, or a bar with no icon, beside the word, a rule that draws and the sub-line; the tile slides and turns in); `banner` (the word on a brand band with a notched end that wipes in, the icon on a disc over its start); `marker` (a big left-set word, a highlighter band that sweeps under each line, the icon spinning in above); then the looks beyond the box (`kit/core/catalog-g-looks.mjs`, no card under them even over footage): `free` (the word set left in display type straight on the footage with a soft shadow, an accent rule that draws under it as wide as its widest line, the sub-line under the rule); `scrim` (the word centred on a soft radial pool of the brand background that swells in); `glass` (a frosted translucent plate with a hairline edge that scales in, the text set left on it); `sticker` (a paper note that drops in turning and settles 3° askew, a strip of accent tape slapping on its top edge, the text in ink). Every look breathes once the word lands (`idleOps`); short of room a look drops its icon before it falls back to the original |
+| `icon-row` | `tiles` (tinted tiles in a row or a list); `pills` (capsules with the icon on a solid disc, one row when every label fits a line, else a column; they slide in and the discs pop); `orbit` (nodes on a dashed ring around a hub, flying out from its centre, labels outside the ring; in 16:9 the title stands to its left); `list` (numbered rows between rules that draw, the icon at the row end); then the looks beyond the box: `chips` (outline capsules on a blurred tint that wrap and centre, an upper-case eyebrow title in the accent, each chip popping in and breathing); `ticks` (free display type set left, a tick, or every item's icon when all have one, popping beside each label); `glass` (rows between hairlines on a frosted plate, the icon or the item's number leading each); `tags` (paper tags in the display face, stacked and centred, each dropping in turning and settling askew, then breathing). An item's `icon` is optional: with none, `tiles`, `pills`, `orbit` and `glass` show the item's number and the rest draw nothing in its place |
 | `section-card` | `centered` (head, kicker, a rule and the title, centred); `split` (a big chapter number or icon, a vertical rule that grows, the kicker and title set left); `tab` (number · kicker on a solid tab that drops in, the title rising line by line over a full-width rule); `frame` (corner brackets that close in on the kicker and title, the number or icon on a disc over the foot) |
 | `object-card` | `stage` (the illustration over its caption); `polaroid` (the illustration in a dark photo on a paper print that drops in turning and settles 3° askew, the caption on its strip in ink); `split` (a panel that wipes open, the illustration left, the label and a display-face caption right); `spotlight` (a primary glow that opens behind an illustration dropping in on a bounce, a label pill and a display-face caption) |
 | `stat-card` | `giant` (the figure big over its label); `ring` (the figure inside a ring that sweeps, with the count, to the share a percentage states or all the way round; label beside it in 16:9); `bar` (the figure over a bar that fills with the count, set left); `ticker` (a tile per digit, each rolling through its slot of the count, zero-padded, then flipping on the hit; other characters stand between the tiles) |
