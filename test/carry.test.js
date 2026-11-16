@@ -279,14 +279,11 @@ for (const [name, transition, camera] of [
     assert.equal(Boolean(ride), transition.type === 'orbit' || transition.type === 'pull' || (transition.type === 'push' && camera.mode === 'world'));
     if (ride) {
       const plan = cameraPlan(story, {windows: sceneWindows(story), objects: sceneObjectLookup(story, (scene, value) => resolveModule(scene, value))});
-      const zoomAt = t => (({zoom}) => zoom)(cameraStateAt(plan, t)) * plan.placements[b.id].scale;
-      for (const [t, value] of ride.scale) assert.ok(Math.abs(value * zoomAt(t) - 1) < 1e-4, `ride scale at ${t}`);
-      // And its rotation cancels the camera's roll, so a carried element stays upright while the plates turn.
-      const rideId = `${items[0].id}-ride`;
-      for (let k = 0; k <= 10; k += 1) {
-        const t = move.start + (move.duration * k) / 10;
-        const roll = cameraStateAt(plan, t).rotation + plan.placements[b.id].rotation;
-        assert.ok(Math.abs((frameState(opList(b).ops, t).get(rideId).rotation ?? 0) + roll) < 1e-3, `ride rotation at ${t}`);
+      const P = plan.placements[b.id];
+      for (const [t, , , scale, rotation] of ride.samples) {
+        const cam = cameraStateAt(plan, t);
+        assert.ok(Math.abs(scale * cam.zoom * P.scale - 1) < 1e-4, `ride scale at ${t}`);
+        assert.ok(Math.abs(rotation + cam.rotation + P.rotation) < 1e-3, `ride rotation at ${t}`);
       }
     }
     // A hides its handed copies on the boundary; it is drawn on through the move.
