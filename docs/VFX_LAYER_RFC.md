@@ -335,10 +335,29 @@ effect here draws in `pixel` mode, which is what the retro look wants anyway.
   against the import, the transition sounds and the retro gate. Story parity
   gains `vfx-hits-9x16` and `vfx-transitions-9x16`, and the contact sheet
   gains a transitions sheet.
-- **Next:** weather backgrounds (§3e, phase 6) are not built: rain, snow,
-  fog, fireflies, aurora and god-rays are pure loops, so they need a
-  `weather` background kind tiled over the frame, not new driver work.
-  After that: `smooth` (phase 3), masks (phase 8), planner text (phase 9).
+- **Next:** see §4c.
+
+## 4c. Built in round four (weather, masks) and where it differs
+
+- **Weather (§3e, phase 6):** all twelve weather loops are vendored and
+  catalogued as `VFX_WEATHER`. `story.background: {kind: "weather", params:
+  {type, color, intensity, speed, fade}}` is a background kind like the
+  others (`kit/core/backgrounds.mjs`), so it draws in every plate, in world
+  mode and under the light, and nothing changes without it: no seeded style
+  picks it. The param is `type`, not `kind`, as for `texture`. The layer
+  carries a one-cue VFX plan that `paintVfx` draws in both renderers, so no
+  new driver or runtime work was needed (the loops are pure). Not tiled: the
+  320 × 180 screen scales up by a whole number to cover the frame and is
+  centred, because each loop has a floor (puddles, snow banks, grass) that a
+  tile would repeat mid-frame; a portrait frame crops its sides at an 11 px
+  grid. Colour is a ramp of one palette role (default `primary`) from the
+  background, so the haze blends into the brand's own background; opacity is
+  `intensity`, clamped by the text-contrast rule. One seed per story, so the
+  weather runs on across cuts. Level `off` holds its first frame. Not a panel
+  fill. The ambience beds of the sound pairing (rain, wind …) are not wired.
+  Checks: purity covers the loops, `test/backgrounds.test.js` the plan,
+  compile and level, and three background parity fixtures (`bg-weather-rain`,
+  `-snow`, `-fireflies`). The contact sheet gains two weather sheets.
 
 ## 5. Phases
 
