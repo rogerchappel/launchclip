@@ -56,17 +56,19 @@ const sha = (value) => createHash("sha256").update(value).digest("hex");
 // 8.518 → 8.517999 …) so they no longer overlap the next tween; nothing else.
 // All but cooling (no sound) re-pinned with HyperFrames 0.7.111: a mono mix
 // or base recording is declared at 0.7071 of its volume (data-volume only).
+// All six re-pinned when the default body face moved from Inter to Manrope
+// (Inter stays second in the stack): font stacks and @font-face lines only.
 const PRE_GRAMMAR_HTML_SHA256 = {
-  cooling: "37b43aac4ca34a6995d6086fe341ef4bf3350842548f0d46c600b1f22c4a717b",
-  minimal: "67c86782bb05e9a3a403070e64431e0454319652a77ebe4b1496650f58268e52",
-  "promo-16x9": "048cd31ddead7df29fbbf976ff25679ca4e6c7dc3778aec8be48906c2b847e56",
-  "explainer-9x16": "09b7b71cba4519ae98572f00b4480fe57d752750fbe9edd61efb0f6c3632a633",
-  "data-story-9x16": "eab385e262a0ca1423d9d4e9f2e22ac196daf30f8d4a9c5addb2fb413a7b60c5",
-  footage: "50730148d9c032f74f81d9e298ceea1b52e42d4597fbd894a8a51c00b4324f96"
+  cooling: "f03ce35f7b7d49330fdd906d97ea745ccdf1da6ae5ef5cbd5233353ce2c938f7",
+  minimal: "1ed5e9c69b1db2cfdede757704b1f7c25027e543bd10c38da93bd43fa143cc2f",
+  "promo-16x9": "89b46b832a0ead1a0c4cfd6f3cc16d39c635fc68e725a30e59ef0cfc8b830d94",
+  "explainer-9x16": "d619974b8318461131df949b914224edc1a0cf299743a1fe679cdfb2dc0e0fd9",
+  "data-story-9x16": "80653aee5601f84ae27a4cf0bc6e170b38ea334efcfce7633c89879cd9b2f89a",
+  footage: "1ec5db732ba314dcd962f7244731d6d51c36571064ffdfff3b99a973c7641542"
 };
 // test/editorial_core.test.js: the explicit-rect 16:9 corpus subset (re-pinned
 // with it when bound messages moved to 2-decimal bounds; error strings only).
-const EXPLICIT_16X9_SHA256 = "45c528200fb88850369afee5518317015f2fc7992261c1c473e0555b803a7fd7";
+const EXPLICIT_16X9_SHA256 = "fe9ef44645faaa6e7cae0e289b889428587e51c27e374336bec1abef3e6ffe56";
 
 async function goldenStory(id) {
   let dir = path.join(STORY, id), cleanup = async () => {};

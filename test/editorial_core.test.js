@@ -33,8 +33,9 @@ test('golden corpus covers every kind with outputs and errors', () => {
 // checklist rows stopped showing the pending label before they turn active or
 // done (checklist entries only), and once when bound messages started printing
 // their bounds to 2 decimals (kit/core/bounds.mjs; two focus-flow error
-// strings, "8.389999999999999" → "8.39" and "8.149999999999999" → "8.15").
-const EXPLICIT_16X9_SHA256 = '45c528200fb88850369afee5518317015f2fc7992261c1c473e0555b803a7fd7';
+// strings, "8.389999999999999" → "8.39" and "8.149999999999999" → "8.15"),
+// and when the default body face moved from Inter to Manrope (stacks only).
+const EXPLICIT_16X9_SHA256 = 'fe9ef44645faaa6e7cae0e289b889428587e51c27e374336bec1abef3e6ffe56';
 const explicit16x9 = entry => entry.spec && typeof entry.spec === 'object' && !Array.isArray(entry.spec) && entry.spec.aspect === '16:9' && entry.spec.rect !== undefined;
 
 test('explicit-rect 16:9 golden outputs are unchanged by the density work', () => {
@@ -123,7 +124,7 @@ test('editorial core imports only the font registry and the motion grammar, and 
   assert.equal(copy, canonical);
   assert.deepEqual(canonical.match(/^[ \t]*import\b.*$/gm), ["import {formatBound, withinBounds} from './bounds.mjs';", "import {fontStack} from './fonts.mjs';", "import {grammarDuration, grammarEase} from './grammar.mjs';"]);
   assert.doesNotMatch(canonical, /\bimport\(|\brequire\(/);
-  assert.equal(EDITORIAL_STYLE.font.sans, "var(--lc-font-body, 'Inter', 'STIX Two Math', sans-serif)");
+  assert.equal(EDITORIAL_STYLE.font.sans, "var(--lc-font-body, 'Manrope', 'Inter', 'STIX Two Math', sans-serif)");
   assert.equal(EDITORIAL_STYLE.font.mono, "var(--lc-font-meta, 'JetBrains Mono', 'STIX Two Math', monospace)");
   assert.equal(EDITORIAL_KINDS.length, 14);
   assert.equal(EDITORIAL_STYLE.space.pad, 24);
