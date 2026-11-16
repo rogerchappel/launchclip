@@ -168,6 +168,48 @@ is Fan Open); `blinds {count, axis}` (Blinds, Slats); `pixel-dissolve
 Their text animator list also has **Scramble**, which our 24 text effects
 lack (E.6).
 
+**Built (phase 3).** Everything is opt-in; nothing is added to the style
+seed or a planner default.
+
+- *Transitions:* `wipe {angle, feather}`, `clock-wipe {start, segments,
+  feather}` and `card-flip {direction}` in `TRANSITION_TYPES` (32 now). The
+  two masks are one layer prop, `mask` (progress 0 → 1), with the shape in
+  the tween's `args`: a `linear-gradient` or `conic-gradient` `mask-image`
+  whose every number is linear in the progress, so HyperFrames' GSAP string
+  interpolation draws what Remotion's `layerStyle` draws (`maskCss`). A
+  zero-length `mask` tween to kind `none` takes the mask off when it lands.
+  `card-flip` is `rotateY` under `perspective` (GSAP `rotationY` and
+  `transformPerspective`): the outgoing card turns edge-on on `power2.in`,
+  the incoming one turns in on `power2.out` (slow, fast, slow, no
+  overshoot), blurred and fallen back a little at the edge-on middle. It is a
+  card transition, so between two footage plates it plays as a fade.
+  `blinds` and `pixel-dissolve` were already built as VFX covers (#644), so
+  they are not added again as clip-paths. The transition check reads the
+  masks (`maskCover`) and the flip (a squeeze across).
+- *Behaviours:* `scene.behaviour {kind, amount, period, angle, bpm,
+  direction}` with `wiggle`, `jitter`, `orbit`, `lissajous`, `drift`,
+  `pendulum`, `wobble`, `spin`, `pulse`, `heartbeat`, `breathe`, `squash`,
+  `flicker` and `fade-pulse` (`kit/core/behaviours.mjs`). They are
+  camera-world ops on one wrapper inside the drift (`#lc-behave-<id>`),
+  played by `opsGsap` in HyperFrames and `opsStateAt` in Remotion, so no new
+  runtime. They live on a scene wrapper, not on each module's `-idle` node:
+  only the node graph has those, and a scene wrapper works for every module.
+  Periodic kinds are `sine.inOut` half-cycles between extremes (an exact
+  sinusoid), entered and left on quarter cycles, so each starts and ends at
+  rest. Idle kinds wait `BEHAVIOUR_SETTLE` (0.6 s); `squash` and `wobble`
+  play on arrival; `pulse` and `heartbeat` land on the music's beat. The
+  pivot is the content rect's centre (top for `pendulum`, base for
+  `squash`). `flicker` dims at most 40 % (no strobe).
+- *Backgrounds:* `rings` (one ring leaves the centre on each beat: a scale
+  glide per ring, a beat apart, wrapping past the corners), `bokeh` (discs
+  with light-sweep's falloff, drifting), `motif` shapes `checker` and
+  `grid`, and `sweep` on `light-rays`. 20 `BACKGROUND_KINDS` with the weather kind.
+- *Tests and parity:* `test/css_transitions.test.js`,
+  `test/behaviours.test.js` (GSAP seeking the compiled lines equals the ops
+  state on every frame), the transition-frame check over every new type, the
+  story fixture `examples/story/css-transitions-9x16` and five background
+  fixtures.
+
 ## E.4 New looks
 
 Our looks are blueprint, hologram, thermal, neon-night, paper-cutout,
@@ -363,7 +405,7 @@ Differences from the plan above, all open:
 | 0 | Description fix, length test, trigger eval sets | S |
 | 1 | `finish_pass.js`, protect mask, `grade` + generated presets, `grain`, `aberration` | M |
 | 2 | `bloom`, `zoom-blur`, `burn`, `crt`, `halftone` | M |
-| 3 | CSS transitions, behaviours, CSS backgrounds (E.3) | M |
+| 3 | CSS transitions, behaviours, CSS backgrounds (E.3): built | M |
 | 4 | Maps that travel | M |
 | 5 | Scramble, chrome, flow-field (S–M); Lottie, morph, three inks (M); word-architecture, proof-mechanism (L) | L |
 | 6 | Looks: risograph, one-bit, pen-plotter (SVG); lidar; stained-glass and silkscreen after phase 2 | M |

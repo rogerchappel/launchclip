@@ -30,7 +30,7 @@ import { cameraPlan, cameraStateAt, sceneObjectLookup, worldPoint } from './came
 import { dotWipeCover, dotWipes } from './dot-wipe.mjs';
 import { resolveModule } from './modules.mjs';
 import { getEase } from './motion.mjs';
-import { CAMERA_TRANSITION_TYPES, FULL_FRAME_PLATES, VFX_COVER_TRANSITIONS, layerStateAt, sceneWindows } from './transitions.mjs';
+import { CAMERA_TRANSITION_TYPES, FULL_FRAME_PLATES, VFX_COVER_TRANSITIONS, layerStateAt, maskCover, sceneWindows } from './transitions.mjs';
 import { vfxCoverSpan } from './vfx/plan.mjs';
 
 /**
@@ -44,7 +44,7 @@ import { vfxCoverSpan } from './vfx/plan.mjs';
  */
 export const TRANSITION_CHECK = Object.freeze({ cover: 0.95, gap: 0.8, still: 0.5, fade: 0.002, pop: 0.12, rise: 1.5, calm: 0.03, drop: 0.1, columns: 24 });
 
-const FILTER_PROPS = ['blur', 'glow', 'rackIn', 'veil', 'dip', 'focus', 'smearX', 'smearY'];
+const FILTER_PROPS = ['blur', 'glow', 'rackIn', 'veil', 'dip', 'focus', 'smearX', 'smearY', 'mask'];
 const rad = (deg) => (deg * Math.PI) / 180;
 const rotate = (p, deg) => { const r = rad(deg), c = Math.cos(r), s = Math.sin(r); return { x: p.x * c - p.y * s, y: p.x * s + p.y * c }; };
 
@@ -55,9 +55,11 @@ function plateAt(entry, t, { width, height, plan }) {
   const C = { x: width / 2, y: height / 2 };
   const placement = plan?.placements?.[entry.id] ?? null;
   const camera = plan ? cameraStateAt(plan, t) : null;
+  // A card-flip's turn, taken as a squeeze across (its perspective ignored).
+  const sx = state.scale * Math.cos((state.flip * Math.PI) / 180), sy = state.scale;
   // Layer transform about the canvas centre, then the world placement, then the camera.
   const toScreen = (q) => {
-    let p = { x: C.x + state.scale * (q.x - C.x) + state.x, y: C.y + state.scale * (q.y - C.y) + state.y };
+    let p = { x: C.x + sx * (q.x - C.x) + state.x, y: C.y + sy * (q.y - C.y) + state.y };
     if (placement) p = worldPoint(placement, p);
     if (camera) { const v = rotate({ x: (p.x - camera.x) * camera.zoom, y: (p.y - camera.y) * camera.zoom }, camera.rotation); p = { x: C.x + v.x, y: C.y + v.y }; }
     return p;
@@ -66,14 +68,14 @@ function plateAt(entry, t, { width, height, plan }) {
     let p = s;
     if (camera) { const v = rotate({ x: s.x - C.x, y: s.y - C.y }, -camera.rotation); p = { x: camera.x + v.x / camera.zoom, y: camera.y + v.y / camera.zoom }; }
     if (placement) { const v = rotate({ x: p.x - placement.x, y: p.y - placement.y }, -placement.rotation); p = { x: v.x / placement.scale, y: v.y / placement.scale }; }
-    return { x: C.x + (p.x - C.x - state.x) / state.scale, y: C.y + (p.y - C.y - state.y) / state.scale };
+    return { x: C.x + (p.x - C.x - state.x) / Math.max(sx, 1e-6), y: C.y + (p.y - C.y - state.y) / sy };
   };
   const inside = (q) => {
     if (q.x < 0 || q.y < 0 || q.x > width || q.y > height) return false;
     if (state.iris !== null && Math.hypot(q.x - C.x, q.y - C.y) > state.iris) return false;
     if (q.x < (width * (state.wipeL ?? 0)) / 100 || q.x > width * (1 - (state.wipeR ?? 0) / 100)) return false;
     if (q.y < (height * (state.wipeT ?? 0)) / 100 || q.y > height * (1 - (state.wipeB ?? 0) / 100)) return false;
-    return true;
+    return maskCover(state, q.x, q.y, width, height) >= 0.5;
   };
   const corners = [{ x: 0, y: 0 }, { x: width, y: 0 }, { x: 0, y: height }, { x: width, y: height }].map(toScreen);
   // The clip in px: the iris radius, then the wipe insets (top, right, bottom, left); null = none.
