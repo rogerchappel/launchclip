@@ -36,6 +36,7 @@ import { shotZooms, zoomOps } from '../core/zooms.mjs';
 import { feelGsap, feelPlan } from '../core/kinetic.mjs';
 import { MOTION_BLUR_GUARD_FILE } from '../core/motion-blur.mjs';
 import { DOT_WIPE, dotWipeCss, dotWipeGsap, dotWipePeak, dotWipeSvg, dotWipes } from '../core/dot-wipe.mjs';
+import { BEFORE_AFTER, beforeAfterGsap, beforeAfterHtml, beforeAfterWipes } from '../core/before-after.mjs';
 import { profileGeometry } from '../core/layout-check.mjs';
 import { CAPTION_DEFAULT_COLORS, blurSnappedChunks, captionBlurGuard, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from '../core/captions.mjs';
 import { brandFramePlan, brandFrameRuntime } from '../core/brand-frame.mjs';
@@ -604,6 +605,9 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   // Dot wipes (kit/core/dot-wipe.mjs): a halftone grid over every scene.
   const wipes = isolate ? [] : dotWipes(story, windows);
   const wipeMarkup = wipes.map((wipe) => `<div id="${wipe.id}" class="lc-dot-wipe" data-launchclip-transition="dot-wipe" aria-hidden="true" style="opacity:0;--lc-dw:0;--lc-dc:${dotWipePeak(wipe)};z-index:${DOT_WIPE.z.hyperframes}">${dotWipeSvg(W, H, wipe.color)}</div>`);
+  // Before-and-after wipes (kit/core/before-after.mjs): the handle and the side labels over every scene.
+  const handles = isolate ? [] : beforeAfterWipes(story, windows);
+  wipeMarkup.push(...handles.map((wipe) => `<div id="${wipe.id}" class="lc-before-after" data-launchclip-transition="before-after" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;pointer-events:none;opacity:0;--lc-ba:0;z-index:${BEFORE_AFTER.z.hyperframes}">${beforeAfterHtml(W, H, wipe)}</div>`));
   // Light sweeps (kit/core/light-sweep.mjs): streaks of light added over every scene.
   const sweeps = isolate ? [] : lightSweeps(story, windows);
   // Per sweep the dip (a shade over every scene) and the light screened over it.
@@ -676,7 +680,7 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     <script>
       window.__timelines = window.__timelines || {};
       const tl = gsap.timeline({ paused: true });${stepped ? `\n      // look ${look.name}: the picture runs on its own timeline, held on ${look.step} drawings a second\n      const lcPicture = gsap.timeline({ paused: true });\n      ((tl) => {` : ''}
-${seamTweens([...motion, ...(lightOver ? ['// light (over the scenes)', ...lightOver.motion] : [])].join('\n').split('\n')).map((line) => `      ${line}`).join('\n')}${feelLines.length || wipes.length || sweeps.length ? `\n${[...feelLines, ...wipes.flatMap((wipe) => [`// dot-wipe into ${wipe.sceneId}`, ...dotWipeGsap(wipe)]), ...sweeps.flatMap((sweep) => [`// ${sweep.type ?? 'light-sweep'} into ${sweep.sceneId}`, ...lightSweepGsap(sweep)])].map((line) => `      ${line}`).join('\n')}` : ''}${stepped ? `\n      })(lcPicture);\n      lcPicture.render(0, true, true);\n      tl.fromTo(lcPicture, { time: 0 }, { time: ${num(D)}, duration: ${num(D)}, ease: ${lookStepEase(look)}, immediateRender: false }, 0);` : ''}
+${seamTweens([...motion, ...(lightOver ? ['// light (over the scenes)', ...lightOver.motion] : [])].join('\n').split('\n')).map((line) => `      ${line}`).join('\n')}${feelLines.length || wipes.length || handles.length || sweeps.length ? `\n${[...feelLines, ...wipes.flatMap((wipe) => [`// dot-wipe into ${wipe.sceneId}`, ...dotWipeGsap(wipe)]), ...handles.flatMap((wipe) => [`// before-after into ${wipe.sceneId}`, ...beforeAfterGsap(wipe)]), ...sweeps.flatMap((sweep) => [`// ${sweep.type ?? 'light-sweep'} into ${sweep.sceneId}`, ...lightSweepGsap(sweep)])].map((line) => `      ${line}`).join('\n')}` : ''}${stepped ? `\n      })(lcPicture);\n      lcPicture.render(0, true, true);\n      tl.fromTo(lcPicture, { time: 0 }, { time: ${num(D)}, duration: ${num(D)}, ease: ${lookStepEase(look)}, immediateRender: false }, 0);` : ''}
       ${look ? `${lookSteps(look, D).map((step) => `tl.set(${js(lookSelector(look))}, ${js(step.vars)}, ${num(step.time)});`).join('\n      ')}\n      ` : ''}${medium ? `${mediumSteps(medium, D).map((step) => `tl.set(${js(`#${MEDIUM_LAYER_ID}`)}, ${js({ '--lc-medium-filter': step.filter })}, ${num(step.time)});`).join('\n      ')}\n      ` : ''}${frame ? 'window.mountBrandFrame(tl, document.getElementById("lc-frame-root"));\n      ' : ''}${captions ? 'window.mountCaptions(tl, document.getElementById("lc-captions"));' : ''}${captions?.dips.length ? `\n      // captions dip out during sweeping camera moves (each dip out ends in a hard
       // set, so a seek past the fade, often onto a shot's start, finds them hidden)\n      ${captions.dips.map((dip) => `tl.fromTo('#lc-captions', { opacity: ${dip.from} }, { opacity: ${dip.to}, duration: ${num(dip.dur)}, ease: 'none', immediateRender: false }, ${num(dip.at)});${dip.to === 0 ? `\n      tl.set('#lc-captions', { opacity: 0 }, ${num(dip.at + dip.dur)});` : ''}`).join('\n      ')}` : ''}
       window.__timelines["${COMPOSITION_ID}"] = tl;

@@ -20,8 +20,9 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - format: {width, height, fps, duration, platform?} and brand: {colors, fonts} are given; copy them unchanged.
 - audio: {voice?, words?, music?, sfx?}; base: null, or the recording path for footage-led.
 - audio.music: omit it (finish picks ElevenLabs when a key is set, else the synth bed), or "synth", "none", an assets/ path, or {provider: "elevenlabs" | "synth" | "file", prompt?, bpm?, file?, sync?: "auto" | "off" | "cuts" | "hits"}. The music follows scene energy, so set energy honestly: calm intro, "build" before the payoff, 3 on the payoff. A prompt describes style only (no vocals is added for you).
-- scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: cut | fade | push | whip | zoom | iris | morph | pan | pull | orbit | whip-pan | rack-focus | glow-wipe | card-to-card | overview | dot-wipe | light-sweep | push-blur | light-leak, dur, direction?, from_object?, color?, cover?, hold? (dot-wipe only)}, params, hits?, zooms?, ambient?, layer? (footage-led: "behind" draws it behind the presenter)}].
+- scenes: [{id ("s1", "s2"…), module, start, end, energy (0 calm, 1 light, 2 groove, 3 full, "build"), in? {type: cut | fade | push | whip | zoom | iris | morph | pan | pull | orbit | whip-pan | rack-focus | glow-wipe | card-to-card | overview | dot-wipe | light-sweep | push-blur | light-leak | before-after, dur, direction?, from_object?, color?, cover?, hold? (dot-wipe only), pause?, labels? (before-after only)}, params, hits?, zooms?, ambient?, layer? (footage-led: "behind" draws it behind the presenter)}].
 - in.dur must be shorter than the scene. Choose transitions by meaning: cut for contrast, push for continuation, whip for speed, zoom for scale change, morph for identity (name in.from_object, e.g. "s2.gap-bracket"), iris for focus; camera moves (pan, whip-pan, orbit, pull, world push) are under "Motion grammar and camera".
+- before-after (1.2–2 s, track 0) when the next scene is the same thing in another version (a redesign, a filter or grade, a fix, the edited take after the raw one): a handle drags across and reveals the new scene behind it, slow → fast → slow; direction where the handle travels (default left: the after side opens from the right), pause (seconds, at most half the wipe) rests it half-way so both versions sit side by side, labels {before?, after?} a word on each side. For two versions of one shot inside a scene use the before-after module instead (it can rest and reverse). Not between unrelated scenes: it promises a comparison.
 - overlays: [captions]. ending: {loop_to: "<first scene id>"} for a seamless loop (Shorts). For no loop, set ending {loop: false} (or loop_to: null, or omit ending without a looping style pack); the last scene then holds settled to the final frame (ending.final "hold", the default), or use final "fade" to fade it fully to the background by the final frame, or "exit" to play its own exit. ending accepts only loop_to, in, loop and final.
 - ambient? (optional): {level: off | subtle | standard | lively, background?: boolean, drift?: boolean}, or just the level. Ambient motion keeps settled frames alive between beats: a slow push-in on each settled module (kept inside the safe zone) and soft brand-colour light drifting behind the plates.
 - Usually leave ambient out: the level follows each scene's energy (0 → subtle, 1, 2 or "build" → standard, 3 → lively; every scene is lively under the cinematic grammar), and footage-led stories get no background field and drift overlays only. Set story ambient only to change the whole piece (for example "subtle" for a calm brand film); "off" makes settled frames hold still and fails the cinematic motion gate.
@@ -33,7 +34,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - Recorded product flows (assets/demo/<flow>.mp4 with demo/<flow>.actions.json, from launchclip demo record) play in product-demo scenes. Copy the params the asset inventory gives for each flow (media, viewport, actions, callouts) unchanged: the zooms, outlines and SFX are timed from the real action log, so never invent or move action boxes or times. Time the scene to the clip window (media.sourceStart plus the scene length must stay inside the clip); you may shorten a scene from the end, and drop actions after it.
 - Captured evidence (assets/evidence/<id>.mp4 with <id>.evidence.json, from launchclip evidence capture) plays in evidence-clip scenes. Copy the params the asset inventory gives (media, viewport, source) unchanged; the page's own beats (scroll, selection, focus ring, date pin) are already in the clip, so add focus or cursor only on boxes the sidecar lists, and never retype what the page says.
 - Supplied footage (assets/ videos and stills) plays full frame in clip scenes, cut to the narration: params.media {src, sourceStart?, sourceEnd?} picks the source window (the scene must fit inside it), focus keeps the subject in frame when the source is cropped to the canvas, and 1–3 callouts carry the key words over the footage. Higher-track scenes may sit over a clip.
-- Footage to footage (a clip or photo-scene on track 0 straight after another): use cut, fade, push, whip, zoom or iris (or push-blur, light-sweep, light-leak, glow-wipe, dot-wipe); the new picture arrives over the old one, which stays whole under it, so the frame never drops to the background. In world mode a camera pan, whip-pan, push or pull works too (a push grows the new picture out of the old one). Never card-to-card, rack-focus, morph between footage: they move a card or hand a named object across, footage has neither, and they play as a plain fade there.
+- Footage to footage (a clip or photo-scene on track 0 straight after another): use cut, fade, push, whip, zoom or iris (or push-blur, light-sweep, light-leak, glow-wipe, dot-wipe, or before-after when the new shot is the other version of the old one); the new picture arrives over the old one, which stays whole under it, so the frame never drops to the background. In world mode a camera pan, whip-pan, push or pull works too (a push grows the new picture out of the old one). Never card-to-card, rack-focus, morph between footage: they move a card or hand a named object across, footage has neither, and they play as a plain fade there.
 - Vary the modules: a 20–40 s piece uses at least four different modules and never the same module three times in a row.
 
 ## Lane rules
@@ -254,6 +255,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | picks one option from several | focus-flow |
 | sets a scene or mood with a real photo or clip (assets/… image or video, full bleed) [motion, voiceover-motion] | photo-scene |
 | shows the real thing in supplied footage, cut to the line (assets/… video or still, full frame, with callouts for the key words) [motion, voiceover-motion] | clip |
+| shows one thing in two versions (a redesign, a filter or grade, a fix, the raw take vs the edit, a room before and after): a handle drags across the shot and reveals the other version behind it, resting half-way; two sources, or one with a grade on one side [motion, voiceover-motion] | before-after |
 | contrasts two real options you can show ("hardwood or composite", "slide-on vs caravan"): each option in its own footage with a label, the second on its word, the pick ringed [motion, voiceover-motion] | media-compare |
 | names two to four options, models or materials you can show together ("three options", "hardwood, composite and aluminium"): a tile of footage each (a grid, or a mosaic with one large), revealed on its word [motion, voiceover-motion] | media-grid |
 | lists steps or checks that each have something to show ("check the payload, measure the tray, ask about the warranty"): a row each with a small thumbnail, one by one [motion, voiceover-motion] | media-list |
@@ -340,6 +342,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | counts a run of days ("28 days", "every day for a month", "a daily release"): a month calendar whose day cells fill in sequence, with marks on the days that matter | month-grid |
 | introduces a real person by name and role in an explainer ("Professor X at Y", "the paper's author", "her advisor"): their photo with a glowing name pill and role | person-id |
 | traces who taught or worked with whom ("his doctoral advisor", "her student", "trained under"): photos linked by dashed connectors with role labels | lineage-graph |
+| describes a team, agents or tools working together under one lead ("seven agents", "a director hands out the work", "every tool reports back to one model", "a pipeline of specialists"): icon cards flock out of a hub and fan above it, glowing wires carry pulses of light into the hub on the beat, then every wire fires at once | node-graph |
 | shows or changes a formula ("the equation", "a sign error", "this term"): typeset LaTeX that reveals term by term, boxes the term in question and diffs red to green | equation |
 | unpacks a paper or report title word by word ("the paper's title", "in plain English that means"): the title as word chips, each key term linked to an icon and a gloss | title-decompose |
 | describes particle interactions or loop corrections ("one loop", "exchanges a photon", "self-energy"): a Feynman diagram that draws itself line by line; particle physics only (any other line sketch is a line-diagram) | feynman-diagram |
@@ -952,6 +955,18 @@ params:
 - items: [{media: "assets/…" video (.mp4|.webm|.mov|.m4v) or still (.jpg|.png|.webp|.svg), or {src, kind?, sourceStart? (video), focus?: {x, y} 0–1, the point kept in the crop}, label?: string ≤ 28, at?}] 2–4; the first shows at the scene start
 - variant: grid|mosaic (default mosaic for three on 9:16 and 1:1, else grid)
 events: item-<i>
+
+### before-after (keeps captions)
+One shot in two versions, full frame: a handle drags across (slow, fast, slow) and the other version is revealed behind it, resting and reversing at its stops; for a redesign, a filter or grade, a fix, raw vs edited takes. Two sources (before, after) or one with a grade on one side; a label on each side (optional). Keeps captions.
+params:
+- before: "assets/…" video (.mp4|.webm|.mov|.m4v) or still (.jpg|.png|.webp|.svg), or {src, kind?, sourceStart? (video), focus?: {x, y} 0–1, the point kept in the crop}
+- after: "assets/…" video (.mp4|.webm|.mov|.m4v) or still (.jpg|.png|.webp|.svg), or {src, kind?, sourceStart? (video), focus?: {x, y} 0–1, the point kept in the crop}, the other version (optional with grade: the same source)
+- grade: flat|mono|warm|cool|vivid, a look on one side of the source (optional)
+- gradeSide: before|after, the side the grade is on (default after; before for raw-vs-graded: grade flat on the before side)
+- direction: left|right|up|down, where the handle travels (default left: before on the left, after opening from the right)
+- stops: [0–1] 1–4, the share of the after side the handle opens to, in turn, resting between (default [0.5, 1]: half-way, rest, all the way; [0.6, 0.3, 1] reverses)
+- labels: {before?: string ≤ 24, after?: string ≤ 24}, a word on each side (optional)
+events: stop-<i>
 
 ### feed-frame (hides captions, needs the subject)
 Footage-led: the recording springs into a portrait feed window on a dark backdrop and the presenter breaks out over its top and sides, with generic feed chrome (icons, the user's handle, a caption, a progress bar). For "this exact video", posting or going viral. Counts appear only when given. Hides captions.
@@ -2340,6 +2355,20 @@ params:
 events: build, line-<i>
 variants: blueprint (default), plain
 
+### node-graph (keeps captions)
+A team at work: 3–8 nodes (agents, tools, steps) with icons and short labels flock out of a hub ("director", "the model") and fan above it, glowing wires draw into the hub and pulses of light run down them on the beat, lighting the hub as they land; at converge every wire fires at once and the hub takes the hit. Every element keeps moving.
+params:
+- nodes: [label ≤ 14 | {label ≤ 14, icon? (kit/core/icons.mjs, default bot), id? (a reveal id; default n<i>)}] 3–8 (events node-<id>)
+- hub: the lead node: a label ≤ 16, or {label ≤ 16, icon? (default sparkles)}
+- tone: the hub and its pill: primary | accent (default) | paper | #rrggbb
+- title: string ≤ 60 (optional)
+- at: build start: seconds from scene start (optional; else a matching hit, else a default)
+- converge: every wire fires at once: seconds from scene start (optional; else a matching hit, else a default)
+- bpm: beats per minute for default timing, 60–200 (default 120): landings and pulses land on beats, converge on a bar line
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, node-<id>, converge
+
 ### drop-grid (keeps captions)
 Things pile up as they are said: 1–40 cards, coins or tiles drop into a grid one by one ("10 times a day": ten cards land), each with a weighted fall, a squash on contact, a contact shadow and a puff of dust, over faint empty slots; an optional counter climbs with every landing, and confetti bursts when the grid fills. Time each drop to its word with params.times.
 params:
@@ -2509,6 +2538,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | media-stat | 1.5 s | 0 s | scene − 0.6 s | the first window shows at the scene start (footage from the first visible frame); the last reveal at least 0.6 s before the scene ends |
 | media-list | 1.5 s | 0 s | scene − 0.6 s | the first window shows at the scene start (footage from the first visible frame); the last reveal at least 0.6 s before the scene ends |
 | media-grid | 1.5 s | 0 s | scene − 0.6 s | the first window shows at the scene start (footage from the first visible frame); the last reveal at least 0.6 s before the scene ends |
+| before-after | 1.5 s | 0 s | scene − 0.6 s | the first window shows at the scene start (footage from the first visible frame); the last reveal at least 0.6 s before the scene ends; the handle starts 0.4 s in and rests 0.5 s at its last stop before the exit |
 | feed-frame | 2 s | 0 s | — | at ≤ scene − release − 1 s (release 0.3–1 s, default 0.5) |
 | pull-back | 3 s | 0 s | — | at ≤ scene − release − 1.6 s (release 0.3–1.2 s, default 0.6); at least 0.3 s per step |
 | backdrop-swap | 2 s | 0 s | — | at ≤ scene − release − 0.8 s (release 0.3–1 s, default 0.5) |
@@ -2602,6 +2632,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | title-decompose | 2 s | 0.5 s | scene − 0.65 s | the words pop in reading order within about 0.9 s from at; terms follow 0.7 s apart (squeezed to fit) |
 | feynman-diagram | 2 s | 0.5 s | scene − 0.65 s | lines draw in 0.6 s each, about 0.55 s apart from at; both compress so every label stays up 1 s plus 0.3 s a word before the exit, and a label the scene has no time for is dropped; vertices pop as the first line reaches them; the caption shows with the build |
 | line-diagram | 2 s | 0.5 s | scene − 0.65 s | strokes draw in 0.6 s, 0.5 s apart from at; both compress so every label stays up 1 s plus 0.3 s a word before the exit, and a label the scene still has no time for is dropped (keep labels few and short, or lengthen the scene); an explicit line at must leave its label that read |
+| node-graph | 2 s | 0.5 s | scene − 0.65 s | the hub pops on the first beat after 0.5 s; nodes flock out from the middle of the fan outwards a quarter beat apart; a pulse lands on every beat once the wires are drawn; converge falls on the first bar line two beats after the last wire, or the last beat before the exit |
 | drop-grid | 2 s | 0.5 s | scene − 0.65 s | each item lands TACTILE.fall s after its drop time; time drops to the words that count them; the last item lands before the exit |
 | live-counter | 2 s | 0.5 s | scene − 0.65 s | the count runs from at until just before the exit, so the figure is moving whenever it is on screen |
 | live-bars | 2 s | 0.5 s | scene − 0.65 s | the bars climb from at until just before the exit |

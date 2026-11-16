@@ -105,10 +105,12 @@ export function sceneMotionFindings({ id, motion = null, ops = [], states = [], 
   for (const tween of tweens) {
     if (!tween.keys.includes('opacity')) continue;
     const life = lives.get(tween.op.target) ?? lives.set(tween.op.target, {}).get(tween.op.target);
-    if ((tween.op.from?.opacity ?? 1) < 0.05 && tween.op.to.opacity > 0.05 && !life.enter) life.enter = tween;
-    if (tween.op.to.opacity < 0.05) life.exit = tween;
+    const flashes = life.flashes ?? (life.flashes = []);
+    if ((tween.op.from?.opacity ?? 1) < 0.05 && tween.op.to.opacity > 0.05) { if (!life.enter) life.enter = tween; flashes.push({ enter: tween }); }
+    if (tween.op.to.opacity < 0.05) { life.exit = tween; if (flashes.length) flashes.at(-1).exit ??= tween; }
   }
-  const isPulse = (life) => Boolean(life?.enter && life?.exit) && life.exit.end - life.enter.op.start <= check.pulse + EPS;
+  // A flash: every fade in is gone again within `pulse` (a node that lights on each beat flashes many times).
+  const isPulse = (life) => Boolean(life?.enter && life?.exit) && life.flashes.every((f) => f.exit && f.exit.end - f.enter.op.start <= check.pulse + EPS);
   const during = (tween, fade) => Boolean(fade) && tween.op.start >= fade.op.start - EPS && tween.op.start <= fade.end + EPS;
 
   for (const tween of tweens) {
