@@ -777,7 +777,7 @@ export function defaultAdapters() {
     motion: (video, out, options) => writeMotionReport(video, out, options),
     audio: (video, manifest, options) => analyzeProductionAudio(video, manifest, options),
     // The style gate's measurements (loudness has its own gate, so no audio pass).
-    styleReference: (video) => analyzeReference(video, {}, { audio: async () => ({ output: {} }), rhythm: null }),
+    styleReference: (video) => analyzeReference(video, {}, { audio: async () => ({ output: {} }), rhythm: null, transitions: null }),
     resolveStyle: (request, options) => resolveStyleV2(request, options)
   };
 }

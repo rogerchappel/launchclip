@@ -118,3 +118,13 @@ test("both renderers: every transition type is classified, letterboxed copies ag
     await rm(work, { recursive: true, force: true });
   }
 });
+
+test("a measured transition mix sets the style's transition preference", async () => {
+  const { grammarFromPacing } = await import("../src/style_reference.js");
+  const guessed = grammarFromPacing({ median_shot_seconds: 2.4 }, { activity: 0.3 });
+  assert.deepEqual(guessed.transitions, ["push", "fade"]);
+  const measured = grammarFromPacing({ median_shot_seconds: 2.4, transition_mix: { dissolve: 0.5, iris: 0.3, other: 0.15, wipe: 0.05 } }, { activity: 0.3 });
+  assert.equal(measured.grammar, guessed.grammar);
+  assert.deepEqual(measured.transitions, ["fade", "iris"]);
+  assert.match(measured.reason, /dissolve 50%, iris 30%/);
+});
