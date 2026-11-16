@@ -229,7 +229,8 @@ export function planOutputs({ root = ROOT } = {}) {
   // kit/core/*.mjs plus its subfolders of modules (kit/core/characters/),
   // copied with their folder so relative imports keep working. index.mjs is
   // the @launchclip/core package entry, which the skills never import.
-  const kitCore = listFiles(path.join(root, 'kit/core')).filter((file) => file.endsWith('.mjs') && file !== 'index.mjs' && file.split(path.sep).length <= 2).map((file) => file.split(path.sep).join('/'));
+  // The vendored VFX code (kit/core/vfx/vendor: plain .js and its LICENSE) goes whole, as kit/core/vfx imports it.
+  const kitCore = listFiles(path.join(root, 'kit/core')).filter((file) => (file.endsWith('.mjs') && file !== 'index.mjs' && file.split(path.sep).length <= 2) || file.startsWith(`vfx${path.sep}vendor${path.sep}`)).map((file) => file.split(path.sep).join('/'));
   // The kit's TSX, without the @launchclip/remotion packaging (package.json,
   // README, LICENSE, build script, dist/).
   const kitRemotion = listFiles(path.join(root, 'kit/remotion')).filter((file) => /\.tsx?$/.test(file) && !/^(?:scripts|dist)[\\/]/.test(file));
