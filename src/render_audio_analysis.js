@@ -6,6 +6,7 @@ import { DEFAULT_NARRATED_MUSIC_VOLUME } from "./production_contracts.js";
 import { PLATFORM_LOUDNESS } from "./production_profiles.js";
 import { decodeAudio } from "./music/beats.js";
 import { fft, percussiveSpectra } from "./scripts/audio-features.mjs";
+import { SFX_TYPES, typingRuns } from "./sfx/classify.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -143,7 +144,7 @@ export const AUDIO_RHYTHM = Object.freeze({
   sfxBeatGap: 0.05, // an onset this close to a beat is the music
   typeWindow: 0.12, // spectrum read over the 120 ms after onset
   decayDb: 15, // decay = time to fall this far from the onset peak
-  typingCount: 4, typingSpan: 0.6, // ≥ 4 click/pop/hit within ±0.6 s is typing
+  typingCount: 4, typingSpan: 0.6, // ≥ 4 click/pop/hit inside 0.6 s is typing (src/sfx/classify.js typingRuns)
   onPicture: 0.12, // an SFX this close to a cut or visual event is on-picture
   onBeat: 0.07, // a cut this close to a beat is on-beat
   silenceSeconds: 0.4, silenceDb: -30, // near silence: ≥ 0.4 s at ≤ peak − 30 dB
@@ -158,7 +159,7 @@ export const AUDIO_RHYTHM = Object.freeze({
   onsetLead: 0.0375
 });
 
-export const SFX_TYPES = Object.freeze(["whoosh", "ding", "impact", "click", "pop", "typing", "hit"]);
+export { SFX_TYPES };
 
 /** Magnitude STFT of mono samples at AUDIO_RHYTHM.rate (Hann, no padding). */
 export function stft(samples, { nFft = AUDIO_RHYTHM.nFft, hop = AUDIO_RHYTHM.hop } = {}) {
@@ -313,10 +314,7 @@ export function analyzeRhythm(samples, options = {}) {
     };
     return { at_seconds: round(t), type: sfxType(features), strength: round(Math.min(ratio, 99), 2), ...features };
   });
-  for (const entry of sfx) {
-    const near = sfx.filter((other) => ["click", "pop", "hit", "typing"].includes(other.type) && Math.abs(other.at_seconds - entry.at_seconds) <= R.typingSpan);
-    if (["click", "pop", "hit"].includes(entry.type) && near.length >= R.typingCount) for (const other of near) other.type = "typing";
-  }
+  typingRuns(sfx.map((entry) => ({ time: entry.at_seconds, type: entry.type })), { count: R.typingCount, within: R.typingSpan }).forEach((event, i) => { sfx[i].type = event.type; });
 
   // Near silences: interior runs ≥ 0.4 s at or below peak − 30 dB.
   const near_silences = [];
@@ -329,7 +327,8 @@ export function analyzeRhythm(samples, options = {}) {
   return { tempo_bpm: tempo, beat_strength: round(strength), percussive_share_p90: round(shareP90, 4), beats, sfx, near_silences, speech, duration_seconds: round(duration) };
 }
 
-// SFX type thresholds. rea-video's were set on library SFX; ours are band
+// SFX type thresholds. src/sfx/classify.js keeps rea-video's exactly (for
+// one isolated file); this scan needs them recalibrated. rea-video's were set on library SFX; ours are band
 // limited (most families keep < 5% of their energy above 4 kHz), so the
 // brightness tests also accept a centroid and whoosh also accepts "noisy and
 // sustained" (low tonality). Calibrated on the default kit (render_audio_rhythm.test.js).

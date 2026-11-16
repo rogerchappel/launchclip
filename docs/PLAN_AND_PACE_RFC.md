@@ -389,6 +389,13 @@ What shipped, and where it departs from the text above:
   variant alone: default kit 86% (the test), minimal 78%, glassy 77%,
   organic 55% (its dings and keys are marimba-like, under 1 kHz). Boing
   measures as impact and a space bar as impact in every palette.
+- **Two rule sets.** The immersive sound RFC's classifier
+  (`src/sfx/classify.js`, merged alongside this) types one isolated file
+  with rea-video's thresholds unchanged and its own family table
+  (`FAMILY_TYPE`); this scan shares its `SFX_TYPES` and `typingRuns` but
+  keeps the recalibrated rules above and `SFX_FAMILY_TYPES`. Its baseline
+  types our clicks and keys as ding in every palette, which is what the
+  recalibration fixes. One table and one rule set is a follow-up.
 - **Profile fields** land in each reference's `sound` and in
   `reference_stats.sound`: all eight from the list above plus
   `beat_synced`. `soundFromAudio` sets `sfx_density` from `sfx_per_min`
