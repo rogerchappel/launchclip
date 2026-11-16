@@ -12,16 +12,24 @@
 //   visualDensityGate(story, {rects}) → a guardrail gate result
 //   visualDensityErrors(story, rects) → "density: …" planner repair notes
 //
-// fill at a moment: the share of a coarse grid over the frame covered by a
-// media, text or hero element, or by a scene's footage plate (a video or
-// image backdrop) weighted by how much of it shows through its dim. Captions,
-// decor panels and drawn plates do not count: they are the surface.
+// At each moment the frame is a coarse grid. A cell is filled when a media,
+// text or hero element covers it, or a scene's footage plate (a video or
+// image backdrop) shows through its dim there (at least `seen`); else it is
+// bare surface. Captions, decor panels and drawn plates do not fill: they are
+// the surface. fill = the filled share; footage = the media share, a plate
+// counted by how much of it shows (1 - dim).
+// shortcut: a module that paints an opaque ground over its own footage plate
+// (an end-card layout named with a solid ground) still counts the plate; read
+// the model's ground here if plans start naming such layouts over footage.
 import { platePlan, scenePlateSpec } from "@launchclip/core/plates.mjs";
 
 export const VISUAL_DENSITY = Object.freeze({
   step: 0.5,
-  // Below this fill a moment is sparse: a flat surface with a little on it.
-  floor: 0.35,
+  // Below this fill a moment is sparse: more of the frame bare surface than not
+  // (footage in 40% of the frame over a panel holding one line is sparse).
+  floor: 0.55,
+  // A footage plate fills its cells when at least this much of it shows through its dim.
+  seen: 0.3,
   // At most this share of the timeline may be sparse.
   sparseShare: 0.25,
   // No sparse run longer than this (s) anywhere.
@@ -72,9 +80,8 @@ export function visualDensity(story, rects = [], options = {}) {
     for (let r = 0; r < rows; r += 1) for (let c = 0; c < cols; c += 1) {
       const x = ((c + 0.5) / cols) * W, y = ((r + 0.5) / rows) * H;
       const over = active.filter(({ rect }) => x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height);
-      const media = over.some((entry) => entry.role === "media") ? 1 : plate;
-      footage += media;
-      fill += over.length ? 1 : plate;
+      footage += over.some((entry) => entry.role === "media") ? 1 : plate;
+      fill += over.length || plate >= k.seen ? 1 : 0;
     }
     samples.push({ t: at, fill: round(fill / (rows * cols)), footage: round(footage / (rows * cols)) });
   }
