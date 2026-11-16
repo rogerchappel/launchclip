@@ -1,0 +1,98 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Catalogue H parity: h-icon-grid-marks-portrait",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 4,
+      "platform": "youtube-shorts"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#06070d",
+        "primary": "#fdb022",
+        "accent": "#46d4ff",
+        "ink": "#06070d",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "el",
+        "module": "icon-grid",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "title": "Works with",
+          "items": [
+            {
+              "member": {
+                "module": "brand-mark",
+                "src": "assets/marks/ringly.png",
+                "ratio": 1,
+                "tone": "dark",
+                "clear": true,
+                "label": "Ringly"
+              }
+            },
+            {
+              "member": {
+                "module": "brand-mark",
+                "src": "assets/marks/glint.png",
+                "ratio": 1,
+                "tone": "light",
+                "clear": true,
+                "label": "Glint"
+              }
+            },
+            {
+              "member": {
+                "module": "brand-mark",
+                "src": "assets/marks/plumbox.png",
+                "ratio": 1,
+                "tone": "light",
+                "clear": false,
+                "box": "#5b2a86",
+                "label": "Plumbox"
+              }
+            },
+            {
+              "member": {
+                "module": "brand-mark",
+                "src": "assets/marks/stackr.png",
+                "ratio": 2,
+                "tone": "dark",
+                "clear": true,
+                "label": "Stackr"
+              }
+            },
+            {
+              "member": {
+                "module": "brand-mark",
+                "src": "assets/marks/ringly.png",
+                "label": "Unmeasured"
+              }
+            },
+            {
+              "icon": "plus",
+              "label": "Yours"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "sceneId": "el",
+  "threshold": {
+    "ssim": 0.97
+  }
+}
