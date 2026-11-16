@@ -1,0 +1,152 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Flow through a zooming camera (golden, 9:16 carry across a push and a pull)",
+  "notes": "Golden story for carry through camera moves that change zoom (docs/FLUID_MOTION_RFC.md \u00a76.6): three node-graph plates in one world-camera space. The camera pushes into the second plate and pulls back out to the third; with flow on from the steady feel, the title and hub ride a layer that cancels the camera, so they hold still and keep their size on screen while the plates zoom under them, and the cards glide from one fan into the next with the camera's own ease. No narration and no paid calls.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 12,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0b0d1a",
+      "primary": "#ffb547",
+      "accent": "#46d4ff",
+      "ink": "#0b0d1a",
+      "paper": "#f6f3ee"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "feel": "steady"
+  },
+  "camera": {
+    "mode": "world",
+    "layout": "row"
+  },
+  "scenes": [
+    {
+      "id": "plan",
+      "module": "node-graph",
+      "start": 0,
+      "end": 4,
+      "params": {
+        "title": "One brief, a whole team",
+        "hub": {
+          "label": "Director",
+          "icon": "clapperboard"
+        },
+        "nodes": [
+          {
+            "id": "research",
+            "label": "Research",
+            "icon": "search"
+          },
+          {
+            "id": "script",
+            "label": "Script",
+            "icon": "pen-line"
+          },
+          {
+            "id": "voice",
+            "label": "Voice",
+            "icon": "mic"
+          },
+          {
+            "id": "camera",
+            "label": "Camera",
+            "icon": "camera"
+          }
+        ],
+        "bpm": 120
+      }
+    },
+    {
+      "id": "ship",
+      "module": "node-graph",
+      "start": 4,
+      "end": 8,
+      "in": {
+        "type": "push",
+        "dur": 0.9
+      },
+      "params": {
+        "title": "One brief, a whole team",
+        "hub": {
+          "label": "Director",
+          "icon": "clapperboard"
+        },
+        "nodes": [
+          {
+            "id": "research",
+            "label": "Research",
+            "icon": "search"
+          },
+          {
+            "id": "script",
+            "label": "Script",
+            "icon": "pen-line"
+          },
+          {
+            "id": "voice",
+            "label": "Voice",
+            "icon": "mic"
+          },
+          {
+            "id": "camera",
+            "label": "Camera",
+            "icon": "camera"
+          },
+          {
+            "id": "edit",
+            "label": "Edit",
+            "icon": "scissors"
+          }
+        ],
+        "bpm": 120
+      }
+    },
+    {
+      "id": "wrap",
+      "module": "node-graph",
+      "start": 8,
+      "end": 12,
+      "in": {
+        "type": "pull",
+        "dur": 0.9
+      },
+      "params": {
+        "title": "One brief, a whole team",
+        "hub": {
+          "label": "Director",
+          "icon": "clapperboard"
+        },
+        "nodes": [
+          {
+            "id": "research",
+            "label": "Research",
+            "icon": "search"
+          },
+          {
+            "id": "edit",
+            "label": "Edit",
+            "icon": "scissors"
+          },
+          {
+            "id": "publish",
+            "label": "Publish",
+            "icon": "megaphone"
+          }
+        ],
+        "bpm": 120
+      }
+    }
+  ]
+}
