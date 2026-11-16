@@ -11,10 +11,13 @@ const rules = (findings) => findings.map(f => `${f.severity}:${f.rule}`).sort();
 const beats = Array.from({length: 40}, (_, i) => i * 0.5);
 
 test('a profile\'s measured pace tightens the band and never loosens it', () => {
-  const tight = profilePace(short, {measures: {hook_rate_ratio: {p10: 2}, max_event_gap_seconds: {p90: 2}, cuts_on_beat_ratio: {p10: 0.8}}});
+  const tight = profilePace(short, {provenance: {kind: 'measured'}, measures: {hook_rate_ratio: {p10: 2}, max_event_gap_seconds: {p90: 2}, cuts_on_beat_ratio: {p10: 0.8}}});
   assert.deepEqual([tight.hook_ratio, tight.gap_warn, tight.cuts_on_beat], [2, 2, 0.8]);
-  const loose = profilePace(short, {measures: {hook_rate_ratio: {p10: 0.5}, max_event_gap_seconds: {p90: 9}}});
+  const loose = profilePace(short, {provenance: {kind: 'measured'}, measures: {hook_rate_ratio: {p10: 0.5}, max_event_gap_seconds: {p90: 9}}});
   assert.deepEqual([loose.hook_ratio, loose.gap_warn], [short.hook_ratio, short.gap_warn]);
+  // A seed profile's fields are the table: a calm style's longer gaps stand.
+  const calm = cadenceTarget('short-form', 'calm').pace;
+  assert.equal(profilePace(calm, {provenance: {kind: 'seed'}, measures: {max_event_gap_seconds: {p90: 2.5}}}).gap_warn, calm.gap_warn);
 });
 
 test('planned against measured: missing events, a lost hook, cuts off the beat', () => {

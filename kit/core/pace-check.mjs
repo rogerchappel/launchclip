@@ -105,10 +105,12 @@ export const RENDER_PACE = Object.freeze({
 /**
  * A profile's measured pace fields tighten the format's band, never loosen it:
  * hook_rate_ratio p10 raises hook_ratio, max_event_gap_seconds p90 lowers
- * gap_warn, cuts_on_beat_ratio p10 raises cuts_on_beat.
+ * gap_warn, cuts_on_beat_ratio p10 raises cuts_on_beat. Only a measured
+ * profile: a seed profile's pace fields are this table, before style scaling.
  */
 export function profilePace(pace, profile = null) {
-  const m = profile?.measures ?? {};
+  if (profile?.provenance?.kind !== 'measured') return pace;
+  const m = profile.measures ?? {};
   const out = { ...pace };
   if (Number.isFinite(m.hook_rate_ratio?.p10)) out.hook_ratio = Math.max(pace.hook_ratio, m.hook_rate_ratio.p10);
   if (Number.isFinite(m.max_event_gap_seconds?.p90)) out.gap_warn = Math.min(pace.gap_warn, m.max_event_gap_seconds.p90);
