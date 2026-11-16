@@ -397,7 +397,21 @@ non-empty finding must also contain `evidence_ids` naming the exact artifacts
 that support it. A clean `ship` verdict without complete evidence coverage
 fails the phase-2 gate.
 
-Use `verdict: "repair"` or `"replan"` for a failed review. Every finding must
+Use `verdict: "repair"` or `"replan"` for a failed review, and `"recapture"`
+when the evidence itself is bad (blank or half-loaded tiles, left and right
+tiles that differ from a capture fault, missing samples): rebuild the sheets
+with `launchclip finish`, never repair the video. A partial set of sheets
+cannot ship.
+
+Judge the sheets before reading any tooling findings (the finish gates, the
+tells), so the measurements do not anchor you, and answer the template
+question first: if the subject were swapped for another, would the video
+still fit? Then check each tooling finding against the frames and mark it
+`agree` or `false-positive`. Add `keep`: up to five things that work and must
+survive any repair. When reviewing a repair, score each earlier blocking or
+major finding `resolved`, `partial` or `unresolved` from the new sheets only,
+name at most three regressions, and do not hunt for new problems; anything
+short of resolved cannot ship. Every finding must
 contain a stable `id`, `severity: "blocking|major|minor"`, a concise `category`,
 an actionable `message`, and a non-empty `evidence_ids` array. Add timing or
 sequence identifiers when known; do not invent them when the evidence cannot
@@ -407,6 +421,8 @@ Use one of these categories: `narrative`, `composition`, `typography`,
 `motion`, `asset`, `timing`, `audio`, `mount`, `factual`, and the density and
 style ones:
 
+- `specificity`: the template check fails; the video would still fit with
+  another subject (generic copy, world or signature).
 - `missed-opportunity`: a line whose intent calls for a visual (in
   `DIRECTION.json`: a claim, number, list, process, product, proof, quote,
   the hook or the call to action) has none on screen.
