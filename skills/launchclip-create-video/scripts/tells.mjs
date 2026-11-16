@@ -89,7 +89,7 @@ export const TELL_REGISTRY = Object.freeze([
   tell('card-grid', 'slop', 'warning', 'plan', 'cardGrid', 'Vary the sizes so one leads, or use item-list.', 'impeccable, unslop'),
   tell('icon-tile', 'slop', 'warning', 'plan', 'iconTile', 'The icon beside the text, or none.', 'impeccable'),
   // The pilot's cheap modules (a 9:16 explainer with the brand's own footage).
-  tell('boxed-on-flat', 'slop', 'error', 'plan', 'boxedOnFlat', 'Free type over the footage or a photo: before-after for one thing in two states, media-compare for two options with footage, item-list over footage, photo-scene cards; or the same module on a scene backdrop.', 'LaunchClip pilot review'),
+  tell('boxed-on-flat', 'slop', 'error', 'plan', 'boxedOnFlat', 'Free type over the footage or a photo: before-after for one thing in two states, media-compare for two options with footage, item-list over footage, media-grid photo-backed tiles, photo-scene lines; or the same module on a scene backdrop.', 'LaunchClip pilot review'),
   tell('stock-icon', 'slop', 'warning', 'plan', 'stockIcon', 'Show the thing itself (the footage, a photo, an object), or no icon.', 'LaunchClip pilot review'),
   tell('caption-echoes-headline', 'slop', 'warning', 'plan', 'captionEchoesHeadline', 'Make the on-screen text add what the narration does not say (the figure, the name, the trade-off), or drop the headline and let the caption carry the line.', 'LaunchClip pilot review'),
   tell('emoji-icons', 'slop', 'error', 'plan', 'emojiIcons', 'One icon set (catalog-h-icons) or none.', 'unslop, impeccable'),
