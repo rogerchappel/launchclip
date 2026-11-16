@@ -338,7 +338,9 @@ test("ASCII terminal is a real conversion: cells, nine characters by brightness,
 test("the looks a filter cannot fully make say so in their name and their description", () => {
   assert.match(LOOK_INFO["clay-2d"].honest, /not 3D clay/);
   assert.match(LOOK_INFO["isometric-layers"].honest, /not 3D models/);
-  for (const name of NAMED.filter((entry) => !["clay-2d", "isometric-layers"].includes(entry))) assert.equal(LOOK_INFO[name].honest, null, name);
+  assert.match(LOOK_INFO["pen-plotter"].honest, /row-by-row sweep/);
+  assert.match(LOOK_INFO.lidar.honest, /not measured depth/);
+  for (const name of NAMED.filter((entry) => !["clay-2d", "isometric-layers", "pen-plotter", "lidar"].includes(entry))) assert.equal(LOOK_INFO[name].honest, null, name);
   assert.match(lookErrors("claymation")[0], /"claymation" is called "clay-2d" here/);
   assert.match(lookErrors("isometric")[0], /"isometric" is called "isometric-layers" here/);
   const clay = planOf("clay-2d");

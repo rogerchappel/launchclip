@@ -72,6 +72,26 @@ test("the chain runs in table order with defaults, and the grade joins it", () =
   assert.deepEqual(resolveFinish({ ...base, grade: "off", finish: [{ pass: "grain" }] }).map((entry) => entry.pass), ["grain"]);
 });
 
+test("a finish look adds its passes; the story's own entries win, pass by pass", () => {
+  assert.deepEqual(resolveFinish({ ...base, look: "stained-glass" }).map((entry) => entry.pass), ["stained-glass", "bloom"]);
+  assert.deepEqual(resolveFinish({ ...base, look: { name: "silkscreen" } }).map((entry) => entry.pass), ["silkscreen", "grain"]);
+  const own = resolveFinish({ ...base, look: "silkscreen", finish: [{ pass: "grain", amount: 0.3 }, { pass: "aberration" }] });
+  assert.deepEqual(own.map((entry) => entry.pass), ["silkscreen", "aberration", "grain"]);
+  assert.equal(own.at(-1).params.amount, 0.3);
+  assert.equal(resolveFinish({ ...base, look: "hologram" }), null, "an SVG look adds no pass");
+});
+
+test("stained glass and silkscreen compile, change the frame and are seek-pure", { skip: media, timeout: 120_000 }, async (t) => {
+  const dir = await scratch(t);
+  for (const pass of ["stained-glass", "silkscreen"]) {
+    const chain = resolveFinish({ finish: [{ pass, ...(pass === "stained-glass" ? { cell: 16 } : { cell: 4 }) }] });
+    await runFinishPass({ input: path.join(dir, "in%03d.png"), output: path.join(dir, `${pass}%03d.png`), chain, width: W, height: H, fps: 30, kind: "image" });
+    await runFinishPass({ input: path.join(dir, "in005.png"), output: path.join(dir, `${pass}-alone.png`), chain, width: W, height: H, fps: 30, frameStart: 4, kind: "image" });
+    assert.ok(rgbOf(path.join(dir, `${pass}004.png`)).equals(rgbOf(path.join(dir, `${pass}-alone.png`))), `${pass}: frame 4 differs between the sequence and a seek`);
+    assert.ok(!rgbOf(path.join(dir, `${pass}004.png`)).equals(rgbOf(path.join(dir, "in005.png"))), `${pass} changed nothing`);
+  }
+});
+
 test("protect rects: the caption band while a caption shows, the brand frame while it shows", () => {
   const captionRect = { x: 0, y: 1400, width: 1080, height: 200 };
   const rects = protectRects(base, { captions: [[0.5, 1.5], [2, 3]], captionRect });

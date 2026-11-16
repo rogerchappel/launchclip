@@ -82,6 +82,102 @@ const rgb = (hex) => [0, 2, 4].map((i) => parseInt(hex.slice(1 + i, 3 + i), 16) 
 
 // Each pass: its body (and a pre-pass for bloom) and its uniforms from params.
 const PASSES = {
+  // Stained glass: a seeded Voronoi of `cell` px (1080p) panes, each the
+  // picture's colour at its site, saturated and backlit (brightest at the
+  // pane's heart), with streaks and a few bubbles in the glass; lead `lead`
+  // px wide on every pane border, and on the picture's own strong edges
+  // (Sobel on luma) by `edges`. A bloom after it eats into the lead.
+  "stained-glass": {
+    body: `uniform float u_cell;
+uniform float u_lead;
+uniform float u_glow;
+uniform float u_edges;
+uniform float u_seed;
+vec2 site(ivec2 c) { return (vec2(c) + 0.15 + 0.7 * hash3(uvec3(c + 65536, uint(u_seed) + 101u)).xy); }
+vec4 effect(vec2 p) {
+  float k = min(u_res.x, u_res.y) / 1080.0, s = u_cell * k;
+  vec2 q = p / s;
+  ivec2 g = ivec2(floor(q));
+  // The nearest site, then the distance to the nearest border (the bisector to each neighbour).
+  float best = 1e9; ivec2 near = g; vec2 a = vec2(0.0);
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    ivec2 c = g + ivec2(x, y); vec2 o = site(c); float d = dot(o - q, o - q);
+    if (d < best) { best = d; near = c; a = o; }
+  }
+  float border = 1e9;
+  for (int y = -2; y <= 2; y++) for (int x = -2; x <= 2; x++) {
+    ivec2 c = near + ivec2(x, y); if (c == near) continue;
+    vec2 b = site(c);
+    border = min(border, dot(0.5 * (a + b) - q, normalize(b - a)));
+  }
+  vec3 pane = px(clamp(a * s, vec2(0.5), u_res - 0.5)).rgb;
+  vec3 c = mix(pane, px(p).rgb, 0.25);
+  float l = luma(c);
+  c = clamp(mix(vec3(l), c, 1.6), 0.0, 1.0);
+  // Backlight: a glow that falls off toward the lead.
+  float heart = 1.0 - clamp(length(q - a) / 0.8, 0.0, 1.0);
+  c *= 0.7 + u_glow * (0.25 + 0.45 * heart);
+  // Streaks run across each pane at its own angle; bubbles are small bright rings.
+  uint h = uint(near.x + 65536) * 73856093u ^ uint(near.y + 65536) * 19349663u ^ uint(u_seed);
+  float ang = hash3(uvec3(h, 3u, 7u)).x * 3.14159;
+  vec2 dir = vec2(cos(ang), sin(ang));
+  c *= 0.9 + 0.2 * fbm(vec2(dot(q, dir) * 6.0, dot(q, vec2(-dir.y, dir.x)) * 0.6), h);
+  vec2 bq = p / (9.0 * k);
+  vec3 bh = hash3(uvec3(ivec2(floor(bq)) + 65536, uint(u_seed) + 7u));
+  if (bh.z > 0.93) { float r = length(fract(bq) - (0.3 + 0.4 * bh.xy)); c += 0.25 * u_glow * (1.0 - smoothstep(0.05, 0.12, abs(r - 0.18))); }
+  // Lead: the pane borders and the picture's strong edges.
+  float e = 0.0;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    float w = luma(px(p + vec2(x, y) * 1.5 * k).rgb);
+    e += w * float(x) * (y == 0 ? 2.0 : 1.0);
+  }
+  float ey = 0.0;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) ey += luma(px(p + vec2(x, y) * 1.5 * k).rgb) * float(y) * (x == 0 ? 2.0 : 1.0);
+  float edge = smoothstep(0.35, 0.6, length(vec2(e, ey))) * u_edges;
+  float lead = 1.0 - smoothstep(0.5 * u_lead * k - 0.75, 0.5 * u_lead * k + 0.75, border * s);
+  return vec4(mix(c, vec3(0.06, 0.05, 0.045), max(lead, edge)), 1.0);
+}`,
+    uniforms: (q) => ({ u_cell: q.cell, u_lead: q.lead, u_glow: q.glow, u_edges: q.edges, u_seed: q.seed })
+  },
+  // Silkscreen: the picture printed in up to six flat inks (paper, ink, one
+  // to four, the first `inks` of them): each pixel takes its nearest ink, and
+  // where it sits between two (the mid-tones) a halftone screen of `cell` px
+  // turned by `angle` prints the second ink as dots, read `registration` px
+  // off in a seeded direction, so dots and solids sit slightly out of register.
+  silkscreen: {
+    body: `uniform vec3 u_inks[6];
+uniform int u_n;
+uniform float u_cell;
+uniform float u_angle;
+uniform float u_registration;
+uniform float u_seed;
+void nearest(vec3 c, out int i0, out int i1, out float t) {
+  float d0 = 1e9, d1 = 1e9; i0 = 0; i1 = 0;
+  for (int i = 0; i < 6; i++) {
+    if (i >= u_n) break;
+    float d = distance(c, u_inks[i]);
+    if (d < d0) { d1 = d0; i1 = i0; d0 = d; i0 = i; } else if (d < d1) { d1 = d; i1 = i; }
+  }
+  t = d0 / max(d0 + d1, 1e-4);
+}
+vec4 effect(vec2 p) {
+  float k = min(u_res.x, u_res.y) / 1080.0;
+  float a = hash3(uvec3(uint(u_seed), 5u, 11u)).x * 6.2831853;
+  vec2 off = vec2(cos(a), sin(a)) * u_registration * k;
+  int i0, i1; float t;
+  nearest(px(p).rgb, i0, i1, t);
+  vec3 c = u_inks[i0];
+  // The screen, on the misregistered read.
+  int j0, j1; float u;
+  nearest(px(p + off).rgb, j0, j1, u);
+  float r = radians(u_angle);
+  vec2 q = mat2(cos(r), sin(r), -sin(r), cos(r)) * (p + off) / (u_cell * k);
+  float rad = sqrt(clamp((u - 0.12) / 0.38, 0.0, 1.0)) * 0.6;
+  float dotv = 1.0 - smoothstep(rad - 0.06, rad + 0.06, length(fract(q) - 0.5));
+  return vec4(mix(c, u_inks[j0 == i0 ? j1 : j0], dotv * step(0.12, u)), 1.0);
+}`,
+    uniforms: (q) => ({ u_inks: [q.paper, q.ink, q.one, q.two, q.three, q.four].flatMap(rgb), u_n: q.inks, u_cell: q.cell, u_angle: q.angle, u_registration: q.registration, u_seed: q.seed })
+  },
   // Threshold bloom: the pre-pass keeps what is brighter than threshold (soft
   // knee), the page mipmaps it (the downsample pyramid), and each of six
   // levels is read through a 9-tap tent, then screen-added in the tint.
