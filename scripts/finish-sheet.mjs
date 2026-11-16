@@ -25,11 +25,19 @@ export const SHEET = Object.freeze([
   {label: 'grade warm-film, brand tint', finish: [{pass: 'grade', preset: 'warm-film', tint: 'brand'}]},
   {label: 'grain 0.12', finish: [{pass: 'grain', amount: 0.12}]},
   {label: 'aberration 3 px', finish: [{pass: 'aberration', px: 3}]},
-  {label: 'aberration + grade + grain', finish: [{pass: 'aberration', px: 2}, {pass: 'grade', preset: 'cool-tech'}, {pass: 'grain', amount: 0.08}]}
+  {label: 'aberration + grade + grain', finish: [{pass: 'aberration', px: 2}, {pass: 'grade', preset: 'cool-tech'}, {pass: 'grain', amount: 0.08}]},
+  {label: 'bloom 0.65 / 1.2', finish: [{pass: 'bloom', threshold: 0.65, strength: 1.2}]},
+  {label: 'zoom-blur 0.18 (on a hit)', finish: [{pass: 'zoom-blur', amount: 0.18, at: 'here'}]},
+  {label: 'burn (mid-hit)', finish: [{pass: 'burn', at: 'here', frames: 14}], offset: -3},
+  {label: 'crt', finish: [{pass: 'crt', scan: 0.5, grille: 0.3, curvature: 0.06, tracking: 0.5}]},
+  {label: 'halftone dot', finish: [{pass: 'halftone', cell: 12}]},
+  {label: 'halftone line', finish: [{pass: 'halftone', cell: 10, mode: 'line', angle: 30}]},
+  {label: 'halftone duotone', finish: [{pass: 'halftone', cell: 10, mode: 'duotone'}]},
+  {label: 'crt + bloom + grain', finish: [{pass: 'crt', scan: 0.45, grille: 0.25}, {pass: 'bloom', threshold: 0.7, strength: 0.8}, {pass: 'grain', amount: 0.06}]}
 ]);
 
 function args(argv) {
-  const out = {story: 'examples/story/explainer-9x16', at: 3.2, out: 'qa/finishing/finish-passes.png', tile: 360};
+  const out = {story: 'examples/story/explainer-9x16', at: 3.2, out: 'qa/finishing/finish-passes.png', tile: 300};
   for (let i = 0; i < argv.length; i += 2) out[argv[i].replace(/^--/, '')] = argv[i + 1];
   return {...out, at: Number(out.at), tile: Number(out.tile)};
 }
@@ -51,11 +59,12 @@ try {
     const file = path.join(work, `tile-${i}.png`);
     // A grade alone is the ffmpeg path in a render; the sheet shows it through the chain with a zero grain.
     const finish = entry.finish.length && entry.finish.every((e) => e.pass === 'grade') ? [...entry.finish, {pass: 'grain', amount: 0}] : entry.finish;
-    const chain = resolveFinish({...story, grade: undefined, finish});
+    // at: 'here' puts the tile's hit on the still's own time (offset frames before it).
+    const chain = resolveFinish({...story, grade: undefined, finish: finish.map((e) => (e.at === 'here' ? {...e, at: [(frame - (entry.offset ?? 0)) / fps]} : e))});
     if (chain) await runFinishPass({input: still, output: file, ...(await finishChain(project, story, chain)), width, height, fps, frameStart: frame, rects, kind: 'image'});
     tiles.push({label: entry.label, file: chain ? file : still});
   }
-  const tileH = Math.round(opts.tile * height / width), cols = 3;
+  const tileH = Math.round(opts.tile * height / width), cols = 4;
   const html = path.join(work, 'sheet.html');
   await writeFile(html, `<!doctype html><meta charset="utf-8"><style>body{margin:0;background:#111;color:#eee;font:600 15px/1.2 system-ui,sans-serif;display:grid;grid-template-columns:repeat(${cols},${opts.tile}px);gap:12px;padding:12px;width:max-content}figure{margin:0}img{width:${opts.tile}px;height:${tileH}px;display:block}figcaption{padding:6px 2px 0}</style>
 ${tiles.map((t) => `<figure><img src="${pathToFileURL(t.file).href}"><figcaption>${t.label}</figcaption></figure>`).join('\n')}`);

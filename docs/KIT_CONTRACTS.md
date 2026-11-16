@@ -3075,9 +3075,22 @@ accent, else primary. A `.cube` takes no tint.
 
 `story.finish` is a list of `{pass, ...params}`, at most 8, each pass once;
 every pass is off unless listed. Passes run in chain order whatever order
-the list has: `aberration` (`px` 0.5–4, `falloff` 0–1), `grade` (the
-`story.grade` fields), `grain` (`amount` 0–1, `size` 1–4 px, `mono`,
-`seed`). Ranges and defaults: `STORY_FINISH_PASSES` in `kit/core/story.mjs`.
+the list has:
+
+| Pass | Params | What it does |
+|---|---|---|
+| `bloom` | `threshold` 0.5–0.95, `radius` 0.5–2, `strength` 0–2, `tint` | a soft-knee bright pass, mipmapped (the pyramid), six levels through a 9-tap tent, screen-added |
+| `aberration` | `px` 0.5–4, `falloff` 0–1 | R and B sampled along the radius, G fixed |
+| `zoom-blur` | `amount` 0–0.5, `centre` [x, y], `samples` 4–24, `at` | blur toward the centre; with `at`, amount rises over 0.07 s to each hit and falls over 0.35 s (smoothstep both ways) |
+| `burn` | `at` (default `"cuts"`), `frames` 8–14, `band` 0.02–0.3, `colour`, `seed` | over `frames` frames centred on each hit, an fbm front from a seeded origin burns the frame to white and recedes, a coloured band ahead of it |
+| `crt` | `scan`, `grille`, `bleed`, `tracking` 0–1, `curvature` 0–0.15, `powerOn` | luma sharp, chroma smeared and red shifted, barrel curve, scanlines, aperture grille, a rolling tracking band; `powerOn` opens the picture from a line over 0.45 s |
+| `halftone` | `cell` 4–48 px, `angle` 0–90, `ink`, `paper`, `accent`, `mode` `dot`/`line`/`duotone` | one ink as dots or rules whose size follows darkness; `duotone` prints over a map from `accent` to `paper` |
+| `grade` | the `story.grade` fields | the 3D LUT |
+| `grain` | `amount` 0–1, `size` 1–4 px, `mono`, `seed` | luma-weighted grain, a fresh field each frame |
+
+`at` is a list of up to 32 seconds, or `"cuts"` (every track-0 scene start
+after the first). Ranges and defaults: `STORY_FINISH_PASSES` in
+`kit/core/story.mjs`.
 
 `launchclip finish` runs the chain over the finished render, in place of
 the ffmpeg grade, before the caption legibility pass: ffmpeg decodes to
@@ -3090,8 +3103,9 @@ stays the `lut3d` pass. The GL grade samples the same cube tetrahedrally
 and truncates to 8 bits as `lut3d` does (ΔE2000 under 1 on a chart).
 
 Every value is a function of the absolute frame number, the size and the
-params (grain hashes cell, frame and seed), so frame N finished alone equals
-frame N in a sequence and segment joins never seam.
+params (grain hashes cell, frame and seed; hits are absolute seconds), so
+frame N finished alone equals frame N in a sequence and segment joins never
+seam.
 
 Protect mask: every pass but the grade mixes back to its input pixel inside
 the caption band while a caption shows (0.1 s before a chunk to 0.2 s after)
