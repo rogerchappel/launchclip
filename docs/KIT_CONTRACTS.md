@@ -6033,6 +6033,58 @@ of set type. It hides captions, like `hook-title` and `cta`.
 - **Compilers:** the catalogue B emitter and `CatalogBModule`
   (`kit/remotion/catalog/BrandLockup.tsx`) draw the same tree and ops.
 
+## End card (catalogue B, `kit/core/catalog-b-end-card.mjs`)
+
+`end-card` is the library of endings from the [end-card RFC](END_CARDS_RFC.md):
+about thirty designed layouts, each dressed in the brand's fonts, colours and
+logo. It hides captions.
+
+```json
+{ "module": "end-card", "params": { "action": "keyword",
+  "keyword": "DECK", "offer": "the board checklist", "headline": "Save this before you pick your deck boards",
+  "logo": "assets/brand/logo.png", "still": "assets/last-frame.png", "avoid": ["freeze-scrim"] } }
+{ "module": "end-card", "params": { "layout": "sign-off",
+  "headline": "Made slowly, meant to last", "emphasis": "meant to last", "url": "koyaclay.studio", "logo": "assets/brand/logo.jpg" } }
+```
+
+- **Layouts:** `params.layout` names one; the families live in
+  `kit/core/end-card-layouts-{type,brand,footage,graphic,loop}.mjs`
+  (`END_CARD_LAYOUTS` lists them all). Each declares the grounds and actions it
+  is built for, style tags, the fields it `needs` (a stated layout without
+  them fails with a param error naming them) and, optionally, the logo classes
+  and aspects it handles.
+- **The pick:** with no layout, the story's `variants["end-card"]` wins, then
+  `pickEndCard()`: layouts that fit the action, the grounds (footage only when
+  the video has a shot under the ending: `still`, or a footage base), the logo
+  class, the aspect and the content, weighted by the style's tags and doubled
+  for footage layouts over footage, with the last two of `avoid` weighed down
+  to 2% and the rest to 25%. The seed (`params.seed`, else the scene id, the
+  primary colour and the headline) draws one, so the same inputs end the same
+  way.
+- **Content:** `headline` (with `emphasis`, words of it set in italic), `url`,
+  `handle`, `keyword` (one word, shown in capitals), `offer`, `reason`, `next`,
+  `date`, `place`, `slot`, `app`, `hook`, `issue`, `rating`, and `badges`
+  (handed-in store badge images) for download endings.
+- **Logo:** `logo` is an `assets/` image or `{src, ratio, tone, clear, box}`.
+  `src/logo_mark.js` measures the file when the story is read and fills in
+  the ratio, the tone (dark, light, mixed), whether its background is
+  see-through and, for a boxed logo, the box colour. `logoTreatment()` then
+  draws it: a see-through mark that would not read on the ground is tinted
+  paper or ink (an SVG `feColorMatrix`), a boxed or unmeasured logo sits whole
+  on a plate in its box colour, and a layout may recolour a see-through mark
+  outright (a knockout in a colour block).
+- **Grounds:** card (`brand.colors.bg`), paper, a split of colour blocks, or
+  footage. Footage layouts sit over the last shot on track 2: with `still` (the
+  last frame as an image) they hold it and push in 6% over the scene, without
+  it the shot keeps playing under them. Type over footage sits on a scrim.
+- **Motion:** elements land beat by beat, `stagger` apart (0.28 s, scaled by
+  the grammar), the first at `at` (0.1 s), the action last. Eases go slow,
+  fast, slow and nothing overshoots: rise, fade, scale from 0.86, a clip wipe,
+  a stamp from 1.5×, a stroke drawing on, typed text, a ticker, a slow spin, a
+  stepping count and a blinking cursor, all as the shared catalogue B op list,
+  so both renderers match. Events: `enter` and `ask` (the action landing, with
+  its sound cue).
+
 ## Photo scene (catalogue D, `kit/core/catalog-d-photo-scene.mjs`)
 
 `photo-scene` fills the frame with one photo or video clip from `assets/` and

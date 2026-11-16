@@ -94,6 +94,20 @@ export function logoClear(bytes, size = SIZE) {
   return clear / edges > 0.85;
 }
 
+/** RGBA pixels → the average colour of an opaque edge (a logo's own box), as #rrggbb, or null. */
+export function logoBox(bytes, size = SIZE) {
+  if ((bytes?.length ?? 0) < size * size * 4) return null;
+  let n = 0, r = 0, g = 0, b = 0;
+  for (let y = 0; y < size; y += 1) for (let x = 0; x < size; x += 1) {
+    if (x !== 0 && y !== 0 && x !== size - 1 && y !== size - 1) continue;
+    const i = (y * size + x) * 4;
+    if (bytes[i + 3] < 240) continue;
+    n += 1; r += bytes[i]; g += bytes[i + 1]; b += bytes[i + 2];
+  }
+  if (!n) return null;
+  return `#${[r, g, b].map((v) => Math.round(v / n).toString(16).padStart(2, "0")).join("")}`;
+}
+
 const cache = new Map();
 
 /** An image file → {tone?, aspect?, trim?, clear} (each may be missing), or null when ffmpeg cannot read it. */
@@ -110,7 +124,7 @@ async function readLogoMark(file) {
   const { stdout } = await run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", file, "-frames:v", "1", "-vf", `scale=${SIZE}:${SIZE},format=rgba`, "-f", "rawvideo", "-"], { encoding: "buffer", maxBuffer: 1024 * 1024 });
   const tone = logoTone(stdout);
   const trim = aspect ? logoTrim(stdout) : null;
-  return tone || aspect ? { ...(tone ? { tone } : {}), ...(aspect ? { aspect } : {}), ...(trim ? { trim } : {}), clear: logoClear(stdout) } : null;
+  return tone || aspect ? { ...(tone ? { tone } : {}), ...(aspect ? { aspect } : {}), ...(trim ? { trim } : {}), clear: logoClear(stdout), ...(logoClear(stdout) ? {} : { box: logoBox(stdout) }) } : null;
 }
 
 /**
@@ -125,7 +139,7 @@ export async function withLogoMark(story, projectDir = process.cwd()) {
   if (known.tone && known.aspect) return story;
   const found = await measureLogoMark(path.resolve(projectDir, frame.logo.trim()));
   if (!found) return story;
-  const { clear: _clear, ...measured } = found;
+  const { clear: _clear, box: _box, ...measured } = found;
   // A stated aspect belongs with its own trim (or none), not the measured one.
   const logo_mark = { ...(known.aspect ? { ...measured, trim: undefined } : measured), ...known };
   if (logo_mark.trim === undefined) delete logo_mark.trim;
@@ -147,6 +161,20 @@ export function lockupTint(measured, backdrop) {
 }
 
 /**
+ * An end-card's logo with what was measured filled in ({src, ratio, tone,
+ * clear, box}), keeping anything the story states. → null when there is
+ * nothing to add or the file cannot be read.
+ */
+async function endCardLogo(value, projectDir, measure) {
+  const given = typeof value === "string" ? { src: value } : value && typeof value === "object" && !Array.isArray(value) ? value : null;
+  if (!given || typeof given.src !== "string" || !given.src.trim() || (given.tone && typeof given.clear === "boolean" && given.ratio)) return null;
+  const found = await measure(path.resolve(projectDir, given.src.trim()));
+  if (!found) return null;
+  const measured = { ...(found.aspect ? { ratio: Math.min(12, Math.max(0.2, found.aspect)) } : {}), ...(found.tone ? { tone: found.tone } : {}), clear: found.clear === true, ...(found.box ? { box: found.box } : {}) };
+  return { ...measured, ...given };
+}
+
+/**
  * The story with every brand-lockup scene's untinted mark and wordmark tinted
  * to read on its backdrop (lockupTint), measured from the files. A stated
  * tint or markTint (even "none") wins. → the same story when nothing changes.
@@ -155,6 +183,12 @@ export async function withLockupTints(story, projectDir = process.cwd(), measure
   const scenes = Array.isArray(story?.scenes) ? story.scenes : [];
   let changed = false;
   const next = await Promise.all(scenes.map(async (scene) => {
+    if (scene?.module === "end-card") {
+      const logo = await endCardLogo(scene.params?.logo, projectDir, measure);
+      if (!logo) return scene;
+      changed = true;
+      return { ...scene, params: { ...scene.params, logo } };
+    }
     if (scene?.module !== "brand-lockup" || !scene.params || typeof scene.params !== "object") return scene;
     const params = { ...scene.params };
     let tinted = false;

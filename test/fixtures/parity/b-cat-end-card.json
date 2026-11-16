@@ -1,0 +1,47 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Parity: end-card, keyword ticket",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 4.5
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0b1116",
+        "primary": "#5fc4c4",
+        "accent": "#e8b04a",
+        "ink": "#0b1116",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "scenes": [
+      {
+        "id": "m",
+        "module": "end-card",
+        "start": 0,
+        "end": 4.5,
+        "params": {
+          "layout": "keyword-ticket",
+          "keyword": "DECK",
+          "offer": "the board checklist",
+          "logo": {
+            "src": "assets/brand/mark.svg",
+            "ratio": 1,
+            "tone": "light",
+            "clear": true
+          }
+        }
+      }
+    ]
+  },
+  "sceneId": "m"
+}

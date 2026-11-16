@@ -16,7 +16,7 @@ import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { brandFrameErrors } from "@launchclip/core/style.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 import { brandFrameFindings } from "../src/layout_check.js";
-import { lockupTint, logoClear, logoTone, logoTrim, withLockupTints } from "../src/logo_mark.js";
+import { lockupTint, logoBox, logoClear, logoTone, logoTrim, withLockupTints } from "../src/logo_mark.js";
 
 const require = createRequire(import.meta.url);
 const { gsap } = require("gsap");
@@ -400,4 +400,20 @@ test("withLockupTints: fills an untinted mark and wordmark, keeps a stated tint"
   assert.equal(out.scenes[1], story.scenes[1]);
   assert.equal(out.scenes[2], story.scenes[2]);
   assert.equal(await withLockupTints(story, "/p", async () => null), story, "unreadable files change nothing");
+});
+
+test("withLockupTints: an end-card logo gets its measured ratio, tone, see-through flag and box colour", async () => {
+  const story = { brand: { colors: { bg: "#0b0f10" } }, scenes: [
+    { id: "end", module: "end-card", start: 0, end: 3, params: { layout: "sign-off", headline: "x", logo: "assets/logo.jpg" } },
+    { id: "stated", module: "end-card", start: 3, end: 6, params: { headline: "x", logo: { src: "assets/logo.png", ratio: 2, tone: "light", clear: true } } }
+  ] };
+  const out = await withLockupTints(story, "/p", async () => ({ tone: "dark", aspect: 2.3, clear: false, box: "#efe4d4" }));
+  assert.deepEqual(out.scenes[0].params.logo, { ratio: 2.3, tone: "dark", clear: false, box: "#efe4d4", src: "assets/logo.jpg" });
+  assert.equal(out.scenes[1], story.scenes[1], "a fully stated logo is left alone");
+});
+
+test("logoBox: the average colour of an opaque edge", () => {
+  const size = 8, image = (fill) => Buffer.from(Array.from({ length: size * size }, (_, i) => fill(i % size, Math.floor(i / size))).flat());
+  assert.equal(logoBox(image(() => [239, 228, 212, 255]), size), "#efe4d4");
+  assert.equal(logoBox(image(() => [0, 0, 0, 0]), size), null);
 });

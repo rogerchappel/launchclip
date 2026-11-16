@@ -1,6 +1,6 @@
 // Catalogue B: renderer-neutral models for the RFC §5 modules
 // function-chart, gauge-compare, flow-compare, process-steps, archive-card and
-// logo-row, plus brand-lockup (title and end cards from the brand's artwork). Contract: docs/KIT_CONTRACTS.md ("Wave 2").
+// logo-row, plus brand-lockup (title and end cards from the brand's artwork) and end-card (the library of endings). Contract: docs/KIT_CONTRACTS.md ("Wave 2").
 //
 // Each MODULES entry resolves (params, ctx) into a JSON-only model. Both the
 // HyperFrames emitter (kit/hyperframes/catalog-b.mjs) and the Remotion
@@ -46,10 +46,11 @@ import {flowCompare} from './catalog-b-flow-compare.mjs';
 import {gaugeCompare} from './catalog-b-gauge-compare.mjs';
 import {functionChart} from './catalog-b-function-chart.mjs';
 import {brandLockup} from './catalog-b-brand-lockup.mjs';
+import {endCard} from './catalog-b-end-card.mjs';
 
 export {parseExpression, contrastRatio, luminance, mixColor, formatNumber, withUnit, sampleIndex, SAMPLE_LEAD, CATALOG_B_STYLE, CATALOG_B_TIMING} from './catalog-b-base.mjs';
 
-const DEFINITIONS = [functionChart, gaugeCompare, flowCompare, processSteps, archiveCard, logoRow, brandLockup];
+const DEFINITIONS = [functionChart, gaugeCompare, flowCompare, processSteps, archiveCard, logoRow, brandLockup, endCard];
 
 export const MODULES = Object.fromEntries(DEFINITIONS.map(def => [def.id, {describe: def.describe, params: def.params, events: def.events, timing: def.timing, resolve: def.resolve, states: def.states}]));
 const BY_ID = Object.fromEntries(DEFINITIONS.map(def => [def.id, def]));
