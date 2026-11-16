@@ -174,8 +174,10 @@ test("every preset compiles into the HyperFrames project and the Remotion compon
 const fixtures = readdirSync(path.join(ROOT, "test", "fixtures", "parity-captions")).filter((name) => name.endsWith(".json")).sort();
 
 test("a parity fixture exists for every preset", async () => {
-  const presets = await Promise.all(fixtures.map(async (file) => JSON.parse(await readFile(path.join(ROOT, "test", "fixtures", "parity-captions", file), "utf8")).preset));
-  assert.deepEqual(presets.sort(), [...CAPTION_PRESET_NAMES].sort());
+  // Named fixtures (a second look at one preset: the surface colours, a position) come on top.
+  const all = await Promise.all(fixtures.map(async (file) => JSON.parse(await readFile(path.join(ROOT, "test", "fixtures", "parity-captions", file), "utf8"))));
+  assert.deepEqual(all.filter((fixture) => !fixture.name).map((fixture) => fixture.preset).sort(), [...CAPTION_PRESET_NAMES].sort());
+  assert.ok(all.every((fixture) => CAPTION_PRESET_NAMES.includes(fixture.preset)));
 });
 
 test("caption parity: every preset, HyperFrames vs Remotion stills at word boundaries and mid-animation", { skip: process.env.LAUNCHCLIP_PARITY === "1" ? false : "set LAUNCHCLIP_PARITY=1 to render caption parity fixtures", timeout: 1_800_000 }, async () => {
