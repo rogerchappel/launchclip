@@ -7,6 +7,7 @@
 //   ghostingGate(story)  one copy of a person; nothing half-transparent held
 //   densityGate(story, {rects, profile})  no empty region or lone card held long
 //   varietyGate(story)   the same shot never repeats back to back
+//   tellsGate(story, {words})  the plan tells (docs/VIDEO_TELLS_RFC.md §1)
 //
 // Each gate → {status: "passed" | "failed" | "skipped", findings: [{rule,
 // severity, at?, ids, detail}]}. Errors fail the gate; warnings do not.
@@ -26,6 +27,14 @@ import { sceneWindows } from "@launchclip/core/transitions.mjs";
 import { ACTION_INFO, LOOK_ACTIONS, TARGET_REQUIRED, targetError } from "@launchclip/core/characters/actions.mjs";
 import { narrationWords } from "@launchclip/core/direction.mjs";
 import { abstractFindings } from "@launchclip/core/explainer.mjs";
+import { planTells } from "@launchclip/core/tells.mjs";
+import { catalogBView, MODULES as B } from "@launchclip/core/catalog-b.mjs";
+import { catalogCView, MODULES as C } from "@launchclip/core/catalog-c.mjs";
+import { catalogEView, MODULES as E } from "@launchclip/core/catalog-e.mjs";
+import { catalogFView, MODULES as F } from "@launchclip/core/catalog-f.mjs";
+import { catalogGView, MODULES as G } from "@launchclip/core/catalog-g.mjs";
+import { catalogHView, MODULES as H } from "@launchclip/core/catalog-h.mjs";
+import { modelOps } from "./movement_guardrails.js";
 
 // Sampling step (s) and tolerances for "moves with its layer".
 export const PHYSICS = Object.freeze({ step: 0.1, px: 0.5, scale: 0.001, fadeLow: 0.02, fadeHigh: 0.98 });
@@ -465,4 +474,24 @@ export function varietyGate(story) {
   const abstract = abstractFindings(story);
   if (abstract.abstract) findings.push({ rule: "abstract-only", severity: "error", at: 0, ids: [], detail: `all ${abstract.scenes} scenes are line diagrams, step rows and text cards (${abstract.modules.join(", ")}), with nothing pictured; show the subject: a character acting the line, an object, a photo, a chart of real figures or an interface, and keep diagrams as support` });
   return gateResult(findings, { shots: shots.length });
+}
+
+// The view tree each catalogue draws for a model, as both renderers draw it.
+const VIEWS = new Map([[B, catalogBView], [C, catalogCView], [E, catalogEView], [F, catalogFView], [G, catalogGView], [H, catalogHView]].flatMap(([modules, view]) => Object.keys(modules ?? {}).map((id) => [id, view])));
+
+/**
+ * Tells (docs/VIDEO_TELLS_RFC.md §1): every plan rule of the registry in
+ * kit/core/tells.mjs, on the resolved story with each scene's model, view
+ * tree and op list. Needs no render, so it runs under --plan-only and in the
+ * storyboard check, whose repair pass gets its errors.
+ */
+export function tellsGate(story, { words = [] } = {}) {
+  const { entries } = renderedModels(story);
+  const scenes = [...entries.values()].map(({ entry, model }) => {
+    let view = null;
+    try { view = VIEWS.get(model.module)?.(model) ?? null; } catch { view = null; }
+    return { id: entry.id, module: model.module, start: entry.start, end: entry.renderEnd ?? entry.end, track: entry.scene?.track ?? 0, scene: entry.scene, model, view, ops: modelOps(model) };
+  });
+  const findings = planTells({ story, scenes, words });
+  return gateResult(findings.sort((a, b) => (a.severity === "error" ? 0 : 1) - (b.severity === "error" ? 0 : 1)), { scenes: scenes.length });
 }
