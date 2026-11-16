@@ -123,3 +123,14 @@ test("a clip carrying the sonification masters to −14 ± 1 LUFS and at most �
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("with sound.sonify a chart's build cues no tally (its sonification plays instead); without it nothing changes", async () => {
+  const { bindCues, soundSettings } = await import("../src/finish.js");
+  const { model } = chart("bar-chart", "columns");
+  const story = { scenes: [{ id: "s", start: 1, duration: 5, hits: [] }], resolved: { duration: 10 } };
+  const families = (sonify) => bindCues(story, { models: () => model, sonify }).cues.map((cue) => cue.cue);
+  assert.ok(families(false).includes("tally"));
+  assert.ok(!families(true).includes("tally"));
+  assert.equal(soundSettings({}, { audio: { sound: { sonify: true } } }).sonify, true);
+  assert.equal(soundSettings({}, {}).sonify, undefined, "off unless the story asks");
+});
