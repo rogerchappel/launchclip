@@ -16,6 +16,8 @@
 //             tooltip, callout-arrow)
 //   titles    catalog-h-text.mjs (motion-title: the 24 named text effects)
 //   icons     catalog-h-icons.mjs (icon-grid, stroke or duotone)
+//   lists     catalog-h-list.mjs (item-list: one free element per item,
+//             stacked, fanned, scattered or orbiting, ticks one at a time)
 //   data      catalog-h-data.mjs (unit-grid, number-line: the data-explainer
 //             isotype and ruler)
 //   social    catalog-i-social.mjs (social-post, social-stack, social-sort,
@@ -69,9 +71,10 @@ import {LAYER_MODULES} from './catalog-i-layers.mjs';
 import {EXPLAIN_MODULES} from './catalog-i-explain.mjs';
 import {TACTILE_MODULES} from './catalog-h-tactile.mjs';
 import {UI_MODULES} from './catalog-i-ui.mjs';
+import {LIST_MODULES} from './catalog-h-list.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
-const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...SOCIAL_MODULES, ...CHANNEL_MODULES, ...CODE_MODULES, ...PARTICLE_MODULES, ...GRID_MODULES, ...TOKENIZER_MODULES, ...OBJECT_MODULES, ...EXPLODED_MODULES, ...LAYER_MODULES, ...SCATTER, ...EXPLAIN_MODULES, ...TACTILE_MODULES, ...UI_MODULES];
+const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...SOCIAL_MODULES, ...CHANNEL_MODULES, ...CODE_MODULES, ...PARTICLE_MODULES, ...GRID_MODULES, ...TOKENIZER_MODULES, ...OBJECT_MODULES, ...EXPLODED_MODULES, ...LAYER_MODULES, ...SCATTER, ...EXPLAIN_MODULES, ...TACTILE_MODULES, ...UI_MODULES, ...LIST_MODULES];
 
 
 

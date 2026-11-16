@@ -146,8 +146,8 @@ test("beat director: an hour scales chapter by chapter", () => {
   assert.ok(Date.now() - started < 30000);
   assert.equal(map.chapters.length, 48);
   assert.equal(map.report.cadence.gate.ok, true, beatMapReportText(map));
-  // Visual memory spans the hour: the same chapter text later in the video does not get the same modules.
-  const modules = (id) => map.chapters.find((chapter) => chapter.id === id).shots.flatMap((shot) => shot.states.map((state) => state.module));
+  // Visual memory spans the hour: the same chapter text later in the video does not get the same modules (a list takes another layout).
+  const modules = (id) => map.chapters.find((chapter) => chapter.id === id).shots.flatMap((shot) => shot.states.map((state) => (state.module === "item-list" ? `item-list/${state.params.variant}` : state.module)));
   const first = modules("why-speed-changed-everything-1"), fourth = modules("why-speed-changed-everything-4");
   assert.notDeepEqual(first, fourth);
 });

@@ -76,33 +76,19 @@
        "text": "There was no keynote, no countdown, and no teaser trailer.",
        "intent": "claim",
        "kind": "list",
-       "capability": "process-steps",
-       "module": "process-steps",
+       "capability": "item-list",
+       "module": "item-list",
        "change": "swap",
        "params": {
         "title": "Keynote countdown teaser",
-        "steps": [
-         {
-          "label": "Keynote"
-         },
-         {
-          "label": "No countdown"
-         },
-         {
-          "label": "No teaser trailer"
-         }
-        ]
+        "items": [
+         "Keynote",
+         "No countdown",
+         "No teaser trailer"
+        ],
+        "variant": "pills"
        },
-       "why": "list: process-steps, ahead of icon-row",
-       "zooms": [
-        {
-         "at": 8.54,
-         "until": 10.94,
-         "word": "keynote",
-         "element": "step Keynote",
-         "target": "node-0"
-        }
-       ]
+       "why": "list: item-list"
       },
       {
        "id": "the-launch-nobody-saw-coming-1-sh1-3",
@@ -522,22 +508,17 @@
        "text": "It was slow, expensive, and very good at one thing, which was reading long contracts.",
        "intent": "list",
        "kind": "list",
-       "capability": "process-steps",
-       "module": "process-steps",
+       "capability": "item-list",
+       "module": "item-list",
        "change": "swap",
        "params": {
         "title": "Slow expensive good",
-        "steps": [
-         {
-          "label": "Slow"
-         },
-         {
-          "label": "Expensive"
-         },
-         {
-          "label": "Very good"
-         }
-        ]
+        "items": [
+         "Slow",
+         "Expensive",
+         "Very good"
+        ],
+        "variant": "stack"
        },
        "evidence": {
         "claim": "c-long-doc",
@@ -551,16 +532,7 @@
         },
         "quote": "71% on long-document QA"
        },
-       "why": "list (evidence c-long-doc): process-steps, ahead of icon-row",
-       "zooms": [
-        {
-         "at": 88.365,
-         "until": 90.765,
-         "word": "expensive",
-         "element": "step Expensive",
-         "target": "node-1"
-        }
-       ]
+       "why": "list (evidence c-long-doc): item-list"
       }
      ],
      "camera": {
@@ -626,26 +598,20 @@
        "text": "It was based on the same architecture as the original, with more data and a longer training run.",
        "intent": "proof",
        "kind": "list",
-       "capability": "checklist",
-       "module": "checklist",
+       "capability": "process-steps",
+       "module": "process-steps",
        "change": "swap",
        "params": {
         "title": "Based architecture",
-        "rows": [
+        "steps": [
          {
-          "label": "Original",
-          "status": "done",
-          "at": 0.6
+          "label": "Original"
          },
          {
-          "label": "With more data",
-          "status": "done",
-          "at": 1.2
+          "label": "With more data"
          },
          {
-          "label": "Longer training run",
-          "status": "done",
-          "at": 1.8
+          "label": "Longer training run"
          }
         ]
        },
@@ -660,7 +626,16 @@
          "date": "2026-04-02"
         }
        },
-       "why": "list (evidence c-training-cost): checklist, ahead of icon-row"
+       "why": "list (evidence c-training-cost): process-steps, ahead of icon-row",
+       "zooms": [
+        {
+         "at": 107.315,
+         "until": 109.715,
+         "word": "original",
+         "element": "step Original",
+         "target": "node-0"
+        }
+       ]
       }
      ],
      "camera": {
@@ -920,33 +895,19 @@
        "text": "Every release pushed the same idea further: read more, remember more, and finish longer tasks without losing the thread.",
        "intent": "claim",
        "kind": "list",
-       "capability": "process-steps",
-       "module": "process-steps",
+       "capability": "item-list",
+       "module": "item-list",
        "change": "swap",
        "params": {
         "title": "Release pushed idea",
-        "steps": [
-         {
-          "label": "More"
-         },
-         {
-          "label": "Remember more"
-         },
-         {
-          "label": "Finish longer tasks"
-         }
-        ]
+        "items": [
+         "More",
+         "Remember more",
+         "Finish longer tasks"
+        ],
+        "variant": "fan"
        },
-       "why": "list: process-steps, ahead of icon-row",
-       "zooms": [
-        {
-         "at": 153.055,
-         "until": 155.455,
-         "word": "remember more",
-         "element": "step Remember more",
-         "target": "node-1"
-        }
-       ]
+       "why": "list: item-list"
       }
      ],
      "camera": {
@@ -1188,30 +1149,19 @@
        "text": "once you count the chips, the power and the people.",
        "intent": "claim",
        "kind": "list",
-       "capability": "checklist",
-       "module": "checklist",
+       "capability": "item-list",
+       "module": "item-list",
        "change": "swap",
        "params": {
         "title": "Once count chips",
-        "rows": [
-         {
-          "label": "Chips",
-          "status": "done",
-          "at": 0.6
-         },
-         {
-          "label": "Power",
-          "status": "done",
-          "at": 1.2
-         },
-         {
-          "label": "People",
-          "status": "done",
-          "at": 1.8
-         }
-        ]
+        "items": [
+         "Chips",
+         "Power",
+         "People"
+        ],
+        "variant": "scatter"
        },
-       "why": "list: checklist, ahead of icon-row"
+       "why": "list: item-list, ahead of icon-row"
       },
       {
        "id": "inside-the-training-run-1-sh2-3",
@@ -1224,35 +1174,20 @@
        "text": "Northlight has not confirmed a number. Power is the other constraint.",
        "intent": "claim",
        "kind": "concept",
-       "capability": "checklist",
-       "module": "checklist",
+       "capability": "item-list",
+       "module": "item-list",
        "change": "build",
        "params": {
         "title": "Once count chips",
-        "rows": [
-         {
-          "label": "Chips",
-          "status": "done",
-          "at": 0.6
-         },
-         {
-          "label": "Power",
-          "status": "done",
-          "at": 1.1
-         },
-         {
-          "label": "People",
-          "status": "done",
-          "at": 1.6
-         },
-         {
-          "label": "Northlight confirmed",
-          "status": "done",
-          "at": 2.1
-         }
-        ]
+        "items": [
+         "Chips",
+         "Power",
+         "People",
+         "Northlight confirmed"
+        ],
+        "variant": "scatter"
        },
-       "why": "concept: builds on checklist (+1 rows)"
+       "why": "concept: builds on item-list (+1 items)"
       },
       {
        "id": "inside-the-training-run-1-sh2-4",
@@ -1265,35 +1200,20 @@
        "text": "The Finnish site was chosen because electricity there is cheap, mostly renewable,",
        "intent": "claim",
        "kind": "concept",
-       "capability": "checklist",
-       "module": "checklist",
+       "capability": "item-list",
+       "module": "item-list",
        "change": "build",
        "params": {
         "title": "Once count chips",
-        "rows": [
-         {
-          "label": "Power",
-          "status": "done",
-          "at": 0.6
-         },
-         {
-          "label": "People",
-          "status": "done",
-          "at": 1.1
-         },
-         {
-          "label": "Northlight confirmed",
-          "status": "done",
-          "at": 1.6
-         },
-         {
-          "label": "Finnish site chosen",
-          "status": "done",
-          "at": 2.1
-         }
-        ]
+        "items": [
+         "Power",
+         "People",
+         "Northlight confirmed",
+         "Finnish site chosen"
+        ],
+        "variant": "scatter"
        },
-       "why": "concept: builds on checklist (+1 rows)"
+       "why": "concept: builds on item-list (+1 items)"
       }
      ],
      "camera": {
@@ -2128,33 +2048,19 @@
        "text": "They ask, they wait, and they read. When it answers in under two seconds, people start using it like a keyboard.",
        "intent": "number",
        "kind": "list",
-       "capability": "process-steps",
-       "module": "process-steps",
+       "capability": "item-list",
+       "module": "item-list",
        "change": "swap",
        "params": {
         "title": "Ask wait read",
-        "steps": [
-         {
-          "label": "Ask"
-         },
-         {
-          "label": "They wait"
-         },
-         {
-          "label": "They read"
-         }
-        ]
+        "items": [
+         "Ask",
+         "They wait",
+         "They read"
+        ],
+        "variant": "fan"
        },
-       "why": "list: process-steps, ahead of icon-row",
-       "zooms": [
-        {
-         "at": 334.997,
-         "until": 337.397,
-         "word": "wait",
-         "element": "step They wait",
-         "target": "node-1"
-        }
-       ]
+       "why": "list: item-list, ahead of icon-row"
       }
      ],
      "camera": {
@@ -3182,33 +3088,19 @@
        "text": "There are three places it can come from: cheaper hardware, a smaller model, or thinner margins.",
        "intent": "claim",
        "kind": "list",
-       "capability": "process-steps",
-       "module": "process-steps",
+       "capability": "item-list",
+       "module": "item-list",
        "change": "swap",
        "params": {
         "title": "Three places come",
-        "steps": [
-         {
-          "label": "Hardware"
-         },
-         {
-          "label": "Smaller model"
-         },
-         {
-          "label": "Thinner margins"
-         }
-        ]
+        "items": [
+         "Hardware",
+         "Smaller model",
+         "Thinner margins"
+        ],
+        "variant": "scatter"
        },
-       "why": "list: process-steps, ahead of icon-row",
-       "zooms": [
-        {
-         "at": 517.97,
-         "until": 520.37,
-         "word": "hardware",
-         "element": "step Hardware",
-         "target": "node-0"
-        }
-       ]
+       "why": "list: item-list, ahead of icon-row"
       },
       {
        "id": "the-price-cut-and-who-pays-for-it-1-sh2-4",
@@ -4909,22 +4801,17 @@
        "text": "Read the failure table first, the benchmark chart second, and the launch video last.",
        "intent": "list",
        "kind": "list",
-       "capability": "process-steps",
-       "module": "process-steps",
+       "capability": "item-list",
+       "module": "item-list",
        "change": "swap",
        "params": {
         "title": "Read failure table",
-        "steps": [
-         {
-          "label": "Failure table first"
-         },
-         {
-          "label": "Benchmark chart second"
-         },
-         {
-          "label": "Launch video last"
-         }
-        ]
+        "items": [
+         "Failure table first",
+         "Benchmark chart second",
+         "Launch video last"
+        ],
+        "variant": "pills"
        },
        "evidence": {
         "claim": "c-leaderboard",
@@ -4937,16 +4824,7 @@
          "date": "2026-03-24"
         }
        },
-       "why": "list (evidence c-leaderboard): process-steps, ahead of icon-row",
-       "zooms": [
-        {
-         "at": 809.273,
-         "until": 811.673,
-         "word": "benchmark chart second",
-         "element": "step Benchmark chart second",
-         "target": "node-1"
-        }
-       ]
+       "why": "list (evidence c-leaderboard): item-list, ahead of icon-row"
       }
      ],
      "camera": {
@@ -5843,7 +5721,7 @@
    ],
    "start": 0.3,
    "end": 71.663,
-   "key": "41ee2e0a856cf58c",
+   "key": "b7891b88cc274bc6",
    "shots": [
     "the-launch-nobody-saw-coming-1-sh1",
     "the-launch-nobody-saw-coming-1-sh2",
@@ -5863,7 +5741,7 @@
     ],
     "counts": {
      "logo-sting": 1,
-     "process-steps": 1,
+     "item-list": 1,
      "motion-title": 4,
      "repo-pr-card": 1,
      "quote-card": 1,
@@ -5892,7 +5770,7 @@
    ],
    "start": 73.327,
    "end": 157.404,
-   "key": "742477b8bc58fa7a",
+   "key": "763d2fc1c00548df",
    "shots": [
     "a-short-history-of-halcyon-1-sh1",
     "a-short-history-of-halcyon-1-sh2",
@@ -5908,17 +5786,17 @@
      "media-window",
      "quote-card",
      "quote-card",
-     "process-steps"
+     "item-list"
     ],
     "counts": {
      "logo-sting": 1,
-     "process-steps": 3,
+     "item-list": 3,
      "motion-title": 7,
      "repo-pr-card": 1,
      "quote-card": 3,
      "concept-card": 6,
      "kinetic-words": 2,
-     "checklist": 1,
+     "process-steps": 1,
      "map-highlight": 1,
      "media-window": 1
     },
@@ -5952,7 +5830,7 @@
    ],
    "start": 159.059,
    "end": 241.355,
-   "key": "f47c40569e86df30",
+   "key": "b9fe8a6100fd429b",
    "shots": [
     "inside-the-training-run-1-sh1",
     "inside-the-training-run-1-sh2",
@@ -5961,7 +5839,7 @@
    ],
    "history": {
     "recent": [
-     "checklist",
+     "item-list",
      "concept-card",
      "cta",
      "kinetic-words",
@@ -5972,13 +5850,13 @@
     ],
     "counts": {
      "logo-sting": 1,
-     "process-steps": 3,
+     "item-list": 6,
      "motion-title": 9,
      "repo-pr-card": 1,
      "quote-card": 4,
      "concept-card": 7,
      "kinetic-words": 5,
-     "checklist": 4,
+     "process-steps": 1,
      "map-highlight": 1,
      "media-window": 1,
      "stat-card": 1,
@@ -6022,7 +5900,7 @@
    ],
    "start": 242.999,
    "end": 321.23,
-   "key": "8ee5c9251f232f03",
+   "key": "d0b55343f59a5e55",
    "shots": [
     "what-northlight-actually-announced-1-sh1",
     "what-northlight-actually-announced-1-sh2",
@@ -6042,13 +5920,13 @@
     ],
     "counts": {
      "logo-sting": 1,
-     "process-steps": 3,
+     "item-list": 6,
      "motion-title": 12,
      "repo-pr-card": 1,
      "quote-card": 5,
      "concept-card": 10,
      "kinetic-words": 8,
-     "checklist": 4,
+     "process-steps": 1,
      "map-highlight": 1,
      "media-window": 2,
      "stat-card": 1,
@@ -6099,7 +5977,7 @@
    ],
    "start": 322.888,
    "end": 407.015,
-   "key": "83d34565a8194483",
+   "key": "78b0b92176539a17",
    "shots": [
     "why-speed-changed-everything-1-sh1",
     "why-speed-changed-everything-1-sh2",
@@ -6119,13 +5997,13 @@
     ],
     "counts": {
      "logo-sting": 1,
-     "process-steps": 4,
+     "item-list": 7,
      "motion-title": 16,
      "repo-pr-card": 1,
      "quote-card": 5,
      "concept-card": 11,
      "kinetic-words": 13,
-     "checklist": 4,
+     "process-steps": 1,
      "map-highlight": 1,
      "media-window": 2,
      "stat-card": 2,
@@ -6183,7 +6061,7 @@
    ],
    "start": 408.665,
    "end": 489.154,
-   "key": "9a37095196a06b6f",
+   "key": "88a706832f71b5a5",
    "shots": [
     "the-context-window-doubled-1-sh1",
     "the-context-window-doubled-1-sh2",
@@ -6203,13 +6081,13 @@
     ],
     "counts": {
      "logo-sting": 1,
-     "process-steps": 4,
+     "item-list": 7,
      "motion-title": 20,
      "repo-pr-card": 1,
      "quote-card": 5,
      "concept-card": 12,
      "kinetic-words": 17,
-     "checklist": 4,
+     "process-steps": 1,
      "map-highlight": 1,
      "media-window": 2,
      "stat-card": 2,
@@ -6273,7 +6151,7 @@
    ],
    "start": 490.818,
    "end": 569.226,
-   "key": "2e9ba03d592a70d7",
+   "key": "1139b6d7cac509dd",
    "shots": [
     "the-price-cut-and-who-pays-for-it-1-sh1",
     "the-price-cut-and-who-pays-for-it-1-sh2",
@@ -6293,13 +6171,13 @@
     ],
     "counts": {
      "logo-sting": 1,
-     "process-steps": 5,
+     "item-list": 8,
      "motion-title": 23,
      "repo-pr-card": 1,
      "quote-card": 5,
      "concept-card": 14,
      "kinetic-words": 21,
-     "checklist": 4,
+     "process-steps": 1,
      "map-highlight": 1,
      "media-window": 3,
      "stat-card": 2,
@@ -6368,7 +6246,7 @@
    ],
    "start": 570.872,
    "end": 652.654,
-   "key": "b967796e299c4c28",
+   "key": "e69bed3a4a53f374",
    "shots": [
     "reading-the-benchmarks-honestly-1-sh1",
     "reading-the-benchmarks-honestly-1-sh2",
@@ -6388,13 +6266,13 @@
     ],
     "counts": {
      "logo-sting": 1,
-     "process-steps": 5,
+     "item-list": 8,
      "motion-title": 25,
      "repo-pr-card": 1,
      "quote-card": 6,
      "concept-card": 15,
      "kinetic-words": 25,
-     "checklist": 4,
+     "process-steps": 1,
      "map-highlight": 1,
      "media-window": 3,
      "stat-card": 3,
@@ -6468,7 +6346,7 @@
    ],
    "start": 654.3,
    "end": 734.708,
-   "key": "10a937d4d6c84e7a",
+   "key": "15fd88280b3b7f1e",
    "shots": [
     "what-developers-found-in-week-one-1-sh1",
     "what-developers-found-in-week-one-1-sh2",
@@ -6488,13 +6366,13 @@
     ],
     "counts": {
      "logo-sting": 1,
-     "process-steps": 5,
+     "item-list": 8,
      "motion-title": 29,
      "repo-pr-card": 2,
      "quote-card": 6,
      "concept-card": 18,
      "kinetic-words": 28,
-     "checklist": 4,
+     "process-steps": 1,
      "map-highlight": 1,
      "media-window": 3,
      "stat-card": 4,
@@ -6575,7 +6453,7 @@
    ],
    "start": 736.36,
    "end": 812.706,
-   "key": "a1c630b24f3f52a8",
+   "key": "834684b6f4bdbd3c",
    "shots": [
     "the-failure-table-and-what-it-admits-1-sh1",
     "the-failure-table-and-what-it-admits-1-sh2",
@@ -6591,17 +6469,17 @@
      "excerpt",
      "motion-title",
      "kinetic-words",
-     "process-steps"
+     "item-list"
     ],
     "counts": {
      "logo-sting": 1,
-     "process-steps": 6,
+     "item-list": 9,
      "motion-title": 31,
      "repo-pr-card": 2,
      "quote-card": 8,
      "concept-card": 18,
      "kinetic-words": 31,
-     "checklist": 4,
+     "process-steps": 1,
      "map-highlight": 1,
      "media-window": 4,
      "stat-card": 4,
@@ -6688,7 +6566,7 @@
    ],
    "start": 814.355,
    "end": 894.442,
-   "key": "5c386c50668bcb5e",
+   "key": "2f9f5ac9cb2e3a9b",
    "shots": [
     "how-the-rivals-answered-1-sh1",
     "how-the-rivals-answered-1-sh2",
@@ -6708,13 +6586,13 @@
     ],
     "counts": {
      "logo-sting": 1,
-     "process-steps": 6,
+     "item-list": 9,
      "motion-title": 34,
      "repo-pr-card": 2,
      "quote-card": 8,
      "concept-card": 20,
      "kinetic-words": 33,
-     "checklist": 4,
+     "process-steps": 1,
      "map-highlight": 1,
      "media-window": 5,
      "stat-card": 5,
@@ -6807,7 +6685,7 @@
    ],
    "start": 896.088,
    "end": 975.877,
-   "key": "ec4356e78637d6fd",
+   "key": "7cefaec1d76b22cb",
    "shots": [
     "what-this-means-for-the-next-year-1-sh1",
     "what-this-means-for-the-next-year-1-sh2",
@@ -6827,13 +6705,13 @@
     ],
     "counts": {
      "logo-sting": 2,
-     "process-steps": 6,
+     "item-list": 9,
      "motion-title": 38,
      "repo-pr-card": 2,
      "quote-card": 8,
      "concept-card": 23,
      "kinetic-words": 38,
-     "checklist": 4,
+     "process-steps": 1,
      "map-highlight": 1,
      "media-window": 5,
      "stat-card": 5,
@@ -7036,12 +6914,12 @@
      "share": 0.147
     },
     {
-     "id": "quote-card",
-     "share": 0.045
+     "id": "item-list",
+     "share": 0.058
     },
     {
-     "id": "process-steps",
-     "share": 0.038
+     "id": "quote-card",
+     "share": 0.045
     }
    ],
    "longest_same_module_across_cuts": 2
@@ -7060,31 +6938,17 @@
     "overview": 9,
     "orbit": 7
    },
-   "zooms": 11,
-   "zooms_per_min": 0.68,
+   "zooms": 6,
+   "zooms_per_min": 0.37,
    "overviews": 9,
    "longest_push_run": 2,
    "list": {
     "zooms": [
      {
-      "at": 8.54,
+      "at": 107.315,
       "module": "process-steps",
-      "element": "step Keynote",
-      "word": "keynote",
-      "by": "target"
-     },
-     {
-      "at": 88.365,
-      "module": "process-steps",
-      "element": "step Expensive",
-      "word": "expensive",
-      "by": "target"
-     },
-     {
-      "at": 153.055,
-      "module": "process-steps",
-      "element": "step Remember more",
-      "word": "remember more",
+      "element": "step Original",
+      "word": "original",
       "by": "target"
      },
      {
@@ -7102,13 +6966,6 @@
       "by": "box"
      },
      {
-      "at": 334.997,
-      "module": "process-steps",
-      "element": "step They wait",
-      "word": "wait",
-      "by": "target"
-     },
-     {
       "at": 503.654,
       "module": "bar-chart",
       "element": "bar Dollars into…",
@@ -7116,25 +6973,11 @@
       "by": "box"
      },
      {
-      "at": 517.97,
-      "module": "process-steps",
-      "element": "step Hardware",
-      "word": "hardware",
-      "by": "target"
-     },
-     {
       "at": 614.28,
       "module": "unit-grid",
       "element": "count 71 in 100",
       "word": "71",
       "by": "box"
-     },
-     {
-      "at": 809.273,
-      "module": "process-steps",
-      "element": "step Benchmark chart second",
-      "word": "benchmark chart second",
-      "by": "target"
      },
      {
       "at": 822.669,
