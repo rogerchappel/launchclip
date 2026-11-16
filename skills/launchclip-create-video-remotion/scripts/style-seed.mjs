@@ -42,6 +42,7 @@ import { PANEL_TREATMENTS } from './panels.mjs';
 import { WORLD_KINDS, suggestWorld } from './worlds/index.mjs';
 import { mediumErrors } from './medium.mjs';
 import { lookErrors } from './look.mjs';
+import { GRADE_LOOK_DEFAULTS, GRADE_TONE_DEFAULTS } from './grade.mjs';
 import { FONT_REGISTRY, registeredFamily } from './fonts.mjs';
 import { fitContrast, hexToOklab, hexToOklch, hueGap, oklchToHex } from './oklch.mjs';
 import { brandFonts, brandIsEmpty, brandRoles, normalizeBrand } from './style-brand.mjs';
@@ -595,7 +596,7 @@ export function generateStyle({ seed, brand, tone = null, constraints = {}, avoi
     ...(step ? { stepped: { from: hex, steps: step } } : {}),
     ...(avoidTraits.length ? { avoided: { styles: avoidTraits.length, distance: round(distance, 4) } } : {})
   };
-  const order = ['schema', 'name', 'description', 'generated', 'brand', 'motion', 'camera', 'ambient', 'captions', 'sound', 'layout', 'layouts', 'background', 'plate', 'medium', 'look', 'vocabulary', 'variants', 'cast', 'world', 'brand_frame', 'dials'];
+  const order = ['schema', 'name', 'description', 'generated', 'brand', 'motion', 'camera', 'ambient', 'captions', 'sound', 'layout', 'layouts', 'background', 'plate', 'medium', 'look', 'grade', 'vocabulary', 'variants', 'cast', 'world', 'brand_frame', 'dials'];
   const sorted = Object.fromEntries(order.filter((key) => pack[key] !== undefined).map((key) => [key, pack[key]]));
   const validation = validateStylePack(sorted);
   if (!validation.ok) throw new Error(`generated style ${sorted.name} is invalid:\n- ${validation.errors.join('\n- ')}`);
@@ -794,6 +795,8 @@ function buildPack(hex, toneName, t, fixed, attempt, ctx) {
     ...(world ? { world } : {}),
     ...(fixed.medium ? { medium: JSON.parse(JSON.stringify(fixed.medium)) } : {}),
     ...(fixed.look ? { look: JSON.parse(JSON.stringify(fixed.look)) } : {}),
+    // Grade (grade.mjs): the look's own preset, else the tone's (bleach only on a dark serious style); no draw, so every other draw stays put.
+    grade: GRADE_LOOK_DEFAULTS[typeof fixed.look === 'string' ? fixed.look : fixed.look?.name] ?? (toneName === 'serious' && !palette.dark ? 'clean' : GRADE_TONE_DEFAULTS[toneName] ?? 'clean'),
     brand_frame,
     dials,
     generated: {
