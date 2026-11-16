@@ -513,6 +513,14 @@ export function validateStory(story, { modules, moduleParams } = {}) {
     // audio.sound: a story-level sound block over the style's (palette, music, ambience, sfx_density;
     // kit/core/sound/options.mjs). finish warns about values it does not know.
     if (audio.sound !== undefined && audio.sound !== null && !isObject(audio.sound)) err("audio.sound must be an object: {palette, music: {genre, bpm, key, progression}, ambience, sfx_density}");
+    // audio.react: opt-in layers that move with the finished sound (kit/core/audio-react.mjs audioReactErrors, kept in step here).
+    if (audio.react !== undefined && audio.react !== null) {
+      if (!isObject(audio.react)) err("audio.react must be an object {glow?, bar?, pulse?}");
+      else for (const [kind, spec] of Object.entries(audio.react)) {
+        if (!["glow", "bar", "pulse"].includes(kind)) err(`audio.react.${kind} is not a reactive layer; use glow, bar, pulse`);
+        else if (typeof spec !== "boolean" && !(isObject(spec) && (spec.bus === undefined || ["mix", "music", "voice"].includes(spec.bus)) && (spec.series === undefined || ["loud", "sub", "low", "mid", "high", "air", "onset"].includes(spec.series)) && (spec.strength === undefined || (typeof spec.strength === "number" && spec.strength >= 0 && spec.strength <= 1)))) err(`audio.react.${kind} must be true, false or {bus?: mix|music|voice, series?: loud|sub|low|mid|high|air|onset, strength?: 0–1}`);
+      }
+    }
     // audio.narration: text that `launchclip finish` synthesises into audio.voice and audio.words.
     if (audio.narration !== undefined && audio.narration !== null) {
       const narration = audio.narration;

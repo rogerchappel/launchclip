@@ -27,6 +27,7 @@ import { promisify } from "node:util";
 import { chunkWords, narrationWords } from "@launchclip/core/captions.mjs";
 import { knownModules, resolveModule } from "@launchclip/core/modules.mjs";
 import { customModuleGaps } from "@launchclip/core/custom-modules.mjs";
+import { pickAudioFeatures } from "@launchclip/core/audio-react.mjs";
 import { customModuleProblems } from "../kit/hyperframes/custom-module.mjs";
 import { LOOK_MEASURES } from "@launchclip/core/profiles.mjs";
 import { useProjectTemp } from "./render_temp.js";
@@ -103,6 +104,7 @@ const SCRIPT = {
   synth: path.join(SCRIPTS, "synth-audio-kit.mjs"),
   mix: path.join(SCRIPTS, "build-mix.mjs"),
   master: path.join(SCRIPTS, "master-loudness.mjs"),
+  features: path.join(SCRIPTS, "audio-features.mjs"),
   evidence: path.join(SCRIPTS, "build-evidence.mjs")
 };
 const SOUND_DIR = path.dirname(fileURLToPath(import.meta.resolve("@launchclip/core/sound/dsp.mjs")));
@@ -143,6 +145,7 @@ export const PATHS = Object.freeze({
   beatsFallback: "assets/audio/BEATS.json",
   beatSync: "qa/beat-sync.json",
   audioManifest: "AUDIO-MANIFEST.json",
+  audioFeatures: "AUDIO_FEATURES.json",
   evidence: "qa/temporal-evidence/manifest.json",
   gates: "qa/finish/gates.json",
   captionLegibility: "qa/finish/caption-legibility.json",
@@ -721,6 +724,10 @@ export function defaultAdapters() {
       const cues = normalizeCues(options.cues, options.sfxDir).map((cue, i) => (options.score ? { ...cue, pan: options.cues[i].pan, sweep: options.cues[i].sweep, ...(options.cues[i].take?.dur ? { sweep_seconds: options.cues[i].take.dur } : {}) } : cue));
       buildMix({ score: options.score ?? null, voice: options.voice, music: options.music, ambience: options.ambience, cues, duration: options.duration, out: options.out, musicVolume: options.musicVolume, musicDuck: options.musicDuck ?? null, ambienceVolume: options.ambienceVolume, key: options.key, keySegments: options.keySegments });
       return { cues };
+    },
+    async audioFeatures(out, buses, options) {
+      const { writeAudioFeatures } = await import("./scripts/audio-features.mjs");
+      return writeAudioFeatures(out, buses, options);
     },
     async master(input, output, target) {
       const { masterLoudness } = await import("./scripts/master-loudness.mjs");
@@ -1316,13 +1323,14 @@ const STAGES = [
         voice: voice ? await fileHash(path.join(ctx.project, voice)) : null,
         speech_key: speechKey,
         duration: ctx.resolved.resolved.duration,
+        react: Boolean(ctx.copy.audio?.react),
         timing: sync.strategy === "snap" ? storyTiming(ctx.copy) : null,
-        scripts: [await fileHash(SCRIPT.synth), await treeFingerprint(SOUND_DIR), await fileHash(SCRIPT.mix), await fileHash(path.join(ROOT, "src", "music", "beats.js")), await fileHash(path.join(ROOT, "src", "music", "beat_sync.js"))],
+        scripts: [await fileHash(SCRIPT.synth), await treeFingerprint(SOUND_DIR), await fileHash(SCRIPT.mix), await fileHash(SCRIPT.features), await fileHash(path.join(ROOT, "src", "music", "beats.js")), await fileHash(path.join(ROOT, "src", "music", "beat_sync.js"))],
         ...(score ? { score: { room: score.room, earshot: Boolean(findEarshot(ctx.adapters.env ?? process.env)), sounds: [await fileHash(path.join(ROOT, "src", "sfx", "score.js")), await fileHash(path.join(ROOT, "src", "sfx", "score_sounds.js"))] } } : {}),
         kit: kit ?? undefined,
         sfx: { mode: sfxMode, ...(sfxMode === "earshot" ? { earshot: await fileHash(path.join(ROOT, "src", "sfx", "earshot.js")) } : {}), density, typing, libraries: libraries.map((library) => ({ scope: library.scope, dir: library.dir, families: hashValue(library.manifest.families) })) }
       });
-      const outputs = [PATHS.mix, PATHS.audioManifest, PATHS.sfxManifest, ...(typing.length ? [PATHS.typing] : [])];
+      const outputs = [PATHS.mix, PATHS.audioManifest, PATHS.sfxManifest, ...(ctx.copy.audio?.react ? [PATHS.audioFeatures] : []), ...(typing.length ? [PATHS.typing] : [])];
       if (music.kind !== "none") outputs.push(PATHS.beatSync, await beatsTarget(ctx.project));
       return { inputHash, outputs, score, scoreFor, sfxOn, sfxMode, earshotBin: sfxChoice.earshot ?? null, cues: bound.cues, cueWarnings: [...choice.warnings, ...bound.warnings], bed, music, choice, voice, speechKey, provider, lock, trackKey, sync, typing, libraries, storyId, density, sound, kit };
     },
@@ -1412,6 +1420,9 @@ const STAGES = [
       }
       await writeJson(path.join(ctx.project, PATHS.cues), cues);
       const mixed = await ctx.adapters.buildMix({ voice: voiceFile, music: musicFile, ambience: ambienceFile, cues, sfxDir: path.join(kitDir, "sfx"), duration, out: mixFile, musicVolume: plan.bed?.volume ?? 0.42, ...(plan.music.duck != null ? { musicDuck: plan.music.duck } : {}), ...(ambienceFile ? { ambienceVolume: AMBIENCE_VOLUME } : {}), ...(speechKey ? { key: speechKey.file, keySegments: speechKey.segments } : {}), ...(scorePlan ? { score: { room: scorePlan.room } } : {}) });
+      // Only for a story with audio.react: the final mix and its buses, measured once per video frame for the
+      // audio-reactive layers (kit/core/audio-react.mjs); both renderers read it.
+      if (ctx.copy.audio?.react) await ctx.adapters.audioFeatures?.(path.join(ctx.project, PATHS.audioFeatures), { mix: mixFile, music: musicFile, voice: voiceFile }, { fps: Number(ctx.resolved.resolved?.fps ?? ctx.resolved.format?.fps ?? 30), duration });
       const placed = (mixed?.cues ?? cues).map((cue, index) => ({ ...cues[index], ...cue, file: cues[index]?.file ?? cue.file ?? path.join(kitDir, "sfx", `${cue.cue}.wav`) }));
       const sfxManifest = path.join(ctx.project, PATHS.sfxManifest);
       // Same shape build-mix.mjs --sfx-manifest writes; cinematic-check reads it through AUDIO-MANIFEST.json.
@@ -1503,7 +1514,9 @@ const STAGES = [
       // Caption plates (docs/DIRECTION_GUARDRAILS.md §3): lines over a
       // character or a card, and lines a past render measured illegible.
       await applyCaptionPlates(ctx);
-      const resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null });
+      ctx.audioFeatures = ctx.copy.audio?.react ? await readOptionalJson(path.join(ctx.project, PATHS.audioFeatures)) : null;
+      if (ctx.copy.audio?.react && !ctx.audioFeatures) ctx.warnings.push(`audio.react: no ${PATHS.audioFeatures} (the sound stage writes it from the mix), so the reactive layers are not drawn`);
+      const resolved = withAudioFeatures(resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null }), ctx.audioFeatures);
       ctx.resolved = resolved;
       await writeResolvedCopy(ctx);
       const assets = {};
@@ -1592,6 +1605,12 @@ const STAGES = [
     }
   }
 ];
+
+/** The resolved story with the series its audio.react layers read (from AUDIO_FEATURES.json) as audio.features. */
+export function withAudioFeatures(resolved, features) {
+  const picked = resolved?.audio?.react && features ? pickAudioFeatures(resolved, features) : null;
+  return picked ? { ...resolved, audio: { ...resolved.audio, features: picked } } : resolved;
+}
 
 // ---------------------------------------------------------------------------
 // Master: loudness, then the chapters (long form, RFC §10.2)
@@ -1853,7 +1872,7 @@ async function runRender(ctx) {
     if (added.length) {
       await writeCaptionPlates(ctx, legibility, added);
       await applyCaptionPlates(ctx);
-      ctx.resolved = resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null });
+      ctx.resolved = withAudioFeatures(resolveStory(ctx.copy, { words: ctx.words ?? [], beats: ctx.beats ?? null, edl: ctx.edl ?? null, subject: ctx.subject ?? null, track: ctx.track ?? null }), ctx.audioFeatures);
       await writeResolvedCopy(ctx);
       details.segments_first_pass = segments ?? null;
       await renderStory(ctx, adapter, { output: ctx.raw, scenes, range: null });

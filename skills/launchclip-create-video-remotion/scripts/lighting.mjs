@@ -192,7 +192,7 @@ export function poolEllipse(pool, { width = 1080, height = 1920 } = {}) {
 // ---------------------------------------------------------------------------
 // Colour
 
-function palette(story) {
+export function palette(story) {
   const colors = isObject(story?.brand?.colors) ? story.brand.colors : {};
   const pick = (key, fallback) => (HEX.test(colors[key] ?? '') ? colors[key].toLowerCase() : fallback);
   const bg = pick('bg', '#000000');
@@ -203,11 +203,11 @@ function palette(story) {
 
 const colorOf = (colors, value) => (HEX.test(value ?? '') ? value.toLowerCase() : colors[value] ?? colors.accent);
 const rgbOf = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-const rgba = (hex, alpha) => `rgba(${rgbOf(hex).join(', ')}, ${round(alpha, 4)})`;
+export const rgba = (hex, alpha) => `rgba(${rgbOf(hex).join(', ')}, ${round(alpha, 4)})`;
 
 // The largest alpha (≤ want) at which `color` over `under` keeps paper text at
 // its floor (backgrounds.mjs safeAlpha, kept here so this file does not import it).
-function textSafeAlpha(colors, color, want, under = colors.bg) {
+export function textSafeAlpha(colors, color, want, under = colors.bg) {
   const floor = Math.min(TEXT_MIN, contrast(colors.paper, colors.bg) - 0.01);
   const ok = (alpha) => contrast(colors.paper, mix(under, color, alpha)) >= floor;
   if (ok(want)) return round(want, 4);
@@ -218,7 +218,7 @@ function textSafeAlpha(colors, color, want, under = colors.bg) {
 
 // Gaussian-like falloff (stop %, alpha fraction), many stops so no ring shows.
 const FALLOFF = Object.freeze([[0, 1], [10, 0.95], [20, 0.84], [30, 0.69], [40, 0.53], [50, 0.38], [60, 0.25], [70, 0.14], [80, 0.07], [90, 0.025], [100, 0]]);
-const glow = (hex, alpha) => `radial-gradient(closest-side, ${FALLOFF.map(([stop, k]) => `${rgba(hex, alpha * k)} ${stop}%`).join(', ')})`;
+export const glow = (hex, alpha) => `radial-gradient(closest-side, ${FALLOFF.map(([stop, k]) => `${rgba(hex, alpha * k)} ${stop}%`).join(', ')})`;
 
 // ---------------------------------------------------------------------------
 // Plan
