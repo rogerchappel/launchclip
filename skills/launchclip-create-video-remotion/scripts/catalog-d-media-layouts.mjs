@@ -710,12 +710,13 @@ function resolveBeforeAfter(params, ctx) {
     for (const side of ['before', 'after']) {
       if (raw[side] === undefined) continue;
       const text = check.str(raw[side], `params.labels.${side}`, 24).toUpperCase();
-      const room = (g.axis === 'x' ? canvas.width / 2 : canvas.width) - 2 * u(L.margin);
+      // Inside the module safe area: the top corners, or (vertical) the top and just under the middle.
+      const room = g.axis === 'x' ? b.safe.width / 2 - u(24) : b.safe.width;
       const fit = fitText(check, `params.labels.${side}`, text, {family: 'display', width: room, preferred: u(L.size), min: b.min.key, maxLines: 1});
       const width = r2(Math.min(room, textWidth(text, fit.size, 'display') * 1.08)), height = r2(fit.size * 1.1);
       const first = g.axis === 'x' ? (side === 'before') === (g.before === 'right') : (side === 'before') === (g.before === 'bottom');
-      const x = g.axis === 'x' && !first ? canvas.width - u(L.margin) - width : u(L.margin);
-      const y = (g.axis === 'x' || first ? L.top : L.lower) * canvas.height;
+      const x = g.axis === 'x' && !first ? b.safe.x + b.safe.width - width : b.safe.x;
+      const y = g.axis === 'x' || first ? b.safe.y : b.safe.y + b.safe.height / 2 + u(32);
       labels[side] = {text, size: fit.size, box: {x: r2(x), y: r2(y), width, height}, align: g.axis === 'x' && !first ? 'right' : 'left'};
       b.parts.push({id: `label-${side}`, role: 'text', rect: labels[side].box, minTextPx: fit.size, start: rt(b.start + T.lead), motion: {enterEnd: rt(b.start + T.lead + T.textFade), exitStart: rt(b.end - T.exit)}, over: ['win-0', 'win-1']});
     }
