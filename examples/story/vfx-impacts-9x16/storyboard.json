@@ -142,7 +142,7 @@
           "effect": "firework-burst",
           "at": "word:again",
           "x": 0.5,
-          "y": 0.3,
+          "y": 0.17,
           "color": "accent"
         }
       ]

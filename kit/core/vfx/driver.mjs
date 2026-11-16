@@ -10,6 +10,9 @@
 // the particle runtime uses for its bitmaps. The cached state is a function
 // of the step count alone, so the cache changes only the cost, never a pixel.
 
+/** The vendored frame helpers, for stills, sheets and tests outside kit/. */
+export {clearFrame, composite, createFrame, painterFor, resolveOptions} from './vendor/core/fx.js';
+
 /** Seconds per simulation step. */
 export const VFX_STEP = 1 / 120;
 const CACHE_SIZE = 64;

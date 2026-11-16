@@ -9,8 +9,7 @@ import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {VFX_MODULES} from '@launchclip/core/vfx/catalog.mjs';
-import {clearVfxCache, drawVfx, vfxAt, vfxLocalTime} from '@launchclip/core/vfx/driver.mjs';
-import {createFrame, clearFrame, painterFor, resolveOptions} from '../kit/core/vfx/vendor/core/fx.js';
+import {clearFrame, clearVfxCache, createFrame, drawVfx, painterFor, resolveOptions, vfxAt, vfxLocalTime} from '@launchclip/core/vfx/driver.mjs';
 
 const VENDOR = fileURLToPath(new URL('../kit/core/vfx/vendor/', import.meta.url));
 

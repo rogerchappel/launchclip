@@ -7,9 +7,8 @@
 //
 //   node scripts/vfx-peaks.mjs
 import {fileURLToPath} from 'node:url';
-import {VFX_MODULES} from '../kit/core/vfx/catalog.mjs';
-import {drawVfx} from '../kit/core/vfx/driver.mjs';
-import {clearFrame, createFrame, painterFor, resolveOptions} from '../kit/core/vfx/vendor/core/fx.js';
+import {VFX_MODULES} from '@launchclip/core/vfx/catalog.mjs';
+import {clearFrame, createFrame, drawVfx, painterFor, resolveOptions} from '@launchclip/core/vfx/driver.mjs';
 
 /** Seconds to the brightest 60 fps frame of an effect at its default options. */
 export function measurePeak(mod) {

@@ -11,10 +11,9 @@ import {spawnSync} from 'node:child_process';
 import {mkdirSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {VFX_MODULES} from '../kit/core/vfx/catalog.mjs';
-import {drawVfx} from '../kit/core/vfx/driver.mjs';
-import {rampOf} from '../kit/core/vfx/plan.mjs';
-import {clearFrame, composite, createFrame, painterFor, resolveOptions} from '../kit/core/vfx/vendor/core/fx.js';
+import {VFX_MODULES} from '@launchclip/core/vfx/catalog.mjs';
+import {rampOf} from '@launchclip/core/vfx/plan.mjs';
+import {clearFrame, composite, createFrame, drawVfx, painterFor, resolveOptions} from '@launchclip/core/vfx/driver.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const TILE = [304, 256];

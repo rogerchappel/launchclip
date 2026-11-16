@@ -49,7 +49,7 @@ test('the plan places cues on the art grid, aligns them on their peak and maps b
   assert.deepEqual([plan.aw, plan.ah, plan.grid], [180, 320, 6]);
   const firework = plan.cues.find(cue => cue.effect === 'firework-burst');
   assert.equal(firework.start, Math.round((5.22 - VFX_EFFECTS['firework-burst'].peak) * 1000) / 1000);
-  assert.deepEqual([firework.x, firework.y], [90, 96]);
+  assert.deepEqual([firework.x, firework.y], [90, 54]);
   assert.deepEqual(firework.palette, rampOf(STORY.brand.colors.accent, STORY.brand.colors.bg));
   assert.equal(rampOf('#ff0000', '#000000').length, 8);
   assert.equal(vfxPlan({format: {width: 1920, height: 1080}, scenes: [{id: 's1'}]}), null);
