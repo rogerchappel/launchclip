@@ -714,6 +714,67 @@ the painter:
   taller tiers, and a chip or ribbon with an icon is wider than a card, which
   shrank the labels under the 26 px floor.
 
+**Member modules: the hookup.** A member module is a catalogue module whose
+job is to be one member of a set (a card on a wall, a pin on a map): the
+forms past the closed list that other modules already take (`docs/ROADMAP.md`).
+It joins a set through the same path a graphic does, extended rather than
+doubled: `kit/core/members.mjs`. A set member is the module's default member,
+`{graphic: {kind, …}}` (the closed list), or `{member: {module, …}}` (a member
+module), never more than one, and the set reads either through the same calls:
+
+| Call | What the set module uses it for |
+|---|---|
+| `memberOf(check, raw, path, {replaces, labelMax, base})` | the spec an item gives, or null for the default member; fails when `graphic` and `member` are both given, or either with the default member's own keys (`replaces`) |
+| `memberWidth(spec, L)`, `fitMember(…)` | the width it needs at label size L; the largest label that fits a cell, failing under the brand's meta size |
+| `memberHeight(spec, I, L)` | its height with an I px icon (a card's unless the member says otherwise); node-graph gives every node the tallest, icon-grid shrinks the icon until it fits the cell |
+| `memberFace(spec)` | `card`: the set lights its rim; `glow`: it glows from behind |
+| `memberNodes(spec, W, H, look)` | its view nodes inside the set's own layout and `-idle` wrappers, so it flocks, breathes and lights like the default member |
+| `memberOps(ops, spec, {key, start, landAt, settle})` | its own ops after the set's flock and idle (status over time, a count) |
+
+A member module is a plain object in `MEMBERS` (one line per module in
+`members.mjs`): `id` (what `member.module` names), `describe`, `params` (its
+planner line; `SET_MEMBER_PARAM` lists every one on the set modules'
+params), `face`, `spec(check, raw, path, {labelMax, base})` returning a plain
+spec with a `label` (the member's name, or null; `base` is the set's
+`createHBase`, for colours and `timeOf`), `width(spec, L)` in proportion to L,
+`height?(spec, I, L)`, `nodes(spec, W, H, look)` (the painter's `look`; ids
+start with `look.key`, which is `<scene>-g-<node id>` in node-graph and
+`<scene>-g-<index>` in icon-grid) and `timeline?(ops, spec, at)` (ops only on
+its own ids; group and idle motion stay the set's, from `fluid-motion.mjs`).
+`node-graph` and `icon-grid` take members today; another set module joins by
+calling `memberOf` and the four draw calls where it now draws its default
+member. Graphics draw byte for byte as before. `test/members.test.js` proves
+the path with a stand-in member; each member module brings its own parity
+fixture, tests and 9:16 sample.
+
+**Member module: `tone`** (`kit/core/member-tone.mjs`). A card (`icon`,
+`label`, `badge`) in its own colour instead of the set's palette:
+`{member: {module: "tone", tone: "accent-deep", icon, label}}`. A tone is a
+step of the brand palette, never a hex: a hue (`primary`, `accent`, `paper`),
+alone or with `-deeper`, `-deep`, `-light` or `-lighter` (OKLCH lightness
+−0.16, −0.08, +0.08, +0.16 from the brand colour), pushed away from the ground
+until it clears 3:1 on bg; the ink on it is the brand colour that reads best.
+A hex fails with the nearest step. Steps that head toward the ground can meet
+at the 3:1 floor, and paper's lighter steps meet at white. A node-graph node in
+a tone runs its wire, pulse and lit rim in it too (the set takes a member's
+`color` when it gives one). Proof: parity fixture `h-node-graph-tone-portrait`
+(min SSIM 0.9959), `test/member-tone.test.js`, and the sample
+`examples/story/member-tone-9x16` (a kitchen whose hot stations sit in the
+primary's steps and cold ones in the accent's; finish's motion and pace gates
+pass).
+
+**Member module: `value-card`** (`kit/core/member-value-card.mjs`).
+`{member: {module: "value-card", value ≤ 10, label?}}`: a
+value or multiplier too long for a badge ("$7.15", "×3.2", "1,250") set in
+the display face at 1.9× the label in the member's colour, the label under
+it. Its width is measured from the label size, so the fit that keeps labels
+over the brand's meta floor also keeps the longest value inside its card,
+and node-graph widens every card to it while icon-grid fails a cell it cannot
+fill rather than overflow. A badge or count past three characters, or a
+`value` on a graphic, now names it. Proof: `h-node-graph-value-card-portrait`,
+`h-icon-grid-value-card-portrait`, `test/member_value_card.test.js`, and
+`examples/story/members-value-9x16` (the bakery's morning in numbers).
+
 ## 11. Phases
 
 1. **`node-graph` and `fluid-motion.mjs`** (this PR): flock, wave, idle, impact
