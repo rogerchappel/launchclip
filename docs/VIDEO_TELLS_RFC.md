@@ -430,6 +430,38 @@ Recommendation:
 - **Do not chase the list.** It moves with each wave. The registry's `added`
   date is the guard: re-check the overused list twice a year.
 
+### Phase 5: what landed
+
+- **Default body.** Manrope, set by the default-brand change (#636), since
+  DM Sans's fontsource build has no tabular figures. Inter stays second in
+  every body stack and stays the `fontWidthScale` calibration face.
+  `DEFAULT_BRAND` lives in `kit/core/default-brand.mjs`, which the planning
+  prompt re-exports, so this phase left `planning-prompt.mjs` alone. The
+  planner copies `brand.fonts` unchanged, so there is no font guidance to add.
+- **Seed rebalance.** Six `FONT_PAIRINGS` move their body face:
+  `archivo-dm`, `unbounded-lexend`, `syne-manrope`, `bricolage-outfit`,
+  `bricolage-manrope` and `instrument-dm`. Listed body faces fall from 17 of
+  37 pairings to 11. Inter stays on the technical and serious pairings.
+  `test/style_seed.test.js` keeps the share at a third or fewer, using
+  `OVERUSED_FONTS` (now exported from `kit/core/tells.mjs`). A pack with no
+  body face now reads as Manrope in `styleFingerprint` and `styleSummary`.
+  Ids changed in place, so a reroll of an old seed that drew one of the six
+  gets the new body. Saved packs render as saved.
+- **Text fit.** `scripts/font-fit.mjs` compiles each of the 508 module
+  parity fixtures with HyperFrames once per body face, measures every text
+  run in Chromium at the mid hold, and reports the overflow a face adds over
+  the baseline (Space Grotesk). Two kinds of run are skipped: runs wholly
+  outside their box (carousels and tickers park items off stage) and repeated
+  labels, which are paired in order. At Manrope, DM Sans, Outfit, Lexend and
+  Inter, no module adds clipped glyphs. What it does flag is ellipsis
+  truncation: names in commit, PR and social cards cut one character earlier
+  or later, by design. It also flags a few runs that already overflow at the
+  baseline and move by under 30 px. Parity with the new faces in the body
+  role passes: process-steps and comparison-table with Manrope (min SSIM
+  0.994), item-list with DM Sans (0.991), kinetic-words with Lexend (0.996).
+- **Contact sheet.** `node scripts/element-sheet.mjs --body <face>` draws the
+  element sheet with another body face, for before-and-after checks.
+
 ## 6. Phases, effort, tests
 
 | Phase | Work | Files | Effort |
