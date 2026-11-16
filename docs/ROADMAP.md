@@ -52,6 +52,7 @@ LaunchClip's goal: **a SaaS founder points it at their product and gets a launch
 
 - A cross-model benchmark: how well do different AI models plan videos with LaunchClip?
 - A hosted version, for founders who don't use an AI coding agent at all.
+- **Generate the handed-in footage too** ([RFC](GENERATED_FOOTAGE_RFC.md)): an opt-in flag on the CLI and the skill that sends each shot to an image or video model you choose (local, your own API key, or your agent's tools), starting from the frame the animatic drew, with the character's description pasted word for word, a price quoted first, a budget, and cheap drafts before finals. Every generated shot goes through the same checks as one you hand in. Handing in your own footage stays the default.
 - Curated music and sound packs per style.
 - **A subject inventory before the concepts:** before pitching ideas, the planner lists eight to twelve things only this subject has (its place, its numbers, its constraint, the objects in its world), and the winning concept must be built from one of them, so a video about the 20-20-20 rule opens on a real view twenty feet away rather than a generic office. Borrowed from [taste-skill](https://github.com/Leonxlnx/taste-skill).
 - **A dated registry of video tells:** a list of devices that make a video read as generated (a quote card over a wide set, a dissolve between every scene, a centred title card as the hook, a fact card fighting the caption), each dated and enforced by the finish gates, so a draft that leans on them fails before you see it. Also from taste-skill.
