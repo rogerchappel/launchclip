@@ -65,7 +65,7 @@ export function flockOps(ops, members, start, origin, {duration = 0.8, from = 0.
     tw(ops, m.id, m.at, 0.2, 'power1.out', {opacity: 0}, {opacity: 1});
     tw(ops, m.id, m.at, duration, 'power2.out', {x: dx}, {x: 0});
     tw(ops, m.id, m.at, duration, 'power4.out', {y: dy}, {y: 0});
-    tw(ops, m.id, m.at, duration, 'back.out(1.4)', {scaleX: from, scaleY: from, rotation: spin}, {scaleX: 1, scaleY: 1, rotation: rot});
+    tw(ops, m.id, m.at, duration, 'power3.out', {scaleX: from, scaleY: from, rotation: spin}, {scaleX: 1, scaleY: 1, rotation: rot});
     return rt(m.at + duration * 0.7);
   });
 }

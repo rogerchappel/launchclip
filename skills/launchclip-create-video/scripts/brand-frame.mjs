@@ -508,7 +508,7 @@ export function brandFramePlan(story, { format = story?.format } = {}) {
       // A landed step pulses.
       if (entry.step !== null && entry.step > 0) {
         tw('lc-frame-counter-box', entry.at, 0.08, 'power2.out', { scale: 1.16 });
-        tw('lc-frame-counter-box', r4(entry.at + 0.08), 0.3, 'back.out(2.4)', { scale: 1 });
+        tw('lc-frame-counter-box', r4(entry.at + 0.08), 0.3, 'power3.out', { scale: 1 });
       }
     });
     holder.children.push(values);

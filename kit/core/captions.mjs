@@ -20,7 +20,7 @@ const SOFT_BREAK = /[,;:—–-]$/;
 // Caption motion, shared by the GSAP runtime below and WordCaptions.tsx so
 // both renderers pop, highlight and clear identically.
 export const CAPTION_MOTION = Object.freeze({
-  lineIn: Object.freeze({ from: Object.freeze({ opacity: 0, y: 26, scale: 0.86 }), duration: 0.16, ease: 'back.out(2.2)' }),
+  lineIn: Object.freeze({ from: Object.freeze({ opacity: 0, y: 26, scale: 0.86 }), duration: 0.16, ease: 'power3.out' }),
   wordOn: Object.freeze({ lead: 0.03, scale: 1.08, duration: 0.06, ease: 'power2.out' }),
   wordOff: Object.freeze({ minHold: 0.08, duration: 0.12, ease: 'power1.out' }),
   lineOut: Object.freeze({ to: Object.freeze({ opacity: 0, y: -10 }), duration: 0.1, ease: 'power2.in', minShow: 0.12, lead: 0.1 })
@@ -240,7 +240,7 @@ export function captionRuntime(chunks) {
         line.appendChild(span);
       });
       container.appendChild(line);
-      tl.fromTo(line, { opacity: 0, y: 26, scale: 0.86 }, { opacity: 1, y: 0, scale: 1, duration: 0.16, ease: 'back.out(2.2)' }, chunk.start);
+      tl.fromTo(line, { opacity: 0, y: 26, scale: 0.86 }, { opacity: 1, y: 0, scale: 1, duration: 0.16, ease: 'power3.out' }, chunk.start);
       chunk.words.forEach(function (word, i) {
         var span = line.children[i];
         span.style.color = idle;
@@ -299,11 +299,11 @@ export const CAPTION_CASES = Object.freeze(['as-is', 'upper', 'title', 'lower'])
 export const CAPTION_PLATE_STYLES = Object.freeze(['box', 'scrim']);
 export const CAPTION_FONT_ROLES = Object.freeze(['display', 'body', 'meta']);
 export const CAPTION_ENTRANCES = Object.freeze({
-  pop: Object.freeze({ from: Object.freeze({ opacity: 0, y: 26, scale: 0.86 }), dur: 0.16, ease: 'back.out(2.2)' }),
+  pop: Object.freeze({ from: Object.freeze({ opacity: 0, y: 26, scale: 0.86 }), dur: 0.16, ease: 'power3.out' }),
   fade: Object.freeze({ from: Object.freeze({ opacity: 0, y: 0, scale: 1 }), dur: 0.2, ease: 'power1.out' }),
   'slide-up': Object.freeze({ from: Object.freeze({ opacity: 0, y: 44, scale: 1 }), dur: 0.24, ease: 'power3.out' }),
   'slide-left': Object.freeze({ from: Object.freeze({ opacity: 0, x: -48, y: 0, scale: 1 }), dur: 0.24, ease: 'power3.out' }),
-  scale: Object.freeze({ from: Object.freeze({ opacity: 0, y: 0, scale: 1.28 }), dur: 0.2, ease: 'back.out(2.6)' }),
+  scale: Object.freeze({ from: Object.freeze({ opacity: 0, y: 0, scale: 1.28 }), dur: 0.2, ease: 'power3.out' }),
   // none: on screen within a blur sub-frame, like the none exit.
   none: Object.freeze({ from: Object.freeze({ opacity: 0, y: 0, scale: 1 }), dur: 0.005, ease: 'none' })
 });
@@ -898,7 +898,7 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
         }
         case 'pop': {
           span.text = word.text;
-          tw(id, onAt, 0.16, 'back.out(2.6)', { opacity: 1, scale: 1 }, { opacity: 0, scale: 0.55 }, false);
+          tw(id, onAt, 0.16, 'power3.out', { opacity: 1, scale: 1 }, { opacity: 0, scale: 0.55 }, false);
           const next = chunk.words[i + 1];
           if (next) tw(id, Math.max(next.start + o.offset - 0.03, onAt + 0.16), 0.04, 'none', { opacity: 0 });
           break;
@@ -906,6 +906,7 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
         case 'bounce': {
           kids.push({ tag: 'span', id: `${id}-t`, cls: 'lc-cap-t', text: word.text });
           tw(id, onAt, 0.1, 'power2.out', { y: -28 }, { y: 0 }, false);
+          // Kept: the named bounce word style is a bounce on purpose.
           tw(id, onAt + 0.1, 0.32, 'bounce.out', { y: 0 });
           tw(`${id}-t`, onAt, 0.06, 'power2.out', { color: C.active }, { color: idle }, false);
           tw(`${id}-t`, offAt, 0.12, 'power1.out', { color: idle });
@@ -923,7 +924,7 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
         }
         case 'box': {
           kids.push({ tag: 'span', id: `${id}-b`, cls: 'lc-cap-box' }, { tag: 'span', id: `${id}-t`, cls: 'lc-cap-t', text: word.text });
-          tw(`${id}-b`, onAt, 0.1, 'back.out(2)', { opacity: 1, scale: 1 }, { opacity: 0, scale: 0.8 }, false);
+          tw(`${id}-b`, onAt, 0.1, 'power3.out', { opacity: 1, scale: 1 }, { opacity: 0, scale: 0.8 }, false);
           tw(`${id}-b`, offAt, 0.12, 'power1.out', { opacity: 0 });
           tw(`${id}-t`, onAt, 0.06, 'power2.out', { color: C.boxText }, { color: idle }, false);
           tw(`${id}-t`, offAt, 0.12, 'power1.out', { color: idle });
@@ -983,7 +984,7 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
         }
         case 'chip': {
           span.text = word.text;
-          tw(id, onAt, 0.16, 'back.out(2.2)', { opacity: 1, scale: 1 }, { opacity: 0, scale: 0.6 }, false);
+          tw(id, onAt, 0.16, 'power3.out', { opacity: 1, scale: 1 }, { opacity: 0, scale: 0.6 }, false);
           tw(id, onAt, 0.06, 'power2.out', { backgroundColor: C.active }, { backgroundColor: C.chip }, false);
           tw(id, offAt, 0.12, 'power1.out', { backgroundColor: C.chip });
           break;
