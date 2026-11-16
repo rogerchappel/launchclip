@@ -9,7 +9,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { CAPTION_ENTRANCES, CAPTION_EXITS, CAPTION_MOTION, CAPTION_PRESET_NAMES, CAPTION_PRESETS, captionBandTop, captionElementStateAt, captionInlineStyle, captionPlan, captionPlanRuntime, captionPresetName, captionStateAt, chunkWords, indexCaptionTweens, joinAttachedWords } from "@launchclip/core/captions.mjs";
-import { CAPTION_POSITION_TOP, captionBandAt } from "@launchclip/core/layout-check.mjs";
+import { CAPTION_POSITION_TOP, PLATFORM_UI_TOP, captionBandAt } from "@launchclip/core/layout-check.mjs";
 import { resolveStory, STORY_CAPTION_PRESETS, validateStory } from "@launchclip/core/story.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 
@@ -37,6 +37,26 @@ test("at least twelve presets, kept in step with the story schema and the layout
     assert.equal(captionBandAt(band, format, "top").y / format.height, captionBandTop(format, "top"));
     assert.equal(landscape ? CAPTION_POSITION_TOP.landscape : CAPTION_POSITION_TOP.portrait, captionBandTop(format, "top"));
   }
+});
+
+test("caption positions: the renderers and the layout check place the band from one set of constants", async () => {
+  const { CAPTION_POSITIONS, CAPTION_BAND } = await import("@launchclip/core/captions.mjs");
+  for (const format of [FORMAT, { width: 1920, height: 1080 }, { width: 1080, height: 1080 }]) {
+    const fraction = format.width > format.height ? 140 / 1080 : CAPTION_BAND.height;
+    const band = { x: 0, y: (format.width > format.height ? 0.8 : CAPTION_BAND.top) * format.height, width: 800, height: fraction * format.height };
+    for (const position of CAPTION_POSITIONS) assert.ok(Math.abs(captionBandAt(band, format, position).y / format.height - captionBandTop(format, position)) <= 0.001, `${position} ${format.width}x${format.height}`);
+  }
+  const portrait = { x: 0, y: CAPTION_BAND.top * 1920, width: 800, height: CAPTION_BAND.height * 1920 };
+  const lower = captionBandAt(portrait, FORMAT, "lower-third");
+  // About a quarter up from the bottom, and clear of the platforms' own captions and buttons.
+  assert.ok(Math.abs((lower.y + lower.height / 2) / 1920 - 0.73) < 1e-9);
+  assert.ok((lower.y + lower.height) / 1920 <= PLATFORM_UI_TOP - 0.01);
+  assert.ok(lower.y > captionBandAt(portrait, FORMAT, "auto").y, "lower than the usual band");
+  // (captionBandTop rounds to 3 places.) Portrait bottom is the lower third; landscape bottom keeps the format's band; an unknown position moves nothing.
+  assert.deepEqual(captionBandAt(portrait, FORMAT, "bottom"), lower);
+  const wide = { x: 0, y: 864, width: 1536, height: 140 };
+  assert.deepEqual(captionBandAt(wide, { width: 1920, height: 1080 }, "bottom"), wide);
+  assert.deepEqual(captionBandAt(portrait, FORMAT, "sideways"), portrait);
 });
 
 test("every preset builds a seek-safe plan: unique ids, known targets, one immediate render, `to` after a prior tween", () => {

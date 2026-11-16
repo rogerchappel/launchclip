@@ -13,6 +13,7 @@ import { getEase, interpolateColor } from './motion.mjs';
 import { brandFontStacks } from './fonts.mjs';
 import { captionSnapOffset, guardFrames, guardRect, resolveMotionBlur } from './motion-blur.mjs';
 import { CHARACTER_CAPTIONS, isCharacterStory } from './character-story.mjs';
+import { CAPTION_POSITION_CENTRE, CAPTION_POSITION_TOP, captionPositionCentre } from './layout-check.mjs';
 
 const STRONG_BREAK = /[.!?…]$/;
 const SOFT_BREAK = /[,;:—–-]$/;
@@ -291,10 +292,10 @@ export const CAPTION_LEGACY_STYLES = Object.freeze({ 'word-highlight': 'word-hig
 // 'seam': on the line between a stacked section's panel and presenter
 // (kit/core/footage-layout.mjs captionZone); 'chest': at the presenter's chest
 // height, from the measured head (captionZones). Elsewhere both sit as 'auto' does.
-export const CAPTION_POSITIONS = Object.freeze(['bottom', 'middle', 'low', 'top', 'auto', 'seam', 'chest']);
-// 'low': centred 58% down the frame, below the middle: a word tag that sits
-// on the panels' lower half (the interface-explainer look).
-export const CAPTION_LOW_CENTRE = 0.58;
+// The others: kit/core/layout-check.mjs CAPTION_POSITION_CENTRE (diagram in
+// docs/guide/caption-positions.md).
+export const CAPTION_POSITIONS = Object.freeze(['bottom', 'lower-third', 'middle', 'low', 'top', 'auto', 'seam', 'chest']);
+export const CAPTION_LOW_CENTRE = CAPTION_POSITION_CENTRE.low;
 export const CAPTION_CASES = Object.freeze(['as-is', 'upper', 'title', 'lower']);
 export const CAPTION_PLATE_STYLES = Object.freeze(['box', 'scrim']);
 export const CAPTION_FONT_ROLES = Object.freeze(['display', 'body', 'meta']);
@@ -456,10 +457,9 @@ export function shownWords(words, preset) {
 export function captionBandTop(format, position = 'auto') {
   const band = captionBandFor(format);
   const landscape = Number(format?.width) > Number(format?.height);
-  if (position === 'top') return landscape ? 0.08 : 0.13;
-  if (position === 'middle') return round(0.5 - band.height / 2);
-  if (position === 'low') return round(CAPTION_LOW_CENTRE - band.height / 2);
-  return band.top;
+  if (position === 'top') return landscape ? CAPTION_POSITION_TOP.landscape : CAPTION_POSITION_TOP.portrait;
+  const centre = captionPositionCentre(position, landscape);
+  return centre === null ? band.top : round(centre - band.height / 2);
 }
 
 const normToken = (text) => String(text ?? '').toLowerCase().replace(/#\d+$/, '').replace(/[^\p{L}\p{N}-]+/gu, '');

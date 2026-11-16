@@ -1616,7 +1616,9 @@ each element with `captionElementStateAt` (GSAP forward-seek semantics) and
 timeline to every frame against the evaluator; `scripts/parity-captions.mjs`
 compares rendered stills per preset (`test/fixtures/parity-captions/`, SSIM ≥
 0.97, `LAUNCHCLIP_PARITY=1`). The layout check moves the caption band for
-`position: top|middle|low` (`captionBandAt`; `low` centres it 58% down).
+`position: top|middle|low|lower-third|bottom` (`captionBandAt`, from `CAPTION_POSITION_CENTRE` in `layout-check.mjs`, which `captionBandTop` reads too: `middle` centres it at 0.5, `low` at 0.58, `lower-third` and portrait `bottom` at 0.73; see `docs/guide/caption-positions.md`).
+
+Surface colours: `overlay.surface` (`"all"` or line ids, written by finish) marks the lines on the brand surface. Such a line, when the idle colour does not reach 3:1 on the brand background, is drawn as `lc-cap-on-surface` in the colours `captionColorsOn(colors, bg, brandColors)` picks: idle, highlight (`active`, the hierarchy hero) and accent, with no halo or drop shadow.
 
 Placed zones: `zones: [{start, end, rect, scale?}]` (seconds, canvas px,
 `scale` 0.7–1). A line mostly spoken inside a zone is drawn in its rect
