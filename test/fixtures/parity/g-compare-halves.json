@@ -1,0 +1,58 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Variant parity: g-compare-halves",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 4,
+      "platform": "youtube-shorts"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#0f2527",
+        "primary": "#7fd6c2",
+        "accent": "#f2b880",
+        "ink": "#0f2527",
+        "paper": "#eef5f2"
+      },
+      "fonts": {
+        "display": "oswald",
+        "body": "outfit",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "el",
+        "module": "compare",
+        "start": 0,
+        "end": 4,
+        "params": {
+          "left": {
+            "title": "Save now",
+            "items": [
+              "Oil every season",
+              "Sand twice a year"
+            ]
+          },
+          "right": {
+            "title": "Pay upfront",
+            "items": [
+              "No oiling",
+              "Free weekends"
+            ]
+          },
+          "variant": "halves"
+        }
+      }
+    ]
+  },
+  "sceneId": "el",
+  "threshold": {
+    "ssim": 0.97
+  }
+}
