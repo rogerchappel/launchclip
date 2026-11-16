@@ -242,12 +242,12 @@ function listTimeline(model, ops) {
       : {x: item.from.x, y: item.from.y, rotation: 0, scaleX: 0.4, scaleY: 0.4};
     set(ops, target, start, {opacity: 0, ...from});
     tw(ops, target, item.time, 0.2, 'power1.out', {opacity: 0}, {opacity: 1});
-    tw(ops, target, item.time, ENTER, c.variant === 'scatter' || c.variant === 'pills' ? 'back.out(1.6)' : 'power3.out', from, rest);
+    tw(ops, target, item.time, ENTER, c.variant === 'scatter' || c.variant === 'pills' ? 'power3.out' : 'power3.out', from, rest);
     if (item.tickTime !== null && c.pill) {
       // The disc fills and pops, then its check draws on.
       set(ops, `${id}-tick-${item.index}`, start, {opacity: 0, x: 0, y: 0, scaleX: 0.4, scaleY: 0.4});
       tw(ops, `${id}-tick-${item.index}`, item.tickTime, 0.12, 'power1.out', {opacity: 0}, {opacity: 1});
-      tw(ops, `${id}-tick-${item.index}`, item.tickTime, 0.4, 'back.out(2)', {scaleX: 0.4, scaleY: 0.4}, {scaleX: 1, scaleY: 1});
+      tw(ops, `${id}-tick-${item.index}`, item.tickTime, 0.4, 'power3.out', {scaleX: 0.4, scaleY: 0.4}, {scaleX: 1, scaleY: 1});
       drawOps(ops, `${id}-check-${item.index}`, start, rt(item.tickTime + 0.1), TICK_DRAW, 'power2.out');
     } else if (item.tickTime !== null) {
       drawOps(ops, `${id}-tick-${item.index}`, start, item.tickTime, TICK_DRAW, 'power2.out');

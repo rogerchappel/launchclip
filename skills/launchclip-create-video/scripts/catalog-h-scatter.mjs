@@ -482,11 +482,11 @@ function scatterTimeline(model, ops) {
     });
   });
   for (const line of c.lines) drawOps(ops, `${id}-s-${line.series}-line`, start, line.time, LINE_DRAW, 'power2.inOut');
-  c.marks.forEach((m, i) => popOps(ops, `${id}-dot-${i}`, start, m.time, {from: 0, duration: 0.4, ease: 'back.out(2.2)', fade: 0.1}));
+  c.marks.forEach((m, i) => popOps(ops, `${id}-dot-${i}`, start, m.time, {from: 0, duration: 0.4, ease: 'power3.out', fade: 0.1}));
   if (c.trendLine) drawOps(ops, `${id}-trend`, start, c.trendLine.time, 0.6, 'power2.inOut');
   if (c.highlight !== null) {
     c.marks.forEach((_, i) => { if (i !== c.highlight) fadeOps(ops, `${id}-dot-${i}`, c.highlightAt, 1, 0.3); });
-    tw(ops, `${id}-dot-${c.highlight}`, c.highlightAt, 0.45, 'back.out(2)', {scaleX: 1, scaleY: 1}, {scaleX: 1.5, scaleY: 1.5});
+    tw(ops, `${id}-dot-${c.highlight}`, c.highlightAt, 0.45, 'power3.out', {scaleX: 1, scaleY: 1}, {scaleX: 1.5, scaleY: 1.5});
     popOps(ops, `${id}-callout`, start, rt(c.highlightAt + 0.1), {from: 0.7});
   }
   if (c.focus !== null) {
@@ -501,7 +501,7 @@ function scatterTimeline(model, ops) {
     }
     c.marks.forEach((m, i) => {
       if (!seriesOf.has(m.series)) return;
-      if (focused.has(m.series)) tw(ops, `${id}-dot-${i}`, rt(c.focusAt + 0.05), 0.4, 'back.out(2)', {scaleX: 1, scaleY: 1}, {scaleX: 1.3, scaleY: 1.3});
+      if (focused.has(m.series)) tw(ops, `${id}-dot-${i}`, rt(c.focusAt + 0.05), 0.4, 'power3.out', {scaleX: 1, scaleY: 1}, {scaleX: 1.3, scaleY: 1.3});
       else fadeOps(ops, `${id}-dot-${i}`, c.focusAt, 1, 0.3, 0.45);
     });
   }
@@ -517,7 +517,7 @@ function scatterTimeline(model, ops) {
       popOps(ops, `${nid}-yp`, start, rt(t + 0.55), {from: 0.6});
       if (n.tag) riseOps(ops, `${nid}-tag`, start, rt(t + 0.3), r2(12 * u));
     } else if (n.type === 'placeholder') {
-      popOps(ops, `${nid}-dot`, start, t, {from: 0.2, duration: 0.55, ease: 'back.out(2.4)'});
+      popOps(ops, `${nid}-dot`, start, t, {from: 0.2, duration: 0.55, ease: 'power3.out'});
       if (n.tag) riseOps(ops, `${nid}-tag`, start, rt(t + 0.2), r2(12 * u));
     } else {
       popOps(ops, `${nid}-ring`, start, t, {from: 0.2, duration: 0.4});

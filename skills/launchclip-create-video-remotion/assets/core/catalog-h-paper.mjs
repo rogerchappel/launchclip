@@ -119,7 +119,7 @@ function polaroidTimeline(model, ops) {
   });
   set(ops, `${id}-photo`, start, {opacity: 0, x: 0, y: r2(-260 * u), rotation: -14, scaleX: 1.08, scaleY: 1.08});
   tw(ops, `${id}-photo`, c.t, 0.18, 'power1.out', {opacity: 0}, {opacity: 1});
-  tw(ops, `${id}-photo`, c.t, 0.75, 'back.out(1.3)', {y: r2(-260 * u), rotation: -14, scaleX: 1.08, scaleY: 1.08}, {y: 0, rotation: 0, scaleX: 1, scaleY: 1});
+  tw(ops, `${id}-photo`, c.t, 0.75, 'power3.out', {y: r2(-260 * u), rotation: -14, scaleX: 1.08, scaleY: 1.08}, {y: 0, rotation: 0, scaleX: 1, scaleY: 1});
   // The photo develops: the dark layer fades away. A real photo shows from
   // the card's first visible frame, under a light veil that clears as it
   // lands (an opaque layer read as an empty frame); the placeholder keeps
@@ -212,7 +212,7 @@ function stickerTimeline(model, ops) {
   const c = model.content;
   set(ops, `${id}-sticker`, start, {opacity: 0, x: 0, y: 0, rotation: c.tilt + 18, scaleX: 1.7, scaleY: 1.7});
   tw(ops, `${id}-sticker`, c.t, 0.08, 'power1.out', {opacity: 0}, {opacity: 1});
-  tw(ops, `${id}-sticker`, c.t, 0.45, 'back.out(2.2)', {rotation: c.tilt + 18, scaleX: 1.7, scaleY: 1.7}, {rotation: c.tilt, scaleX: 1, scaleY: 1});
+  tw(ops, `${id}-sticker`, c.t, 0.45, 'power3.out', {rotation: c.tilt + 18, scaleX: 1.7, scaleY: 1.7}, {rotation: c.tilt, scaleX: 1, scaleY: 1});
   set(ops, `${id}-shine`, start, {opacity: 0, x: -c.box.width, y: 0});
   set(ops, `${id}-shine`, rt(c.t + 0.4), {opacity: 1});
   tw(ops, `${id}-shine`, rt(c.t + 0.4), 0.6, 'power2.inOut', {x: -c.box.width}, {x: c.box.width});
@@ -415,7 +415,7 @@ function badgeTimeline(model, ops) {
   const c = model.content;
   set(ops, `${id}-badge`, start, {opacity: 0, x: 0, y: 0, rotation: c.tilt - 140, scaleX: 0, scaleY: 0});
   tw(ops, `${id}-badge`, c.t, 0.12, 'power1.out', {opacity: 0}, {opacity: 1});
-  tw(ops, `${id}-badge`, c.t, 0.7, 'back.out(1.8)', {rotation: c.tilt - 140, scaleX: 0, scaleY: 0}, {rotation: c.tilt, scaleX: 1, scaleY: 1});
+  tw(ops, `${id}-badge`, c.t, 0.7, 'power3.out', {rotation: c.tilt - 140, scaleX: 0, scaleY: 0}, {rotation: c.tilt, scaleX: 1, scaleY: 1});
 }
 
 export const badge = {

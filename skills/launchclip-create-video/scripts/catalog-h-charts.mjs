@@ -171,7 +171,7 @@ function barTimeline(model, ops) {
       fadeOps(ops, `${id}-value-${i}`, c.highlightAt, 1, 0.4);
       if (c.variant === 'lollipop') fadeOps(ops, `${id}-dot-${i}`, c.highlightAt, 1, 0.32);
     });
-    tw(ops, `${id}-value-${c.highlight}`, c.highlightAt, 0.45, 'back.out(2)', {scaleX: 1, scaleY: 1}, {scaleX: 1.14, scaleY: 1.14});
+    tw(ops, `${id}-value-${c.highlight}`, c.highlightAt, 0.45, 'power3.out', {scaleX: 1, scaleY: 1}, {scaleX: 1.14, scaleY: 1.14});
   }
 }
 
@@ -651,7 +651,7 @@ function radarTimeline(model, ops) {
   c.legend.forEach((_, i) => riseOps(ops, `${id}-legend-${i}`, start, rt(c.buildAt + i * 0.08), 0));
   c.labels.forEach((_, j) => riseOps(ops, `${id}-axis-${j}`, start, rt(c.buildAt + 0.1 + j * 0.05), 0, {duration: 0.35}));
   c.shapes.forEach((s, i) => {
-    popOps(ops, `${id}-shape-${i}`, start, s.time, {from: 0, duration: 0.7, ease: 'back.out(1.3)', fade: 0.2});
+    popOps(ops, `${id}-shape-${i}`, start, s.time, {from: 0, duration: 0.7, ease: 'power3.out', fade: 0.2});
     if (c.variant === 'dots') s.points.forEach((_, j) => popOps(ops, `${id}-pt-${i}-${j}`, start, rt(s.time + 0.45 + j * 0.04), {from: 0}));
   });
 }
@@ -849,7 +849,7 @@ function ringTimeline(model, ops) {
   riseOps(ops, `${id}-label`, start, rt(c.buildAt + 0.15), r2(14 * u));
   if (c.sub) riseOps(ops, `${id}-sub`, start, rt(c.buildAt + 0.3), r2(10 * u));
   const pulse = rt(c.fill.at + c.fill.duration);
-  tw(ops, `${id}-value`, pulse, 0.4, 'back.out(2.5)', {scaleX: 0.92, scaleY: 0.92}, {scaleX: 1, scaleY: 1});
+  tw(ops, `${id}-value`, pulse, 0.4, 'power3.out', {scaleX: 0.92, scaleY: 0.92}, {scaleX: 1, scaleY: 1});
 }
 
 export const progressRing = {
