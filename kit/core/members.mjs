@@ -24,10 +24,12 @@
 import {GRAPHIC_PARAM, cardHeight, fitGraphic, graphicNodes, graphicSpec, graphicWidth} from './graphic.mjs';
 import {r2} from './catalog-h-base.mjs';
 import {subCard} from './member-sub-card.mjs';
+import {toneMember} from './member-tone.mjs';
 
 // One line per member module; each member session appends its own.
 const LIST = [
   subCard,
+  toneMember,
 ];
 
 // Not frozen: a test may register a stand-in member.
