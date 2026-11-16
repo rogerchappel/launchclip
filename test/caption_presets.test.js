@@ -9,7 +9,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { CAPTION_ENTRANCES, CAPTION_EXITS, CAPTION_MOTION, CAPTION_PRESET_NAMES, CAPTION_PRESETS, captionBandTop, captionElementStateAt, captionInlineStyle, captionPlan, captionPlanRuntime, captionPresetName, captionStateAt, chunkWords, indexCaptionTweens, joinAttachedWords } from "@launchclip/core/captions.mjs";
-import { CAPTION_POSITION_TOP, captionBandAt } from "@launchclip/core/layout-check.mjs";
+import { CAPTION_POSITION_TOP, PLATFORM_UI_TOP, captionBandAt } from "@launchclip/core/layout-check.mjs";
 import { resolveStory, STORY_CAPTION_PRESETS, validateStory } from "@launchclip/core/story.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 
@@ -37,6 +37,26 @@ test("at least twelve presets, kept in step with the story schema and the layout
     assert.equal(captionBandAt(band, format, "top").y / format.height, captionBandTop(format, "top"));
     assert.equal(landscape ? CAPTION_POSITION_TOP.landscape : CAPTION_POSITION_TOP.portrait, captionBandTop(format, "top"));
   }
+});
+
+test("caption positions: the renderers and the layout check place the band from one set of constants", async () => {
+  const { CAPTION_POSITIONS, CAPTION_BAND } = await import("@launchclip/core/captions.mjs");
+  for (const format of [FORMAT, { width: 1920, height: 1080 }, { width: 1080, height: 1080 }]) {
+    const fraction = format.width > format.height ? 140 / 1080 : CAPTION_BAND.height;
+    const band = { x: 0, y: (format.width > format.height ? 0.8 : CAPTION_BAND.top) * format.height, width: 800, height: fraction * format.height };
+    for (const position of CAPTION_POSITIONS) assert.ok(Math.abs(captionBandAt(band, format, position).y / format.height - captionBandTop(format, position)) <= 0.001, `${position} ${format.width}x${format.height}`);
+  }
+  const portrait = { x: 0, y: CAPTION_BAND.top * 1920, width: 800, height: CAPTION_BAND.height * 1920 };
+  const lower = captionBandAt(portrait, FORMAT, "lower-third");
+  // About a quarter up from the bottom, and clear of the platforms' own captions and buttons.
+  assert.ok(Math.abs((lower.y + lower.height / 2) / 1920 - 0.73) < 1e-9);
+  assert.ok((lower.y + lower.height) / 1920 <= PLATFORM_UI_TOP - 0.01);
+  assert.ok(lower.y > captionBandAt(portrait, FORMAT, "auto").y, "lower than the usual band");
+  // (captionBandTop rounds to 3 places.) Portrait bottom is the lower third; landscape bottom keeps the format's band; an unknown position moves nothing.
+  assert.deepEqual(captionBandAt(portrait, FORMAT, "bottom"), lower);
+  const wide = { x: 0, y: 864, width: 1536, height: 140 };
+  assert.deepEqual(captionBandAt(wide, { width: 1920, height: 1080 }, "bottom"), wide);
+  assert.deepEqual(captionBandAt(portrait, FORMAT, "sideways"), portrait);
 });
 
 test("every preset builds a seek-safe plan: unique ids, known targets, one immediate render, `to` after a prior tween", () => {
@@ -154,8 +174,10 @@ test("every preset compiles into the HyperFrames project and the Remotion compon
 const fixtures = readdirSync(path.join(ROOT, "test", "fixtures", "parity-captions")).filter((name) => name.endsWith(".json")).sort();
 
 test("a parity fixture exists for every preset", async () => {
-  const presets = await Promise.all(fixtures.map(async (file) => JSON.parse(await readFile(path.join(ROOT, "test", "fixtures", "parity-captions", file), "utf8")).preset));
-  assert.deepEqual(presets.sort(), [...CAPTION_PRESET_NAMES].sort());
+  // Named fixtures (a second look at one preset: the surface colours, a position) come on top.
+  const all = await Promise.all(fixtures.map(async (file) => JSON.parse(await readFile(path.join(ROOT, "test", "fixtures", "parity-captions", file), "utf8"))));
+  assert.deepEqual(all.filter((fixture) => !fixture.name).map((fixture) => fixture.preset).sort(), [...CAPTION_PRESET_NAMES].sort());
+  assert.ok(all.every((fixture) => CAPTION_PRESET_NAMES.includes(fixture.preset)));
 });
 
 test("caption parity: every preset, HyperFrames vs Remotion stills at word boundaries and mid-animation", { skip: process.env.LAUNCHCLIP_PARITY === "1" ? false : "set LAUNCHCLIP_PARITY=1 to render caption parity fixtures", timeout: 1_800_000 }, async () => {
@@ -211,6 +233,30 @@ test("caption lines over a dark world switch to a colour that reads; over a ligh
   // A story with no worlds draws exactly as before.
   const plain = captionPlan(chunks, { type: "captions", preset: "quiet-accent" }, { brand, format: story.format, story: { ...story, scenes: [] } });
   assert.doesNotMatch(plain.css, /lc-cap-on-/);
+});
+
+test("caption lines on a light brand surface take dark words and a brand-colour hero instead of a plate", async () => {
+  const { captionPlan, captionColorsOn, captionContrast } = await import("@launchclip/core/captions.mjs");
+  const mint = { colors: { bg: "#e5fcfc", primary: "#0f766e", accent: "#b45309", ink: "#0b2b2a", paper: "#ffffff" } };
+  // Pinned white is a preference: on mint it gives way to the first brand colour that reads, and the highlight stays the primary.
+  const on = captionColorsOn({ idle: "#ffffff", active: "#0f766e", accent: "#b45309", spoken: "#ffffff" }, "#e5fcfc", mint.colors);
+  assert.equal(on.swapped, true);
+  assert.equal(on.idle, "#0b2b2a");
+  assert.equal(on.active, "#0f766e");
+  assert.ok(captionContrast(on.accent, "#e5fcfc") >= 3);
+  // A highlight that does not read on the surface is replaced by a brand colour that does.
+  assert.equal(captionColorsOn({ idle: "#ffffff", active: "#ccffee" }, "#e5fcfc", mint.colors).active, "#0f766e");
+  // Colours that already read are kept.
+  assert.equal(captionColorsOn({ idle: "#0b2b2a", active: "#0f766e" }, "#e5fcfc", mint.colors).swapped, false);
+  const words = (start, texts) => texts.map((text, i) => ({ text, start: start + i * 0.3, end: start + i * 0.3 + 0.25 }));
+  const chunks = [{ id: "cap-001", start: 0.5, end: 1.4, words: words(0.5, ["the", "dearer"]) }, { id: "cap-002", start: 2, end: 2.9, words: words(2, ["gets", "hot"]) }];
+  const format = { width: 1080, height: 1920 };
+  const plan = captionPlan(chunks, { type: "captions", preset: "kinetic-hierarchy", colors: { idle: "#ffffff" }, surface: ["cap-001"] }, { brand: mint, format, story: { format, brand: mint, scenes: [] } });
+  assert.equal(plan.nodes.find((node) => node.id === "cap-001").cls, "lc-cap lc-cap-on-surface");
+  assert.equal(plan.nodes.find((node) => node.id === "cap-002").cls, "lc-cap");
+  assert.match(plan.css, /\.lc-cap-on-surface \.lc-cap-w \{ color: #0b2b2a; text-shadow: none; \}/);
+  assert.match(plan.css, /\.lc-cap-on-surface \.lc-cap-hero \{ color: #0f766e; \}/);
+  assert.doesNotMatch(plan.css, /lc-cap-legible/);
 });
 
 test("one-word presets show one word at a time on a real GSAP timeline, short words and blur sub-frames included", () => {

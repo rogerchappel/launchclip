@@ -30,7 +30,7 @@ test('the registry: every entry dated, typed and sourced; plan rules have a dete
     assert.ok(t.fix && t.source, t.id);
     assert.ok(t.applies === 'script' || t.detector, `${t.id}: plan and frame rules have a detector`);
   }
-  assert.deepEqual(TELL_REGISTRY.filter(t => t.applies === 'frame').map(t => t.id), ['accent-everywhere', 'buried-raster', 'unblended-media']);
+  assert.deepEqual(TELL_REGISTRY.filter(t => t.applies === 'frame').map(t => t.id), ['accent-everywhere', 'buried-raster', 'unblended-media', 'thin-text-on-footage']);
 });
 
 // [rule, hit input, near-miss input]
@@ -131,6 +131,16 @@ const CASES = [
   ['icon-tile',
     {scenes: [scene('s', 'concept-card', 0, 3, {view: box([box([svg], {background: '#ff6b3d', borderRadius: 24}), txt('Headline')])})]},
     {scenes: [scene('s', 'concept-card', 0, 3, {view: box([box([svg], {}), txt('Headline')])})]}],
+  // The pilot's chips: two boxed panels on the flat brand plate; the near miss is the same chips over footage.
+  ['boxed-on-flat',
+    {scenes: [scene('s', 'compare', 0, 3, {view: box([box([txt('Cheap'), txt('Weekend brush')], {background: '#e5fcfc', borderRadius: 28}), box([txt('Dearer'), txt('Pay once')], {border: '2px solid #ccc', borderRadius: 28})])})]},
+    {scenes: [scene('b', 'clip', 0, 3), scene('s', 'compare', 0, 3, {view: box([box([txt('Cheap'), txt('Weekend brush')], {background: '#e5fcfc', borderRadius: 28}), box([txt('Dearer'), txt('Pay once')], {border: '2px solid #ccc', borderRadius: 28})])})]}],
+  ['stock-icon',
+    {scenes: [scene('s', 'concept-card', 0, 3, {scene: {params: {text: 'All about upkeep', icon: 'layers'}}})]},
+    {scenes: [scene('s', 'concept-card', 0, 3, {scene: {params: {text: 'Three layers of oil', icon: 'layers'}}})]}],
+  ['caption-echoes-headline',
+    {story: story({overlays: [{type: 'captions'}]}), words: 'composite is wood fibre and plastic'.split(' ').map((word, i) => ({word, start: 1 + i * 0.3})), scenes: [scene('s', 'clip', 1, 4, {scene: {params: {title: 'Wood fibre + plastic blend'}}})]},
+    {story: story({overlays: [{type: 'captions'}]}), words: 'composite never needs oiling'.split(' ').map((word, i) => ({word, start: 1 + i * 0.3})), scenes: [scene('s', 'clip', 1, 4, {scene: {params: {title: 'Wood fibre + plastic blend'}}})]}],
   ['emoji-icons',
     {scenes: [scene('s', 'icon-row', 0, 3, {scene: {params: {items: ['🚀 Launch']}}})]},
     {scenes: [scene('s', 'icon-row', 0, 3, {scene: {params: {items: ['Launch']}}})]}],
@@ -175,6 +185,11 @@ test('every plan detector has a hit and a near miss', () => {
     assert.ok(rules(hit).includes(id), `${id} fires on its hit: ${JSON.stringify(planTells({story: story(), words: [], ...hit}))}`);
     assert.ok(!rules(miss).includes(id), `${id} stays quiet on its near miss`);
   }
+});
+
+test('icon-tile: a tile whose fill is its first layer (catalog-g-base iconTile) fires; a bare glyph does not', () => {
+  assert.ok(rules({scenes: [scene('s', 'icon-row', 0, 3, {view: box([box([box([], {background: '#ff6b3d24', borderRadius: 28}), svg]), txt('Label')])})]}).includes('icon-tile'));
+  assert.ok(!rules({scenes: [scene('s', 'icon-row', 0, 3, {view: box([box([box([], {}), svg]), txt('Label')])})]}).includes('icon-tile'));
 });
 
 test('a finding ends in its fix and carries the date the tell was added', () => {
@@ -223,6 +238,10 @@ const mediaFrame = (blended) => image(100, 100, (x, y) => {
   if (blended) { const d = Math.min(x - 30, 69 - x, y - 30, 69 - y); return d < 8 ? ground : (x + y) % 2 ? [200, 200, 200] : ground; }
   return (x + y) % 2 ? [220, 220, 220] : [90, 90, 90];
 });
+// 540×540 footage (half of 1080, so the floor is 28 px): busy (a 3 px checker of light and dark) or flat.
+const footageFrame = (busy) => image(540, 540, (x, y) => (busy && (Math.floor(x / 3) + Math.floor(y / 3)) % 2 ? [210, 200, 180] : [70, 80, 60]));
+const busyShot = footageFrame(true);
+const overlayText = (size, weight, frame = busyShot) => ({texts: [{id: 's3', at: 3, rect: {x: 40, y: 300, width: 260, height: size * 1.2}, size, weight, image: frame}]});
 const FRAME_CASES = [
   ['accent-everywhere',
     {frames: [{id: 's1', at: 1, image: accentFrame(0.3)}]},
@@ -232,7 +251,8 @@ const FRAME_CASES = [
     {plates: [{id: 'plate', at: 0, path: 'plate', dim: 0.9, raw: 0.2, dimmed: 0.03, minimum: 0.01}]}],
   ['unblended-media',
     {media: [{id: 's2-media', at: 2, rect: {x: 30, y: 30, width: 40, height: 40}, image: mediaFrame(false)}]},
-    {media: [{id: 's2-media', at: 2, rect: {x: 30, y: 30, width: 40, height: 40}, image: mediaFrame(true)}]}]
+    {media: [{id: 's2-media', at: 2, rect: {x: 30, y: 30, width: 40, height: 40}, image: mediaFrame(true)}]}],
+  ['thin-text-on-footage', overlayText(22, 400), overlayText(32, 700)]
 ];
 const frameRules = (input) => frameTells({story: story(), ...input}).map(f => f.rule);
 
@@ -248,4 +268,12 @@ test('accent-everywhere: a direction moment may be rich, and an accent that is t
   const frames = [{id: 's1', at: 1, image: accentFrame(0.3)}];
   assert.deepEqual(frameRules({story: story({direction: {moments: ['s1']}}), frames}), []);
   assert.deepEqual(frameTells({story: story({brand: {colors: {bg: '#ffb08a', accent: '#ffb08a'}}}), frames}), []);
+});
+
+test('thin-text-on-footage: small or thin type fires only on busy footage, and says which', () => {
+  assert.deepEqual(frameRules(overlayText(22, 400, footageFrame(false))), [], 'a flat shot holds small type');
+  const thin = frameTells({story: story(), ...overlayText(40, 300)});
+  assert.equal(thin.length, 1);
+  assert.match(thin[0].detail, /weight 300 type over busy footage/);
+  assert.match(frameTells({story: story(), ...overlayText(20, null)})[0].detail, /s3 sets 20 px type/);
 });

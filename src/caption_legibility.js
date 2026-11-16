@@ -19,7 +19,7 @@
 
 import { spawn } from "node:child_process";
 import { castCaptionZones, withPlacedZones } from "@launchclip/core/cast-captions.mjs";
-import { captionOptions, captionPlan, captionZoneIndex, captionsOverlayOf, chunksForCaptions } from "@launchclip/core/captions.mjs";
+import { captionLineOnSurface, captionOptions, captionPlan, captionZoneIndex, captionsOverlayOf, chunksForCaptions } from "@launchclip/core/captions.mjs";
 import { decodePng } from "./visual_snapshot.js";
 import { renderedModels } from "./direction_guardrails.js";
 
@@ -54,7 +54,7 @@ export function captionLines(story, chunks) {
     const chunk = byId.get(node.id) ?? null;
     const words = (node.children ?? []).map((child) => child.text ?? child.children?.map((kid) => kid.text).join("") ?? "").join(" ");
     const tone = String(node.cls).match(/lc-cap-on-(\w+)/)?.[1] ?? null;
-    const colors = tone && o.tones?.[tone]?.swapped ? { ...o.colors, idle: o.tones[tone].idle, accent: o.tones[tone].accent } : o.colors;
+    const colors = tone && o.tones?.[tone]?.swapped ? { ...o.colors, idle: o.tones[tone].idle, accent: o.tones[tone].accent, active: o.tones[tone].active } : o.colors;
     const start = chunk ? chunk.start : null, end = chunk ? Math.max(chunk.start, chunk.words?.at(-1)?.end ?? chunk.end) : null;
     if (start === null) continue;
     const time = round(Math.min(end - 0.15, Math.max(start + 0.35, (start + end) / 2)), 3);
@@ -165,18 +165,34 @@ export function lineLegibility(image, rect, colors, { size = 74, chars = 0, plat
   const outer = { x0: Math.max(x0, box.x0 - pad), x1: Math.min(x1 - 1, box.x1 + pad), y0: Math.max(y0, box.y0 - pad), y1: Math.min(y1 - 1, box.y1 + pad) };
   const main = text[0];
   let ring = 0, ringText = 0;
-  const contrasts = [];
+  const contrasts = [], backdrop = [];
   for (let y = outer.y0; y <= outer.y1; y += 2) for (let x = outer.x0; x <= outer.x1; x += 2) {
     const p = at(x, y);
     const d = near(p);
     const inside = x >= box.x0 && x <= box.x1 && y >= box.y0 && y <= box.y1;
-    if (!inside) { ring += 1; if (d < L.textDistance) ringText += 1; }
+    // The backdrop is the ring around the text box, whatever its colour (a backdrop close to the text's is the point).
+    if (!inside) { ring += 1; backdrop.push(p); if (d < L.textDistance) ringText += 1; }
     if (d > L.backgroundDistance) contrasts.push(contrast(main, p));
   }
   const camouflage = ring ? ringText / ring : 0;
   const worst = contrasts.length ? pct(contrasts, 0.25) : 1;
-  return { found: true, contrast: round(worst), camouflage: round(camouflage, 3), legible: worst >= L.contrast && camouflage <= L.camouflage, box: { x: box.x0, y: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0 } };
+  return { found: true, contrast: round(worst), camouflage: round(camouflage, 3), legible: worst >= L.contrast && camouflage <= L.camouflage, box: { x: box.x0, y: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0 }, ...(backdrop.length ? { backdrop: backdropOf(backdrop) } : {}) };
 }
+
+/**
+ * What is behind a line, from its background pixels: the median colour and
+ * how flat it is (the share of pixels within CAPTION_SURFACE.distance of the
+ * median). A flat backdrop is a surface (a brand panel or background) a
+ * colour can be picked for; a busy one (footage) needs a plate. → {color, flat}
+ */
+export function backdropOf(pixels) {
+  const median = [0, 1, 2].map((c) => pixels.map((p) => p[c]).sort((a, b) => a - b)[pixels.length >> 1]);
+  const flat = pixels.filter((p) => distance(p, median) <= CAPTION_SURFACE.distance).length / pixels.length;
+  return { color: `#${median.map((c) => c.toString(16).padStart(2, "0")).join("")}`, flat: round(flat, 3) };
+}
+
+// A backdrop with at least `flat` of its pixels within `distance` (RGB) of its median is a surface.
+export const CAPTION_SURFACE = Object.freeze({ flat: 0.85, distance: 24 });
 
 /**
  * A line on a backing (its plate, a legibility plate, the chips or band the
@@ -323,7 +339,11 @@ export async function measureCaptionLegibility(video, story, { chunks, frame = v
     const outlined = outlinedCaptions(options) && !line.plated;
     out.push({ id: line.id, text: line.text, time: line.time, plated: line.plated, ...(line.backing ? { backing: line.backing.color } : {}), ...measured, ...(outlined && measured.found ? { legible: true, outlined: true } : {}) });
   }
-  return { lines: out, failed: out.filter((line) => line.found && !line.legible).map((line) => line.id) };
+  const failed = out.filter((line) => line.found && !line.legible);
+  // A failed line on a flat backdrop takes the surface colours instead of a
+  // plate when they read there (and it has not already tried them).
+  const onSurface = (line) => !line.plated && !captionLineOnSurface(options, line.id) && line.backdrop?.flat >= CAPTION_SURFACE.flat && contrast(hexRgb(options.surfaceIdle), hexRgb(line.backdrop.color)) >= CAPTION_LEGIBILITY.contrast;
+  return { lines: out, failed: failed.map((line) => line.id), surface: failed.filter(onSurface).map((line) => line.id) };
 }
 
 const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -341,6 +361,20 @@ export function predictCaptionPlates(story, chunks, elements = []) {
   // A photo-scene's picture (fullFrame, src/layout_check.js) is judged on the render, as before.
   const busy = elements.filter((element) => element.role === "media" && element.rect && element.id !== "base" && !element.fullFrame);
   return lines.filter((line) => { const band = lineBandRect(options, story.format, line, zones); return busy.some((element) => element.start < line.end && element.end > line.start && overlaps(element.rect, band)); }).map((line) => line.id);
+}
+
+/**
+ * Lines on the brand surface before the first render, when the captions'
+ * idle colour does not read on the brand background: those whose band
+ * crosses no media at their time (no footage base, picture or window).
+ */
+export function predictCaptionSurfaces(story, chunks, elements = []) {
+  const { lines, options } = captionLines(story, chunks);
+  if (!lines.length || options.plate || outlinedCaptions(options)) return [];
+  if (!/^#[0-9a-f]{6}$/i.test(String(options.colors.idle)) || contrast(hexRgb(options.colors.idle), hexRgb(options.surfaceUnder)) >= CAPTION_LEGIBILITY.contrast) return [];
+  const zones = withPlacedZones(story, castCaptionZones(story));
+  const media = elements.filter((element) => element.role === "media" && element.rect);
+  return lines.filter((line) => { const band = lineBandRect(options, story.format, line, zones); return !media.some((element) => element.start < line.end && element.end > line.start && overlaps(element.rect, band)); }).map((line) => line.id);
 }
 
 /** The plates an overlay should carry: predicted and measured ids, merged and sorted. */

@@ -1157,3 +1157,471 @@ async function runCommand(command, args) {
 async function runRawCommand(command, args) {
   return execFileAsync(command, args, { encoding: null, maxBuffer: 1024 * 1024 * 128 });
 }
+
+// ---------------------------------------------------------------------------
+// Transition classifier (docs/PLAN_AND_PACE_RFC.md §4.1). Grey frames at
+// 30 fps; the picture is cropped out of any letterbox and resampled to a
+// work grid with a 48 px short side, so a letterboxed copy reads the same.
+// Every threshold is the RFC's unless its line says otherwise.
+export const TRANSITION_CLASSIFY = Object.freeze({
+  fps: 30, // a 0.2 s window is 6 frames
+  workShortSide: 48,
+  thumb: [12, 16], // short × long side of the thumb the distances read
+  blocks: [6, 8], // short × long side of the block grid
+  crop: Object.freeze({ samples: 48, longSide: 640, share: 0.08, levels: 16, minHeight: 0.15, minWidth: 0.3 }),
+  windows: Object.freeze([0.2, 0.35, 0.6, 1.0, 1.5]),
+  minAcross: 10, // mean abs diff of the window's ends on the thumb
+  outside: 0.3, // change just outside ≤ this × change across
+  blockShare: 0.5, // blocks changed between the ends
+  warp: 0.45, // a shift-and-scale explaining the change this well is a camera move, not a transition
+  progressBefore: 0.3, progressAfter: 0.7, tightenLow: 0.12, tightenHigh: 0.88,
+  cutSpan: 0.25, // a hard cut whose span is under this is a cut
+  dip: Object.freeze({ flatStd: 8, dark: 45, light: 210, cover: 1.2 }), // cover: a middle frame this far (÷ the A–B change) from both pictures
+  flash: Object.freeze({ minSpan: 0.15, peak: 170, lift: 50 }),
+  iris: Object.freeze({ correlation: 0.55, residual: 0.35 }),
+  edge: Object.freeze({ positions: 33, residual: 0.35, vsBlend: 0.6, rise: 0.8, travel: 0.3, moveBeat: 0.2 }),
+  spin: Object.freeze({ degrees: 25, net: 0.7 }),
+  zoom: Object.freeze({ net: 0.25, consistent: 0.4 }), // |net log scale|, and net ≥ this × summed |log scale| (the RFC: summed ≥ 0.5)
+  whip: Object.freeze({ net: 0.3, path: 1.5, sharpness: 0.7 }),
+  shake: Object.freeze({ path: 0.4, net: 3 }),
+  blur: 0.5,
+  dissolve: Object.freeze({ residual: 0.25, rise: 0.85 }),
+  glitch: Object.freeze({ swings: 2, drop: 0.2 })
+});
+
+export const TRANSITION_KINDS = Object.freeze(['cut', 'dip', 'flash', 'iris', 'wipe', 'push', 'cover', 'reveal', 'spin', 'zoom', 'whip', 'shake', 'blur', 'dissolve', 'glitch', 'other']);
+
+// The kind each of our TRANSITION_TYPES draws in cuts mode (camera.mode
+// world turns push into a dolly, which measures as zoom). Between two
+// footage plates morph, rack-focus and card-to-card play as a fade. The
+// VFX covers, dot-wipe and light-sweep cover the whole frame at their
+// midpoint, so they read as dips. overview needs a chapter: null.
+export const TRANSITION_TYPE_KINDS = Object.freeze({
+  cut: 'cut', fade: 'dissolve', push: 'push', whip: 'whip', zoom: 'zoom', iris: 'iris', morph: 'dissolve',
+  pan: 'push', pull: 'zoom', orbit: 'push', 'whip-pan': 'whip', 'rack-focus': 'dissolve', 'glow-wipe': 'wipe',
+  'card-to-card': 'dissolve', overview: null, 'dot-wipe': 'dip', 'light-sweep': 'dip', 'push-blur': 'whip',
+  'light-leak': 'flash', 'before-after': 'wipe', 'burn-away': 'dip', 'slash-wipe': 'dip', shatter: 'dip',
+  'crt-off': 'dip', 'glitch-wipe': 'dip', blinds: 'dip', 'diamond-wipe': 'dip', 'star-iris': 'dip', 'pixel-dissolve': 'dip'
+});
+
+// Measured kind → our types to prefer, first first (the RFC's map, plus the
+// kinds it leaves out). A style drafted from references orders its
+// transition_preference by these.
+export const KIND_TRANSITION_TYPES = Object.freeze({
+  cut: ['cut'], dissolve: ['fade'], dip: ['light-sweep', 'crt-off'], flash: ['light-leak'], iris: ['iris'],
+  wipe: ['glow-wipe'], push: ['push'], cover: ['push'], reveal: ['push'], spin: ['orbit'],
+  zoom: ['zoom', 'push-blur'], whip: ['whip', 'whip-pan'], shake: ['whip'], blur: ['rack-focus'], glitch: ['glitch-wipe'], other: []
+});
+
+/**
+ * Profile fields from classified transitions over `duration` seconds:
+ * transitions_per_min, transition_mix (share by kind) and
+ * transition_seconds (p50 of the spans that are not cuts, null without).
+ */
+export function transitionStats(transitions, duration) {
+  const list = transitions ?? [];
+  const spans = list.filter((entry) => entry.kind !== 'cut').map((entry) => entry.seconds);
+  const mix = {};
+  for (const entry of list) mix[entry.kind] = (mix[entry.kind] ?? 0) + 1;
+  return {
+    transitions_per_min: duration > 0 ? round(list.length * 60 / duration, 2) : 0,
+    transition_mix: Object.fromEntries(Object.entries(mix).sort((a, b) => b[1] - a[1]).map(([kind, n]) => [kind, round(n / list.length, 3)])),
+    transition_seconds: spans.length ? round(median(spans), 3) : null
+  };
+}
+
+/**
+ * The picture inside any letterbox or pillarbox: over `samples` frames
+ * spread through the video, a row (column) is picture when more than
+ * `share` of its pixels vary by more than `levels`. The crop is skipped
+ * (the whole frame) when what is left is under minHeight of the height or
+ * minWidth of the width. → {x, y, width, height}
+ */
+export function pictureCrop(rawFrames, width, height, options = {}) {
+  const C = { ...TRANSITION_CLASSIFY.crop, ...options };
+  const size = width * height;
+  const count = Math.floor(rawFrames.length / size);
+  const whole = { x: 0, y: 0, width, height };
+  if (count < 2) return whole;
+  const picks = Array.from({ length: Math.min(C.samples, count) }, (_, i) => Math.round(i * (count - 1) / Math.max(1, Math.min(C.samples, count) - 1)));
+  const lo = new Uint8Array(size).fill(255), hi = new Uint8Array(size);
+  for (const f of picks) for (let k = 0; k < size; k += 1) { const v = rawFrames[f * size + k]; if (v < lo[k]) lo[k] = v; if (v > hi[k]) hi[k] = v; }
+  const varies = (k) => hi[k] - lo[k] > C.levels;
+  const rows = [], cols = [];
+  for (let y = 0; y < height; y += 1) { let n = 0; for (let x = 0; x < width; x += 1) n += varies(y * width + x); if (n > C.share * width) rows.push(y); }
+  for (let x = 0; x < width; x += 1) { let n = 0; for (let y = 0; y < height; y += 1) n += varies(y * width + x); if (n > C.share * height) cols.push(x); }
+  if (!rows.length || !cols.length) return whole;
+  const crop = { x: cols[0], y: rows[0], width: cols.at(-1) - cols[0] + 1, height: rows.at(-1) - rows[0] + 1 };
+  return crop.height < C.minHeight * height || crop.width < C.minWidth * width ? whole : crop;
+}
+
+/** Area-average a crop of each grey frame onto a w × h grid. → [Float32Array] */
+function resampleFrames(rawFrames, width, height, crop, w, h) {
+  const size = width * height;
+  const count = Math.floor(rawFrames.length / size);
+  const frames = [];
+  const sx = crop.width / w, sy = crop.height / h;
+  for (let f = 0; f < count; f += 1) {
+    const out = new Float32Array(w * h);
+    for (let j = 0; j < h; j += 1) {
+      const y0 = crop.y + j * sy, y1 = y0 + sy;
+      for (let i = 0; i < w; i += 1) {
+        const x0 = crop.x + i * sx, x1 = x0 + sx;
+        let sum = 0, area = 0;
+        for (let y = Math.floor(y0); y < Math.ceil(y1); y += 1) {
+          const wy = Math.min(y + 1, y1) - Math.max(y, y0);
+          for (let x = Math.floor(x0); x < Math.ceil(x1); x += 1) {
+            const wx = Math.min(x + 1, x1) - Math.max(x, x0);
+            sum += rawFrames[f * size + y * width + x] * wx * wy; area += wx * wy;
+          }
+        }
+        out[j * w + i] = sum / area;
+      }
+    }
+    frames.push(out);
+  }
+  return frames;
+}
+
+function shrink(frame, w, h, tw, th) {
+  const out = new Float32Array(tw * th), n = new Float32Array(tw * th);
+  for (let y = 0; y < h; y += 1) for (let x = 0; x < w; x += 1) { const k = Math.floor(y * th / h) * tw + Math.floor(x * tw / w); out[k] += frame[y * w + x]; n[k] += 1; }
+  for (let k = 0; k < out.length; k += 1) out[k] /= n[k];
+  return out;
+}
+
+function meanAbs(a, b) { let s = 0; for (let k = 0; k < a.length; k += 1) s += Math.abs(a[k] - b[k]); return s / a.length; }
+function frameMean(a) { let s = 0; for (const v of a) s += v; return s / a.length; }
+function frameMedian(a) { return median(Array.from(a)); }
+function robustSpread(a) { const m = frameMedian(a); return 1.4826 * median(Array.from(a, (v) => Math.abs(v - m))); }
+function detail(frame, w, h) { let s = 0; for (let y = 0; y < h - 1; y += 1) for (let x = 0; x < w - 1; x += 1) { const k = y * w + x; s += Math.abs(frame[k + 1] - frame[k]) + Math.abs(frame[k + w] - frame[k]); } return s / ((w - 1) * (h - 1)); }
+function correlation(xs, ys) {
+  const n = xs.length; if (n < 3) return 0;
+  const mx = xs.reduce((a, b) => a + b, 0) / n, my = ys.reduce((a, b) => a + b, 0) / n;
+  let sxy = 0, sxx = 0, syy = 0;
+  for (let i = 0; i < n; i += 1) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; syy += (ys[i] - my) ** 2; }
+  return sxx > 0 && syy > 0 ? sxy / Math.sqrt(sxx * syy) : 0;
+}
+
+/**
+ * Transitions in grey frames (width × height bytes each, at fps): each
+ * boundary's span and kind (TRANSITION_KINDS), with a direction for wipes,
+ * pushes, covers, reveals and whips and `via` (black or white) for a dip.
+ * → {crop, transitions: [{at, start, end, seconds, kind, direction?, via?}]}
+ */
+export function classifyTransitions(rawFrames, width, height, fps = TRANSITION_CLASSIFY.fps, options = {}) {
+  const T = { ...TRANSITION_CLASSIFY, ...options };
+  const crop = options.cropped ? { x: 0, y: 0, width, height } : pictureCrop(rawFrames, width, height, T.crop);
+  const portrait = crop.height >= crop.width;
+  const shortSide = T.workShortSide, longSide = Math.max(shortSide, Math.round(shortSide * Math.max(crop.width, crop.height) / Math.min(crop.width, crop.height)));
+  const W = portrait ? shortSide : longSide, H = portrait ? longSide : shortSide;
+  const frames = resampleFrames(rawFrames, width, height, crop, W, H);
+  const [ts, tl] = T.thumb, [bs, bl] = T.blocks;
+  const thumbs = frames.map((f) => portrait ? shrink(f, W, H, ts, tl) : shrink(f, W, H, tl, ts));
+  const blocks = frames.map((f) => portrait ? shrink(f, W, H, bs, bl) : shrink(f, W, H, bl, bs));
+  const count = frames.length;
+  const dist = (i, j) => meanAbs(thumbs[i], thumbs[j]);
+  const progress = (t, s, e) => { const a = dist(t, s), b = dist(t, e); return a + b > 0 ? a / (a + b) : 0; };
+  const candidates = [];
+  for (const L of T.windows) {
+    const n = Math.max(1, Math.round(L * fps)), step = Math.max(1, Math.round(n / 5)), k = Math.max(2, Math.round(n / 4));
+    for (let s = k; s + n + k < count; s += step) {
+      const e = s + n;
+      const across = dist(s, e);
+      if (across < T.minAcross) continue;
+      if (Math.max(dist(s - k, s), dist(e, e + k)) > T.outside * across) continue;
+      let changed = 0;
+      for (let b = 0; b < blocks[s].length; b += 1) if (Math.abs(blocks[s][b] - blocks[e][b]) > T.minAcross) changed += 1;
+      if (changed < T.blockShare * blocks[s].length) continue;
+      let ok = true;
+      for (let t = s - k; t <= s && ok; t += 1) if (progress(t, s, e) >= T.progressBefore) ok = false;
+      for (let t = e; t <= e + k && ok; t += 1) if (progress(t, s, e) <= T.progressAfter) ok = false;
+      if (!ok) continue;
+      let a = e, b = s, half = e;
+      for (let t = s; t <= e; t += 1) { const p = progress(t, s, e); if (p >= T.tightenLow && a === e) a = t; if (p <= T.tightenHigh) b = t; if (p >= 0.5 && half === e) half = t; }
+      candidates.push({ s, e, a, b, half, across });
+    }
+  }
+  // Windows whose tightened spans overlap are one boundary (a long window
+  // reaches the next boundary, its tightened span does not). Keep the widest:
+  // a cover through a held dark frame also passes as old → dark and dark → new.
+  for (const c of candidates) { c.from = Math.min(c.a, c.b + 1); c.to = Math.max(c.a, c.b + 1); }
+  candidates.sort((x, y) => x.from - y.from);
+  const clusters = [];
+  for (const c of candidates) {
+    const last = clusters.at(-1);
+    if (last && c.from <= last.to) { last.to = Math.max(last.to, c.to); if (c.to - c.from > last.best.to - last.best.from || (c.to - c.from === last.best.to - last.best.from && c.across > last.best.across)) last.best = c; }
+    else clusters.push({ to: c.to, best: c });
+  }
+  const transitions = [];
+  for (const { best } of clusters) {
+    if (warpExplains(frames[best.s], frames[best.e], W, H, T.warp)) continue;
+    const start = Math.min(best.a, best.b + 1), end = Math.max(best.a, best.b + 1);
+    const entry = { at: round((best.half - 0.5) / fps, 3), start: round((start - 0.5) / fps, 3), end: round((end - 0.5) / fps, 3), seconds: round((end - start) / fps, 3) };
+    transitions.push({ ...entry, ...classifySpan(frames, W, H, fps, best, T, dist) });
+  }
+  return { crop, grid: { width: W, height: H }, transitions };
+}
+
+// Is frame b frame a shifted and scaled (a camera move, not a new picture)?
+// Search on a half-size grid: scale in five steps, shift up to 30% of the side.
+function warpExplains(a, b, w, h, limit) {
+  const hw = Math.floor(w / 2), hh = Math.floor(h / 2);
+  const A = shrink(a, w, h, hw, hh), B = shrink(b, w, h, hw, hh);
+  const raw = meanAbs(A, B);
+  let best = raw;
+  const rx = Math.round(hw * 0.3), ry = Math.round(hh * 0.3);
+  for (const s of [1 / 1.3, 1 / 1.15, 1, 1.15, 1.3]) for (let dy = -ry; dy <= ry; dy += 1) for (let dx = -rx; dx <= rx; dx += 1) {
+    if (s === 1 && !dx && !dy) continue;
+    let sum = 0, n = 0;
+    for (let y = 0; y < hh; y += 2) for (let x = 0; x < hw; x += 2) {
+      const sxp = Math.round((x - hw / 2) / s + hw / 2 - dx), syp = Math.round((y - hh / 2) / s + hh / 2 - dy);
+      if (sxp < 0 || syp < 0 || sxp >= hw || syp >= hh) continue;
+      sum += Math.abs(B[y * hw + x] - A[syp * hw + sxp]); n += 1;
+    }
+    if (n > hw * hh / 8) best = Math.min(best, sum / n);
+  }
+  return best < limit * raw;
+}
+
+function classifySpan(frames, W, H, fps, { s, e, a, b, half }, T, dist) {
+  const A = frames[s], B = frames[e];
+  const norm = Math.max(1, meanAbs(A, B));
+  const middle = [];
+  for (let t = Math.min(a, b); t <= Math.max(a, b); t += 1) if (t > s && t < e) middle.push(t);
+  const seconds = Math.max(0, b - a + 1) / fps;
+  // Dip through a flat black or white frame.
+  // Spread is 1.4826 × the median absolute deviation (the std of a flat
+  // frame's noise), so sparks and streaks over the cover do not count.
+  for (const t of middle) {
+    const m = frameMedian(frames[t]);
+    if (robustSpread(frames[t]) < T.dip.flatStd && (m < T.dip.dark || m > T.dip.light)) return { kind: 'dip', via: m < T.dip.dark ? 'black' : 'white' };
+  }
+  if (seconds >= T.flash.minSpan && middle.length) {
+    const peak = Math.max(...middle.map((t) => frameMean(frames[t])));
+    if (peak > T.flash.peak && peak > frameMean(A) + T.flash.lift && peak > frameMean(B) + T.flash.lift) return { kind: 'flash' };
+  }
+  // Not in the RFC: a dip through a patterned cover (a halftone grid, a
+  // pattern card): a middle frame far from both pictures.
+  const away = Math.max(0, ...middle.map((t) => Math.min(meanAbs(frames[t], A), meanAbs(frames[t], B)) / norm));
+  if (away >= T.dip.cover) return { kind: 'dip', via: 'pattern' };
+  // A hard cut: one frame pair goes from the old picture (progress ≤ 0.12)
+  // to the new (≥ 0.88); an eased push can be as short, but passes through.
+  const progress = (t) => { const x = dist(t, s), y = dist(t, e); return x + y > 0 ? x / (x + y) : 0; };
+  let hard = false;
+  for (let t = s + 1; t <= e && !hard; t += 1) hard = progress(t - 1) <= T.tightenLow && progress(t) >= T.tightenHigh;
+  if (hard && seconds < T.cutSpan) return { kind: 'cut' };
+  if (middle.length < 2) return { kind: 'other' };
+  const iris = irisFit(frames, W, H, s, e, middle, norm);
+  if (Math.abs(iris.r) >= T.iris.correlation && iris.residual <= T.iris.residual) return { kind: 'iris', direction: iris.r > 0 ? 'open' : 'close' };
+  const blend = middle.map((t) => blendFit(frames[t], A, B));
+  const blendResidual = median(blend.map((x) => x.residual)) / norm;
+  const edge = edgeFit(frames, W, H, A, B, middle, norm, T.edge);
+  // A smeared picture is not a clean wipe: it goes on to the motion tests.
+  if (edge && edge.residual <= T.edge.residual && edge.residual < T.edge.vsBlend * blendResidual && !(edge.mode === 'wipe' && edge.sharpness < T.whip.sharpness)) {
+    // A slide smeared by motion blur is a whip.
+    return { kind: edge.mode !== 'wipe' && edge.sharpness < T.whip.sharpness ? 'whip' : edge.mode, direction: edge.direction };
+  }
+  const motion = spanMotion(frames, W, H, s, e);
+  if (motion.rotation >= T.spin.degrees && Math.abs(motion.netRotation) >= T.spin.net * motion.rotation) return { kind: 'spin' };
+  if (Math.abs(motion.netLogScale) >= T.zoom.net && Math.abs(motion.netLogScale) >= T.zoom.consistent * motion.logScale) return { kind: 'zoom', direction: motion.netLogScale > 0 ? 'in' : 'out' };
+  const base = Math.min(detail(A, W, H), detail(B, W, H));
+  const sharpness = base > 0 ? Math.min(...middle.map((t) => detail(frames[t], W, H))) / base : 1;
+  if (motion.net >= T.whip.net && motion.path < T.whip.path * motion.net && sharpness < T.whip.sharpness) return { kind: 'whip', direction: motion.direction };
+  if (motion.path >= T.shake.path && motion.path > T.shake.net * motion.net) return { kind: 'shake' };
+  const near = [half - 1, half].filter((t) => t > s && t < e);
+  if (near.length === 2 && detail(frames[near[0]], W, H) < T.blur * detail(A, W, H) && detail(frames[near[1]], W, H) < T.blur * detail(B, W, H)) return { kind: 'blur' };
+  if (blendResidual < T.dissolve.residual && correlation(middle, blend.map((x) => x.alpha)) > T.dissolve.rise) return { kind: 'dissolve' };
+  let swings = 0, peak = 0, falling = false;
+  for (const t of middle) {
+    const p = dist(t, s) / Math.max(1e-6, dist(t, s) + dist(t, e));
+    if (p > peak) { peak = p; falling = false; } else if (!falling && peak - p >= T.glitch.drop) { swings += 1; falling = true; peak = p; }
+  }
+  if (swings >= T.glitch.swings) return { kind: 'glitch' };
+  return { kind: 'other' };
+}
+
+// frame ≈ A + α(B − A): the best α and the mean abs residual.
+function blendFit(f, A, B) {
+  let num = 0, den = 0;
+  for (let k = 0; k < f.length; k += 1) { const d = B[k] - A[k]; num += (f[k] - A[k]) * d; den += d * d; }
+  const alpha = den > 0 ? Math.max(0, Math.min(1, num / den)) : 0;
+  let r = 0;
+  for (let k = 0; k < f.length; k += 1) r += Math.abs(f[k] - A[k] - alpha * (B[k] - A[k]));
+  return { alpha, residual: r / f.length };
+}
+
+// Per cell of the thumb grid, the frame it turns from old to new; the turn
+// time against the distance from the centre (r), and how well "new inside,
+// old outside" explains the middle frames (residual, ÷ the A–B change).
+function irisFit(frames, W, H, s, e, middle, norm) {
+  const A = frames[s], B = frames[e];
+  const cell = Math.max(2, Math.round(Math.min(W, H) / 12));
+  const turns = [], radii = [];
+  const cx = W / 2, cy = H / 2;
+  const cells = [];
+  for (let y = 0; y + cell <= H; y += cell) for (let x = 0; x + cell <= W; x += cell) cells.push([x, y]);
+  const cellDiff = (f, g, x, y) => { let d = 0; for (let j = 0; j < cell; j += 1) for (let i = 0; i < cell; i += 1) { const k = (y + j) * W + x + i; d += Math.abs(f[k] - g[k]); } return d / (cell * cell); };
+  const turned = new Map();
+  for (const [x, y] of cells) {
+    if (cellDiff(A, B, x, y) < 10) continue;
+    let turn = null, flips = 0, prev = false;
+    for (let t = s; t <= e; t += 1) {
+      const isNew = cellDiff(frames[t], B, x, y) < cellDiff(frames[t], A, x, y);
+      if (isNew !== prev) { flips += 1; prev = isNew; if (isNew && turn === null) turn = t; }
+    }
+    if (turn === null || flips > 1) continue;
+    turns.push(turn); radii.push(Math.hypot(x + cell / 2 - cx, y + cell / 2 - cy) / Math.hypot(cx, cy));
+    turned.set(`${x},${y}`, turn);
+  }
+  if (turns.length < cells.length * 0.3) return { r: 0, residual: Infinity };
+  const r = correlation(radii, turns);
+  const residuals = middle.map((t) => {
+    let d = 0;
+    for (const [x, y] of cells) { const turn = turned.get(`${x},${y}`); d += cellDiff(frames[t], turn !== undefined && turn <= t ? B : A, x, y); }
+    return d / cells.length;
+  });
+  return { r, residual: median(residuals) / norm };
+}
+
+// A straight edge travelling across the frame: wipe (both pictures still),
+// push (both move), cover (the new one slides over) or reveal (the old one
+// slides off). The best mode and direction by median residual over the
+// middle frames, with the edge position rising and travelling far enough.
+function edgeFit(frames, W, H, A, B, middle, norm, E) {
+  const results = [];
+  const comp = new Float32Array(W * H), best = new Float32Array(W * H);
+  for (const direction of ['right', 'left', 'down', 'up']) {
+    const horizontal = direction === 'right' || direction === 'left';
+    const side = horizontal ? W : H;
+    for (const mode of ['wipe', 'push', 'cover', 'reveal']) {
+      const qs = [], res = [], sharp = [];
+      for (const t of middle) {
+        const f = frames[t];
+        let bestR = Infinity, bestQ = 0;
+        for (let p = 0; p < E.positions; p += 1) {
+          const q = p / (E.positions - 1), edge = Math.round(q * side);
+          for (let y = 0; y < H; y += 1) for (let x = 0; x < W; x += 1) {
+            // u: distance along the travel from the side the new picture enters.
+            const u = direction === 'right' ? x : direction === 'left' ? W - 1 - x : direction === 'down' ? y : H - 1 - y;
+            let src, uu;
+            if (u < edge) { src = B; uu = mode === 'push' || mode === 'cover' ? u + side - edge : u; }
+            else { src = A; uu = mode === 'push' || mode === 'reveal' ? u - edge : u; }
+            const sx = horizontal ? (direction === 'right' ? uu : W - 1 - uu) : x, sy = horizontal ? y : (direction === 'down' ? uu : H - 1 - uu);
+            comp[y * W + x] = src[sy * W + sx];
+          }
+          // One gain per frame: a glow or an exposure dip over the move.
+          let fc = 0, cc = 0;
+          for (let k = 0; k < comp.length; k += 1) { fc += f[k] * comp[k]; cc += comp[k] * comp[k]; }
+          const g = cc > 0 ? fc / cc : 1;
+          let sum = 0, plain = 0;
+          for (let k = 0; k < comp.length; k += 1) { sum += Math.abs(f[k] - g * comp[k]); plain += Math.abs(f[k] - comp[k]); }
+          const r = Math.min(sum, plain) / (W * H);
+          if (r < bestR) { bestR = r; bestQ = q; best.set(comp); }
+        }
+        qs.push(bestQ); res.push(bestR);
+        const d = detail(best, W, H);
+        sharp.push(d > 0 ? detail(f, W, H) / d : 1);
+      }
+      const rise = correlation(middle, qs), travel = Math.max(...qs) - Math.min(...qs);
+      if (rise >= E.rise && travel >= E.travel) results.push({ mode, direction, residual: median(res) / norm, sharpness: Math.min(...sharp) });
+    }
+  }
+  if (!results.length) return null;
+  const wipe = results.filter((x) => x.mode === 'wipe').sort((x, y) => x.residual - y.residual)[0];
+  // Cover and reveal (one picture moves) must beat push (both move) by the
+  // same margin a moving mode needs over a wipe: near ties read as push.
+  const push = results.filter((x) => x.mode === 'push').sort((x, y) => x.residual - y.residual)[0];
+  const single = results.filter((x) => x.mode === 'cover' || x.mode === 'reveal').sort((x, y) => x.residual - y.residual)[0];
+  const moving = push && (!single || single.residual >= (1 - E.moveBeat) * push.residual) ? push : single;
+  if (!wipe) return moving;
+  return moving && moving.residual < (1 - E.moveBeat) * wipe.residual ? moving : wipe;
+}
+
+// Whole-frame motion across the span from consecutive frame pairs: a
+// similarity (shift, scale, rotation) fitted to block matches on the work
+// grid. Shifts are fractions of the short side. → {net, path, direction,
+// logScale, netLogScale, rotation, netRotation (degrees)}
+function spanMotion(frames, W, H, s, e) {
+  const block = 6, radius = 6;
+  const sads = new Float64Array((2 * radius + 1) ** 2);
+  const buffer = new Uint8Array(W * H * 2);
+  let nx = 0, ny = 0, path = 0, logScale = 0, netLogScale = 0, rotation = 0, netRotation = 0;
+  for (let t = s + 1; t <= e; t += 1) {
+    for (let k = 0; k < W * H; k += 1) { buffer[k] = frames[t - 1][k]; buffer[W * H + k] = frames[t][k]; }
+    const matches = [];
+    for (let y = radius; y + block + radius <= H; y += block) for (let x = radius; x + block + radius <= W; x += block) {
+      if (blockTexture(buffer, 0, W, x, y, block) < 4) continue;
+      const m = searchBlock(buffer, 0, W * H, W, x, y, block, radius, sads);
+      if (m.bestSad > 24 * block * block) continue;
+      matches.push({ x: x + block / 2, y: y + block / 2, dx: m.bestDx + m.ox, dy: m.bestDy + m.oy });
+    }
+    if (matches.length < 6) continue;
+    const fit = fitSimilarity(matches, W / 2, H / 2);
+    const short = Math.min(W, H);
+    nx += fit.tx / short; ny += fit.ty / short; path += Math.hypot(fit.tx, fit.ty) / short;
+    const ls = Math.log(Math.max(0.2, fit.scale));
+    logScale += Math.abs(ls); netLogScale += ls;
+    const deg = fit.angle * 180 / Math.PI;
+    rotation += Math.abs(deg); netRotation += deg;
+  }
+  const net = Math.hypot(nx, ny);
+  // Content moving right means the camera whips left; report the content's travel.
+  const direction = Math.abs(nx) >= Math.abs(ny) ? (nx > 0 ? 'right' : 'left') : (ny > 0 ? 'down' : 'up');
+  return { net, path, direction, logScale, netLogScale, rotation, netRotation };
+}
+
+// Least squares d = t + a·(p − c) + b·perp(p − c), outliers over 2 px dropped once.
+function fitSimilarity(matches, cx, cy) {
+  const solve = (list) => {
+    const n = list.length;
+    let mx = 0, my = 0, mdx = 0, mdy = 0;
+    for (const m of list) { mx += m.x - cx; my += m.y - cy; mdx += m.dx; mdy += m.dy; }
+    mx /= n; my /= n; mdx /= n; mdy /= n;
+    let sa = 0, sb = 0, den = 0;
+    for (const m of list) {
+      const x = m.x - cx - mx, y = m.y - cy - my, dx = m.dx - mdx, dy = m.dy - mdy;
+      sa += x * dx + y * dy; sb += x * dy - y * dx; den += x * x + y * y;
+    }
+    const a = den > 0 ? sa / den : 0, b = den > 0 ? sb / den : 0;
+    return { a, b, tx: mdx - a * mx + b * my, ty: mdy - b * mx - a * my };
+  };
+  let fit = solve(matches);
+  const kept = matches.filter((m) => { const x = m.x - cx, y = m.y - cy; return Math.hypot(m.dx - fit.tx - fit.a * x + fit.b * y, m.dy - fit.ty - fit.b * x - fit.a * y) <= 2; });
+  if (kept.length >= 6) fit = solve(kept);
+  return { tx: fit.tx, ty: fit.ty, scale: Math.hypot(1 + fit.a, fit.b), angle: Math.atan2(fit.b, 1 + fit.a) };
+}
+
+/**
+ * Classify the transitions of a video file. Two decodes: 48 grey frames
+ * spread through the video find the picture inside any letterbox
+ * (pictureCrop), then ffmpeg crops that picture and scales it straight to
+ * the work grid at 30 fps, so a letterboxed copy is read from the same
+ * pixels. → {crop (source px), grid, transitions, duration_seconds}
+ */
+export async function analyzeTransitionsFile(videoPath, options = {}, adapters = {}) {
+  const resolved = path.resolve(videoPath);
+  const run = adapters.run ?? runCommand;
+  const runRaw = adapters.runRaw ?? ((command, args) => execFileAsync(command, args, { encoding: null, maxBuffer: 1024 * 1024 * 1024 }));
+  const probe = JSON.parse((await run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height:format=duration", "-of", "json", resolved])).stdout);
+  const { width: vw, height: vh } = probe.streams?.[0] ?? {};
+  const duration = Number(probe.format?.duration);
+  if (!vw || !vh) throw new Error(`No video stream found: ${resolved}`);
+  const T = TRANSITION_CLASSIFY;
+  const even = (v) => Math.max(2, 2 * Math.round(v / 2));
+  const cropLong = Math.min(Math.max(vw, vh), T.crop.longSide);
+  const sw = vw >= vh ? cropLong : even(cropLong * vw / vh), sh = vw >= vh ? even(cropLong * vh / vw) : cropLong;
+  const sampleRate = Number.isFinite(duration) && duration > 0 ? T.crop.samples / duration : 1;
+  const samples = await runRaw("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", resolved, "-vf", `fps=${sampleRate},scale=${sw}:${sh}:flags=area,format=gray`, "-an", "-f", "rawvideo", "pipe:1"]);
+  const small = pictureCrop(Buffer.from(samples.stdout ?? []), sw, sh);
+  // Rounded inward, so no letterbox bar bleeds into the picture.
+  const x0 = Math.ceil(small.x * vw / sw), y0 = Math.ceil(small.y * vh / sh);
+  const crop = { x: x0, y: y0, width: Math.min(vw, Math.floor((small.x + small.width) * vw / sw)) - x0, height: Math.min(vh, Math.floor((small.y + small.height) * vh / sh)) - y0 };
+  const portrait = crop.height >= crop.width;
+  const long = Math.max(T.workShortSide, Math.round(T.workShortSide * Math.max(crop.width, crop.height) / Math.min(crop.width, crop.height)));
+  const W = portrait ? T.workShortSide : long, H = portrait ? long : T.workShortSide;
+  const raw = await runRaw("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", resolved, "-vf", `fps=${T.fps},crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},scale=${W}:${H}:flags=area,format=gray`, "-an", "-f", "rawvideo", "pipe:1"]);
+  const buffer = Buffer.from(raw.stdout ?? []);
+  const result = classifyTransitions(buffer, W, H, T.fps, { ...options, cropped: true });
+  return { ...result, crop, duration_seconds: round(buffer.length / (W * H) / T.fps, 3) };
+}

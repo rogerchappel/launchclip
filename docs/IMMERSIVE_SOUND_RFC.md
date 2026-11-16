@@ -198,8 +198,17 @@ error-buzz with hit). On our own kit, 381 of 1,259 family × palette × variant
 sounds land in their row: synthetic keys, clicks and ticks are tonal enough
 to read as ding, and many impacts as pop. So the family-name test (media
 suite) checks against `test/fixtures/sfx-classify-baseline.json` and fails
-when a sound leaves its row, not until every sound is in it. Tightening the
-rules for synthetic sounds, or the families that miss, is open.
+when a sound leaves its row, not until every sound is in it.
+
+**Merged with the plan-and-pace scan.** The reference-audio scan
+(docs/PLAN_AND_PACE_RFC.md §4.3) recalibrated the same rules for our band
+limited kit, and those won: one rule set (`SFX_TYPE_RULES`, `sfxType`), one
+measure (`sfxFeatures`, with tonality in place of peak/mean) and one family
+table (`FAMILY_TYPE`) in `src/sfx/classify.js`. The table differs from the
+one above: page-turn is a whoosh, snap a click, and riser, tally,
+tape-stop, glitch, error-buzz and pen-scribble have no single type (null),
+so no hit row is expected. 689 of the 1,029 typed sounds now land in their
+row (397 under the RFC thresholds).
 `kit/core/sound/pairs.mjs` holds the pairs (sparkle joins shimmer and ping,
 and a pop row for the spawn and pickup effects, as the VFX catalogue pairs
 them); `finish` runs the check on the bound cues and reports it as warnings

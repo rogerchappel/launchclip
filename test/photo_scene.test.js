@@ -104,3 +104,40 @@ test('photo-scene is registered in both renderers and the planner', () => {
   assert.match(readFileSync(path.join(ROOT, 'kit/remotion/catalog/registry-d.ts'), 'utf8'), /'photo-scene': PhotoScene/);
   assert.match(readFileSync(path.join(ROOT, 'skills/launchclip-create-video/references/storyboard-modules.md'), 'utf8'), /### photo-scene \(keeps captions\)/);
 });
+
+test('type over footage sits on a dark local grade, heavy and large, whatever the brand', async () => {
+  const {FOOTAGE_TEXT} = await import('@launchclip/core/catalog-d-photo-scene.mjs');
+  const {contrast} = await import('@launchclip/core/panels.mjs');
+  // A pale brand (paper is its dark text colour): the scrim is no longer its background washed over the shot.
+  const pale = {...brand, colors: {bg: '#e5fcfc', primary: '#0f766e', accent: '#b45309', ink: '#e5fcfc', paper: '#14201f'}};
+  const s = scene({lines: ['Never oil it', 'Hot in full sun']});
+  const model = resolveModule(s, story(s, {brand: pale}));
+  assert.equal(model.content.scrimColor, '#14201f', 'the darkest brand colour, dark enough to grade with');
+  for (const line of model.content.lines) {
+    assert.equal(line.color, '#e5fcfc');
+    assert.ok(contrast(line.color, model.content.scrimColor) >= 4.5);
+    assert.ok(line.size >= FOOTAGE_TEXT.minPx, `${line.text} at ${line.size} px`);
+  }
+  assert.equal(model.layout.textWeight, FOOTAGE_TEXT.weight);
+  // An emphasis line reads at 4.5:1 on the grade too, lifted from the primary when the primary itself does not.
+  const em = scene({lines: ['Never oil it', {text: 'Hot in full sun', emphasis: true}]});
+  const emphasised = resolveModule(em, story(em, {brand: pale})).content.lines[1].color;
+  assert.notEqual(emphasised, pale.colors.primary);
+  assert.ok(contrast(emphasised, '#14201f') >= 4.5, emphasised);
+  const view = photoSceneView(model);
+  const lineNode = JSON.stringify(view.overlay);
+  assert.match(lineNode, /"fontWeight":700/);
+  // A brand with no dark colour grades with near-black and sets the lines in white.
+  const bright = {...brand, colors: {bg: '#f4f4f4', primary: '#0f766e', accent: '#b45309', ink: '#f4f4f4', paper: '#777777'}};
+  const lit = resolveModule(s, story(s, {brand: bright}));
+  assert.equal(lit.content.scrimColor, FOOTAGE_TEXT.fallback);
+  assert.ok(contrast(lit.content.lines[0].color, FOOTAGE_TEXT.fallback) >= 4.5);
+  // A dark brand keeps its own background as the grade, as before.
+  assert.equal(resolve({lines: ['Dawn']}).content.scrimColor, brand.colors.bg);
+  // In portrait, a left block widens before it goes under the floor; a line too long even then fails rather than shrinking.
+  const portrait = {width: 1080, height: 1920, fps: 30, duration: 12};
+  const wide = scene({lines: ['Nobody else for miles']});
+  assert.ok(resolveModule(wide, story(wide, {format: portrait})).content.lines[0].size >= FOOTAGE_TEXT.minPx);
+  const long = scene({lines: ['W'.repeat(40)]});
+  assert.throws(() => resolveModule(long, story(long, {format: portrait})), /lines\[0\]/);
+});

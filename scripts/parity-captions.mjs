@@ -3,8 +3,9 @@
 //
 //   node scripts/parity-captions.mjs [preset ...] [--out qa/parity-captions]
 //
-// Each fixture in test/fixtures/parity-captions/<preset>.json is
-// {preset, overlay?, times, threshold?}. The harness takes the minimal golden
+// Each fixture in test/fixtures/parity-captions/<name>.json is
+// {preset, name?, brand?, overlay?, times, threshold?} (name: the report's
+// folder when one preset has several fixtures; brand: colours over the story's). The harness takes the minimal golden
 // story (examples/story/minimal: two modules and its NARRATION.json), sets its
 // captions overlay to the fixture's preset and options, compiles it with the
 // HyperFrames story compiler and snapshots the sampled times (word boundaries
@@ -35,6 +36,7 @@ export async function captionStory(fixture) {
   const words = JSON.parse(await readFile(path.join(BASE_STORY, 'NARRATION.json'), 'utf8')).words;
   delete story.audio.mix;
   story.overlays = [{type: 'captions', preset: fixture.preset, ...(fixture.overlay ?? {})}];
+  if (fixture.brand?.colors) story.brand = {...story.brand, colors: {...story.brand.colors, ...fixture.brand.colors}};
   return {story: resolveStory(story, {words}), words, chunks: chunkWords(words)};
 }
 
@@ -46,9 +48,9 @@ export async function runCaptionParity(fixture, {out, bundle, browser} = {}) {
   const {compileStoryToHyperFrames} = await import(pathToFileURL(path.join(ROOT, 'kit', 'hyperframes', 'story-compiler.mjs')).href);
   const {selectComposition, renderStill} = await import('@remotion/renderer');
   const threshold = {...DEFAULT_THRESHOLD, ...(fixture.threshold ?? {})};
-  const outDir = path.resolve(out ?? path.join(ROOT, 'qa', 'parity-captions', fixture.preset));
+  const outDir = path.resolve(out ?? path.join(ROOT, 'qa', 'parity-captions', fixture.name ?? fixture.preset));
   await mkdir(outDir, {recursive: true});
-  const work = await mkdtemp(path.join(os.tmpdir(), `launchclip-caption-parity-${fixture.preset}-`));
+  const work = await mkdtemp(path.join(os.tmpdir(), `launchclip-caption-parity-${fixture.name ?? fixture.preset}-`));
   try {
     const {story, chunks} = await captionStory(fixture);
     const source = path.join(work, 'source');
@@ -70,7 +72,7 @@ export async function runCaptionParity(fixture, {out, bundle, browser} = {}) {
       await sideBySide(hf[i], rm, side, diff);
       results.push({name: sample.name, time: sample.time, ssim: metrics.ssim, psnr: metrics.psnr, pass: metrics.ssim >= threshold.ssim, sideBySide: path.basename(side)});
     }
-    const report = {preset: fixture.preset, fixture: path.relative(ROOT, fixture.file ?? ''), threshold, warnings: compiled.warnings, minSsim: Math.min(...results.map((entry) => entry.ssim)), pass: results.every((entry) => entry.pass), samples: results};
+    const report = {preset: fixture.name ?? fixture.preset, fixture: path.relative(ROOT, fixture.file ?? ''), threshold, warnings: compiled.warnings, minSsim: Math.min(...results.map((entry) => entry.ssim)), pass: results.every((entry) => entry.pass), samples: results};
     await writeFile(path.join(outDir, 'report.json'), `${JSON.stringify(report, (key, value) => (value === Infinity ? 'inf' : value), 2)}\n`);
     return {...report, outDir};
   } finally {
@@ -89,7 +91,7 @@ export async function runCaptionParitySuite(fixtures, {out = path.join(ROOT, 'qa
   const reports = [];
   try {
     for (const fixture of fixtures) {
-      const report = await runCaptionParity(fixture, {out: path.join(out, fixture.preset), bundle, browser});
+      const report = await runCaptionParity(fixture, {out: path.join(out, fixture.name ?? fixture.preset), bundle, browser});
       reports.push(report);
       onReport?.(report);
     }
@@ -106,7 +108,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   const out = outIndex >= 0 ? path.resolve(args[outIndex + 1]) : undefined;
   const wanted = args.filter((arg, index) => !arg.startsWith('--') && index !== outIndex + 1);
   const all = await captionFixtures();
-  const fixtures = wanted.length ? all.filter((fixture) => wanted.includes(fixture.preset)) : all;
+  const fixtures = wanted.length ? all.filter((fixture) => wanted.includes(fixture.preset) || wanted.includes(fixture.name)) : all;
   if (!existsSync(DEFAULT_ENTRY)) throw new Error(`Remotion entry not found: ${DEFAULT_ENTRY}`);
   const reports = await runCaptionParitySuite(fixtures, {out, onReport: (report) => process.stdout.write(`${report.pass ? 'PASS' : 'FAIL'} ${report.preset.padEnd(16)} min ssim ${report.minSsim.toFixed(4)}\n`)});
   process.exitCode = reports.every((report) => report.pass) ? 0 : 1;

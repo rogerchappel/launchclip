@@ -203,7 +203,7 @@ seed or a planner default.
 - *Backgrounds:* `rings` (one ring leaves the centre on each beat: a scale
   glide per ring, a beat apart, wrapping past the corners), `bokeh` (discs
   with light-sweep's falloff, drifting), `motif` shapes `checker` and
-  `grid`, and `sweep` on `light-rays`. 19 `BACKGROUND_KINDS`.
+  `grid`, and `sweep` on `light-rays`. 20 `BACKGROUND_KINDS` with the weather kind.
 - *Tests and parity:* `test/css_transitions.test.js`,
   `test/behaviours.test.js` (GSAP seeking the compiled lines equals the ops
   state on every frame), the transition-frame check over every new type, the

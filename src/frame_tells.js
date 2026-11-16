@@ -8,6 +8,8 @@
 // - media: each media window the layout check placed (role "media", not
 //   full frame, not the footage base), at the middle of its time, at full
 //   size so its edge strips are sharp (unblended-media).
+// - texts: each text element over media (a window, a full-frame shot or the
+//   footage base) at the middle of its time, at full size (thin-text-on-footage).
 // - plates: each image or video plate dimmed over TELLS.rasterDim, read from
 //   its asset (media_presence's grey frames): the edge share as it is, and
 //   with the edge step scaled up by 1 / (1 - dim), which is what the dim
@@ -40,6 +42,10 @@ export function dimmedPlates(story) {
   return out;
 }
 
+// shortcut: at most this many text-over-footage frames are read; sample by scene if a long video needs more.
+const FOOTAGE_TEXT_SAMPLES = 24;
+const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
 export async function measureFrameTells(project, video, story, { rects = [], frame = videoFrame, decode = decodeFrames } = {}) {
   const width = Number(story.format.width), height = Number(story.format.height);
   const quarter = { width: 2 * Math.round(width / 8), height: 2 * Math.round(height / 8) };
@@ -56,6 +62,15 @@ export async function measureFrameTells(project, video, story, { rects = [], fra
     const at = (Number(element.start) + Number(element.end)) / 2;
     if (Number.isFinite(at)) media.push({ id: element.id, at, rect: element.rect, image: await frame(video, at, { width, height }) });
   }
+  // Text over footage (thin-text-on-footage): each text element over media at its time, at full size.
+  const footage = rects.filter((element) => element.role === "media" && element.rect);
+  const texts = [];
+  for (const element of rects) {
+    if ((element.role !== "text" && element.role !== "hero") || !element.rect || !(element.minTextPx > 0)) continue;
+    const under = footage.some((m) => m.start < element.end && m.end > element.start && overlaps(m.rect, element.rect));
+    const at = (Number(element.start) + Number(element.end)) / 2;
+    if (under && Number.isFinite(at) && texts.length < FOOTAGE_TEXT_SAMPLES) texts.push({ id: element.id, at, rect: element.rect, size: element.minTextPx, weight: element.textWeight ?? null, image: await frame(video, at, { width, height }) });
+  }
   const plates = [];
   for (const plate of dimmedPlates(story)) {
     if (path.isAbsolute(plate.src) || plate.src.split(/[\\/]/).includes("..")) continue;
@@ -67,5 +82,5 @@ export async function measureFrameTells(project, video, story, { rects = [], fra
     const dimmed = mediaPresenceFacts(decoded.frames, { ...grid, edgeLevel: MEDIA_PRESENCE.edgeLevel / (1 - plate.dim) })?.detail ?? 0;
     plates.push({ ...plate, raw, dimmed, minimum: MEDIA_PRESENCE.minimumEdgeShare });
   }
-  return frameTells({ story, frames, media, plates });
+  return frameTells({ story, frames, media, plates, texts });
 }

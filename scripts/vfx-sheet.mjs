@@ -3,8 +3,8 @@
 // at six times through its life (one row each), drawn by the same painter and
 // fixed-step driver the renderers use, over a dark background, once per
 // palette: the effect's own and ramps from two brand colours. The `pixel`
-// render, scaled up nearest-neighbour. A fourth sheet shows the screen
-// transitions. A human looks at it before a batch of
+// render, scaled up nearest-neighbour. Further sheets show the screen
+// transitions and the weather loops (their own palette and an amber ramp). A human looks at it before a batch of
 // effects merges.
 //
 //   node scripts/vfx-sheet.mjs [--out qa/vfx] [--scale 2]
@@ -12,7 +12,7 @@ import {spawnSync} from 'node:child_process';
 import {mkdirSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {VFX_MODULES, VFX_TRANSITIONS} from '@launchclip/core/vfx/catalog.mjs';
+import {VFX_MODULES, VFX_TRANSITIONS, VFX_WEATHER} from '@launchclip/core/vfx/catalog.mjs';
 import {rampOf} from '@launchclip/core/vfx/plan.mjs';
 import {clearFrame, composite, createFrame, drawVfx, painterFor, resolveOptions} from '@launchclip/core/vfx/driver.mjs';
 
@@ -60,4 +60,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const file = path.join(out, 'sheet-transitions.png');
   writePng(sheetPixels(null, TRANSITION_MODULES, [320, 180]), file, scale);
   console.log(`wrote ${file} (rows: ${Object.keys(TRANSITION_MODULES).join(', ')})`);
+  for (const [name, palette] of [['own', null], ['amber', SHEET_PALETTES.amber]]) {
+    const weather = path.join(out, `sheet-weather-${name}.png`);
+    writePng(sheetPixels(palette, VFX_WEATHER, [320, 180]), weather, scale);
+    console.log(`wrote ${weather} (rows: ${Object.keys(VFX_WEATHER).join(', ')})`);
+  }
 }
