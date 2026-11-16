@@ -23,6 +23,8 @@ export const STORY_CAMERA_MODES = ["cuts", "world"];
 export const STORY_CAMERA_LAYOUTS = ["row", "column", "grid", "path", "auto"];
 // story.motion.grammar presets (kit/core/grammar.mjs GRAMMAR_NAMES).
 // What a scene hit's moment asks the sound score for (kit/core/sound/options.mjs SCORE_MOMENTS; kept in step by test/sound_score.test.js).
+/** Effects a scene's vfx cues may name (kit/core/vfx/catalog.mjs VFX_EFFECT_NAMES, kept here so this file stays import-free). */
+export const STORY_VFX_EFFECTS = ["hit-spark", "crit-hit", "impact-frame", "ground-slam", "small-explosion", "smoke-bomb", "firework-burst", "poof", "sunburst", "collect-burst"];
 export const STORY_MOMENTS = ["letdown", "promise", "reveal", "impact", "crystallise", "wonder", "miss", "resolve"];
 export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "documentary", "cinematic"];
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
@@ -734,6 +736,28 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (hit.moment !== undefined && !STORY_MOMENTS.includes(hit.moment)) err(`${hitPath}.moment must be one of ${STORY_MOMENTS.join(", ")}`);
       }
     }
+    // VFX cues (kit/core/vfx/plan.mjs): an effect on the frame's art-pixel canvas, timed like a hit.
+    if (scene.vfx !== undefined) {
+      if (!Array.isArray(scene.vfx)) err(`${path}.vfx must be an array`);
+      else for (const [v, cue] of scene.vfx.entries()) {
+        const cuePath = `${path}.vfx[${v}]`;
+        if (!isObject(cue)) { err(`${cuePath} must be an object`); continue; }
+        if (!STORY_VFX_EFFECTS.includes(cue.effect)) err(`${cuePath}.effect must be one of ${STORY_VFX_EFFECTS.join(", ")}`);
+        if (cue.at === undefined) err(`${cuePath}.at is required`);
+        else {
+          const at = anchorField(cue.at, `${cuePath}.at`);
+          if (at !== null && start !== null && end !== null && (at < start - EPS || at > end + EPS)) warn(`${cuePath}.at (${at}) falls outside ${label} [${start}, ${end}]`);
+        }
+        if (cue.align !== undefined && cue.align !== "peak" && cue.align !== "start") err(`${cuePath}.align must be "peak" (the default: its brightest frame lands on at) or "start"`);
+        for (const axis of ["x", "y"]) if (cue[axis] !== undefined && !(typeof cue[axis] === "number" && cue[axis] >= 0 && cue[axis] <= 1)) err(`${cuePath}.${axis} must be a fraction of the frame between 0 and 1`);
+        if (cue.color !== undefined && !(typeof cue.color === "string" && (HEX.test(cue.color) || (isObject(story.brand?.colors) && HEX.test(String(story.brand.colors[cue.color])))))) err(`${cuePath}.color must name a brand colour (brand.colors) or be a #rrggbb colour`);
+        if (cue.seed !== undefined && !(Number.isInteger(cue.seed) && cue.seed > 0)) err(`${cuePath}.seed must be a positive integer`);
+        if (cue.flip !== undefined && typeof cue.flip !== "boolean") err(`${cuePath}.flip must be true or false`);
+        if (cue.angle !== undefined && !(typeof cue.angle === "number" && cue.angle >= -180 && cue.angle <= 180)) err(`${cuePath}.angle must be degrees between -180 and 180`);
+        if (cue.light !== undefined && !(typeof cue.light === "number" && cue.light >= 0 && cue.light <= 2)) err(`${cuePath}.light must be a number between 0 and 2`);
+        if (cue.sfx !== undefined && !nonEmpty(cue.sfx)) err(`${cuePath}.sfx must be "auto" (the effect's paired sound, the default), "none" or a sound family`);
+      }
+    }
     // Shot states (kit/core/shot-states.mjs checks the set and the module side).
     if (scene.states !== undefined) {
       if (!Array.isArray(scene.states) || scene.states.length < 1 || scene.states.length > 5) err(`${path}.states must be an array of 1–5 states (the scene itself is state 0)`);
@@ -1006,6 +1030,9 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
     if (scene.end !== undefined) scene.end = resolve(scene.end, `${path}.end`);
     if (Array.isArray(scene.hits)) scene.hits.forEach((hit, h) => {
       if (isObject(hit) && hit.at !== undefined) hit.at = resolve(hit.at, `${path}.hits[${h}].at`);
+    });
+    if (Array.isArray(scene.vfx)) scene.vfx.forEach((cue, v) => {
+      if (isObject(cue) && cue.at !== undefined) cue.at = resolve(cue.at, `${path}.vfx[${v}].at`);
     });
     if (Array.isArray(scene.states)) scene.states.forEach((state, s) => {
       if (isObject(state) && state.at !== undefined) state.at = resolve(state.at, `${path}.states[${s}].at`);

@@ -45,6 +45,7 @@ import { withSlot } from "./queue.js";
 import { getRenderer, resolveRendererName } from "./renderers/index.js";
 import { deriveBoundaries, resolveStory, storyBase, storyFormat } from "./story.js";
 import { storyChapters } from "@launchclip/core/story.mjs";
+import { vfxSounds } from "@launchclip/core/vfx/plan.mjs";
 import { ffmetadataChapters, youtubeChapterProblems, youtubeChapters } from "@launchclip/core/long-form.mjs";
 import { directionFileFor, moduleParamErrors, readScriptBeside, validateStory } from "./story_cli.js";
 import { ANIMATIC_FILE, ANIMATIC_VIDEO, writeAnimatic } from "./animatic.js";
@@ -257,7 +258,7 @@ function modelEventFor(model, event) {
  * Bind one SFX cue to every resolved hit (hit.cue, else the cue of the module
  * event it names, else a default from its event name; palette: true lets the
  * default reach the palette families) and to every module
- * event that carries a `cue`, plus a whoosh under push/whip/zoom transitions.
+ * event that carries a `cue`, every scene.vfx cue's sound on its peak, plus a whoosh under push/whip/zoom transitions.
  * A hit replaces the module event it names (cue "none" silences it).
  * Risers end on their moment. Cues of the same kind closer than 0.12 s merge,
  * and a long cue repeats no sooner than its gap and no more than its budget
@@ -287,6 +288,8 @@ export function bindCues(story, { models, palette = false } = {}) {
       const name = hit.cue ?? event?.cue ?? defaultCueFor(hit.event, { palette });
       raw.push({ name, at: hit.at, end: event?.endTime, source: "hit", shot: scene.id, event: hit.event, explicit: hit.cue !== undefined });
     }
+    // VFX cues (kit/core/vfx/plan.mjs): the effect's paired sound on its peak, like a hit.
+    for (const sound of vfxSounds({ scenes: [scene] })) raw.push({ name: sound.cue, at: sound.at, source: "hit", shot: scene.id, event: `vfx ${sound.effect}`, explicit: true });
     for (const event of Array.isArray(model?.events) ? model.events : []) {
       if (!event?.cue || !Number.isFinite(Number(event.time)) || silenced.has(event)) continue;
       raw.push({ name: event.cue, at: Number(event.time), end: Number.isFinite(Number(event.endTime)) ? Number(event.endTime) : undefined, source: "module-event", shot: scene.id, event: eventName(model, event) || event.role || "event" });
