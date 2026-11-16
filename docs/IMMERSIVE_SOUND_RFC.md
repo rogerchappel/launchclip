@@ -167,8 +167,10 @@ it feels wide.
   breath), a prelap or tail from 30 s, and no words inside a hush. After the mix,
   `measureDirecting` re-reads the mix file: each hush ≥ 18 dB under the mix
   median with a transient within 0.1 s of its end, and each prelap or tail
-  crossing half way on the right side of the cut (measured only where the two
-  scenes' bed levels differ by 3 dB or more). Failures are finish warnings; the
+  half way across (in dB) at least a quarter of its lead on the planned side of
+  the cut (the ramp is linear in gain, so the dB midpoint comes early). It is
+  measured only where the two scenes' bed levels differ by 3 dB or more, and a
+  loud cue on the cut can hide it: the whole mix is measured, not the bed alone. Failures are finish warnings; the
   results go in `qa/sfx.json` under `directing`. Pairing every sound with
   something on screen stays the phase 3 pairs check, run before directing moves cues.
 

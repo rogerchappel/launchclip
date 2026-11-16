@@ -70,6 +70,7 @@ export function sceneSoundProblems(sound, { path = "sound", first = false, last 
   if (sound.into !== undefined) {
     if (!SOUND_INTO.includes(sound.into)) err(`.into must be one of ${SOUND_INTO.join(", ")}`);
     else if (first) err(".into: the first scene has no cut into it");
+    else if (sound.into === "silence" && prevTail !== undefined) err(".into \"silence\" drops to nothing on the cut, so the scene before cannot ring over it (tail)");
     else if (sound.into === "silence" && sound.prelap !== undefined) err(".into \"silence\" drops to nothing on the cut, so the scene cannot also arrive early (prelap)");
   }
   if (sound.space !== undefined && !SOUND_SPACES.includes(sound.space)) err(`.space must be one of ${SOUND_SPACES.join(", ")}`);

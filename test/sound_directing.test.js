@@ -45,6 +45,7 @@ test("into: a known transition sound passes; an unknown one, the first scene, or
   assert.match(problems({ into: "boom" })[0], /into must be one of/);
   assert.match(problems({ into: "hit" }, { first: true })[0], /no cut into it/);
   assert.match(problems({ into: "silence", prelap: 0.3 })[0], /cannot also arrive early/);
+  assert.match(problems({ into: "silence" }, { prevTail: 0.3 })[0], /cannot ring over it/);
 });
 
 test("space and focus: the named values pass, anything else fails; unknown fields fail", () => {
@@ -92,6 +93,9 @@ test("directCues: nothing starts in a hush but what lands on it; a prelapped sce
     { cue: "pop", at: 3.1, shot: "s2" },
     { cue: "pop", at: 4.5, shot: "s2" }
   ], direct);
+  // A prelap that moves an arrival sound into a hush loses it there.
+  const into = directSound(story([scene("s1", 0, 3, { hush: { at: 2.8, for: 0.6 } }), scene("s2", 3, 6, { prelap: 0.6 })]));
+  assert.deepEqual(directCues([{ cue: "pop", at: 3.1, shot: "s2" }], into), []);
   assert.deepEqual(cues.map((cue) => [cue.cue, cue.at]), [["riser", 1.2], ["whoosh", 2.3], ["impact", 2.5], ["pop", 2.6], ["pop", 4.5]]);
 });
 

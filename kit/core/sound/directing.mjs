@@ -42,7 +42,7 @@ export const DIRECTING = Object.freeze({
   // The mix check: a hush sits ≥ 18 dB under the mix median and a transient lands within 0.1 s of its end.
   hushDepthDb: 18,
   hitWindow: 0.1,
-  // A prelap leads when the level change is at least half way across before the cut;
+  // A prelap leads when the level change is half way across (in dB) a quarter of its lead before the cut;
   // it is only measured when the two scenes differ by this much.
   contrastDb: 3
 });
@@ -153,17 +153,18 @@ export function directSound(story, { fps = 30 } = {}) {
 export function directCues(cues, direct) {
   if (!direct) return cues;
   const leads = new Map(direct.cuts.filter((cut) => cut.kind === 'prelap').map((cut) => [cut.shot, cut]));
-  return cues.flatMap((cue) => {
+  // Prelaps first, so a sound moved early into a hush is then kept out of it like any other.
+  const moved = cues.map((cue) => {
+    const at = Number(cue.at);
+    const lead = leads.get(cue.shot);
+    if (!lead || cue.source === 'typing' || cue.source === 'directing' || at < lead.cut - 0.5 || at >= lead.cut + DIRECTING.arrival) return cue;
+    return { ...cue, at: round3(Math.max(0, at - lead.lead)), ...(Number.isFinite(cue.lands_at) ? { lands_at: round3(cue.lands_at - lead.lead) } : {}), prelap: lead.lead };
+  });
+  return moved.filter((cue) => {
     const at = Number(cue.at);
     const lands = Number.isFinite(cue.lands_at) ? cue.lands_at : null;
-    const kept = cue.source === 'typing' || cue.align === 'peak' || cue.source === 'directing';
-    if (!kept && direct.hushes.some((hush) => at >= hush.from && at < hush.to - 1e-9 && !(lands !== null && Math.abs(lands - hush.to) < 0.05))) return [];
-    const lead = leads.get(cue.shot);
-    if (lead && cue.source !== 'typing' && cue.source !== 'directing' && at >= lead.cut - 0.5 && at < lead.cut + DIRECTING.arrival) {
-      const moved = round3(Math.max(0, at - lead.lead));
-      return [{ ...cue, at: moved, ...(lands !== null ? { lands_at: round3(lands - lead.lead) } : {}), prelap: lead.lead }];
-    }
-    return [cue];
+    if (cue.source === 'typing' || cue.align === 'peak' || cue.source === 'directing') return true;
+    return !direct.hushes.some((hush) => at >= hush.from && at < hush.to - 1e-9 && !(lands !== null && Math.abs(lands - hush.to) < 0.05));
   });
 }
 
@@ -216,7 +217,8 @@ export function measureDirecting(samples, rate, direct) {
     const contrast = 20 * Math.log10(cut.after / cut.before);
     if (Math.abs(contrast) < DIRECTING.contrastDb) { result.cuts.push({ cut: cut.cut, kind: cut.kind, planned: cut.lead, measured: null, ok: null }); continue; }
     const measured = changeLead(db, hop, win, cut);
-    const ok = measured !== null && (cut.kind === 'prelap' ? measured >= cut.lead / 2 : measured <= cut.lead / 2);
+    // The ramp is linear in gain, so it is half way in dB well before half its time (40% for +7 dB): ask for a quarter.
+    const ok = measured !== null && (cut.kind === 'prelap' ? measured >= cut.lead / 4 : measured <= cut.lead / 4);
     result.cuts.push({ cut: cut.cut, kind: cut.kind, planned: cut.lead, measured, ok });
     if (!ok) result.errors.push(`${cut.kind} at ${cut.cut} s (${cut.shot}): planned ${Math.abs(cut.lead)} s ${cut.kind === 'prelap' ? 'early' : 'late'}, measured ${measured === null ? 'no change' : `${round3(Math.abs(measured))} s ${measured >= 0 ? 'early' : 'late'}`}`);
   }
