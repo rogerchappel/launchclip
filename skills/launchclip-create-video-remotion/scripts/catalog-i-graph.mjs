@@ -249,6 +249,9 @@ export const nodeGraph = {
     tone: 'the hub and its pill: primary | accent (default) | paper | #rrggbb', title: 'string ≤ 60 (optional)', at: `build start: ${AT}`, converge: `every wire fires at once: ${AT}`,
     bpm: 'beats per minute for default timing, 60–200 (default 120): landings and pulses land on beats, converge on a bar line', variant: VARIANT_PARAM, rect: RECT},
   events: ['build', 'node-<id>', 'converge'], timing: timingRules({rules: ['the hub pops on the first beat after 0.5 s; nodes flock out from the middle of the fan outwards a quarter beat apart', 'a pulse lands on every beat once the wires are drawn; converge falls on the first bar line two beats after the last wire, or the last beat before the exit']}), variants: GRAPH_VARIANTS,
+  // Anchors (RFC §7, kit/core/anchors.mjs): the hub as it pops and at converge, each card as it lands.
+  anchors: model => [{name: 'hub', element: `${model.id}-hub`, event: 'build'}, {name: 'converge', element: `${model.id}-hub`, event: 'converge'},
+    ...model.content.nodes.map(n => ({name: `node-${n.id}`, element: `${model.id}-node-${n.id}`, event: `node-${n.id}`}))],
   resolve: graphResolve, view: graphView, timeline: graphTimeline
 };
 
