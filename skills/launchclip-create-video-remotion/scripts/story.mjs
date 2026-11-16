@@ -84,6 +84,9 @@ export const STORY_MEDIUM_KEYS = ["kind", "strength", "boil", "grain"];
 // step by test/look.test.js).
 export const STORY_LOOK_NAMES = ["none", "blueprint", "hologram", "thermal", "neon-night", "paper-cutout", "watercolour", "anime-cel", "ascii-terminal", "clay-2d", "isometric-layers"];
 export const STORY_LOOK_KEYS = ["name", "strength", "step", "furniture", "palette", "labels"];
+// story.grade presets (kit/core/grade.mjs GRADE_PRESET_NAMES; kept in step by
+// test/grade.test.js, which also runs gradeErrors against validateGrade).
+export const STORY_GRADE_PRESETS = ["clean", "warm-film", "teal-amber", "cool-tech", "neon-crush", "bleach", "ink-mono"];
 // story.light (kit/core/lighting.mjs LIGHT_PARAMS, LIGHT_PRESETS): ranges per
 // layer, kept in step by test/lighting.test.js.
 export const STORY_LIGHT_PRESETS = ["none", "studio", "spot", "soft"];
@@ -118,7 +121,8 @@ const EPS = 1e-6;
 // medium: the material every frame is painted in (a style pack's medium; kit/core/medium.mjs).
 // look: the whole-scene treatment (a style pack's look; kit/core/look.mjs).
 // light: the story's lighting (a style pack's light; kit/core/lighting.mjs).
-const TOP_LEVEL = new Set(["look", "light", "cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine", "bible"]);
+// grade: the colour grade applied to the finished render (a style pack's grade; kit/core/grade.mjs).
+const TOP_LEVEL = new Set(["grade", "look", "light", "cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine", "bible"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -592,6 +596,8 @@ export function validateStory(story, { modules, moduleParams } = {}) {
   validateMedium(story.medium, err);
   // look: the whole-scene treatment (kit/core/look.mjs).
   validateLook(story.look, err);
+  // grade: the 3D LUT over the finished render (kit/core/grade.mjs).
+  validateGrade(story.grade, err);
 
   // variants: one designed variant per module (docs/SEEDED_STYLES_RFC.md §3.2).
   if (story.variants !== undefined && story.variants !== null) {
@@ -1792,6 +1798,21 @@ function validateMedium(value, err, path = "medium") {
   if (!STORY_MEDIUM_KINDS.includes(value.kind)) err(kindError(value.kind, `${path}.kind`));
   for (const key of ["strength", "grain"]) if (value[key] !== undefined && !(typeof value[key] === "number" && value[key] >= 0 && value[key] <= 1)) err(`${path}.${key} must be a number from 0 to 1`);
   if (value.boil !== undefined && typeof value.boil !== "boolean") err(`${path}.boil must be true or false`);
+}
+
+// The same rules as kit/core/grade.mjs gradeErrors(), kept here so this
+// file stays import-free.
+function validateGrade(value, err, path = "grade") {
+  if (value === undefined || value === null || value === false || value === "off") return;
+  const shape = `"off", one of ${STORY_GRADE_PRESETS.join(", ")}, or {preset | cube, strength}`;
+  if (typeof value === "string") { if (!STORY_GRADE_PRESETS.includes(value)) err(`${path} must be ${shape}`); return; }
+  if (!isObject(value)) { err(`${path} must be ${shape}`); return; }
+  for (const key of Object.keys(value)) if (!["preset", "cube", "strength"].includes(key)) err(`${path}.${key} is not a grade field (preset, cube, strength)`);
+  if (value.preset !== undefined && value.cube !== undefined) err(`${path} takes preset or cube, not both`);
+  if (value.preset === undefined && value.cube === undefined) err(`${path} needs a preset or a cube`);
+  if (value.preset !== undefined && !STORY_GRADE_PRESETS.includes(value.preset)) err(`${path}.preset must be one of ${STORY_GRADE_PRESETS.join(", ")}`);
+  if (value.cube !== undefined && !(typeof value.cube === "string" && /\.cube$/i.test(value.cube.trim()))) err(`${path}.cube must be a path to a .cube file`);
+  if (value.strength !== undefined && !(typeof value.strength === "number" && value.strength >= 0 && value.strength <= 1)) err(`${path}.strength must be a number from 0 to 1`);
 }
 
 // The same rules as kit/core/look.mjs lookErrors(), kept here so this file

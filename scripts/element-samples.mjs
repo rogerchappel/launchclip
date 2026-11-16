@@ -117,11 +117,16 @@ export const SAMPLES = Object.freeze({
   'comparison-table': {title: 'How LaunchClip compares', columns: ['LaunchClip', 'Editor', 'Templates'], rows: [{label: 'One prompt to video', values: [true, false, false]}, {label: 'Your brand, every scene', values: [true, true, false]}, {label: 'Captions from the voice', values: [true, false, true]}, {label: 'Time to first cut', values: ['12 min', '2 days', '3 h']}, {label: 'Open source', values: [true, false, null]}], highlight: 0}
 });
 
-/** Extra parity cases beyond one per variant: {name, module, variant, shape, params}. */
 /** Scene length (s) for a module whose sample cannot fit the default 4 s scene. */
 export const SAMPLE_DURATIONS = Object.freeze({'layer-stack': 10});
 
+/** Extra parity cases beyond one per variant: {name, module, variant, shape, params, duration?}. */
+const JOURNEY = {pins: [{lon: -0.13, lat: 51.5, label: 'London'}, {lon: 31.24, lat: 30.04, label: 'Cairo'}, {lon: 72.88, lat: 19.08, label: 'Mumbai'}, {lon: 100.5, lat: 13.75, label: 'Bangkok', sub: 'Day 40'}],
+  highlight: ['UK', 'Egypt', 'India', 'Thailand'], route: {head: true}, camera: 'follow', title: 'Forty days overland'};
 export const EXTRA_SAMPLES = Object.freeze([
+  {name: 'map-highlight-journey', module: 'map-highlight', variant: 'glow', shape: 'landscape', duration: 14, params: JOURNEY},
+  {name: 'map-highlight-journey-portrait', module: 'map-highlight', variant: 'outline', shape: 'portrait', duration: 14, params: JOURNEY},
+  {name: 'map-highlight-camera', module: 'map-highlight', variant: 'fill', shape: 'landscape', duration: 8, params: {highlight: ['Kenya', 'Tanzania', 'Uganda'], camera: [{at: 3, centre: [37, -1], zoom: 3.5}, {at: 6, centre: [32.5, 1.5]}], title: 'East Africa'}},
   {name: 'map-highlight-outline', module: 'map-highlight', variant: 'outline', shape: 'landscape', params: {highlight: [{country: 'Japan', label: 'Japan', value: '¥3,000'}], title: 'Where the price drops first'}},
   {name: 'map-highlight-dots', module: 'map-highlight', variant: 'dots', shape: 'landscape', params: {highlight: [{country: 'USA', value: '$20'}, {country: 'India', value: '$6', badge: '×0.3'}, {country: 'Brazil', value: '$9', badge: '×0.45'}], pins: [{lon: -122.4, lat: 37.8, label: 'San Francisco', sub: 'HQ'}], focus: 'world', title: 'One plan, three prices'}},
   {name: 'map-highlight-route', module: 'map-highlight', variant: 'outline', shape: 'landscape', params: {pins: [{lon: -97.7, lat: 30.3, label: 'Austin', sub: 'First office'}, {lon: -84.4, lat: 33.7, label: 'Atlanta'}, {lon: -74, lat: 40.7, label: 'New York', sub: '2026', card: {title: 'Team of 40', sub: 'moved east in 2026'}}], route: true}},

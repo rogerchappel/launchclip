@@ -17,6 +17,7 @@
 // written to .launchclip/finish/storyboard.json (resolved:
 // .launchclip/finish/story.resolved.json), which is what gets rendered.
 import { motionBlurOptions } from "./motion_blur.js";
+import { applyGrade, gradeWarnings, storyGradeCube } from "./grade.js";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -690,6 +691,8 @@ export function defaultAdapters() {
     voiceProvider: (name, options) => getVoiceProvider(name, options),
     normalizeVoice: (input, output) => normalizeLoudness(input, output),
     renderer: (name) => getRenderer(name),
+    // The colour grade over a finished render (src/grade.js): null when the story has none.
+    grade: (project, story, file) => applyGrade(project, story, file),
     // Cores for this render: the machine's cores split across the render slots.
     renderShare: () => renderShare(),
     withSlot: (kind, options, fn) => withSlot(kind, options, fn),
@@ -1511,7 +1514,9 @@ const STAGES = [
       const missing = Object.entries(assets).filter(([, hash]) => hash === null).map(([asset]) => asset);
       if (missing.length) ctx.warnings.push(`referenced assets not found: ${missing.join(", ")}`);
       if (ctx.options.previewScene) return { always: `--preview-scene ${ctx.options.previewScene} renders that scene only`, outputs: [] };
-      const inputHash = hashValue({ renderer: ctx.rendererName, quality: ctx.quality, story: resolved, assets, words: ctx.words, version: VERSION, kit: await treeFingerprint(path.join(ROOT, "kit")), projectEntry: await fileHash(path.join(ctx.project, "remotion", "entry.tsx")) });
+      const graded = await storyGradeCube(ctx.project, resolved);
+      if (graded) ctx.warnings.push(...gradeWarnings(resolved, graded.cube));
+      const inputHash = hashValue({ renderer: ctx.rendererName, quality: ctx.quality, story: resolved, assets, words: ctx.words, grade: graded?.grade.cube ? await fileHash(path.resolve(ctx.project, graded.grade.cube)) : graded?.grade ?? null, version: VERSION, kit: await treeFingerprint(path.join(ROOT, "kit")), projectEntry: await fileHash(path.join(ctx.project, "remotion", "entry.tsx")) });
       return { inputHash, outputs: [rel(ctx.project, ctx.raw)] };
     },
     // One render slot of the machine queue (src/queue.js) for the whole stage.
@@ -1879,7 +1884,15 @@ export function previewPath(sceneId) {
 // render compiles and renders only that scene's window; an adapter without
 // renderSegments (a custom or injected Remotion adapter) renders the whole
 // story directly.
-async function renderStory(ctx, adapter, { output, scenes = [], previewScene = null, range = null }) {
+async function renderStory(ctx, adapter, options) {
+  const segments = await renderUngraded(ctx, adapter, options);
+  // The grade (story.grade, src/grade.js) goes over the finished picture, so
+  // the caption legibility pass that follows measures the graded frames.
+  await ctx.adapters.grade(ctx.project, ctx.resolved, options.output);
+  return segments;
+}
+
+async function renderUngraded(ctx, adapter, { output, scenes = [], previewScene = null, range = null }) {
   const common = { project: ctx.project, story: ctx.resolved, renderer: ctx.rendererName, adapter, quality: ctx.quality, concurrency: ctx.concurrency, output, scenes, previewScene, range, tools: ctx.adapters.segmentTools, now: ctx.adapters.now, progress: ctx.adapters.progress };
   if (ctx.rendererName === "hyperframes") {
     const compileAndRender = async (dir, file, extra = {}) => {
