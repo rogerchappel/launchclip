@@ -56,6 +56,8 @@ export function viewFor(point, {seated = false} = {}) {
   if (!point) return 'front';
   // Toward the camera (across a street from its far pavement): look past the viewer.
   if (point.toward === 'camera') return 'three-quarter';
+  // A graphic on the plate (an anchor) is in the picture plane: the face turns to it from the front.
+  if (point.plane) return 'front';
   return point.far && !seated ? 'back' : 'three-quarter';
 }
 // A walking pace, metres per second, and a rig of 1000 units ≈ 1.7 m.
@@ -95,7 +97,7 @@ export function targetPoint(target, scene) {
   }
   if (isAnchorTarget(target)) {
     const anchor = anchorOf(target, scene.anchorsOf);
-    return {x: anchor.x, y: anchor.y, far: false};
+    return {x: anchor.x, y: anchor.y, far: false, plane: true};
   }
   if (target.prop !== undefined) {
     const prop = focus?.props?.find(entry => entry.id === target.prop);
@@ -125,9 +127,9 @@ export function gazeOffset(point, actor, canvas) {
   const side = sideOf(point, actor.x, canvas);
   const headY = actor.floor - actor.height * actor.scale * 0.85;
   const y = point.far ? GAZE.lift : point.y === null || point.y === undefined ? 0 : point.y < headY - 80 ? GAZE.lift * 0.6 : point.y > headY + 160 ? GAZE.drop : 0;
-  // A point straight ahead (x close to the character) turns the face less.
+  // A point straight ahead (x close to the character) turns the face less; a plate graphic's turn follows it all the way, so cards side by side read apart.
   const reach = point.x === null || point.x === undefined ? 1 : Math.min(1, Math.abs(point.x - actor.x) / (actor.scale * 600));
-  return {x: Math.round((side === 'left' ? -1 : 1) * GAZE.x * Math.max(0.5, reach) * 10) / 10, y};
+  return {x: Math.round((side === 'left' ? -1 : 1) * GAZE.x * Math.max(point.plane ? 0 : 0.5, reach) * 10) / 10, y};
 }
 
 /** Seconds a walk of dx canvas px takes at a walking pace for a character drawn at `scale` px per rig unit. */

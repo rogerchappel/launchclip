@@ -70,7 +70,9 @@ const STORY_PARITY = Object.freeze([
   // Silhouette effects: scanner and hit-flash on a card, frozen, electrified, stunned and halo on two cast members.
   {id: 'vfx-masks-9x16', times: [1.2, 2.3, 4.2, 6.5]},
   // Interface scenes on signal-ui (the CI smoke's times, scripts/parity-ci.mjs).
-  {id: 'ui-parity-9x16', times: [...CI_UI_STORY.times]}
+  {id: 'ui-parity-9x16', times: [...CI_UI_STORY.times]},
+  // Anchors (docs/FLUID_MOTION_RFC.md §7): a robot looks at each node-graph card as it lands and cheers at converge.
+  {id: 'node-graph-anchors-9x16', times: [1.5, 2.7, 3.3, 4.8]}
 ]);
 
 for (const {id, times} of STORY_PARITY) {

@@ -52,3 +52,13 @@ test('anchor targets: unknown anchor, unknown scene, a scene without anchors and
   assert.equal(targetError({scene: 'team', anchor: 'hub'}), null);
   assert.match(targetError({scene: 'team'}), /\{scene: id, anchor: name\}/);
 });
+
+test('the anchors sample looks at each card as it lands, left to right, from the front, and cheers at converge', () => {
+  const story = resolveStory(JSON.parse(readFileSync(new URL('../examples/story/node-graph-anchors-9x16/storyboard.json', import.meta.url), 'utf8')));
+  const anchors = sceneAnchors(story, 'team');
+  const states = castModel(story).content.actors[0].states;
+  const looks = ['n0', 'n1', 'n2', 'n3'].map(id => states.find(state => state.time === anchors[`node-${id}`].time));
+  assert.ok(looks.every(state => state && state.view === 'front'), 'a plate graphic is looked at from the front');
+  for (let i = 1; i < looks.length; i++) assert.ok(looks[i].gaze.x > looks[i - 1].gaze.x + 5, `the face moves on to card ${i}`);
+  assert.equal(states.find(state => state.time === anchors.converge.time)?.pose, 'cheer');
+});
