@@ -32,6 +32,7 @@ import {ACTING, actingOps, stateJoints, speechChanges} from './characters/acting
 import {BACKDROPS, SEATED_SETS, SETS, SET_INFO, WORLD_SETS, actorProps, layoutSet} from './characters/sets.mjs';
 import {castMember, resolveStoryCast} from './characters/cues.mjs';
 import {ACTIONS, ACTION_INFO, GAZE, NAMED_TARGETS, TARGET_REQUIRED, VIEWS, gazeOffset, viewFor, sideOf, targetError, targetPoint, walkDistance, walkDuration, WALK} from './characters/actions.mjs';
+import {anchorOf, isAnchorTarget} from './anchors.mjs';
 import {WORLD_KINDS, WORLD_TIMES, renderWorld, worldAnchors, worldFocus, worldGrade, worldLight} from './worlds/index.mjs';
 import {worldLayerNodes} from './worlds/view.mjs';
 import {propCueOps, sceneProps, withoutForeground, worldCameraStates} from './catalog-world.mjs';
@@ -77,7 +78,7 @@ function sceneLight(b, value, ctx, world) {
 // The most (s) a scene's edge may cut off a spoken word and leave its phonemes in time with it.
 const WORD_CUT = 0.03;
 
-function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light, shots = false}) {
+function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light, shots = false, anchorsOf = null}) {
   const {check} = b;
   check.obj(raw, path, ACTOR_KEYS, ['id']);
   let member;
@@ -97,10 +98,19 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light, 
   fitsSet(pose, `${path}.pose`);
   cues.map((cue, i) => {
     const where = `${path}.cues[${i}]`;
-    check.obj(cue, where, CUE_KEYS, ['at']);
+    // A cue aimed at another scene's anchor plays as it lands unless it gives an at (docs/FLUID_MOTION_RFC.md §7).
+    const anchored = isAnchorTarget(cue?.target);
+    check.obj(cue, where, CUE_KEYS, anchored ? [] : ['at']);
     if (!CUE_KEYS.slice(1).some(key => cue[key] !== undefined)) check.fail(where, 'needs a pose, an expression, an action, a target or a facing');
+    if (cue.target !== undefined) { const problem = targetError(cue.target); if (problem) check.fail(`${where}.target`, problem); }
     if (typeof cue.at === 'string') check.fail(`${where}.at`, `${JSON.stringify(cue.at)} is a word anchor that was not resolved; pass narration words to the story resolver or give seconds`);
-    const at = check.num(cue.at, `${where}.at`, 0, lastCue);
+    let anchor = null;
+    if (anchored) try { anchor = anchorOf(cue.target, anchorsOf); } catch (error) { check.fail(`${where}.target`, error.message); }
+    let at;
+    if (cue.at === undefined) {
+      at = rt(anchor.time - b.start);
+      if (at < -1e-6 || at > lastCue + 1e-6) check.fail(`${where}.at`, `defaults to anchor "${cue.target.anchor}" of scene "${cue.target.scene}" at ${r2(at)} s, outside this scene's cues (0–${r2(lastCue)} s); give an at`);
+    } else at = check.num(cue.at, `${where}.at`, 0, lastCue);
     if (cue.pose !== undefined) { check.oneOf(cue.pose, `${where}.pose`, POSES); fitsSet(cue.pose, `${where}.pose`); }
     if (cue.expression !== undefined) check.oneOf(cue.expression, `${where}.expression`, EXPRESSIONS);
     if (cue.facing !== undefined) check.oneOf(cue.facing, `${where}.facing`, ['left', 'right']);
@@ -108,7 +118,6 @@ function resolveActor(b, raw, path, {cast, seated, slot, setName, enter, light, 
     if (cue.shot !== undefined && !shots) check.fail(`${where}.shot`, 'is for cast-scene cues (a cut in on that character); a cameo frames its character with params.shot');
     if (cue.shot !== undefined) check.oneOf(cue.shot, `${where}.shot`, SHOTS);
     const action = cue.action === undefined ? null : check.oneOf(cue.action, `${where}.action`, ACTIONS);
-    if (cue.target !== undefined) { const problem = targetError(cue.target); if (problem) check.fail(`${where}.target`, problem); }
     if (action && TARGET_REQUIRED.includes(action) && cue.target === undefined) check.fail(`${where}.target`, `is required for ${action}`);
     if (action === 'stand-up' && !seated) check.fail(`${where}.action`, `stand-up needs a seated set (${SEATED_SETS.join(', ')})`);
     // An action takes its pose unless the cue names one (walk-to in a seated set needs a stand-up first: checked when directed).
@@ -520,7 +529,7 @@ function resolveCastScene(params, ctx) {
   const light = sceneLight(b, p.light, ctx, world);
   const resolved = p.cast.map((raw, i) => {
     const slot = layout.slots[slotOf[i]];
-    const actor = inWorld(resolveActor(b, raw, `params.cast[${i}]`, {cast, seated: layout.seated, slot, setName, enter: b.start, light, shots: true}), world);
+    const actor = inWorld(resolveActor(b, raw, `params.cast[${i}]`, {cast, seated: layout.seated, slot, setName, enter: b.start, light, shots: true, anchorsOf: ctx.anchorsOf}), world);
     // The phone set: the first character holds the phone unless someone else is given it.
     if (setName === 'phone' && i === 0 && !p.cast.some(entry => entry?.holds !== undefined)) actor.holds = 'phone';
     return {...actor, position: POSITION_NAMES[p.cast.length][slotOf[i]], x: slot.x, floor: slot.floor, scale: slot.scale, marks: framingMarks(actor.geometry, actor.height, {seated: layout.seated})};
@@ -536,7 +545,7 @@ function resolveCastScene(params, ctx) {
     const frame = frameCast(shot, {canvas, actors: resolved, floor: layout.floor, fit, shift});
     const placed = resolved.map((actor, i) => ({...actor, x: frame.xs[i], floor: frame.floor, scale: frame.scale, wideScale: actor.scale, ...(shot === 'wide' ? {} : {cut: canvas.height})}));
     const actors = placed.map((one, i, all) => {
-      const directed = directActor(b, one, `params.cast[${i}]`, {focus, actors: all, canvas, safe});
+      const directed = directActor(b, one, `params.cast[${i}]`, {focus, actors: all, canvas, safe, anchorsOf: ctx.anchorsOf});
       return {...directed, reach: actorReach(directed)};
     });
     return {frame, actors};
@@ -656,7 +665,7 @@ function resolveCameo(params, ctx) {
     : portrait ? {x: rect.x, y: r2(rect.y + rect.height * 0.34), width: rect.width, height: r2(rect.height * 0.66)}
       : {x: side === 'left' ? rect.x : r2(rect.x + rect.width * 0.64), y: rect.y, width: r2(rect.width * 0.36), height: rect.height};
   const world = standingWorld(b, ctx);
-  const probe = inWorld(resolveActor(b, actorRaw, 'params', {cast, seated: false, slot: {facing: facingDefault}, setName: 'cameo', enter: b.start, light: sceneLight(b, p.light, ctx, world)}), world);
+  const probe = inWorld(resolveActor(b, actorRaw, 'params', {cast, seated: false, slot: {facing: facingDefault}, setName: 'cameo', enter: b.start, light: sceneLight(b, p.light, ctx, world), anchorsOf: ctx.anchorsOf}), world);
   const pad = u(10);
   // Sized to its tallest pose: a wave or a cheer reaches above the head.
   const tallest = Math.max(probe.height, -actorReach({...probe, x: 0, floor: 0, scale: 1}).top);
@@ -672,7 +681,7 @@ function resolveCameo(params, ctx) {
   const place = (fit, shift) => {
     const frame = shot === 'wide' ? null : frameCast(shot, {canvas: b.canvas, actors: [{x: x0, scale, marks}], floor: floor0, box: {x: area.x, y: area.y + pad, width: area.width}, fit, shift});
     const at = frame ? {x: frame.xs[0], floor: frame.floor, scale: frame.scale, wideScale: scale, cut: b.canvas.height, marks} : {x: x0, floor: floor0, scale};
-    const placed = directActor(b, {...probe, ...at}, 'params', {focus, actors: [{...probe, ...at}], canvas: b.canvas, safe});
+    const placed = directActor(b, {...probe, ...at}, 'params', {focus, actors: [{...probe, ...at}], canvas: b.canvas, safe, anchorsOf: ctx.anchorsOf});
     return {actors: [{...placed, reach: actorReach(placed)}]};
   };
   let actor = fitShot(shot, place, {canvas: b.canvas, count: 1}).actors[0];
@@ -690,7 +699,7 @@ function resolveCameo(params, ctx) {
       const width = right - left;
       if (width > hi - lo) at = {...at, scale: Math.floor(at.scale * (hi - lo) / width * 990) / 1000};
       else at = {...at, x: r2(at.x + (left < lo ? lo - left : hi - right))};
-      const placed = directActor(b, {...probe, ...at}, 'params', {focus, actors: [{...probe, ...at}], canvas: b.canvas, safe});
+      const placed = directActor(b, {...probe, ...at}, 'params', {focus, actors: [{...probe, ...at}], canvas: b.canvas, safe, anchorsOf: ctx.anchorsOf});
       actor = {...placed, reach: actorReach(placed)};
     }
   }
