@@ -443,7 +443,7 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
   const enterDuration = grammarDuration(grammar, 'enter', S.enterDuration, {min: 0.3, max: 0.7}), exitDuration = grammarDuration(grammar, 'exit', S.exitDuration, {min: 0.2, max: 0.5});
   const end = rt(start + duration);
   const motion = {enterStart: rt(start), enterEnd: rt(start + enterDuration), exitStart: rt(end - exitDuration), end, enterDuration, exitDuration,
-    enterFrom: {opacity: 0, x: 0, y: r2(40 * unit), scale: 0.97}, exitTo: {opacity: 0, x: 0, y: r2(-28 * unit), scale: 1},
+    enterFrom: {opacity: 0, x: 0, y: r2(40 * unit), scale: 0.97}, exitTo: ctx.loop === true ? {opacity: 0, x: 0, y: r2(40 * unit), scale: 0.97} : {opacity: 0, x: 0, y: r2(-28 * unit), scale: 1},
     enterEase: grammarEase(grammar, S.enterEase), exitEase: grammarEase(grammar, S.exitEase)};
   const hits = Array.isArray(ctx.hits) ? ctx.hits.filter(hit => hit && typeof hit.event === 'string' && typeof hit.at === 'number') : [];
   // Latest allowed event time leaves 0.3 s before the exit begins.
@@ -464,7 +464,7 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
   const min = {key: Math.ceil(S.minKeyText * unit * 100 - 1e-6) / 100, meta: Math.ceil(S.minMetaText * unit * 100 - 1e-6) / 100};
   const events = [{id: `${id}-enter`, name: 'enter', time: motion.enterEnd, role: 'enter'}];
   const model = {id, module: moduleId, canvas, aspect, fps, unit: r2(unit), start: rt(start), duration: rt(duration), end, track: 2, rect, safe, motion, content: null, events,
-    layout: null, hidesCaptions, theme, fonts, contrast, objects: {}, minTextPx: min.key};
+    layout: null, hidesCaptions, theme, fonts, contrast, objects: {}, minTextPx: min.key, ...(ctx.loop === true ? {loop: true} : {})};
   const finish = (content, {minTextPx = min.key} = {}) => {
     model.content = content;
     model.minTextPx = minTextPx;
