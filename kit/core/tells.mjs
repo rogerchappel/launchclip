@@ -208,7 +208,7 @@ const hasFootage = (input) => input.footage === true || Boolean(input.story?.bas
 // The repairs themselves, and closing cards (the planner puts those on footage).
 const UNBOXED_MODULES = new Set(['item-list', 'end-card', 'cta', 'brand-lockup']);
 // Unboxed variant names a card or table module may offer (moduleVariants()); the first the module has is the repair.
-export const UNBOXED_VARIANTS = Object.freeze(['open', 'free', 'bare', 'plain']);
+export const UNBOXED_VARIANTS = Object.freeze(['open', 'free', 'bare', 'plain', 'ticks']);
 const unboxedVariant = (module) => (moduleVariants()[module] ?? []).find((name) => UNBOXED_VARIANTS.includes(name)) ?? null;
 const LIST_MODULE = /list|icon-row|checklist|steps/;
 const COMPARE_MODULE = /compare|table|versus/;
