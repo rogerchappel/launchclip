@@ -3831,8 +3831,14 @@ and the motion gate still measures the render's first motion and hook events.
 ### Loudness repair (`src/finish.js`)
 
 The master targets −14 LUFS integrated and at most −1 dBTP
-(`LOUDNESS_TARGET`), and complies within 1.5 LU of the level
-(`LOUDNESS_TOLERANCE_LU`). A master that misses is repaired, not shipped with
+(`LOUDNESS_TARGET`), and complies within 1 LU of the level
+(`LOUDNESS_TOLERANCE_LU`). `src/scripts/master-loudness.mjs` aims loudnorm
+(linear) at −1.2 dBTP, then runs a 4× oversampled limiter at −1.6 dBFS
+(`latency=1`, so sounds stay on their frames); an encoded peak over −1 dBTP
+lowers the limiter by the overshoot plus 0.3 dB and encodes again. A mix
+louder than 0 LUFS is turned down to the target first, a silent mix (under
+−70 LUFS) is delivered unnormalised, and audio shorter than the picture is
+padded with silence; each says so in a `loudness:` warning. A master that misses is repaired, not shipped with
 a warning: the master step runs again from the raw render, aimed past the
 target by what the last pass missed by (`repairAim()`: the level moved by the
 miss, the peak ceiling lowered by the overshoot plus 0.2 dB), at most twice

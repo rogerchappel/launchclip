@@ -117,7 +117,7 @@ export const LOUDNESS_TARGET = Object.freeze({ lufs: -14, tp: -1 });
 // are the parts of those two gates that wait for the render as well).
 export const RENDER_ONLY_GATES = Object.freeze(["loudness", "motion", "audio", "temporal_evidence", "style", "critic"]);
 // A master within this many LU of the level target complies (the mastering script's own tolerance).
-export const LOUDNESS_TOLERANCE_LU = 1.5;
+export const LOUDNESS_TOLERANCE_LU = 1;
 // A master that misses the target is run again at most this many times.
 export const MASTER_REPAIRS = 2;
 // How far under the measured overshoot a repair sets the peak ceiling (the script's own retry margin).
@@ -1607,7 +1607,9 @@ async function masterDelivery(ctx) {
   let result = await ctx.adapters.master(ctx.raw, temporary, { lufs: LOUDNESS_TARGET.lufs, tp: LOUDNESS_TARGET.tp });
   // An adapter that reports no measurement keeps its own verdict.
   const meets = (pass) => (Number.isFinite(Number(pass.output?.integrated_lufs)) ? loudnessCompliant(pass.output) : Boolean(pass.compliant));
-  let compliant = meets(result);
+  // A silent mix is delivered unnormalised (the script warns); there is no level to repair.
+  const silent = result.skipped === "silent";
+  let compliant = silent ? !(Number(result.output?.true_peak_dbtp) > LOUDNESS_TARGET.tp) : meets(result);
   // A miss is repaired, not shipped: the master runs again from the raw
   // render, aimed past the target by what the last pass missed by.
   const repairs = [];
@@ -1617,9 +1619,10 @@ async function masterDelivery(ctx) {
     aim = repairAim(aim, miss);
     result = await ctx.adapters.master(ctx.raw, temporary, aim);
     compliant = meets(result);
-    repairs.push({ attempt: repairs.length + 1, missed: miss, aim, output: result.output, compliant });
+    repairs.push({ attempt: repairs.length + 1, missed: miss, aim, output: result.output, compliant, ...(result.warnings?.length ? { warnings: result.warnings } : {}) });
   }
   await rename(temporary, ctx.out);
+  for (const line of new Set([...(result.warnings ?? []), ...repairs.flatMap((repair) => repair.warnings ?? [])])) ctx.warnings.push(`loudness: ${line}`);
   const read = (output) => `${output?.integrated_lufs} LUFS / ${output?.true_peak_dbtp} dBTP`;
   const goal = `target ${LOUDNESS_TARGET.lufs} LUFS (within ${LOUDNESS_TOLERANCE_LU} LU), ≤ ${LOUDNESS_TARGET.tp} dBTP`;
   if (repairs.length && compliant) ctx.warnings.push(`loudness: the first master measured ${read(repairs[0].missed)} (${goal}); re-mastered ${repairs.length === 1 ? "once" : `${repairs.length} times`}, now ${read(result.output)}`);
