@@ -5,7 +5,7 @@ import {fitText, r2, rt, textWidth} from './catalog-b-base.mjs';
 import {abs, el, hex2, set, tw} from './catalog-b-view.mjs';
 import {CARD_PARAMS, cardTiming, column, createCardBase, flow, flowText, iconParam, pick, pop, rise, solidFill, spread, tintBehind} from './catalog-g-base.mjs';
 import {iconNode} from './icons.mjs';
-import {beatGrid, idleAmplitude, idleOps, shakeOps} from './fluid-motion.mjs';
+import {beatGrid, driftOps, idleAmplitude, idleOps, shakeOps} from './fluid-motion.mjs';
 import {loopHome} from './loop.mjs';
 
 const hidden = {opacity: 0};
@@ -109,7 +109,7 @@ function resolveCompare(params, ctx) {
   const halves = (width, k, maxHeight) => {
     const across = !portrait, pad = u(40 * Math.min(1.2, k)), half = across ? r2(width / 2) : width, inner = r2(half - pad * 2);
     const parts = sides.map((s_, i) => {
-      const head = fitText(check, `${sideKey(i)}.title`, s_.title, {family: 'display', width: inner, preferred: Math.max(b.min.key, u(96 * k)), min: b.min.key, maxLines: 2});
+      const head = fitText(check, `${sideKey(i)}.title`, s_.title, {family: 'display', width: inner, preferred: Math.max(b.min.key, u(132 * k)), min: b.min.key, maxLines: 2});
       const items = fitItems(s_, i, inner - mark(k) - markGap, k), size = Math.min(...items.map(f => f.size));
       const rows = items.map(f => r2(Math.max(mark(k), f.lines * size * 1.2))), gap = u(14 * k), headGap = u(26 * k);
       return {head, size, rows, gap, headGap, mark: mark(k), markGap, height: block(head, rows, headGap, gap)};
@@ -122,7 +122,7 @@ function resolveCompare(params, ctx) {
     const across = !portrait, vs = r2(u((across ? 180 : 210) * k)), vsW = r2(textWidth('VS', vs, 'display') + u(40));
     const colW = across ? r2((width - vsW) / 2) : r2(width * 0.94);
     const parts = sides.map((s_, i) => {
-      const head = fitText(check, `${sideKey(i)}.title`, s_.title.toUpperCase(), {family: 'display', width: colW, preferred: Math.max(b.min.key, u(124 * k)), min: b.min.key, maxLines: 2});
+      const head = fitText(check, `${sideKey(i)}.title`, s_.title.toUpperCase(), {family: 'display', width: colW, preferred: Math.max(b.min.key, u(150 * k)), min: b.min.key, maxLines: 2});
       const items = fitItems(s_, i, colW, k), size = Math.min(...items.map(f => f.size));
       const rows = items.map(f => r2(f.lines * size * 1.22)), gap = u(8 * k), headGap = u(20 * k);
       return {head, size, rows, gap, headGap, height: block(head, rows, headGap, gap)};
@@ -264,7 +264,8 @@ Object.assign(COMPARE_VIEWS, {
   halves(model) {
     const {id, fonts, unit} = model;
     const c = model.content, L = c.layout, B = c.box, F = c.frame, sh = shadowOf(model), before = c.mode === 'before-after';
-    const seam = L.across ? r2(B.width / 2) : r2(L.height / 2), bleed = r2(80 * unit);
+    // Over each other, the seam sits on the middle of the frame when both sides fit either side of it.
+    const seam = L.across ? r2(B.width / 2) : r2(Math.min(Math.max(F.y + F.height / 2, L.parts[0].height + L.pad * 2), L.height - L.parts[1].height - L.pad * 2)), bleed = r2(80 * unit);
     const kids = [];
     // The before half dims under a wash; the after half warms with a primary tint.
     if (before) [[hex2(c.bg, 0.5)], [hex2(c.arrow, 0.12)]].forEach(([background], i) => kids.push(el('div', `${id}-wash-${i}`, L.across
@@ -272,8 +273,8 @@ Object.assign(COMPARE_VIEWS, {
       : abs(r2(F.x - bleed), i ? seam : r2(F.y - bleed), r2(F.width + bleed * 2), r2(i ? F.y + F.height + bleed - seam : seam - F.y + bleed), {background, opacity: 0}))));
     c.sides.forEach((s_, i) => {
       const part = L.parts[i], color = before && !i ? c.mutedText : c.textColor;
-      const halfH = L.across ? L.height : r2(L.height / 2);
-      const x = L.across && i ? r2(L.half + L.pad) : L.pad, y = r2((L.across || !i ? 0 : halfH) + (halfH - part.height) / 2);
+      const [from, to] = L.across ? [0, L.height] : i ? [seam, L.height] : [0, seam];
+      const x = L.across && i ? r2(L.half + L.pad) : L.pad, y = r2(from + (to - from - part.height) / 2);
       let top = r2(part.head.size * 1.06 * part.head.lines + part.headGap);
       const items = s_.items.map((item, j) => {
         const node = el('div', `${id}-item-${i}-${j}`, abs(0, top, L.inner, part.rows[j], {opacity: 0, display: 'flex', alignItems: 'center', gap: part.markGap}), [
@@ -306,7 +307,9 @@ Object.assign(COMPARE_VIEWS, {
         color: right ? c.arrow : before ? c.mutedText : c.textColor, ...sh}, s_.title.toUpperCase()), ...items]);
     });
     const vsH = r2(L.vs * 1.1);
-    kids.push(el('div', `${id}-vs`, {...abs(r2((B.width - L.vsW) / 2), r2((L.height - vsH) / 2), L.vsW, vsH), opacity: 0, transformOrigin: '50% 50%'}, [el('div', `${id}-vs-shake`, abs(0, 0, L.vsW, vsH), [
+    // Across, the VS centres between the columns; over each other, in the gap between the two sides.
+    const h0 = L.parts[0].height, vsY = L.across ? r2((L.height - vsH) / 2) : r2(h0 + (L.height - h0 - L.parts[1].height - vsH) / 2);
+    kids.push(el('div', `${id}-vs`, {...abs(r2((B.width - L.vsW) / 2), vsY, L.vsW, vsH), opacity: 0, transformOrigin: '50% 50%'}, [el('div', `${id}-vs-shake`, abs(0, 0, L.vsW, vsH), [
       freeText({position: 'absolute', left: 0, top: 0, width: L.vsW, whiteSpace: 'nowrap', textAlign: 'center', fontFamily: fonts.display, fontSize: L.vs, lineHeight: '1.1', color: 'transparent', WebkitTextStroke: `${r2(4 * unit)}px ${c.arrow}`}, 'VS')])]));
     return [el('div', null, abs(B.x, B.y, B.width, L.height), kids)];
   },
@@ -355,6 +358,7 @@ const FREE_TIMELINES = {
       tw(ops, `${id}-side-${s_.index}`, s_.time, 0.6, 'power3.out', from, {opacity: 1, x: 0, y: 0});
       for (const item of s_.items) rise(ops, model, `${id}-item-${s_.index}-${item.index}`, item.time, {distance: 14, duration: 0.4});
       idleOps(ops, `${id}-side-${s_.index}-idle`, start, rt(s_.time + 0.75), settle, {bob: c.idle.bob, tilt: r2(c.idle.tilt * 0.4)}, loopHome(model));
+    driftOps(ops, `${id}-side-${s_.index}-idle`, rt(s_.time + 0.75), settle, {loop: loopHome(model)});
     }
     // The before side steps back as the after side lands.
     if (c.mode === 'before-after') tw(ops, `${id}-side-0`, rt(c.rightAt + 0.1), 0.5, 'power2.out', {opacity: 1}, {opacity: 0.6});
@@ -369,6 +373,7 @@ const FREE_TIMELINES = {
       tw(ops, `${id}-side-${s_.index}`, s_.time, 0.55, 'power4.out', {x: from.x}, {x: 0});
       for (const item of s_.items) rise(ops, model, `${id}-item-${s_.index}-${item.index}`, item.time, {distance: 14, duration: 0.4});
       idleOps(ops, `${id}-side-${s_.index}-idle`, start, rt(s_.time + 0.7), settle, {bob: c.idle.bob, tilt: r2(c.idle.tilt * 0.4)}, loopHome(model));
+    driftOps(ops, `${id}-side-${s_.index}-idle`, rt(s_.time + 0.7), settle, {loop: loopHome(model)});
     }
     // The VS punches in on the beat between the sides and shakes on impact.
     const at = rt((c.leftAt + c.rightAt) / 2);
@@ -378,6 +383,7 @@ const FREE_TIMELINES = {
     set(ops, `${id}-vs-shake`, start, {x: 0, y: 0, rotation: 0});
     shakeOps(ops, `${id}-vs-shake`, rt(at + 0.28), r2(16 * unit));
     idleOps(ops, `${id}-vs-shake`, start, rt(at + 0.8), settle, {bob: c.idle.bob, tilt: c.idle.tilt}, loopHome(model));
+    driftOps(ops, `${id}-vs-shake`, rt(at + 0.8), settle, {loop: loopHome(model)});
   },
   verdict(model, ops) {
     const {id, start, unit, motion} = model;
@@ -395,7 +401,9 @@ const FREE_TIMELINES = {
     set(ops, `${S}-shake`, start, {x: 0, y: 0});
     shakeOps(ops, `${S}-shake`, rt(at + 0.3), r2(14 * unit));
     idleOps(ops, `${id}-side-0-idle`, start, rt(c.leftAt + 0.7), settle, {bob: c.idle.bob, tilt: r2(c.idle.tilt * 0.3)}, loopHome(model));
+    driftOps(ops, `${id}-side-0-idle`, rt(c.leftAt + 0.7), settle, {loop: loopHome(model)});
     idleOps(ops, `${id}-pick-idle`, start, rt(at + 0.9), settle, {bob: c.idle.bob, tilt: r2(c.idle.tilt * 0.3)}, loopHome(model));
+    driftOps(ops, `${id}-pick-idle`, rt(at + 0.9), settle, {loop: loopHome(model)});
   }
 };
 

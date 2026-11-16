@@ -74,3 +74,41 @@ test('timeline: vertical steps share one pitch, and a stacked compare spreads in
   const cmp = resolve('compare', {...COMPARE, rect: {...rect, width: 600}}, LANDSCAPE);
   if (cmp.content.layout.layout === 'stacked') assert.ok(cmp.content.layout.height >= rect.height * 0.75, `compare fills ${cmp.content.layout.height}`);
 });
+
+// A node by id in a view tree, and every node with a style key.
+const walk = (node, out = []) => { if (node && typeof node === 'object') { out.push(node); for (const child of node.children ?? []) walk(child, out); } return out; };
+
+test('compare free variants: no panel, the right side on a beat, every block breathing', async () => {
+  const {catalogGView} = await import('@launchclip/core/catalog-g.mjs');
+  for (const variant of ['halves', 'versus', 'verdict']) for (const overrides of [{}, LANDSCAPE]) {
+    const model = resolve('compare', {...COMPARE, variant}, overrides);
+    assert.equal(model.content.layout.mode, variant, variant);
+    const nodes = walk(catalogGView(model));
+    // No filled box behind the text: only washes, the divider and the stamp frame carry a background or border.
+    assert.ok(nodes.every(n => !n.style?.background || /wash|divider|strike/.test(n.id ?? '')), `${variant}: no panel`);
+    // 120 bpm from the scene start: the right side lands on a whole beat.
+    assert.ok(Math.abs(((model.content.rightAt - model.start) / 0.5) % 1) < 1e-6, `${variant}: right at ${model.content.rightAt}`);
+    const ops = catalogGTimeline(model);
+    const idle = ops.filter(op => op.type === 'tween' && /-idle$|-vs-shake$/.test(op.target) && op.ease === 'sine.inOut');
+    assert.ok(idle.length >= 2, `${variant}: breathes after landing`);
+    assert.ok(EMITTERS.compare(model).html.length > 0);
+  }
+  // Over footage the free type carries a shadow; on the plate it does not.
+  const shadowed = model => walk(catalogGView(model)).some(n => n.style?.textShadow);
+  assert.ok(shadowed(resolve('compare', {...COMPARE, variant: 'halves'}, {footage: true})));
+  assert.ok(!shadowed(resolve('compare', {...COMPARE, variant: 'halves'})));
+});
+
+test('compare verdict strikes the left, then stamps the right title down and shakes it', () => {
+  const model = resolve('compare', {...COMPARE, variant: 'verdict'});
+  const ops = catalogGTimeline(model), c = model.content;
+  const strike = ops.find(op => op.target === 'scene-strike' && op.type === 'tween');
+  const stamp = ops.find(op => op.target === 'scene-stamp' && op.type === 'tween' && op.to.scaleX === 1);
+  assert.equal(strike.start, c.rightAt);
+  assert.ok(stamp.start > strike.start && stamp.to.rotation === -4);
+  assert.ok(ops.some(op => op.target === 'scene-stamp-shake' && op.type === 'tween' && op.start >= stamp.start + stamp.duration - 1e-6));
+  assert.equal(c.layout.stamp.text, 'AFTER');
+  // The pick's items wait for the stamp.
+  assert.ok(c.sides[1].items.every(item => item.time >= stamp.start));
+  assert.deepEqual(frameState(ops, model.end - 0.6).get('scene-stamp').rotation, -4);
+});

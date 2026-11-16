@@ -191,3 +191,37 @@ test('every catalogue H parity fixture is a valid story that resolves', async ()
     assert.ok(resolveModule(fixture.story.scenes[0], fixture.story), name);
   }
 });
+
+const TRADE = {title: 'No brush? Pick composite', columns: ['Timber', 'Composite'], rows: [{label: 'No oiling', values: [false, true]}, {label: 'Free weekends', values: [false, true]}, {label: 'Upfront cost', values: ['$', '$$$']}]};
+const nodesOf = model => { const out = []; const walk = n => { if (n && typeof n === 'object') { out.push(n); (n.children ?? []).forEach(walk); } }; walk(catalogHView(model)); return out; };
+
+test('comparison-table free variants: rows a beat apart, then breathing; the pick lights', () => {
+  for (const variant of ['scorecard', 'pills', 'verdict']) {
+    const model = resolve('comparison-table', {...TRADE, highlight: 1, variant}, '9:16', {duration: 6});
+    const c = model.content, times = c.rows.map(r => r.time);
+    times.slice(1).forEach((t, i) => assert.ok(Math.abs(t - times[i] - 0.5) < 1e-6, `${variant}: rows ${times}`));
+    assert.deepEqual(model.events.filter(e => /^row-/.test(e.name)).map(e => e.time), times);
+    const ops = catalogHTimeline(model);
+    for (const i of c.rows.keys()) assert.ok(ops.some(op => op.target === `scene-row-${i}-idle` && op.ease === 'sine.inOut'), `${variant}: row ${i} moves after landing`);
+    const nodes = nodesOf(model);
+    // The pick column's tick sits on a lit disc; the other column's cross does not.
+    assert.ok(nodes.find(n => n.id === 'scene-cell-0-1').children.some(k => k.style?.background === c.primary), variant);
+    assert.ok(!nodes.find(n => n.id === 'scene-cell-0-0').children.some(k => k.style?.background === c.primary), variant);
+    assert.equal(nodes.some(n => n.id === 'scene-stamp'), variant === 'verdict');
+  }
+  // A short scene packs the rows on half beats.
+  const short = resolve('comparison-table', {...TRADE, variant: 'scorecard'}, '9:16', {duration: 3.2});
+  assert.ok(Math.abs(short.content.rows[1].time - short.content.rows[0].time - 0.25) < 1e-6);
+});
+
+test('comparison-table verdict stamps the column with the most ticks when no highlight is given', () => {
+  const model = resolve('comparison-table', {...TRADE, variant: 'verdict'}, '16:9', {duration: 6});
+  assert.equal(model.content.winner, 1);
+  assert.equal(model.content.stamp.text, 'COMPOSITE');
+  const ops = catalogHTimeline(model);
+  assert.ok(ops.some(op => op.target === 'scene-stamp' && op.start === model.content.highlightAt));
+  assert.ok(model.content.highlightAt >= model.content.rows.at(-1).time);
+  // Pills with long labels and three columns give up the cascade step rather than fail.
+  const pills = resolve('comparison-table', {...SAMPLES['comparison-table'], variant: 'pills'}, '9:16');
+  assert.ok(pills.content.pill.step >= 0 && pills.content.pill.labelW > 0);
+});

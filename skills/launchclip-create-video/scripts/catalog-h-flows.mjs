@@ -8,7 +8,7 @@ import {VARIANT_PARAM, FORMAT_PARAM, contrastRatio, createHBase, dataRows, fitTe
 import {abs, chromeNodes, chromeOps, countOps, countSamples, drawOps, el, fadeOps, label, popOps, riseOps, set, strokePath, tw} from './catalog-h-view.mjs';
 import {iconNode, isIcon} from './icons.mjs';
 import {glassSurface} from './panels.mjs';
-import {beatGrid, idleAmplitude, idleFor, idleOps, shakeOps} from './fluid-motion.mjs';
+import {beatGrid, driftOps, idleAmplitude, idleFor, idleOps, shakeOps} from './fluid-motion.mjs';
 import {loopHome} from './loop.mjs';
 import {TICK} from './catalog-h-list.mjs';
 
@@ -602,13 +602,14 @@ function tableResolve(params, ctx) {
   const stampH = stampFit ? r2(stampFit.size * 1.1 + u(44)) : 0, stampGap = stampFit ? u(b.portrait ? 64 : 32) : 0;
   const W = rect.width, H = rect.height - tb.top - tb.bottom - stampH - stampGap;
   const headH = r2(u(96));
-  const rowH = r2(Math.min(u(120), (H - headH) / n));
+  // The free variants have no panel to fill, so their rows and type run larger.
+  const rowH = r2(Math.min(u(fresh ? 170 : 120), (H - headH) / n)), cellK = fresh ? [56, 0.4] : [40, 0.36];
   if (rowH < u(64)) check.fail('params.rows', 'has too many rows for the height');
   const labelW = r2(W * (b.portrait ? 0.32 : 0.38));
   const colW = r2((W - labelW) / m);
-  const labelSize = Math.min(...rows.map((r, i) => fitText(check, `params.rows[${i}].label`, r.label, {family: 'body', width: labelW - u(24), preferred: Math.min(u(40), rowH * 0.36), min: b.min.meta, maxLines: 2}).size));
+  const labelSize = Math.min(...rows.map((r, i) => fitText(check, `params.rows[${i}].label`, r.label, {family: 'body', width: labelW - u(24), preferred: Math.min(u(cellK[0]), rowH * cellK[1]), min: b.min.meta, maxLines: 2}).size));
   const headSize = Math.min(...columns.map((c, i) => fitText(check, `params.columns[${i}]`, c, {family: 'body', width: colW - u(16), preferred: u(38), min: b.min.meta, maxLines: 2}).size));
-  const cellSize = r2(Math.max(b.min.meta, Math.min(u(40), rowH * 0.36)));
+  const cellSize = r2(Math.max(b.min.meta, Math.min(u(cellK[0]), rowH * cellK[1])));
   for (const [i, r] of rows.entries()) r.lines = fitText(check, `params.rows[${i}].label`, r.label, {family: 'body', width: labelW - u(24), preferred: labelSize, min: labelSize, maxLines: 2}).lines;
   for (const [i, r] of rows.entries()) r.values.forEach((v, j) => { if (typeof v === 'string') fitText(check, `params.rows[${i}].values[${j}]`, v, {family: 'display', width: colW - u(12), preferred: cellSize, min: b.min.meta}); });
   const totalH = headH + rowH * n;
@@ -704,6 +705,7 @@ function freeTableTimeline(model, ops) {
     tw(ops, `${id}-row-${i}`, row.time, 0.5, 'power3.out', {x: from.x, scaleX: from.scaleX, scaleY: from.scaleY}, {x: 0, scaleX: 1, scaleY: 1});
     // Wide rows only bob: a tilt swings their far ends.
     idleOps(ops, `${id}-row-${i}-idle`, start, rt(row.time + 0.7), settle, {bob: c.idle.bob, tilt: P ? r2(c.idle.tilt * 0.25) : 0}, loopHome(model));
+    driftOps(ops, `${id}-row-${i}-idle`, rt(row.time + 0.7), settle, {amount: 0.02, loop: loopHome(model)});
     if (!P) {
       set(ops, `${id}-rule-${i}`, start, {scaleX: 0, scaleY: 1});
       tw(ops, `${id}-rule-${i}`, row.time, 0.55, 'power2.out', {scaleX: 0}, {scaleX: 1});

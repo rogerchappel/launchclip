@@ -125,3 +125,16 @@ export function beatGrid(bpm, origin = 0) {
   const beat = 60 / bpm;
   return {beat: rt(beat), snap: t => rt(origin + Math.ceil((t - origin) / beat - 1e-6) * beat)};
 }
+
+/**
+ * A slow push and settle on a settled element (scale 1 → 1 + amount → 1,
+ * each way slow → fast → slow) from `from` to `to` (absolute s), so a hold too
+ * short for a breath still moves and is at rest by `to`. Skipped under a
+ * second, and in a loop (the breath there is fitted to the loop).
+ */
+export function driftOps(ops, target, from, to, {amount = 0.03, loop} = {}) {
+  if (loop !== undefined || to - from < 1) return;
+  const half = rt((to - from) / 2), peak = {scaleX: r2(1 + amount), scaleY: r2(1 + amount)};
+  tw(ops, target, rt(from), half, 'sine.inOut', {scaleX: 1, scaleY: 1}, peak);
+  tw(ops, target, rt(from + half), rt(to - from - half), 'sine.inOut', peak, {scaleX: 1, scaleY: 1});
+}
