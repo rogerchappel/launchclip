@@ -43,7 +43,11 @@ export const TELLS = Object.freeze({
   stragglerLines: 3, organicPoints: 12, pulseShare: 0.02,
   heroMetrics: 1, signatureScenes: 3,
   // Frame rules (frameTells): shares of the sampled frame, colour distances in RGB.
-  accentShare: 0.1, accentDistance: 48, rasterDim: 0.85, edgeStep: 60, blackStep: 12, edgeSides: 3
+  accentShare: 0.1, accentDistance: 48, rasterDim: 0.85, edgeStep: 60, blackStep: 12, edgeSides: 3,
+  // Text over footage (thin-text-on-footage): the share of edge pixels (a
+  // luma step of busyStep) in a ring around the text that makes the shot
+  // busy, and the least size (px at 1080) and weight type needs on it.
+  busyStep: 24, busyShare: 0.14, footageTextPx: 56, footageTextWeight: 600
 });
 
 const D = '2026-11-16';
@@ -98,6 +102,7 @@ export const TELL_REGISTRY = Object.freeze([
   tell('baked-text', 'slop', 'advisory', 'plan', 'bakedText', 'Real text over a clean image.', 'unslop'),
   tell('buried-raster', 'quality', 'warning', 'frame', 'buriedRaster', 'Less dim, or no photo.', 'impeccable'),
   tell('unblended-media', 'quality', 'advisory', 'frame', 'unblendedMedia', 'Match the ground and soften the edge.', 'unslop'),
+  tell('thin-text-on-footage', 'quality', 'warning', 'frame', 'thinTextOnFootage', 'Set it larger and heavier on a local dark grade, or move it off the busy part of the shot.', 'pilot review'),
   tell('organic-mask', 'slop', 'warning', 'plan', 'organicMask', 'A real matte from subject matting.', 'impeccable'),
   // The art direction (RFC §3): read only when the plan has a direction block.
   tell('hero-missing', 'quality', 'warning', 'plan', 'heroMissing', 'Mark each scene\'s one bright element as scene.hero; it carries the colour and the biggest move.', 'unslop'),
@@ -505,6 +510,20 @@ export function mediaEdge(image, rect, strip = 3) {
   return { sides, blackIn: dark(inner), blackOut: dark(outer) };
 }
 
+/** The share of edge pixels (a luma step of TELLS.busyStep right or down) in a ring `pad` px wide around rect. */
+export function ringDetail(image, rect, pad) {
+  const W = image.width, H = image.height;
+  const x0 = Math.round(rect.x), y0 = Math.round(rect.y), x1 = Math.round(rect.x + rect.width), y1 = Math.round(rect.y + rect.height);
+  let edges = 0, n = 0;
+  for (let y = Math.max(0, y0 - pad); y < Math.min(H - 1, y1 + pad); y += 2) for (let x = Math.max(0, x0 - pad); x < Math.min(W - 1, x1 + pad); x += 2) {
+    if (x >= x0 && x < x1 && y >= y0 && y < y1) continue;
+    const v = luma(px(image, x, y));
+    n += 1;
+    if (Math.abs(v - luma(px(image, x + 1, y))) >= TELLS.busyStep || Math.abs(v - luma(px(image, x, y + 1))) >= TELLS.busyStep) edges += 1;
+  }
+  return n ? edges / n : 0;
+}
+
 const FRAME_DETECTORS = {
   // frames: [{id, at, image}], one per main-track scene, mid-hold.
   accentEverywhere(input) {
@@ -522,6 +541,14 @@ const FRAME_DETECTORS = {
   buriedRaster: (input) => (input.plates ?? []).filter((p) => p.dim > TELLS.rasterDim && p.raw >= p.minimum && p.dimmed < p.minimum)
     .map((p) => ({ at: p.at ?? 0, ids: [p.id], detail: `the picture on ${p.path} has detail (${round(p.raw * 100)}% edges) that its ${p.dim} dim washes out (${round(p.dimmed * 100)}%)` })),
   // media: [{id, at, rect, image}]: a media window (not full frame) on the frame it plays in.
+  // texts: [{id, at, rect, size, weight, image}], text over footage at full size, mid-hold.
+  thinTextOnFootage: (input) => (input.texts ?? []).flatMap((t) => {
+    const scale = Math.min(t.image.width, t.image.height) / 1080;
+    const small = Number(t.size) < TELLS.footageTextPx * scale - 1e-6, thin = Number(t.weight) > 0 && Number(t.weight) < TELLS.footageTextWeight;
+    if (!small && !thin) return [];
+    const busy = ringDetail(t.image, t.rect, Math.max(8, Math.round(Number(t.size) * 0.6) || 24));
+    return busy >= TELLS.busyShare ? [{ at: t.at, ids: [t.id], detail: `${t.id} sets ${small ? `${Math.round(t.size)} px` : ''}${small && thin ? ', ' : ''}${thin ? `weight ${t.weight}` : ''} type over busy footage (${Math.round(busy * 100)}% edges around it)` }] : [];
+  }),
   unblendedMedia: (input) => (input.media ?? []).flatMap((m) => {
     const edge = mediaEdge(m.image, m.rect);
     const measured = edge.sides.filter((v) => v !== null), hard = measured.filter((v) => v >= TELLS.edgeStep);
@@ -536,7 +563,7 @@ export const FRAME_TELLS = Object.freeze(TELL_REGISTRY.filter((t) => t.applies =
 
 /** Every live frame rule on sampled pixels → findings in the gate shape (as planTells). */
 export function frameTells(input) {
-  const data = { story: input?.story ?? {}, frames: input?.frames ?? [], media: input?.media ?? [], plates: input?.plates ?? [] };
+  const data = { story: input?.story ?? {}, frames: input?.frames ?? [], media: input?.media ?? [], plates: input?.plates ?? [], texts: input?.texts ?? [] };
   const findings = [];
   for (const t of FRAME_TELLS) {
     let hits = [];

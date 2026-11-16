@@ -30,7 +30,13 @@ import {abs, el, set, tw} from './catalog-b-view.mjs';
 import {createFootageBase} from './catalog-c.mjs';
 import {grammarDuration, grammarEase, grammarStagger} from './grammar.mjs';
 import {PASSAGE_PARAMS, mediaPassage, passageParams} from './media-passage.mjs';
+import {contrast} from './panels.mjs';
 
+// Type over footage: at least this size (px at 1080) and weight, on a local
+// dark grade (never the brand background washed over the shot: a pale brand
+// reads as fog). FOOTAGE_TEXT.grade: the darkest a brand colour may be to
+// serve as the grade (contrast against white), else near-black.
+export const FOOTAGE_TEXT = Object.freeze({minPx: 56, weight: 700, grade: 12, fallback: '#0b0d12'});
 export const PHOTO_SCENE_TIMING = Object.freeze({minDuration: 2, fade: 0.4, lineLead: 0.35, lineStagger: 0.45, lineLand: 0.7, leadOut: 0.5});
 const T = PHOTO_SCENE_TIMING;
 const MOVES = ['push-in', 'pull-out', 'pan-left', 'pan-right', 'pan-up', 'pan-down'];
@@ -99,7 +105,7 @@ function resolvePhotoScene(params, ctx) {
     previousAt = at;
     const emphasis = line.emphasis === undefined ? false : check.bool(line.emphasis, `${path}.emphasis`);
     const preferred = u(i === 0 ? 96 : 72);
-    const fit = fitText(check, `${path}.text`, text, {family: 'display', width, preferred, min: b.min.key, maxLines: 1});
+    const fit = fitText(check, `${path}.text`, text, {family: 'display', width, preferred, min: Math.max(b.min.key, u(FOOTAGE_TEXT.minPx)), maxLines: 1});
     return {index: i, text, at, emphasis, size: fit.size};
   });
   const blockH = lines.reduce((sum, line) => sum + line.size * 1.12, 0) + gap * Math.max(0, lines.length - 1);
@@ -107,13 +113,20 @@ function resolvePhotoScene(params, ctx) {
   const top = align === 'center' ? safe.y + (safe.height - blockH) / 2 : bottom - blockH;
   let y = top;
   const x = align === 'center' ? safe.x + (safe.width - width) / 2 : safe.x;
+  // The grade: the darkest brand colour if it is dark enough, else near-black;
+  // the lines in the first brand colour that reads on it, else white.
+  const hex = (value) => /^#[0-9a-f]{6}$/i.test(String(value ?? ''));
+  const brand = [colors.bg, theme.paper, colors.ink].filter(hex);
+  const darkest = brand.length ? brand.reduce((best, c) => (contrast(c, '#ffffff') > contrast(best, '#ffffff') ? c : best)) : FOOTAGE_TEXT.fallback;
+  const scrimColor = contrast(darkest, '#ffffff') >= FOOTAGE_TEXT.grade ? darkest : FOOTAGE_TEXT.fallback;
+  const ink = [theme.paper, colors.ink, colors.bg].filter(hex).find((c) => contrast(c, scrimColor) >= 4.5) ?? '#ffffff';
   for (const line of lines) {
     line.box = {x: r2(x), y: r2(y), width: r2(width), height: r2(line.size * 1.12)};
-    line.color = line.emphasis ? b.resolveColor('primary', `${'params.lines'}[${line.index}].emphasis colour`, 'primary', colors.bg, 'brand.colors.bg') : theme.paper;
+    line.color = line.emphasis ? b.resolveColor('primary', `${'params.lines'}[${line.index}].emphasis colour`, 'primary', scrimColor, 'the scrim') : ink;
     y += line.size * 1.12 + gap;
     b.events.push({id: `${b.id}-line-${line.index}`, name: `line-${line.index}`, time: line.at, endTime: rt(line.at + T.lineLand), role: 'beat'});
   }
-  if (lines.length) b.requireContrast('lines/scrim', theme.paper, colors.bg, 'brand.colors.paper on the scrim (brand.colors.bg)');
+  if (lines.length) b.requireContrast('lines/scrim', ink, scrimColor, `the lines (${ink}) on the scrim (${scrimColor})`);
 
   // The move, sampled once per frame (a pure function of time; a set per frame, as product-demo's camera).
   const samples = [];
@@ -132,12 +145,13 @@ function resolvePhotoScene(params, ctx) {
   // The photo and scrim bleed past the canvas, so a world camera's drift and breathing never show their edge.
   const content = {media, move, zoom, focus, scrim, align, title, lines, samples, bleed: u(64), enter: passage.enter, exit: passage.exit,
     origin: {x: r2(focus.x * canvas.width), y: r2(focus.y * canvas.height)},
-    scrimColor: colors.bg, rise: u(36), lineLand: T.lineLand,
+    scrimColor, rise: u(36), lineLand: T.lineLand,
     lineEase: grammarEase(ctx.grammar, 'power3.out', {props: ['y']}), fadeEase: grammarEase(ctx.grammar, 'power2.out', {props: ['opacity']})};
   const model = b.finish(content, {rect: block, role: lines.length ? 'text' : 'decor', minTextPx: lines.length ? Math.min(...lines.map(line => line.size)) : null,
     motion: {enterEnd: rt(start + fadeIn), exitStart: rt(end - fadeOut), enterFrom: {opacity: passage.enter === 'fade' ? 0 : 1}, exitTo: {opacity: passage.exit === 'fade' ? 0 : 1}, enterEase: 'power2.out', exitEase: 'power2.in'}});
   // Its own Ken Burns move is the rest motion: hold drift would expose the photo's edges.
   model.layout.drift = false;
+  if (lines.length) model.layout.textWeight = FOOTAGE_TEXT.weight;
   return model;
 }
 
@@ -163,7 +177,7 @@ export function photoSceneView(model) {
   if (c.scrim !== 'none') kids.push(el('div', `${id}-scrim`, abs(-B, -B, canvas.width + 2 * B, canvas.height + 2 * B, {background: SCRIM_GRADIENT[c.scrim](c.scrimColor)})));
   for (const line of c.lines) {
     kids.push(el('div', `${id}-line-${line.index}`, abs(line.box.x, line.box.y, line.box.width, line.box.height, {margin: 0, whiteSpace: 'nowrap', textAlign: c.align,
-      fontFamily: fonts.display, fontSize: line.size, lineHeight: '1.12', color: line.color, textShadow: `0 ${4 * model.unit}px ${24 * model.unit}px #00000080`, opacity: 0}), [line.text]));
+      fontFamily: fonts.display, fontWeight: FOOTAGE_TEXT.weight, fontSize: line.size, lineHeight: '1.12', color: line.color, textShadow: `0 ${4 * model.unit}px ${24 * model.unit}px #00000080`, opacity: 0}), [line.text]));
   }
   const overlay = el('div', `${id}-overlay`, abs(0, 0, canvas.width, canvas.height, {opacity: 0, pointerEvents: 'none'}), kids);
   return {media, overlay};
