@@ -1645,7 +1645,7 @@ export const ENTRANCE_CLASSIFY = Object.freeze({
   minArea: 0.002,
   maxArea: 0.6, // not in the RFC: change over more of the frame is a transition or a camera move, not an element
   role: 1.25, // not in the RFC: detail (luma gradient) after ÷ before ≥ this is an entrance, before ÷ after an exit, else a change
-  ease: Object.freeze({ out: 0.68, in: 0.32, linearCv: 0.45, floorPairs: 6, tail: 0.08 }), // not in the RFC: the noise floor taken off the activity is read over floorPairs each side, and the span widens up to floorPairs while activity is above tail × its peak
+  ease: Object.freeze({ out: 0.68, in: 0.32, linearCv: 0.35, floorPairs: 6, tail: 0.05 }), // linearCv: the RFC's 0.45 splits power2.inOut's sampled triangle (CV 0.43–0.47 once its ends sink into the floor); a linear plateau measures ≤ 0.25. Not in the RFC: the noise floor taken off the activity is read over floorPairs each side, and the span widens up to floorPairs while activity is above tail × its peak
   kind: Object.freeze({ tip: 0.35, correlation: 0.6, travel: 0.02, scale: 0.6, presence: 10, firstShare: 0.2 }), // presence: a cell's mean moved this far from before the event; the first frame read is the first with firstShare of the final presence
   stagger: Object.freeze({ min: 3, size: 0.4, duration: 0.5, regularity: 0.4 })
 });
@@ -1865,6 +1865,8 @@ function describeEvent(runs, { means, details, mags, cw, ch, cells, fps, E }) {
   if (n % 2) done += curve[(n - 1) / 2] / 2;
   const share = done / total, mean = total / n;
   const cv = Math.sqrt(curve.reduce((sum, v) => sum + (v - mean) ** 2, 0) / n) / (mean || 1);
+  // An entrance lasts its widened span; its start stays the thresholded one, which staggers read.
+  event.seconds = round(n / fps, 3);
   event.ease = share > E.ease.out ? 'ease-out' : share < E.ease.in ? 'ease-in' : cv < E.ease.linearCv ? 'linear' : 'in-out';
   Object.assign(event, entranceKind(event, list, { means, cw, fps, E }));
   return event;
