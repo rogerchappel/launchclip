@@ -239,6 +239,27 @@ In `anime-cel`, the speed lines fire on their own whenever a cue turns a charact
 
 To see every look on a test scene in both renderers, run `node scripts/look-sheet.mjs`.
 
+## A finish over every frame
+
+A **finish** is a set of passes over the finished picture: film grain, a colour grade, bloom, chromatic aberration and more (the full list and their settings are in the [finishing RFC](../FINISHING_AND_ELEMENTS_RFC.md)). Captions and the brand frame stay crisp under it. Name a ready-made finish in a style pack, so every video of the brand gets it:
+
+```json
+"finish": "subtle-film"
+```
+
+| Finish | What it does |
+|---|---|
+| `subtle-film` | A light warm film grade (`warm-film` at 0.35) and fine mono grain. |
+| `soft-glow` | A gentle bloom on the brightest areas and fine grain. |
+
+Or list the passes yourself:
+
+```json
+"finish": [{ "pass": "grain", "amount": 0.05 }, { "pass": "aberration", "px": 1 }]
+```
+
+A video's own `finish` in its `storyboard.json` (a name or a list) replaces the pack's whole, and `"finish": []` turns it off for that video. The style pack's `look` and `background` work the same way: the pack fills them only when the video sets none.
+
 ## Turn the dials
 
 Every style has four dials, each from 0 to 1:
