@@ -1,0 +1,153 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Flow through slide transitions (golden, 9:16 carry across a push and a whip)",
+  "notes": "Golden story for carry through typed slides in a cuts story (docs/rd/carry-moving-camera.md \u00a74): the second plate pushes up over the first and the third whips in from the right; with flow on from the steady feel, the title and hub ride each slide and hold still on screen while the plates move past, and the cards glide into the next fan with the slide's own ease. No narration and no paid calls.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 12,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0b0d1a",
+      "primary": "#ffb547",
+      "accent": "#46d4ff",
+      "ink": "#0b0d1a",
+      "paper": "#f6f3ee"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "feel": "steady"
+  },
+  "camera": {
+    "mode": "cuts"
+  },
+  "scenes": [
+    {
+      "id": "plan",
+      "module": "node-graph",
+      "start": 0,
+      "end": 4,
+      "params": {
+        "title": "One brief, a whole team",
+        "hub": {
+          "label": "Director",
+          "icon": "clapperboard"
+        },
+        "nodes": [
+          {
+            "id": "research",
+            "label": "Research",
+            "icon": "search"
+          },
+          {
+            "id": "script",
+            "label": "Script",
+            "icon": "pen-line"
+          },
+          {
+            "id": "voice",
+            "label": "Voice",
+            "icon": "mic"
+          },
+          {
+            "id": "camera",
+            "label": "Camera",
+            "icon": "camera"
+          }
+        ],
+        "bpm": 120
+      }
+    },
+    {
+      "id": "ship",
+      "module": "node-graph",
+      "start": 4,
+      "end": 8,
+      "in": {
+        "type": "push",
+        "dur": 0.7,
+        "direction": "up"
+      },
+      "params": {
+        "title": "One brief, a whole team",
+        "hub": {
+          "label": "Director",
+          "icon": "clapperboard"
+        },
+        "nodes": [
+          {
+            "id": "research",
+            "label": "Research",
+            "icon": "search"
+          },
+          {
+            "id": "script",
+            "label": "Script",
+            "icon": "pen-line"
+          },
+          {
+            "id": "voice",
+            "label": "Voice",
+            "icon": "mic"
+          },
+          {
+            "id": "camera",
+            "label": "Camera",
+            "icon": "camera"
+          },
+          {
+            "id": "edit",
+            "label": "Edit",
+            "icon": "scissors"
+          }
+        ],
+        "bpm": 120
+      }
+    },
+    {
+      "id": "wrap",
+      "module": "node-graph",
+      "start": 8,
+      "end": 12,
+      "in": {
+        "type": "whip",
+        "dur": 0.45,
+        "direction": "left"
+      },
+      "params": {
+        "title": "One brief, a whole team",
+        "hub": {
+          "label": "Director",
+          "icon": "clapperboard"
+        },
+        "nodes": [
+          {
+            "id": "research",
+            "label": "Research",
+            "icon": "search"
+          },
+          {
+            "id": "edit",
+            "label": "Edit",
+            "icon": "scissors"
+          },
+          {
+            "id": "publish",
+            "label": "Publish",
+            "icon": "megaphone"
+          }
+        ],
+        "bpm": 120
+      }
+    }
+  ]
+}

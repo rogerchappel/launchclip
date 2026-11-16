@@ -135,6 +135,8 @@ and is passed by the camera is a world backdrop
   applies with B's layer tween in the role of the camera (map A's rect by the
   layers' offsets at the boundary, travel with the layer's ease). Feasible as
   a follow-up; it needs the layer tweens from `sceneWindows` in the flow pass.
+  **Shipped** with the typed `whip` (the same slide, with layer blur):
+  `examples/story/flow-slide-9x16`.
 - **Overview** (out, hold, in): two moves and a change of zoom; out.
 
 ## 5. Motion blur at peak speed
@@ -173,7 +175,6 @@ breaks its stacking with the plate it lands in. Unproven; see §7.
 ## 7. What stays unproven
 
 - Push, pull, orbit and overview (zoom or roll changes): the ride layer of §3.
-- The cuts-mode push (a typed slide), §4.
 - Per-element blur from the element's own screen velocity, §5.
 - A carried element whose B slot is far off its A position across a long
   pan: it crosses the frame with the camera, which may read as a second
