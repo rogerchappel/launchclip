@@ -2740,10 +2740,11 @@ One setting turns on the habits of a top faceless animated reel together:
   resolve in `resolveStory` like hits.
 - Grammar (`feelGrammar`, merged by `resolveGrammar` as preset < feel <
   `motion.grammar`): base `snappy` unless the story names another, `enter`
-  and `emphasis` eases become `springEase(0.27)` (`elastic.out(1, 0.406)`, a
-  GSAP-native spring whose first overshoot is 27 % of the travel and whose
-  later swings decay like a damped spring; `motion.mjs springEase(o)` solves
-  the period for any overshoot), entrances get 0.42 s to settle, the
+  and `emphasis` eases become `springEase(spring)`. Every preset's `spring`
+  is 0, so that is `power3.out`: entrances settle with no overshoot (bounce
+  reads as a template tell). An explicit `motion.feel.spring` (0–0.6) still
+  springs: `springEase(o)` is `elastic.out(1, P)` with the period solved so
+  the first overshoot is `o` of the travel. Entrances get 0.42 s to settle, the
   whip-pan ease is `expo.inOut` with 0.8 move blur, `defaultTransition` is a
   0.26 s whip-pan, and the hold level is `lively` (ambient field and hold
   drift, `ambient.mjs`).
@@ -2771,9 +2772,10 @@ One setting turns on the habits of a top faceless animated reel together:
 - A profile measured with `camera_moves_per_min` also caps it at twice its p90:
   the motion gate reports a camera that reframes far more often than the
   reference.
-- Kicks: a punch from 1 to `scale` (1.05) over 0.12 s (`power2.out`), a spring
-  settle over 0.35 s with the feel's overshoot towards a rest
-  `(1 + o·S)/(1 + o)`, chosen so the overshoot bottoms out at exactly 1, then
+- Kicks: a punch from 1 to `scale` (1.05) over 0.12 s (`power2.out`), a
+  settle over 0.35 s with the feel's overshoot `o` (0 by default: a
+  `power3.out` straight back to 1) towards a rest
+  `(1 + o·S)/(1 + o)`, chosen so any overshoot bottoms out at exactly 1, then
   a 0.6 s relax to 1. The scale is about `origin`. Automatic kicks
   (`kicks.auto`, on by default with the feel) take emphasised caption words
   and numbers (`captionEmphasis`: digits, overlay keywords, words named by

@@ -45,20 +45,25 @@ test('the feel and the dot-wipe are part of the story contract, and story.mjs ag
   assert.match(validateStory(overlay).errors.join('\n'), /dot-wipe/);
 });
 
-test('springs: springEase hits the overshoot it is asked for, and the kinetic grammar springs entrances and emphasis', () => {
+test('settles: springEase hits the overshoot it is asked for, and the kinetic grammar settles entrances and emphasis with none', () => {
   for (const overshoot of [0.1, 0.2, 0.27, 0.4]) assert.ok(Math.abs(easeOvershoot(springEase(overshoot)) - overshoot) < 0.005, String(overshoot));
   assert.equal(springEase(0), 'power3.out');
   const grammar = resolveGrammar(story());
   assert.equal(grammar.base, 'snappy');
-  assert.equal(grammar.ease.enter, springEase(0.27));
-  assert.equal(grammar.ease.emphasis, springEase(0.27));
-  assert.ok(Math.abs(easeOvershoot(grammar.ease.enter) - 0.27) < 0.005);
-  assert.equal(grammar.overshoot, 0.27);
+  assert.equal(grammar.ease.enter, 'power3.out');
+  assert.equal(grammar.ease.emphasis, 'power3.out');
+  assert.equal(grammar.overshoot, 0);
+  for (const name of ['kinetic', 'snap', 'steady']) assert.equal(easeOvershoot(resolveGrammar(story({motion: {feel: name}})).ease.enter), 0, name);
+  // An explicit spring still springs.
+  const springy = resolveGrammar(story({motion: {feel: {preset: 'kinetic', spring: 0.27}}}));
+  assert.equal(springy.ease.enter, springEase(0.27));
+  assert.ok(Math.abs(easeOvershoot(springy.ease.enter) - 0.27) < 0.005);
+  assert.equal(springy.overshoot, 0.27);
   // The story's own grammar wins over the feel; the feel still lays under it.
   const own = resolveGrammar(story({motion: {feel: 'kinetic', grammar: {base: 'playful', ease: {enter: 'power2.out'}}}}));
   assert.equal(own.base, 'playful');
   assert.equal(own.ease.enter, 'power2.out');
-  assert.equal(own.ease.emphasis, springEase(0.27));
+  assert.equal(own.ease.emphasis, 'power3.out');
   // Without a feel nothing changes.
   const plain = resolveStory({...story(), motion: {grammar: 'editorial'}});
   assert.equal(resolveGrammar(plain).ease.enter, 'power3.out');

@@ -435,7 +435,7 @@ export function springVisibleDuration({damping = 14, stiffness = 140, mass = 1} 
 // ---------------------------------------------------------------------------
 // Spring ease (GSAP-native, parameterised by overshoot)
 
-/** The overshoot a kinetic feel springs with by default: 27 % of the travel. */
+/** springEase()'s default overshoot when called with none: 27 % of the travel. The feel presets use 0. */
 export const SPRING_OVERSHOOT = .27;
 const springPeriods = new Map();
 

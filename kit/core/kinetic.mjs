@@ -19,10 +19,11 @@
 //   `move` seconds on expo.inOut (ambientSteps), so holds are crisp and
 //   moves blur. Framings alternate wide and tight within scale[].
 // - A kick multiplies the scale about its origin: a punch from 1 to its
-//   scale over KICK.punch (power2.out), a spring settle (motion.mjs
-//   springEase, 27 % overshoot) towards a rest just above 1, chosen so the
-//   overshoot bottoms out at exactly 1 (the edge never shows), then a slow
-//   relax to 1. Kicks come from story.camera.kicks and, with kicks.auto,
+//   scale over KICK.punch (power2.out), a settle (motion.mjs springEase of
+//   the feel's spring: 0 by default, a power3.out straight to 1; an explicit
+//   overshoot settles towards a rest just above 1, chosen so the overshoot
+//   bottoms out at exactly 1 and the edge never shows), then a slow relax to
+//   1. Kicks come from story.camera.kicks and, with kicks.auto,
 //   from emphasised narration words and numbers (captions.mjs
 //   captionEmphasis: digits, overlay keywords, words named by impact hits)
 //   and strong scene hits; at most one per kicks.gap seconds, never while a

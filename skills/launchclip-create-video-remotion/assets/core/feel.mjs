@@ -16,14 +16,15 @@
 //     seconds, never revealing an edge (scale[0] is the overscan the drift
 //     needs). World mode keeps its own drift instead;
 //   - zoom kicks: a punch-in to ×1.05 over 0.12 s on an emphasised word or
-//     number, then a spring settle over 0.35 s with 27 % overshoot; explicit
+//     number, then an ease-out settle over 0.35 s with no overshoot; explicit
 //     ones from camera.kicks, plus automatic ones (kicks: "auto") at most one
 //     per `gap` seconds and never during another camera move; a kick is
 //     reduced when a bigger one would push the content area out of frame;
-//   - springs: the grammar's entrance and emphasis eases become a spring with
-//     `spring` overshoot (motion.mjs springEase), over the base grammar
-//     (snappy unless motion.grammar names another), with longer entrances so
-//     the spring can settle;
+//   - settles: the grammar's entrance and emphasis eases become
+//     springEase(spring) (motion.mjs), over the base grammar (snappy unless
+//     motion.grammar names another), with longer entrances so they settle.
+//     Every preset's spring is 0 (a power3.out, no overshoot: the house rule);
+//     an explicit `spring` overshoot still springs;
 //   - a tuned whip-pan (0.26 s, the expo whip with full directional blur) as
 //     the default cut, and the dot-wipe transition for chapter turns.
 // What "snap" turns on: the same, except the ambient camera holds still on a
@@ -35,21 +36,21 @@
 // Footage-led stories (a base recording) keep their own camera: the feel's
 // ambient camera and kicks are off there; its grammar still applies.
 
-import { SPRING_OVERSHOOT, springEase } from './motion.mjs';
+import { springEase } from './motion.mjs';
 
 export const FEEL_NAMES = Object.freeze(['kinetic', 'snap', 'steady']);
 
 export const FEELS = Object.freeze({
   kinetic: Object.freeze({
     id: 'kinetic',
-    describe: 'Never still: an ambient camera drifts and breathes under every shot, zoom kicks punch the emphasised words, entrances spring with 27% overshoot, cuts whip in 0.26 s and chapters turn with a halftone dot wipe.',
+    describe: 'Never still: an ambient camera drifts and breathes under every shot, zoom kicks punch the emphasised words, entrances settle with no overshoot, cuts whip in 0.26 s and chapters turn with a halftone dot wipe.',
     base: 'snappy',
     // Tuned on a 52 s narrated reel: a livelier breathing than before and
     // kicks small enough that the content area stays in frame at the
     // ambient's peak (kinetic.mjs feelSafeArea: ×1.05 on ×1.045 in 9:16).
     ambient: Object.freeze({ scale: Object.freeze([1.02, 1.045]), shift: 0.009, period: Object.freeze([4, 7]) }),
     kicks: Object.freeze({ auto: true, scale: 1.05, gap: 1.5 }),
-    spring: SPRING_OVERSHOOT,
+    spring: 0,
     whip: 0.26,
     dotWipe: 0.5
   }),
@@ -62,12 +63,12 @@ export const FEELS = Object.freeze({
   // keeps the reel from reading still is its content (a host, live panels).
   snap: Object.freeze({
     id: 'snap',
-    describe: 'Holds sharp, then snaps: the camera rests on a framing for 1.6–4.5 s, then jumps to the next in 0.28 s (expo), kicks punch and return, entrances spring, cuts whip in 0.26 s',
+    describe: 'Holds sharp, then snaps: the camera rests on a framing for 1.6–4.5 s, then jumps to the next in 0.28 s (expo), kicks punch and return, entrances settle with no overshoot, cuts whip in 0.26 s',
     base: 'snappy',
     ambient: Object.freeze({ mode: 'step', scale: Object.freeze([1.012, 1.05]), shift: 0.016, period: Object.freeze([4, 7]), hold: Object.freeze([1.6, 4.5]), move: 0.28, creep: 0 }),
     kicks: Object.freeze({ auto: true, scale: 1.05, gap: 3.5 }),
     kick: Object.freeze({ punch: 0.1, settle: 0.22, relax: 0.2, relaxEase: 'expo.inOut' }),
-    spring: SPRING_OVERSHOOT,
+    spring: 0,
     whip: 0.26,
     dotWipe: 0.5,
     hold: 'off'
@@ -80,12 +81,12 @@ export const FEELS = Object.freeze({
   // rare and eased.
   steady: Object.freeze({
     id: 'steady',
-    describe: 'A steadicam: the camera floats on one smooth path through wandering framings, never stopping or snapping; kicks only where asked, eased; entrances spring, cuts whip in 0.26 s',
+    describe: 'A steadicam: the camera floats on one smooth path through wandering framings, never stopping or snapping; kicks only where asked, eased; entrances settle with no overshoot, cuts whip in 0.26 s',
     base: 'snappy',
     ambient: Object.freeze({ mode: 'steady', scale: Object.freeze([1.025, 1.06]), shift: 0.012, period: Object.freeze([3, 6]) }),
     kicks: Object.freeze({ auto: false, scale: 1.03, gap: 3 }),
     kick: Object.freeze({ punch: 0.3, settle: 0.45, relax: 0.9, punchEase: 'sine.inOut', relaxEase: 'sine.inOut' }),
-    spring: SPRING_OVERSHOOT,
+    spring: 0,
     whip: 0.26,
     dotWipe: 0.5,
     hold: 'off'
@@ -189,7 +190,7 @@ export function resolveFeel(story) {
 /**
  * The grammar overrides a named feel lays under story.motion.grammar
  * (grammar.mjs resolveGrammar merges preset < feel < the story's own), or
- * null. Entrances and emphasis spring; entrances get time to settle; whips
+ * null. Entrances and emphasis settle (spring 0 = power3.out); entrances get time to settle; whips
  * blur fully.
  */
 export function feelGrammar(story) {
