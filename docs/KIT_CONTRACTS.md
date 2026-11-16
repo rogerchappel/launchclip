@@ -6659,7 +6659,9 @@ both renderers through the shared view tree ([FLUID_MOTION_RFC.md](FLUID_MOTION_
   `{kind: "ribbon", label, icon?}`, `{kind: "prop", prop, state?, label?}`
   (`prop` a world-kit prop id). Icons come from the icon set. Anything else
   fails `graphicSpec(check, raw, path, {labelMax?})` with the path and what to
-  change.
+  change. The list does not grow: past it is a catalogue module, and an
+  unknown kind or key fails with `beyondGraphic(word)`, the nearest module
+  that draws it (`BEYOND`, word → module id) or that none does yet.
 - `graphicWidth(spec, L)` is the width a graphic needs at label size L;
   `fitGraphic(check, path, spec, width, {preferred, min})` is the largest
   label size that fits, failing under `min`; `cardHeight(I, L)` is a card's

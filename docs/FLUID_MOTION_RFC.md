@@ -460,9 +460,20 @@ so it renders in both renderers and can be a member of any group above. The
 spec is validated like module params; anything it cannot draw is a validation
 error the planner can fix, never free-form HTML.
 
-**Unproven.** How far a spec can go before it is a custom module. The line in
-this RFC: shapes from a closed list (card, chip, badge, ribbon, prop from the
-world kit), any icon from `kit/core/icons.mjs`, text that fits; nothing else.
+**The rule (decided 2026-11-17).** The `graphic` spec is a closed list and
+stays one: card, chip, badge, ribbon, a prop from the world kit, any icon from
+`kit/core/icons.mjs`, and text that fits. It does not grow. Anything past it
+(a chart, a progress value, a photo or avatar, an arrow, a second line of
+detail, a colour of its own, a graphic inside a graphic, free positions or
+sizes) is its own catalogue module, with its own params, layout, parity
+fixture and planner line, so the spec never turns into a small layout
+language. Validation enforces the line: an unknown kind or a key no kind takes
+fails with the nearest catalogue module that draws it (`beyondGraphic` in
+`graphic.mjs`: `kind "bar-chart"` → the bar-chart module, `detail` →
+concept-card, `children` → icon-grid or node-graph, `x` or `width` → the module
+lays out its members) or says no module draws it yet, and a key another kind
+takes names that kind. The planner prompt says the same in one line. Graphics
+that recur past the list are module candidates in `docs/ROADMAP.md`.
 
 **Shipped (first half).** `kit/core/graphic.mjs` holds the spec, the fit and
 the painter:
@@ -571,13 +582,15 @@ the painter:
   their base at 0.3 of the bob and 0.7 of the tilt instead of floating off
   their contact shadow. Sets of tiny units (unit-grid) get no idle at all.
   Still unproven: a whole short where every scene breathes.
-- How far a graphic spec can go before it is a custom module. The closed
-  list held for the bakery sample, but a set that mixes kinds reads less
-  evenly than one kind: a chip or ribbon is shorter than a card and floats in
+- ~~How far a graphic spec can go before it is a custom module.~~
+  **Settled (2026-11-17): not past the closed list.** Anything beyond it is a
+  catalogue module (§10, the rule), and validation names the module. Still
+  open within the list: it held for the bakery sample, but a set that mixes
+  kinds reads less evenly than one kind: a chip or ribbon is shorter than a card and floats in
   the middle of its slot, and a prop's visual weight depends on the drawing.
   Not yet tried: a graphic as a member of the other set modules (item-list,
-  drop-grid, social-wall), graphics carried across scenes (§6), and a
-  per-graphic colour (today the module's palette decides it).
+  drop-grid, social-wall) and graphics carried across scenes (§6). A
+  per-graphic colour is past the list: the module's palette decides it.
 - Whether two staggered arcs hold eight labels in every brand's display font;
   the module fails validation rather than overlap them, which may make it
   refuse some fonts at eight nodes.
