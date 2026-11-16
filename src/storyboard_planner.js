@@ -509,7 +509,9 @@ export async function planStoryboard(options = {}) {
         const seconds = storyboardSeconds(checked.storyboard, wordList);
         const footage = Boolean(assets) && lane !== "footage-led";
         const opensOnBase = lane === "footage-led" || Boolean(fixed.base);
-        const short = [...hookErrors(checked.storyboard, { seconds, base: opensOnBase }), ...hookTimingErrors(checked.storyboard, { seconds, words: wordList, times: sceneTimes(checked.storyboard, wordList, beats), profile, base: opensOnBase }), ...cardErrors(checked.storyboard, { seconds, footage })];
+        const short = [...hookErrors(checked.storyboard, { seconds, base: opensOnBase }), ...hookTimingErrors(checked.storyboard, { seconds, words: wordList, times: sceneTimes(checked.storyboard, wordList, beats), profile, base: opensOnBase }), ...cardErrors(checked.storyboard, { seconds, footage }),
+          // The frame full to the last second, and a list in order or its teaser labelled (src/visual_density.js, src/list_order.js).
+          ...(checked.layout?.density ?? []), ...storyboardOrderErrors(checked.storyboard)];
         if (short.length) { checked.errors = [...checked.errors, ...short]; checked.ok = false; }
         // A handed-in file the user clearly meant to feature that no scene shows (src/asset_understanding.js).
         const left = unusedFeatured(checked.storyboard, featured ?? []);
@@ -924,8 +926,8 @@ export function checkStoryboard(raw, { words = [], beats = null, track = null, t
       captionZones: layoutCaptionZones(resolved)
     });
     const report = checkLayout({ canvas, elements, duration: Number(resolved.resolved?.duration) || undefined });
-    // Footage or full-bleed type to the last second (src/visual_density.js), as finish gates it.
-    errors.push(...visualDensityErrors(resolved, elements));
+    // Footage or full-bleed type to the last second (src/visual_density.js), as finish gates it: repair notes the planner loop adds.
+    layout.density = visualDensityErrors(resolved, elements);
     layout.findings = report.findings;
     layout.errors = report.findings.filter((finding) => finding.severity === "error").length;
     layout.warnings = report.findings.filter((finding) => finding.severity !== "error").length;
@@ -938,8 +940,6 @@ export function checkStoryboard(raw, { words = [], beats = null, track = null, t
     errors.push(`layout: ${message(error)}`);
   }
   errors.push(...placeholderErrors(storyboard));
-  // A later list item shown before the earlier ones is a teaser that says so, or a bug (src/list_order.js).
-  errors.push(...storyboardOrderErrors(storyboard));
   // Captions that are on are seen: ranges hidden under cards (tooling's last
   // resort for a card in the caption band, src/caption_band_fit.js) may
   // cover only a small share of the narration (src/caption_visibility.js).
