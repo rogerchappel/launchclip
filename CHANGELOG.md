@@ -142,6 +142,11 @@
 
 ### Changed
 
+- `picture-in-picture` is drawn as a `split-screen` on a 9:16 or square
+  frame (footage across the top for a top corner, the bottom for a bottom
+  one). A corner card there shrank the footage to a thumbnail and left the
+  panel beside it empty. The planner is told it is for 16:9; on 16:9 nothing
+  changes, and a stored portrait plan that names it still builds.
 - HyperFrames moves from 0.7.58 to 0.7.111, which clears its `adm-zip` and
   `@hono/node-server` advisories. That release copies a mono sound to both
   sides at full level, 3 dB above what Remotion renders, so the HyperFrames
