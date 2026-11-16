@@ -115,6 +115,16 @@ test("quality gates exact duration, dimensions, dead motion, and missing samples
   assert.deepEqual(new Set(result.findings.map((entry) => entry.category)), new Set(["duration", "dimensions", "frames", "motion"]));
 });
 
+test("hold_ratio is relative to the video's own median: advisory once the absolute stillness is measured", () => {
+  const metrics = { duration_seconds: 10, width: 1080, height: 1920, frame_count: 300, motion_bursts_per_minute: 30, motion: { hold_ratio: 0.723, bursts: [] } };
+  const expected = { maximum_hold_ratio: 0.703 };
+  const measured = evaluateMotionQuality({ ...metrics, motion: { ...metrics.motion, still_share: 0.04 } }, expected);
+  assert.equal(measured.ok, true);
+  assert.deepEqual(measured.findings.map((entry) => [entry.measure, entry.severity]), [["hold_ratio", "minor"]]);
+  // Without still_share (an older report) it is still the only stillness check, so it holds.
+  assert.equal(evaluateMotionQuality(metrics, expected).ok, false);
+});
+
 test("quality gates opening cadence, frame energy, and velocity", () => {
   const metrics = {
     duration_seconds: 30, width: 1080, height: 1920, frame_count: 900,
