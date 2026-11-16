@@ -404,6 +404,23 @@ test("repairLayout settles a caption-band clash a step further each pass: the ca
   assert.deepEqual(ctx.copy.overlays[0].hide, [[5.18, 5.82]]);
 });
 
+test("repairLayout plates every caption line when fixed caption words lose contrast on the background", async () => {
+  // A production plan failed here after a 13-minute storyboard: brand-pinned white captions on a light texture.
+  const story = {
+    schema: "launchclip.story.v1", lane: "footage-led", format: { width: 1080, height: 1920, fps: 30, duration: 10 },
+    background: { kind: "texture" },
+    overlays: [{ id: "captions", type: "captions", preset: "kinetic-hierarchy", colors: { idle: "#ffffff", active: "primary" } }],
+    scenes: [{ id: "open", module: "hook-title", start: 0, end: 10, params: { headline: "Three boards" } }]
+  };
+  const layout = { findings: [{ rule: "background-contrast", severity: "error", ids: ["captions"], at: 0, detail: "caption words (#ffffff, preset kinetic-hierarchy) have 1.07:1 on the texture background's #e5fcfc; captions need 3:1. Give them an outline or plate, or change the caption colour" }] };
+  const repaired = await repairLayout({ copy: story }, layout, { resolveOptions: () => ({}) });
+  assert.equal(repaired.storyboard.overlays[0].plates, "all");
+  assert.deepEqual(repaired.changes, ["layout: tooling plated every caption line: caption words (#ffffff, preset kinetic-hierarchy) have 1.07:1 on the texture background's #e5fcfc"]);
+  // Once plated, a second pass has nothing to change.
+  const again = await repairLayout({ copy: repaired.storyboard }, layout, { resolveOptions: () => ({}) });
+  assert.deepEqual(again.changes, []);
+});
+
 test("repairLayout moves cards off the face and fits the caption band even beside an error it cannot fix", async () => {
   // The second production failure: cards on the presenter's face once the
   // real timings exist, next to a caption-band clash and an unrelated error.
@@ -1399,6 +1416,26 @@ test("finish --prototype renders only the opening 20–30 s, cut at a scene end,
     assert.ok(report.next_steps.some((step) => /Review the prototype \(renders\/prototype\.mp4, the opening 24 s of 45 s\)/.test(step)));
     await assert.rejects(runFinish(project, { renderer: "remotion", prototype: true, candidate: "a" }, fakeAdapters()), /--prototype or --candidate/);
 
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});
+
+test("finish plates every caption line instead of failing when fixed white captions lose contrast on a light background", async () => {
+  const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-contrast-"));
+  try {
+    await cp(MINIMAL, project, { recursive: true });
+    const file = path.join(project, "storyboard.json");
+    const story = JSON.parse(await readFile(file, "utf8"));
+    story.brand.colors = { bg: "#f4fbfb", primary: "#0f766e", accent: "#b45309", ink: "#f4fbfb", paper: "#14201f" };
+    story.background = { kind: "texture" };
+    story.overlays = [{ type: "captions", preset: "kinetic-hierarchy", colors: { idle: "#ffffff" } }];
+    await writeFile(file, JSON.stringify(story));
+    const report = await runFinish(project, {}, fakeAdapters());
+    assert.equal(report.gates.layout.status, "passed", JSON.stringify(report.gates.layout.findings));
+    assert.ok(report.warnings.some((line) => /^layout: tooling plated every caption line: caption words \(#ffffff, preset kinetic-hierarchy\)/.test(line)), JSON.stringify(report.warnings));
+    const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
+    assert.equal(resolved.overlays.find((entry) => entry.type === "captions").plates, "all");
   } finally {
     await rm(project, { recursive: true, force: true });
   }
