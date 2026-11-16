@@ -1,0 +1,31 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Works with (9:16 brand-mark members)",
+  "notes": "Sample for the brand-mark member (docs/FLUID_MOTION_RFC.md §10, member modules): the vocabulary sample's \"Works with\" row with brand marks where it stood generic icons in. A robot waits in a studio at night while five made-up integrations' marks and two plain nodes flock out of a Your app hub, wired in with pulses on a 120 bpm grid, converging at 3 s as the robot cheers. The marks are generated PNGs with no tone stated, so the story read measures each once: a dark see-through mark is recoloured to read, a light one kept, a boxed one plated whole, a colourful one tinted. No narration and no paid calls.",
+  "lane": "motion",
+  "format": {"width": 1080, "height": 1920, "fps": 30, "duration": 10, "platform": "youtube-shorts"},
+  "brand": {
+    "colors": {"bg": "#0b0d1a", "primary": "#ffb547", "accent": "#46d4ff", "ink": "#0b0d1a", "paper": "#f6f3ee"},
+    "fonts": {"display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono"}
+  },
+  "motion": {"feel": {"preset": "kinetic", "ambient": {"shift": 0.014, "period": [2.5, 4]}}},
+  "camera": {"mode": "cuts", "kicks": [{"at": 0.25}, {"at": 1.5}, {"at": 3}, {"at": 6}, {"at": 8}]},
+  "cast": {"style": "chibi", "characters": [{"id": "bot", "name": "Bot", "kind": "robot", "position": "center"}]},
+  "world": {"kind": "studio", "time": "night"},
+  "scenes": [
+    {"id": "room", "module": "cast-scene", "start": 0, "end": 10, "params": {"set": "standing", "shot": "wide",
+      "cast": [{"id": "bot", "pose": "look", "expression": "happy", "cues": [{"at": 3, "pose": "cheer", "expression": "delighted"}, {"at": 4.7, "pose": "look", "expression": "happy"}]}]}},
+    {"id": "works", "module": "node-graph", "track": 1, "start": 0, "end": 10, "params": {
+      "hub": {"label": "Your app", "icon": "sparkles"},
+      "nodes": [
+        {"id": "ringly", "member": {"module": "brand-mark", "src": "assets/marks/ringly.png", "label": "Ringly"}},
+        {"id": "glint", "member": {"module": "brand-mark", "src": "assets/marks/glint.png", "label": "Glint"}},
+        {"id": "plum", "member": {"module": "brand-mark", "src": "assets/marks/plumbox.png", "label": "Plumbox"}},
+        {"id": "repo", "label": "Repo", "icon": "code"},
+        {"id": "stackr", "member": {"module": "brand-mark", "src": "assets/marks/stackr.png", "label": "Stackr"}},
+        {"id": "prismo", "member": {"module": "brand-mark", "src": "assets/marks/prismo.png", "label": "Prismo"}},
+        {"id": "clips", "label": "Clips", "icon": "video"}
+      ],
+      "bpm": 120, "converge": 3, "rect": {"x": 80, "y": 280, "width": 860, "height": 640}}}
+  ]
+}
