@@ -1,6 +1,6 @@
 # RFC: Sharper plans, faster pace, measured references
 
-Status: draft, open for review
+Status: phase 1 and the plan side of phase 2 built (see "Built so far" at the end of §2); the rest is a draft open for review
 Date: 2026-11-16
 Roadmap entry: "Sharper plans and a faster hook" ([ROADMAP.md](ROADMAP.md))
 
@@ -94,8 +94,9 @@ again on the render:
   move) longer than the band; no frozen pixels longer than `max_still`.
 - **Anticipation:** a move tied to a beat or a hit reaches half its travel
   within one frame of that beat. The compiler starts it early by the ease's
-  half-travel time (power3.out: 0.21 × duration; a 0.4 s move starts 0.08 s
-  early). The planner names the landing, never the start.
+  half-travel time (GSAP's power3 is a quartic, so power3.out reaches half
+  its travel at 0.159 × duration; a 0.4 s move starts 0.064 s early). The
+  planner names the landing, never the start.
 - **Bar timing:** new anchors `bar:<n>` and `bar:<n>.<beat>` (from
   `BEATS.json`). Sections start on bar lines. Cuts land on beats more often
   than chance, but not on every beat.
@@ -124,6 +125,67 @@ it reads ops. Render side: `paceGate` in `src/quality_gates.js`, filed as
 from `src/render_motion_analysis.js` and beat data from §4.3. Profiles gain
 `hook_rate_ratio`, `max_event_gap_seconds` and `cuts_on_beat_ratio` so a
 measured reference set can tighten them.
+
+### Built so far (phases 1 and 2, plan side)
+
+What shipped, and where it departs from the text above:
+
+- **Schema.** `treatment` is an optional, additive field of
+  `launchclip.direction-map.v1`; no map changes shape, so the schema stays
+  at v1 instead of moving to v2. `kit/core/treatment.mjs` validates it
+  (`validateTreatment`, called from `validateDirection`). Without a
+  storyboard (the planner's first call) only the shape is checked; against
+  the storyboard every guardrail in the §1 table runs. The bespoke tier's
+  first planner call requires `concept`, `throughline`, `banned`,
+  `transitions` and `signature`; the storyboard check does not, so a drafted
+  map still plans.
+- **Not yet checked:** `concept` containing a verb (needs a tagger; the
+  critic reads it), `throughline.object` as an element id inside each scene
+  and the render-side carry check, `locked_example.check` expressions,
+  `cover.frame` defaulting to the signature, and every `sound.*` field
+  (later phase, with `bar:` anchors and the reference measures).
+- **Banned tokens** with a plan check (`BANNED_CHECKS`): `crossfade`,
+  `bounce-ease` (elastic, or back past 1.7), `camera-shake` (camera kicks or
+  shake), `brand-before-end` (a logo, brand or wordmark module before 85%),
+  `particles`, `lens-flare` (light-leak or flare), `hold>N`. A style pack's
+  `avoid` list seeds `banned` in the prompt; without one it starts from
+  `crossfade, bounce-ease, lens-flare`.
+- **Pace bands** live in each `CADENCE_TARGETS` format as `pace`, scaled by
+  the cadence style like the other seconds (the hook window does not
+  stretch). Columns map to formats: short motion → `short-form`, short
+  talking head → `talking-head`, explainer motion → `motion-graphics` and
+  `art-direction`, long form → `long-form`. `animated` (character stories,
+  not in the table above) gets hook 0–4 s with 2 events, ratio 1.2, gap warn
+  6.5 s and fail 11 s (its `gap.p90_max`), max still 1 s. `paceFormat` picks
+  the format: long form from 300 s or the long-form profile, then footage →
+  talking head, the two reel profiles → short motion, a character profile →
+  animated, else explainer motion.
+- **Events** on the plan: each scene's entrance and transition moves, its
+  states, hits and zooms, its module events, and each element that fades up
+  from nothing or types on, merged within 0.25 s. Spans of playing footage
+  or a travelling camera are opaque (their own events only show on the
+  render): they never count as a gap, and a hook that is mostly opaque is
+  left to the render. A closing `cta`, `end-card` or `brand-lockup` holds to
+  the end without counting as a gap.
+- **Severities on the plan.** `event-gap` fails past the fail line and warns
+  past the warn line, as in the table. `slow-hook`, `flat-hook` and
+  `frozen-frame` warn on the plan and fail only on renders (phase 7): a
+  plan's element builds saturate the merged event rate (the hook ratio
+  failed 28 of the 41 shipped examples), and a clip's or a still's own
+  motion is only known in pixels. Six shipped examples open with fewer
+  events than the hook rule asks (before-after, footage-transitions,
+  overview-world, ui-parity, world-captions, zoom-through); they are
+  single-feature parity fixtures, so they stay as they are. A frozen frame
+  past a treatment's own `hold>N` fails on the plan.
+- **Anticipation** is `late-beat` in `sceneMotionFindings`: a travel or
+  scale tween that starts exactly on a state or hit and reaches half its
+  travel more than one frame later. It warns, once per scene, until the
+  compiler starts moves early (still to build); every shipped state move
+  lands late today. The two-frame long-form tolerance waits for that too.
+- **Gate:** `paceGate` in `src/quality_gates.js`, filed as `pace` in
+  `qa/finish/gates.json`. The profile fields (`hook_rate_ratio`,
+  `max_event_gap_seconds`, `cuts_on_beat_ratio`), cuts on beat, bar timing
+  and the pace change rule wait for the beat data of §4.3.
 
 ## 3. Techniques catalogue
 
