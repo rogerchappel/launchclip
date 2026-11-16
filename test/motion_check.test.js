@@ -11,6 +11,7 @@ import {MOTION_CHECK, grammarMotionFindings, halfTravel, sceneMotionFindings} fr
 import {choreographyGate, modelOps} from '../src/movement_guardrails.js';
 import {renderedModels} from '../src/direction_guardrails.js';
 import {idleOps, shakeOps} from '@launchclip/core/fluid-motion.mjs';
+import {KICK} from '@launchclip/core/kinetic.mjs';
 
 const tween = (target, start, duration, ease, from, to) => ({type: 'tween', target, start, duration, ease, from, to});
 const fadeIn = (target, start, duration = 0.4, ease = 'power3.out') => tween(target, start, duration, ease, {opacity: 0, y: 18}, {opacity: 1, y: 0});
@@ -208,4 +209,12 @@ test('the phase-1 node-graph sample passes the new checks: it breathes, its shak
   }
   assert.deepEqual(settled(choreographyGate(story).findings), []);
   assert.ok(!choreographyGate(story).findings.some(f => f.rule === 'static-hold'));
+});
+
+// New samples copy these two. feelKicks drops an explicit kick before KICK.edge
+// with no finish warning, and the dropped opening kick left both renders
+// still for their first half second (finish's motion gate failed).
+test('the golden node-graph samples keep every kick', () => {
+  for (const name of ['node-graph-9x16', 'node-graph-anchors-9x16'])
+    for (const kick of example(name).camera.kicks) assert.ok(kick.at >= KICK.edge, `${name}: kick at ${kick.at} s is dropped`);
 });

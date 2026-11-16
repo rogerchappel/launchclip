@@ -8,8 +8,8 @@
     "colors": {"bg": "#0b0d1a", "primary": "#ffb547", "accent": "#46d4ff", "ink": "#0b0d1a", "paper": "#f6f3ee"},
     "fonts": {"display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono"}
   },
-  "motion": {"feel": "kinetic"},
-  "camera": {"mode": "cuts", "kicks": [{"at": 0.15}, {"at": 3.6}]},
+  "motion": {"feel": {"preset": "kinetic", "ambient": {"shift": 0.014, "period": [2.5, 4]}}},
+  "camera": {"mode": "cuts", "kicks": [{"at": 0.25}, {"at": 3.6}]},
   "cast": {"style": "chibi", "characters": [{"id": "bot", "name": "Bot", "kind": "robot", "position": "center"}]},
   "world": {"kind": "cafe", "time": "night"},
   "scenes": [

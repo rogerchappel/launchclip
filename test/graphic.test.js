@@ -5,7 +5,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {MODULES, catalogHTimeline, catalogHView} from '@launchclip/core/catalog-h.mjs';
 import {makeCheck} from '@launchclip/core/catalog-b-base.mjs';
-import {GRAPHIC_KINDS, fitGraphic, graphicNodes, graphicSpec} from '@launchclip/core/graphic.mjs';
+import {BEYOND, GRAPHIC_KINDS, fitGraphic, graphicNodes, graphicSpec} from '@launchclip/core/graphic.mjs';
+import {knownModules} from '@launchclip/core/modules.mjs';
 
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
 const FORMATS = {'9:16': {width: 1080, height: 1920, fps: 30}, '16:9': {width: 1920, height: 1080, fps: 30}};
@@ -41,6 +42,25 @@ test('graphic: the closed list, and errors that say what to change', () => {
     ['card', /must be a graphic/]
   ];
   for (const [raw, message] of fails) assert.throws(() => spec(raw), message, JSON.stringify(raw));
+});
+
+test('graphic: past the closed list, the error names the module that draws it, or says none does yet', () => {
+  const fails = [
+    [{kind: 'bar-chart'}, /kind must be one of card, chip, badge, ribbon, prop, got "bar-chart": the list is closed, and that is the bar-chart module's job/],
+    [{kind: 'arrows'}, /the callout-arrow module's job/],
+    [{kind: 'images', label: 'x'}, /the photo-scene module's job/],
+    [{kind: 'hexagon'}, /no catalogue module draws that yet/],
+    [{kind: 'card', label: 'Baker', detail: 'Starts at 4am'}, /graphic.detail is not supported \(allowed: kind, icon, label, badge\): the list is closed, and that is the concept-card module's job/],
+    [{kind: 'chip', label: 'Hot', progress: 0.4}, /the progress module's job/],
+    [{kind: 'card', label: 'Baker', color: '#f00'}, /graphic.color .*no catalogue module draws that yet/],
+    [{kind: 'card', label: 'Baker', x: 120}, /the module lays out its members; no module takes free positions/],
+    [{kind: 'card', label: 'Team', children: [{kind: 'chip', label: 'a'}]}, /graphic.children must be plain text or a name, not a list: graphics do not nest.*icon-grid, node-graph/],
+    [{kind: 'card', label: {kind: 'chip', label: 'a'}}, /graphic.label must be plain text or a name, not an object: graphics do not nest/],
+    [{kind: 'prop', prop: 'mug', icon: 'star'}, /graphic.icon is not supported \(allowed: kind, prop, state, label\): icon belongs on a card or chip or badge or ribbon/]
+  ];
+  for (const [raw, message] of fails) assert.throws(() => spec(raw), message, JSON.stringify(raw));
+  const known = new Set(knownModules());
+  for (const module of Object.values(BEYOND).filter(Boolean)) assert.ok(known.has(module), `${module} is a catalogue module`);
 });
 
 test('graphic: text that fits, or a validation error', () => {
