@@ -2,6 +2,7 @@
 // index, `sound fetch`, credits, and the offline fallback. No test downloads:
 // zones are synthetic and fetch is injected.
 import test from "node:test";
+import { ffmpegMissing, mediaSkip } from "./helpers/media.js";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -158,7 +159,7 @@ test("credits: CC0 libraries get a thanks line naming the instruments; nothing u
   assert.equal(creditsText([]), "");
 });
 
-test("offline: a sampled genre with nothing fetched renders on synth and says so once", async () => {
+test("offline: a sampled genre with nothing fetched renders on synth and says so once", { skip: mediaSkip(ffmpegMissing()) }, async () => {
   const dir = await tempDir();
   try {
     assert.deepEqual(sampledPlan(genreBed({ genre: "acoustic-pluck" }, "t"), new Set()).stems, {});
