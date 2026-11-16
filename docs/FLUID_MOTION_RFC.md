@@ -164,6 +164,30 @@ out until a rect can be mapped through the camera at the boundary frame. Text
 that reflows between layouts (a card that grows) is a cross-fade inside the
 moving card, not a morph.
 
+**Reference notes (2026-11-17).** A second reel shows carry working through a
+talking-head video: graphics sit on a dark dot-grid plate above the speaker,
+with cutaways to the speaker full frame between beats. What makes it read as
+one continuous piece, and what it adds to this section:
+
+- **The plate survives footage cutaways.** When the cut returns to the
+  graphics, they resume where they left off rather than rebuilding. The plate
+  never moves its camera, so it meets the "same coordinate space" condition
+  above by construction. That makes it a good first target for phase 3.
+- **Pinned elements.** A hub mark at the top stays put across several beats
+  while content below it changes. This is simpler than carry (same rect on
+  both sides, so no FLIP) and could ship first: a carried id whose slot equals
+  its last rect.
+- **Container morph.** A URL pill becomes a node; a search pill streaks in
+  (motion blur at peak speed), becomes a command bar, then three empty rows
+  drop in under it and fill in turn. The shape itself changes, which this
+  section currently rules out. Worth testing a rect-only morph (tween width,
+  height and corner radius of the box, cross-fade the contents) before
+  deciding it stays out.
+- **Growth from what's already there.** Labels branch out of an ad card on
+  wires and icons branch out of the hub, so nothing new appears unattached.
+  `node-graph` wires already do this; the gap is wires from an arbitrary
+  element of another module, which needs the anchors in §7.
+
 ## 7. Characters reacting to graphics (phase 4)
 
 Cast scenes already direct gaze and gestures at targets
