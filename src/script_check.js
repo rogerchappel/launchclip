@@ -327,9 +327,9 @@ export function checkScript(input = {}) {
     else if (hedges.length === 1) add(warnings, "hedge", `"${hedges[0][0]}" hedges.`, "Say it firmly, with the specific the brief gives.", spanOf(sentenceAt(sentences, hedges[0].index)));
     if (duration != null && duration >= 30 && sentences.length >= 6) {
       const share = (sentence) => sentence.wordStart / Math.max(1, words);
-      if (!sentences.some((sentence) => share(sentence) < 0.3 && OPEN_LOOP.test(sentence.text))) add(warnings, "open-loop", "Nothing in the first 30% promises a later payoff (heuristic).", "Open a loop early (\"the last one is the one nobody checks\", \"one fix I'll give you at the end\") and close it before the call to action.", spanOf(sentences[1] ?? hook));
+      if (!sentences.some((sentence) => share(sentence) < 0.3 && OPEN_LOOP.test(sentence.text))) add(warnings, "open-loop", "Nothing in the first 30% promises a later payoff (heuristic).", "Open a loop early (\"the last one is the cheapest fix\", \"one fix I'll give you at the end\") and close it before the call to action.", spanOf(sentences[1] ?? hook));
       const middle = sentences.filter((sentence) => share(sentence) >= 0.3 && share(sentence) <= 0.85);
-      if (middle.length && !middle.some((sentence) => REHOOK.test(sentence.text) || countWords(sentence.text) <= 4)) add(warnings, "rehook-missing", "Nothing between 30% and 85% re-hooks or reframes (heuristic).", "Add one short pattern interrupt near the middle: a line that reframes what came before (\"The word is per.\", \"But here's the part nobody checks.\").", spanOf(middle[0]));
+      if (middle.length && !middle.some((sentence) => REHOOK.test(sentence.text) || countWords(sentence.text) <= 4)) add(warnings, "rehook-missing", "Nothing between 30% and 85% re-hooks or reframes (heuristic).", "Add one short pattern interrupt near the middle: a line that reframes what came before (\"The word is per.\", \"All three fail the same way: water sits on the cut end.\").", spanOf(middle[0]));
     }
   }
 

@@ -154,7 +154,7 @@ export const LIBRARY_SKELETONS = Object.freeze([
   Object.freeze({
     schema: SKELETON_SCHEMA,
     id: 'nobody-tells',
-    title: 'What nobody tells you',
+    title: 'The hidden cost',
     version: '2026-10',
     family: 'nobody-tells',
     fits: Object.freeze(['\\b(nobody|no one) tells?\\b', '\\b(hidden|secret|real) (cost|price|truth|reason)\\b', '\\b(mistakes?|regrets?|wish i knew|before you)\\b']),
@@ -162,7 +162,7 @@ export const LIBRARY_SKELETONS = Object.freeze([
     aspects: Object.freeze(['9:16']),
     duration: Object.freeze({ min: 20, target: 35, max: 60 }),
     script_format: 'short-form',
-    hook: Object.freeze({ template: 'Nobody tells you {the hidden cost} of {the thing}.', rule: 'Name the thing the viewer already does and promise the part they have not been told.' }),
+    hook: Object.freeze({ template: '{The thing} costs you {the hidden cost}, and it is not on the price tag.', rule: 'Name the thing the viewer already does and promise the part they have not been told.' }),
     beats: Object.freeze([
       beat('hook', 'hook', 'The promise', 0.14, 'The thing and the hidden part.'),
       beat('known', 'promise', 'What you know', 0.14, 'The version everyone hears, in one line.'),
@@ -177,8 +177,8 @@ export const LIBRARY_SKELETONS = Object.freeze([
     share: Object.freeze({ kind: 'useful', rule: 'A takeaway the viewer will save or send to someone about to do the thing.' }),
     voice: Object.freeze({ tier: 'free', delivery: 'frank, a friend letting you in on it' }),
     sound: Object.freeze({ density: 'low', long_cues: 'rare' }),
-    packaging: Object.freeze({ titles: Object.freeze(['What nobody tells you about {the thing}', 'The hidden cost of {the thing}']), cover: 'the familiar thing with its hidden part torn open' }),
-    examples: Object.freeze(['What nobody tells you about your first mortgage']),
+    packaging: Object.freeze({ titles: Object.freeze(['The hidden cost of {the thing}', 'What {the thing} costs after you pay for it']), cover: 'the familiar thing with its hidden part torn open' }),
+    examples: Object.freeze(['What your first mortgage costs after the rate']),
     notes: 'The hidden part must come from the brief or evidence; never invent one.'
   }),
   Object.freeze({
