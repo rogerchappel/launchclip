@@ -57,6 +57,8 @@ import { cardErrors, fitShotCallouts, hookErrors, hookTimingErrors, storyboardSe
 import { layoutSpec, talkingHeadLayout } from "./talking_head_layout.js";
 import { abstractErrors, castFromDirection, characterErrors, characterShare, defaultExplainerCast, openingErrors } from "@launchclip/core/explainer.mjs";
 import { readingFindings } from "./direction_guardrails.js";
+import { storyboardOrderErrors } from "./list_order.js";
+import { visualDensityErrors } from "./visual_density.js";
 import { fitCastCuts } from "./cast_cut_fit.js";
 import { normalisePlan } from "./plan_normalise.js";
 import { keepUnnamed, repairScope } from "./repair_scope.js";
@@ -922,6 +924,8 @@ export function checkStoryboard(raw, { words = [], beats = null, track = null, t
       captionZones: layoutCaptionZones(resolved)
     });
     const report = checkLayout({ canvas, elements, duration: Number(resolved.resolved?.duration) || undefined });
+    // Footage or full-bleed type to the last second (src/visual_density.js), as finish gates it.
+    errors.push(...visualDensityErrors(resolved, elements));
     layout.findings = report.findings;
     layout.errors = report.findings.filter((finding) => finding.severity === "error").length;
     layout.warnings = report.findings.filter((finding) => finding.severity !== "error").length;
@@ -934,6 +938,8 @@ export function checkStoryboard(raw, { words = [], beats = null, track = null, t
     errors.push(`layout: ${message(error)}`);
   }
   errors.push(...placeholderErrors(storyboard));
+  // A later list item shown before the earlier ones is a teaser that says so, or a bug (src/list_order.js).
+  errors.push(...storyboardOrderErrors(storyboard));
   // Captions that are on are seen: ranges hidden under cards (tooling's last
   // resort for a card in the caption band, src/caption_band_fit.js) may
   // cover only a small share of the narration (src/caption_visibility.js).
@@ -984,7 +990,7 @@ export function resolveChecked(raw, { words = [], beats = null, style = null } =
 // Errors a storyboard may still ship with when the repairs run out.
 // A storyboard that fails only these still ships when the repairs run out: a
 // weak hook or one card too many beats no video.
-const NEAR_MISS = ["cadence: ", "placeholder: ", "hook: ", "cards: ", "featured: ", "reading: ", "opening: ", "variety: ", "characters: "];
+const NEAR_MISS = ["cadence: ", "density: ", "order: ", "placeholder: ", "hook: ", "cards: ", "featured: ", "reading: ", "opening: ", "variety: ", "characters: "];
 
 /** Cards that hold more words than their time on screen allows (src/direction_guardrails.js readingFindings), as repair notes. */
 export function planReadingErrors(resolved) {
