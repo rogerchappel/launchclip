@@ -6754,7 +6754,8 @@ existed.
 - The variant comes from a scene's `params.variant`, else the story's
   `variants` (`{"<module>": "<variant>"}`, which a style pack fills), else the
   default. An unknown name fails with the module's list of names:
-  `params.variant must be one of stacked, side-icon, banner, marker (the
+  `params.variant must be one of stacked, side-icon, banner, marker, free,
+  scrim, glass, sticker (the
   concept-card variants); got "sparkly"`.
 - A variant that has no room for its own shape (a short overlay, a small rect)
   falls back to the default layout rather than failing; `model.variant` still
