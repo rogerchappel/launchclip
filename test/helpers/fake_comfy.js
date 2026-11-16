@@ -1,6 +1,6 @@
 // A fake ComfyUI HTTP API for tests (no model, no GPU): a fetch that answers
-// /system_stats, /object_info, /prompt, /history/{id}, /view, /upload/image
-// and /interrupt the way a real server does. objectInfo: node class →
+// /system_stats, /object_info, /prompt, /history/{id}, /view and
+// /interrupt the way a real server does. objectInfo: node class →
 // {input: {required}}; output(workflow, n) → Buffer for the n-th job;
 // pending: polls that return {} before the job is done; fail: an
 // execution_error message.
@@ -45,7 +45,6 @@ export function fakeComfy({ objectInfo = null, output = () => Buffer.alloc(2048,
       const bytes = output(job?.workflow, n);
       return { ok: true, status: 200, headers: new Headers({ "content-length": String(bytes.length) }), arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length) };
     }
-    if (pathname === "/upload/image") return ok({ name: init.body.get("image").name ?? "upload.png", subfolder: "", type: "input" });
     if (pathname === "/interrupt") return ok({});
     return { ok: false, status: 404, headers: new Headers(), text: async () => "not found" };
   };

@@ -2,7 +2,7 @@
 // docs/FINISHING_AND_ELEMENTS_RFC.md §E.7). ComfyUI is GPL-3.0, so we speak
 // only its HTTP API and copy no code: POST /prompt with our own API-format
 // workflow, poll GET /history/{id}, fetch outputs with GET /view, cancel with
-// POST /interrupt, upload start frames with POST /upload/image. Health is
+// POST /interrupt. Health is
 // GET /system_stats plus GET /object_info (every node class and model file a
 // template needs).
 //
@@ -50,7 +50,7 @@ const wait = (ms, signal) => new Promise((resolve, reject) => {
 });
 
 /**
- * client: {url, health(needs), upload(buffer, name), run(workflow, {outputNodes}), download(file), interrupt()}.
+ * client: {url, health(needs), run(workflow, {outputNodes}), download(file), interrupt()}.
  * needs: {nodes: [class_type], models: [{node, input, file}]}.
  */
 export function createComfyClient({ url, env = process.env, allowRemote = false, fetch: fetchImpl = globalThis.fetch, timeoutMs = COMFY_JOB_TIMEOUT_MS, pollMs = 1000, maxBytes = COMFY_MAX_DOWNLOAD_BYTES, clientId = randomUUID() } = {}) {
@@ -82,14 +82,6 @@ export function createComfyClient({ url, env = process.env, allowRemote = false,
     if (missingNodes.length) problems.push(`missing node classes: ${missingNodes.join(", ")}`);
     if (missingModels.length) problems.push(`missing model files: ${missingModels.join(", ")}`);
     return { ok: !problems.length, url: base, comfyui: stats?.system?.comfyui_version ?? null, devices, missing_nodes: missingNodes, missing_models: missingModels, ...(problems.length ? { reason: problems.join("; ") } : {}) };
-  }
-
-  async function upload(buffer, name) {
-    const form = new FormData();
-    form.append("image", new Blob([buffer]), name);
-    form.append("overwrite", "false");
-    const result = await json("/upload/image", { method: "POST", body: form });
-    return result.subfolder ? `${result.subfolder}/${result.name}` : result.name;
   }
 
   async function interrupt() {
@@ -129,5 +121,5 @@ export function createComfyClient({ url, env = process.env, allowRemote = false,
     return bytes;
   }
 
-  return { url: base, clientId, health, upload, run, download, interrupt };
+  return { url: base, clientId, health, run, download, interrupt };
 }
