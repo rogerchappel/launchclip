@@ -1,0 +1,192 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "A kitchen whose stations wear their heat (9:16 tone members)",
+  "notes": "Sample for docs/FLUID_MOTION_RFC.md §10 (member modules): a robot runs the pre-dawn shift while its stations flock out of a head-chef hub, each a tone member: hot stations in steps of the brand primary (deeper is hotter), cold ones in steps of the accent, the counter in paper. Each wire and lit rim runs in its node's tone, with pulses on a 120 bpm grid. No narration and no paid calls.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 10,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0b0d1a",
+      "primary": "#ffb547",
+      "accent": "#46d4ff",
+      "ink": "#0b0d1a",
+      "paper": "#f6f3ee"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "feel": {
+      "preset": "kinetic",
+      "ambient": {
+        "shift": 0.014,
+        "period": [
+          2.5,
+          4
+        ]
+      }
+    }
+  },
+  "camera": {
+    "mode": "cuts",
+    "kicks": [
+      {
+        "at": 0.25
+      },
+      {
+        "at": 1.5
+      },
+      {
+        "at": 3
+      },
+      {
+        "at": 6
+      },
+      {
+        "at": 8
+      }
+    ]
+  },
+  "cast": {
+    "style": "chibi",
+    "characters": [
+      {
+        "id": "bot",
+        "name": "Bot",
+        "kind": "robot",
+        "position": "center"
+      }
+    ]
+  },
+  "world": {
+    "kind": "kitchen",
+    "time": "night"
+  },
+  "scenes": [
+    {
+      "id": "room",
+      "module": "cast-scene",
+      "start": 0,
+      "end": 10,
+      "params": {
+        "set": "standing",
+        "shot": "wide",
+        "cast": [
+          {
+            "id": "bot",
+            "pose": "look",
+            "expression": "happy",
+            "cues": [
+              {
+                "at": 3,
+                "pose": "cheer",
+                "expression": "delighted"
+              },
+              {
+                "at": 4.7,
+                "pose": "look",
+                "expression": "happy"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "team",
+      "module": "node-graph",
+      "track": 1,
+      "start": 0,
+      "end": 10,
+      "params": {
+        "hub": {
+          "label": "Head chef",
+          "icon": "chef-hat"
+        },
+        "nodes": [
+          {
+            "id": "oven",
+            "member": {
+              "module": "tone",
+              "tone": "primary-deeper",
+              "icon": "flame",
+              "label": "Oven"
+            }
+          },
+          {
+            "id": "grill",
+            "member": {
+              "module": "tone",
+              "tone": "primary-deep",
+              "icon": "beef",
+              "label": "Grill"
+            }
+          },
+          {
+            "id": "bake",
+            "member": {
+              "module": "tone",
+              "tone": "primary",
+              "icon": "croissant",
+              "label": "Bake",
+              "badge": "3"
+            }
+          },
+          {
+            "id": "proof",
+            "member": {
+              "module": "tone",
+              "tone": "primary-light",
+              "icon": "timer",
+              "label": "Proof"
+            }
+          },
+          {
+            "id": "chill",
+            "member": {
+              "module": "tone",
+              "tone": "accent-deep",
+              "icon": "snowflake",
+              "label": "Chill"
+            }
+          },
+          {
+            "id": "ice",
+            "member": {
+              "module": "tone",
+              "tone": "accent-light",
+              "icon": "ice-cream-cone",
+              "label": "Ices"
+            }
+          },
+          {
+            "id": "pass",
+            "member": {
+              "module": "tone",
+              "tone": "paper",
+              "icon": "bell-ring",
+              "label": "Pass"
+            }
+          }
+        ],
+        "bpm": 120,
+        "converge": 3,
+        "rect": {
+          "x": 80,
+          "y": 280,
+          "width": 860,
+          "height": 640
+        }
+      }
+    }
+  ]
+}
