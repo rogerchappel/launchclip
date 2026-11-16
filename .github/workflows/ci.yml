@@ -46,16 +46,17 @@ jobs:
   # The whole suite with the media tests (test/helpers/media.js): real Remotion
   # and HyperFrames renders, FFmpeg chains and Playwright recordings, which the
   # default npm test above skips. FFmpeg is installed here, so the tests that
-  # skip without it run too. Split across two runners. Locally: npm run
+  # skip without it run too. Split across three runners (two ran
+  # into the 30-minute limit as the suite grew). Locally: npm run
   # test:media (media files only) or npm run test:all (everything).
   media:
-    name: Full suite with media ${{ matrix.shard }}/2 on ubuntu-latest
+    name: Full suite with media ${{ matrix.shard }}/3 on ubuntu-latest
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -81,7 +82,7 @@ jobs:
           npx remotion browser ensure
           npx playwright install --only-shell chromium
       - name: Full suite with media tests
-        run: npm run test:all -- --test-shard=${{ matrix.shard }}/2
+        run: npm run test:all -- --test-shard=${{ matrix.shard }}/3
 
   # Cross-OS renderer parity: the bundled fonts must make HyperFrames and
   # Remotion draw the same text on Linux as on macOS. Five representative
