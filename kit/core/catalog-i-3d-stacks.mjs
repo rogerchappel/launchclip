@@ -181,6 +181,7 @@ function stackTimeline(model, ops) {
       // Hidden (a point) until its drop, then it falls from above the stack and bounces in.
       set(ops, target, start, {x: 0, y: 0, scaleX: 0.001, scaleY: 0.001});
       set(ops, target, t, {scaleX: 1, scaleY: 1, y: -s.dropH});
+      // Kept: a block dropping onto a stack bounces; the physical drop is this build's point.
       tw(ops, target, t, c.drop, 'bounce.out', {y: -s.dropH}, {y: 0});
     });
     riseOps(ops, `${id}-lb${i}`, start, rt(s.times[0] + 0.1), r2(18 * u), {duration: 0.4});

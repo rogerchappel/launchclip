@@ -56,15 +56,18 @@ const sha = (value) => createHash("sha256").update(value).digest("hex");
 // 8.518 → 8.517999 …) so they no longer overlap the next tween; nothing else.
 // All but cooling (no sound) re-pinned with HyperFrames 0.7.111: a mono mix
 // or base recording is declared at 0.7071 of its volume (data-volume only).
+// All six re-pinned when default motion lost its overshoot: back.out eases
+// became power3.out and the footage punch-in spring is critically damped
+// (lc-base-media samples); nothing else changed.
 // All six re-pinned when the default body face moved from Inter to Manrope
 // (Inter stays second in the stack): font stacks and @font-face lines only.
 const PRE_GRAMMAR_HTML_SHA256 = {
-  cooling: "f03ce35f7b7d49330fdd906d97ea745ccdf1da6ae5ef5cbd5233353ce2c938f7",
-  minimal: "1ed5e9c69b1db2cfdede757704b1f7c25027e543bd10c38da93bd43fa143cc2f",
-  "promo-16x9": "89b46b832a0ead1a0c4cfd6f3cc16d39c635fc68e725a30e59ef0cfc8b830d94",
-  "explainer-9x16": "d619974b8318461131df949b914224edc1a0cf299743a1fe679cdfb2dc0e0fd9",
-  "data-story-9x16": "80653aee5601f84ae27a4cf0bc6e170b38ea334efcfce7633c89879cd9b2f89a",
-  footage: "1ec5db732ba314dcd962f7244731d6d51c36571064ffdfff3b99a973c7641542"
+  cooling: "0b4ab88a4855504dc7631e0d3c825d71be8c8ce663b436dc57c6b2c57e3a7ddf",
+  minimal: "6800a10989c206d7ed761faa3251bdcc606d150da1c81bde2307c374c061463e",
+  "promo-16x9": "ea6059e90363e9301b6180d6aa27805794ebf22092baa0dca377b345e575e31d",
+  "explainer-9x16": "ee69a5bdf5f287ccdd670c5dc7f69382ba7f0916b4bd11cc9129dcc264449a4e",
+  "data-story-9x16": "2abcc1e359cecf29e3c6a447efe79e619b935dfe85c8f1c157aabc324318a98f",
+  footage: "b4730f4b3d838d2daa12830c6d7335e6bffb14d420bb27ee65131d5d64f308df"
 };
 // test/editorial_core.test.js: the explicit-rect 16:9 corpus subset (re-pinned
 // with it when bound messages moved to 2-decimal bounds; error strings only).

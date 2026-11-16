@@ -74,7 +74,7 @@ function gridTimeline(model, ops) {
   const {id, start} = model;
   const c = model.content;
   chromeOps(model, ops);
-  c.cells.forEach((cell, i) => popOps(ops, `${id}-cell-${i}`, start, cell.time, {from: 0.5, duration: 0.5, ease: 'back.out(2)'}));
+  c.cells.forEach((cell, i) => popOps(ops, `${id}-cell-${i}`, start, cell.time, {from: 0.5, duration: 0.5, ease: 'power3.out'}));
 }
 
 export const iconGrid = {

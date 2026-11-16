@@ -124,7 +124,7 @@ function bubbleTimeline(model, ops) {
   const c = model.content;
   set(ops, `${id}-bubble`, start, {opacity: 0, x: 0, y: 0, rotation: c.tilt, scaleX: 0.2, scaleY: 0.2});
   tw(ops, `${id}-bubble`, c.t, 0.12, 'power1.out', {opacity: 0}, {opacity: 1});
-  tw(ops, `${id}-bubble`, c.t, 0.5, 'back.out(1.9)', {scaleX: 0.2, scaleY: 0.2}, {scaleX: 1, scaleY: 1});
+  tw(ops, `${id}-bubble`, c.t, 0.5, 'power3.out', {scaleX: 0.2, scaleY: 0.2}, {scaleX: 1, scaleY: 1});
   riseOps(ops, `${id}-text`, start, rt(c.t + 0.18), r2(10 * u), {duration: 0.35});
   if (c.name && c.variant !== 'chat') riseOps(ops, `${id}-name`, start, rt(c.t + 0.1), r2(8 * u));
 }

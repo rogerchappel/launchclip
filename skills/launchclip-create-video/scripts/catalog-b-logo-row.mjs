@@ -48,7 +48,7 @@ function resolve(params, ctx) {
     const y = top + row * (tile + labelBlock + gapY);
     const time = entry.at === undefined ? b.timeOf(`logo-${i}`, undefined, `${path}.at`, first - start + i * stagger) : b.timeOf(`logo-${i}`, entry.at, `${path}.at`, 0);
     b.events.push({id: `${id}-logo-${i}`, name: `logo-${i}`, time, endTime: rt(time + 0.5), role: 'emphasis', cue: 'pop'});
-    return {index: i, src, label, labelSize: fit.size, tile: {x: r2(x), y: r2(y), size: tile}, image: {inset: r2(tile * 0.2)}, labelY: r2(y + tile + u(18)), time, duration: 0.5, ease: 'back.out(1.7)', endTime: rt(time + 0.5)};
+    return {index: i, src, label, labelSize: fit.size, tile: {x: r2(x), y: r2(y), size: tile}, image: {inset: r2(tile * 0.2)}, labelY: r2(y + tile + u(18)), time, duration: 0.5, ease: 'power3.out', endTime: rt(time + 0.5)};
   });
   const content = {title: titleFit ? {text: title, size: titleFit.size, lines: titleFit.lines, y: groupTop} : null, logos, tileRadius: r2(u(34)), tileFill: b.theme.panel, tileBorder: b.theme.border, tileBorderWidth: r2(u(2)),
     gridWidth: r2(gridW), popFrom: {opacity: 0, y: r2(u(30)), scale: 0.55}};

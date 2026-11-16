@@ -13,7 +13,7 @@
 // element draws with those props merged in, so a chip can flip its text or a
 // card its tone without a component of its own.
 //
-// Settled elements hold still: life comes from entrances (spring overshoot,
+// Settled elements hold still: life comes from entrances (eased, with
 // speed blur), timed beats inside components and the shared camera. Nothing
 // floats on its own.
 //
@@ -39,7 +39,7 @@ function uiN(v) { return Math.round(v * 100) / 100; }
 
 /**
  * An entrance at t0 as inline style: kinds up, down, left, right, zoom, slam,
- * pop, drop, fade, focus, hop (a jump in, landing on its feet), cut (no move). Spring kinds (slam, pop, or any with o.ov) overshoot; the
+ * pop, drop, fade, focus, hop (a jump in, landing on its feet), cut (no move). Every kind eases out with no overshoot; an explicit o.ov springs with that much back; the
  * move blurs while it is fast. focus arrives out of focus (14 px blur, scale
  * 1.06) and pulls sharp over 0.42 s, most of it in the first half. o: {d,
  * dist, ov, base (a transform kept under the move)}. Before t0 the element is hidden.
@@ -58,8 +58,7 @@ function uiEnter(t, t0, kind, o) {
     return 'opacity:' + uiClamp(hp * 6).toFixed(3) + ';transform-origin:50% 100%;transform:' + base + ' translateY(' + uiN(hy) + 'px)' + squash + ';';
   }
   const k = kind || 'up', d = opt.d || (k === 'focus' ? 0.42 : 0.36), p = uiClamp((t - t0) / d);
-  const spring = k === 'slam' || k === 'pop' || opt.ov;
-  const e = spring ? uiOutBack(p, opt.ov || 1.4) : k === 'focus' ? uiOutCubic(p) : uiOutExpo(p), v = 1 - uiOutExpo(p);
+  const e = opt.ov ? uiOutBack(p, opt.ov) : k === 'focus' ? uiOutCubic(p) : uiOutExpo(p), v = 1 - uiOutExpo(p);
   const dist = opt.dist || 140;
   let tr = '', bl = 0;
   if (k === 'up') { tr = 'translateY(' + uiN((1 - e) * dist) + 'px)'; bl = v * 3; }

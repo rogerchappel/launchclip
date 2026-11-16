@@ -333,7 +333,7 @@ function barsTimeline(model, ops) {
     const ratio = hop => r2(hop.leader / m.leaderMax * 1e4) / 1e4;
     set(ops, `${id}-mk`, start, {x: 0, y: 0});
     set(ops, `${id}-mkline`, start, {x: 0, y: 0, scaleX: 1, scaleY: ratio(m.hops[0])});
-    riseOps(ops, `${id}-mkin`, start, m.hops[0].time, r2(-40 * u), {duration: 0.5, ease: 'back.out(1.8)'});
+    riseOps(ops, `${id}-mkin`, start, m.hops[0].time, r2(-40 * u), {duration: 0.5, ease: 'power3.out'});
     m.hops.slice(1).forEach((hop, k) => {
       const prev = m.hops[k];
       tw(ops, `${id}-mk`, hop.time, 0.55, 'power3.inOut', {x: r2(prev.x - m.hops[0].x), y: 0}, {x: r2(hop.x - m.hops[0].x), y: 0});

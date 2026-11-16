@@ -238,13 +238,13 @@ function statTimeline(model, ops) {
     tw(ops, `${id}-arc`, c.t0, countFor, 'power3.out', {strokeDashoffset: 1}, {strokeDashoffset: r2((1 - c.share) * 1000) / 1000});
     pop(ops, model, `${id}-value`, rt(Math.max(start, c.t0 - 0.1)), {scale: 0.7, duration: 0.45});
     for (const s_ of c.samples) set(ops, `${id}-value`, sampleTime(s_.t), {text: s_.text});
-    tw(ops, `${id}-value`, c.hitAt, 0.4, 'back.out(2.2)', {scaleX: 1.08, scaleY: 1.08}, {scaleX: 1, scaleY: 1});
+    tw(ops, `${id}-value`, c.hitAt, 0.4, 'power3.out', {scaleX: 1.08, scaleY: 1.08}, {scaleX: 1, scaleY: 1});
   } else if (mode === 'bar') {
     rise(ops, model, `${id}-value`, rt(Math.max(start, c.t0 - 0.1)), {distance: 20, duration: 0.35});
     for (const s_ of c.samples) set(ops, `${id}-value`, sampleTime(s_.t), {text: s_.text});
     set(ops, `${id}-fill`, start, {scaleX: 0, scaleY: 1});
     tw(ops, `${id}-fill`, c.t0, countFor, 'power3.out', {scaleX: 0}, {scaleX: 1});
-    tw(ops, `${id}-value`, c.hitAt, 0.4, 'back.out(2.2)', {scaleX: 1.06, scaleY: 1.06}, {scaleX: 1, scaleY: 1});
+    tw(ops, `${id}-value`, c.hitAt, 0.4, 'power3.out', {scaleX: 1.06, scaleY: 1.06}, {scaleX: 1, scaleY: 1});
   } else if (mode === 'ticker') {
     [...c.value].forEach((char, i) => {
       const at = rt(Math.max(start, c.t0 - 0.12 + i * 0.04));
@@ -254,14 +254,14 @@ function statTimeline(model, ops) {
       // Each digit tile shows its slot of the count, then flips once on the hit.
       let last = c.start[i];
       for (const s_ of c.samples) if (s_.text[i] !== last) { set(ops, `${id}-digit-${i}`, sampleTime(s_.t), {text: s_.text[i]}); last = s_.text[i]; }
-      tw(ops, `${id}-tile-${i}`, rt(c.hitAt + i * 0.03), 0.4, 'back.out(2)', {scaleY: 0.82}, {scaleY: 1});
+      tw(ops, `${id}-tile-${i}`, rt(c.hitAt + i * 0.03), 0.4, 'power3.out', {scaleY: 0.82}, {scaleY: 1});
     });
   } else {
     if (c.icon) pop(ops, model, `${id}-icon`, rt(Math.max(model.start, c.t0 - 0.15)));
     rise(ops, model, `${id}-value`, rt(Math.max(model.start, c.t0 - 0.1)), {distance: 20, duration: 0.35});
     for (const s of c.samples) set(ops, `${id}-value`, sampleTime(s.t), {text: s.text});
     // The hit: a short pulse when the count lands.
-    tw(ops, `${id}-value`, c.hitAt, 0.4, 'back.out(2.2)', {scaleX: 1.08, scaleY: 1.08}, {scaleX: 1, scaleY: 1});
+    tw(ops, `${id}-value`, c.hitAt, 0.4, 'power3.out', {scaleX: 1.08, scaleY: 1.08}, {scaleX: 1, scaleY: 1});
   }
   rise(ops, model, `${id}-label`, c.labelAt, {distance: 16});
   rise(ops, model, `${id}-source`, c.sourceAt, {distance: 10});
@@ -473,11 +473,11 @@ function quoteTimeline(model, ops) {
       tw(ops, `${id}-quote`, c.t0, 0.55, 'power3.out', {opacity: 0, x: r2(40 * unit)}, {opacity: 1, x: 0});
     } else if (mode === 'bubble') {
       set(ops, `${id}-mark`, start, {opacity: 0, x: 0, y: 0, scaleX: 0.6, scaleY: 0.6});
-      tw(ops, `${id}-mark`, rt(Math.max(start, c.t0 - 0.15)), 0.55, 'back.out(1.5)', {opacity: 0, scaleX: 0.6, scaleY: 0.6}, {opacity: 1, scaleX: 1, scaleY: 1});
+      tw(ops, `${id}-mark`, rt(Math.max(start, c.t0 - 0.15)), 0.55, 'power3.out', {opacity: 0, scaleX: 0.6, scaleY: 0.6}, {opacity: 1, scaleX: 1, scaleY: 1});
       rise(ops, model, `${id}-quote`, rt(c.t0 + 0.1), {distance: 12, duration: 0.45});
     } else {
       set(ops, `${id}-mark`, start, {opacity: 0, x: 0, y: r2(-40 * unit), rotation: -20});
-      tw(ops, `${id}-mark`, rt(Math.max(start, c.t0 - 0.15)), 0.55, 'back.out(1.6)', {opacity: 0, y: r2(-40 * unit), rotation: -20}, {opacity: 1, y: 0, rotation: 0});
+      tw(ops, `${id}-mark`, rt(Math.max(start, c.t0 - 0.15)), 0.55, 'power3.out', {opacity: 0, y: r2(-40 * unit), rotation: -20}, {opacity: 1, y: 0, rotation: 0});
       set(ops, `${id}-quote`, start, {opacity: 0, x: 0, y: 0, scaleX: 0.95, scaleY: 0.95});
       tw(ops, `${id}-quote`, c.t0, 0.6, 'power3.out', {opacity: 0, scaleX: 0.95, scaleY: 0.95}, {opacity: 1, scaleX: 1, scaleY: 1});
       set(ops, `${id}-rule`, start, {scaleX: 0, scaleY: 1});
@@ -733,14 +733,14 @@ const EXCERPT_TIMELINES = {
     for (const line of c.lines) {
       const target = `${id}-line-${line.index}`;
       set(ops, target, start, {opacity: 0, x: 0, y: r2(-28 * unit), rotation: -2});
-      tw(ops, target, line.time, 0.45, 'back.out(1.4)', {opacity: 0, y: r2(-28 * unit), rotation: -2}, {opacity: 1, y: 0, rotation: 0});
+      tw(ops, target, line.time, 0.45, 'power3.out', {opacity: 0, y: r2(-28 * unit), rotation: -2}, {opacity: 1, y: 0, rotation: 0});
       if (!c.marked) continue;
       if (line.highlight) {
         set(ops, `${id}-mark-${line.index}`, start, {opacity: 0});
         tw(ops, `${id}-mark-${line.index}`, c.highlightAt, 0.3, 'power2.out', {opacity: 0}, {opacity: 1});
         set(ops, `${id}-edge-${line.index}`, start, {scaleX: 1, scaleY: 0});
         tw(ops, `${id}-edge-${line.index}`, c.highlightAt, 0.4, 'power3.out', {scaleY: 0}, {scaleY: 1});
-        tw(ops, target, c.highlightAt, 0.4, 'back.out(2)', {scaleX: 0.96, scaleY: 0.96}, {scaleX: 1, scaleY: 1});
+        tw(ops, target, c.highlightAt, 0.4, 'power3.out', {scaleX: 0.96, scaleY: 0.96}, {scaleX: 1, scaleY: 1});
       } else tw(ops, target, c.highlightAt, 0.35, 'power1.out', {opacity: 1}, {opacity: 0.45});
     }
   }

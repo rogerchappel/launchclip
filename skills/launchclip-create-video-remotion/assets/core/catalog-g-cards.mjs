@@ -204,7 +204,7 @@ function conceptTimeline(model, ops) {
   if (mode === 'marker') {
     if (c.icon) {
       set(ops, `${id}-icon`, start, {opacity: 0, x: 0, y: 0, scaleX: 0.5, scaleY: 0.5, rotation: -90});
-      tw(ops, `${id}-icon`, c.iconAt, 0.6, 'back.out(1.6)', {opacity: 0, scaleX: 0.5, scaleY: 0.5, rotation: -90}, {opacity: 1, scaleX: 1, scaleY: 1, rotation: 0});
+      tw(ops, `${id}-icon`, c.iconAt, 0.6, 'power3.out', {opacity: 0, scaleX: 0.5, scaleY: 0.5, rotation: -90}, {opacity: 1, scaleX: 1, scaleY: 1, rotation: 0});
     }
     rise(ops, model, `${id}-word`, c.t0, {distance: 44, duration: 0.6});
     c.markLines.forEach((_, i) => {
@@ -475,7 +475,7 @@ function iconRowTimeline(model, ops) {
       // Each node flies out from the hub to its place on the ring.
       const dx = r2(L.cx - L.spots[i].x), dy = r2(L.cy - L.spots[i].y);
       set(ops, `${id}-item-${item.index}`, start, {opacity: 0, x: dx, y: dy, scaleX: 0.4, scaleY: 0.4});
-      tw(ops, `${id}-item-${item.index}`, item.time, 0.6, 'back.out(1.4)', {opacity: 0, x: dx, y: dy, scaleX: 0.4, scaleY: 0.4}, {opacity: 1, x: 0, y: 0, scaleX: 1, scaleY: 1});
+      tw(ops, `${id}-item-${item.index}`, item.time, 0.6, 'power3.out', {opacity: 0, x: dx, y: dy, scaleX: 0.4, scaleY: 0.4}, {opacity: 1, x: 0, y: 0, scaleX: 1, scaleY: 1});
     });
     return;
   }
@@ -669,7 +669,7 @@ function sectionTimeline(model, ops) {
   if (mode === 'tab') {
     if (c.layout.tabH) {
       set(ops, `${id}-kicker`, start, {opacity: 0, x: 0, y: r2(-24 * unit), scaleX: 1, scaleY: 0.4});
-      tw(ops, `${id}-kicker`, c.kickAt, 0.45, 'back.out(1.6)', {opacity: 0, y: r2(-24 * unit), scaleY: 0.4}, {opacity: 1, y: 0, scaleY: 1});
+      tw(ops, `${id}-kicker`, c.kickAt, 0.45, 'power3.out', {opacity: 0, y: r2(-24 * unit), scaleY: 0.4}, {opacity: 1, y: 0, scaleY: 1});
     }
     c.lines.forEach((_, i) => rise(ops, model, `${id}-line-${i}`, rt(c.t0 + i * 0.1), {distance: 50, duration: 0.55}));
     set(ops, `${id}-rule`, start, {scaleX: 0, scaleY: 1});
@@ -914,7 +914,7 @@ function objectTimeline(model, ops) {
   if (mode === 'polaroid') {
     // The print drops in turning, and settles a little askew.
     set(ops, `${id}-print`, start, {opacity: 0, x: 0, y: r2(-90 * unit), rotation: -14});
-    tw(ops, `${id}-print`, c.t0, 0.7, 'back.out(1.3)', {opacity: 0, y: r2(-90 * unit), rotation: -14}, {opacity: 1, y: 0, rotation: -3});
+    tw(ops, `${id}-print`, c.t0, 0.7, 'power3.out', {opacity: 0, y: r2(-90 * unit), rotation: -14}, {opacity: 1, y: 0, rotation: -3});
     illustration(rt(c.t0 + 0.2), rt(c.t0 + 0.3));
     rise(ops, model, `${id}-text`, c.captionAt, {distance: 12});
     return;
@@ -931,7 +931,7 @@ function objectTimeline(model, ops) {
     set(ops, `${id}-glow`, start, {opacity: 0, scaleX: 0.3, scaleY: 0.3});
     tw(ops, `${id}-glow`, rt(Math.max(start, c.t0 - 0.05)), 0.8, 'power2.out', {opacity: 0, scaleX: 0.3, scaleY: 0.3}, {opacity: 1, scaleX: 1, scaleY: 1});
     set(ops, `${id}-stage`, start, {opacity: 0, x: 0, y: r2(-120 * unit), scaleX: 1, scaleY: 1});
-    tw(ops, `${id}-stage`, c.t0, 0.7, 'bounce.out', {opacity: 0, y: r2(-120 * unit)}, {opacity: 1, y: 0});
+    tw(ops, `${id}-stage`, c.t0, 0.7, 'power3.out', {opacity: 0, y: r2(-120 * unit)}, {opacity: 1, y: 0});
     pop(ops, model, `${id}-hero`, rt(c.t0 + 0.2), {scale: 0.5, duration: 0.6});
     bob(ops, `${id}-hero`, rt(c.t0 + 0.8), model.motion.exitStart, r2(6 * unit));
     for (const accent of c.accents) pop(ops, model, `${id}-accent-${accent.index}`, accent.time, {scale: 0.3});

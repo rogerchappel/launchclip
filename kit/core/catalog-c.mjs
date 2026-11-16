@@ -48,7 +48,8 @@ import {baseMediaStyle} from './story.mjs';
 
 export const BASE_CAMERA = 'lc-base-camera';
 export const CAMERA_IDENTITY = Object.freeze({x: 0, y: 0, scaleX: 1, scaleY: 1});
-export const PUNCH_SPRING = Object.freeze({in: {damping: 16, stiffness: 170}, out: {damping: 22, stiffness: 220, overshootClamping: true}});
+// in is critically damped (damping 2·√170 ≈ 26): a punch-in is a camera move, and the camera never overshoots.
+export const PUNCH_SPRING = Object.freeze({in: {damping: 26, stiffness: 170, overshootClamping: true}, out: {damping: 22, stiffness: 220, overshootClamping: true}});
 
 const ROLE_NAMES = ['primary', 'accent', 'paper'];
 const FONT_FALLBACK = {
@@ -433,7 +434,7 @@ function calloutTimeline(model, ops) {
   const {id, start} = model;
   const c = model.content, T = c.times;
   set(ops, `${id}-dot`, start, {scaleX: 0, scaleY: 0});
-  tw(ops, `${id}-dot`, T.dot, 0.3, 'back.out(2)', {scaleX: 0, scaleY: 0}, {scaleX: 1, scaleY: 1});
+  tw(ops, `${id}-dot`, T.dot, 0.3, 'power3.out', {scaleX: 0, scaleY: 0}, {scaleX: 1, scaleY: 1});
   set(ops, `${id}-ring`, start, {opacity: 0, scaleX: 0.4, scaleY: 0.4});
   tw(ops, `${id}-ring`, T.dot, 0.42, 'power2.out', {opacity: 0, scaleX: 0.4, scaleY: 0.4}, {opacity: 0.9, scaleX: 1, scaleY: 1});
   for (const part of ['halo', 'line']) {
@@ -442,7 +443,7 @@ function calloutTimeline(model, ops) {
   }
   set(ops, `${id}-sticker`, start, {opacity: 0, rotation: c.tilt, scaleX: 0.6, scaleY: 0.6});
   tw(ops, `${id}-sticker`, T.sticker, 0.18, 'power1.out', {opacity: 0}, {opacity: 1});
-  tw(ops, `${id}-sticker`, T.sticker, 0.45, 'back.out(1.7)', {scaleX: 0.6, scaleY: 0.6}, {scaleX: 1, scaleY: 1});
+  tw(ops, `${id}-sticker`, T.sticker, 0.45, 'power3.out', {scaleX: 0.6, scaleY: 0.6}, {scaleX: 1, scaleY: 1});
 }
 
 // ---------------------------------------------------------------------------
@@ -619,7 +620,7 @@ function emphasisTimeline(model, ops) {
     const target = `${id}-w-${word.index}`;
     set(ops, target, start, {opacity: 0, x: 0, y: c.rise, scaleX: 0.3, scaleY: 0.3});
     tw(ops, target, word.time, 0.12, 'none', {opacity: 0}, {opacity: 1});
-    tw(ops, target, word.time, 0.38, 'back.out(2.2)', {y: c.rise, scaleX: 0.3, scaleY: 0.3}, {y: 0, scaleX: 1, scaleY: 1});
+    tw(ops, target, word.time, 0.38, 'power3.out', {y: c.rise, scaleX: 0.3, scaleY: 0.3}, {y: 0, scaleX: 1, scaleY: 1});
   }
 }
 
