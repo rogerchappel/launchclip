@@ -1,0 +1,32 @@
+name: Cancel closed PR runs
+
+# A merged or closed PR's queued and running runs are wasted work; cancel
+# them across every workflow. Fork PRs are skipped (no write token).
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+
+jobs:
+  cancel:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref != 'main' &&
+      !startsWith(github.head_ref, 'release')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel queued and in-progress runs on the PR branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.head_ref }}
+          SELF: ${{ github.run_id }}
+        run: |
+          gh run list --branch "$BRANCH" --limit 100 --json databaseId,status \
+            --jq '.[] | select(.status != "completed") | .databaseId' |
+          while read -r id; do
+            [ "$id" = "$SELF" ] && continue
+            gh run cancel "$id" || true # it may finish between list and cancel
+          done
