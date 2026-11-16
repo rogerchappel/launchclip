@@ -23,13 +23,13 @@
 import {createBase, fitText, r2, rt} from './catalog-b-base.mjs';
 import {abs, el, svgRoot, tw, set} from './catalog-b-view.mjs';
 import {media, mediaNode} from './catalog-e.mjs';
-import {EXPRESSIONS, HELD_AIDS, POSES} from './characters/rig.mjs';
+import {EXPRESSIONS, POSES} from './characters/rig.mjs';
 import {drawCharacter, stageHeight, styleGeometry, styleHeight} from './characters/styles.mjs';
 import {lightErrors, normalizeLight} from './characters/light.mjs';
 import {characterView} from './characters/view.mjs';
 import {drawingBounds} from './characters/bounds.mjs';
 import {ACTING, actingOps, stateJoints, speechChanges} from './characters/acting.mjs';
-import {BACKDROPS, SEATED_SETS, SETS, SET_INFO, WORLD_SETS, layoutSet, phoneProp} from './characters/sets.mjs';
+import {BACKDROPS, SEATED_SETS, SETS, SET_INFO, WORLD_SETS, actorProps, layoutSet} from './characters/sets.mjs';
 import {castMember, resolveStoryCast} from './characters/cues.mjs';
 import {ACTIONS, ACTION_INFO, GAZE, NAMED_TARGETS, TARGET_REQUIRED, VIEWS, gazeOffset, viewFor, sideOf, targetError, targetPoint, walkDistance, walkDuration, WALK} from './characters/actions.mjs';
 import {WORLD_KINDS, WORLD_TIMES, renderWorld, worldAnchors, worldFocus, worldGrade, worldLight} from './worlds/index.mjs';
@@ -231,7 +231,6 @@ function inWorld(actor, world) {
 }
 
 // A held phone sits in the hand away from the facing side (in the facing hand when the other holds a cane).
-const actorProps = actor => actor.holds === 'phone' ? {[(actor.facing === 'left') !== HELD_AIDS.includes(actor.params.mobility) ? 'r' : 'l']: phoneProp(actor.colors, 98)} : null;
 
 // What the story's look asks of the cast's drawing (kit/core/look.mjs lookCastOptions: pin joints for paper cutout); nothing without a look.
 const castDraw = ctx => { const options = lookCastOptions(ctx.look); return options ? {castDraw: options} : {}; };
