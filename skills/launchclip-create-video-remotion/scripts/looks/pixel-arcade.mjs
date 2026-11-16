@@ -4,8 +4,10 @@
 // with a 4 × 4 ordered dither, under faint scanlines.
 //
 // Grade: a light blur averages each cell; its corner pixel is kept (a tile of
-// one dot a cell) and spread over the cell by a cell-sized box convolution
-// whose window holds exactly one dot, so cells never overlap or leave seams.
+// one dot a cell) and spread over the cell by dilating it, in four groups of
+// cells by parity so no two squares meet, each clipped to its own cells: no
+// overlap, no seams, and only cheap primitives (a convolution was exact too,
+// but far too slow in Chromium).
 // A 4 × 4 Bayer tile of cells is added before a discrete transfer snaps every
 // channel to four levels, so smooth gradients become ordered dither rather
 // than bands. The VFX layer's pixels sit on the same grid, so effects and
@@ -16,7 +18,7 @@
 // above the look and stay crisp. It posterises per channel (64 colours), not
 // to a fixed 16-colour palette: a filter cannot pick the nearest of 16.
 
-import { arithmetic, blur, composite, fe, flood, image, scanlines } from './parts.mjs';
+import { arithmetic, blur, composite, fe, flood, image, offset, scanlines } from './parts.mjs';
 
 const LEVELS = 4;
 // The 4 × 4 Bayer order, thresholds (i + 0.5) / 16.
@@ -35,7 +37,7 @@ export const LOOK = {
   presets: () => ({ colors: { bg: '#140c28', primary: '#ffd23f', accent: '#3ee6ff', ink: '#140c28', paper: '#fff4e0' } }),
   variants: 1,
   grade(plan) {
-    const c = arcadeCell(plan.unit), step = 1 / (LEVELS - 1);
+    const c = arcadeCell(plan.unit), step = 1 / (LEVELS - 1), r = Math.ceil(c / 2);
     const dot = `<svg xmlns="http://www.w3.org/2000/svg" width="${c}" height="${c}"><rect width="1" height="1" fill="#fff"/></svg>`;
     const bayer = `<svg xmlns="http://www.w3.org/2000/svg" width="${4 * c}" height="${4 * c}" shape-rendering="crispEdges">${BAYER.map((v, i) => { const g = Math.round(((v + 0.5) / 16) * 255); return `<rect x="${(i % 4) * c}" y="${Math.floor(i / 4) * c}" width="${c}" height="${c}" fill="rgb(${g},${g},${g})"/>`; }).join('')}</svg>`;
     return [
@@ -43,8 +45,20 @@ export const LOOK = {
       image('dot', dot, 0, 0, c, c),
       fe('feTile', { in: 'dot', x: 0, y: 0, width: plan.width, height: plan.height, result: 'dots' }),
       composite('points', 'soft', 'dots', 'in'),
-      // Each pixel sums the window up and left of it: the one dot at its cell's corner.
-      fe('feConvolveMatrix', { in: 'points', order: c, kernelMatrix: Array(c * c).fill(1).join(' '), divisor: 1, targetX: c - 1, targetY: c - 1, edgeMode: 'none', preserveAlpha: 'false', result: 'cells' }),
+      // Spread each cell's corner dot over its cell: the cells in four groups by the parity of their column and row,
+      // so a group's dots sit two cells apart and a dilated square (2r + 1 wide) never meets its neighbour's; each
+      // square is moved onto its cell and clipped to its group's cells, and the four groups are laid together.
+      ...[[0, 0], [1, 0], [0, 1], [1, 1]].flatMap(([px, py], k) => [
+        image(`g${k}-cell`, `<svg xmlns="http://www.w3.org/2000/svg" width="${2 * c}" height="${2 * c}" shape-rendering="crispEdges"><rect x="${px * c}" y="${py * c}" width="${c}" height="${c}" fill="#fff"/></svg>`, 0, 0, 2 * c, 2 * c),
+        fe('feTile', { in: `g${k}-cell`, x: 0, y: 0, width: plan.width, height: plan.height, result: `g${k}` }),
+        composite(`g${k}-dots`, 'points', `g${k}`, 'in'),
+        fe('feMorphology', { in: `g${k}-dots`, operator: 'dilate', radius: r, result: `g${k}-wide` }),
+        offset(`g${k}-placed`, `g${k}-wide`, r, r),
+        composite(`g${k}-cells`, `g${k}-placed`, `g${k}`, 'in')
+      ]),
+      composite('cells-01', 'g0-cells', 'g1-cells', 'over'),
+      composite('cells-23', 'g2-cells', 'g3-cells', 'over'),
+      composite('cells', 'cells-01', 'cells-23', 'over'),
       image('bayer-cell', bayer, 0, 0, 4 * c, 4 * c),
       fe('feTile', { in: 'bayer-cell', x: 0, y: 0, width: plan.width, height: plan.height, result: 'bayer' }),
       // Shift each cell by its threshold across one bin of the discrete transfer (1 / LEVELS wide), centred, then snap.
