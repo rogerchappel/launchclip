@@ -248,3 +248,23 @@ test("an opaque word chip is found where the plan centres it, not by its colour 
   assert.equal(lineLegibility(draw({ text: plate.map((v) => v + 30) }), rect, lines[0].colors, { ...opts, plateLine: lines[0].backing.line }).legible === true, false);
   assert.equal(lineLegibility(draw({ chip: false }), rect, lines[0].colors, { ...opts, plateLine: lines[0].backing.line }).legible, false);
 });
+
+test("a box-less preset's plate is a clean band across the frame, feathered top and bottom, and it counts as the line's backing", () => {
+  const s = story({ preset: "kinetic-hierarchy", plates: "all" });
+  const plan = captionPlan(chunks, s.overlays[0], { brand, format: s.format });
+  assert.doesNotMatch(plan.css, /radial-gradient/, "no blurred spot");
+  assert.match(plan.css, /\.lc-cap-legible \{ left: -[\d.]+%; right: -[\d.]+%; padding: 0\.5em 0\.5em; border-radius: 0\.32em; background: linear-gradient\(to bottom, #[0-9a-f]{6}00, #[0-9a-f]{6}eb 0\.3em, #[0-9a-f]{6}eb calc\(100% - 0\.3em\), #[0-9a-f]{6}00\); \}/);
+  assert.match(plan.css, /\.lc-cap-legible \.lc-cap-w \{ text-shadow: none; \}/, "no glow bleeding off the band");
+  const { lines, options } = captionLines(s, chunks);
+  assert.equal(lines[0].plate, options.legiblePlate);
+  assert.deepEqual(lines[0].backing.line.pad, [0.2, 0.5, 0.2, 0.5]);
+  // The held render's case: pale text over a cream railing, on the band.
+  const CREAM = [236, 226, 204];
+  const rect = captionBandRect(options, s.format);
+  const cy = Math.round(rect.y + rect.height / 2), half = Math.round((options.size * options.lineHeight) / 2 + options.size * 0.2);
+  const band = { x: 0, y: cy - half, width: 1080, height: half * 2, color: blend(rgb(options.legiblePlate), CREAM, 0xeb / 255) };
+  const words = { x: 300, y: cy - 24, width: 480, height: 48 };
+  const on = (under) => lineLegibility(image({ bg: CREAM, text: rgb(options.colors.idle), rect: words, under }), rect, lines[0].colors, { size: options.size, chars: 12, plate: lines[0].backing.color, plateAlpha: lines[0].backing.alpha, plateLine: lines[0].backing.line });
+  assert.equal(on(band).legible, true, JSON.stringify(on(band)));
+  assert.equal(on(null).legible, false, "without the band the line does not read on cream");
+});

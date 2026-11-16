@@ -1,0 +1,49 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Caption plates: a box-less preset's band over bright footage",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 4.8,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#cee8ee",
+      "primary": "#89592c",
+      "accent": "#2a7180",
+      "ink": "#fbfeff",
+      "paper": "#1e282b"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "audio": {
+    "words": "NARRATION.json"
+  },
+  "overlays": [
+    {
+      "type": "captions",
+      "preset": "kinetic-hierarchy",
+      "plates": "all"
+    }
+  ],
+  "scenes": [
+    {
+      "id": "street",
+      "module": "world",
+      "start": 0,
+      "end": 4.8,
+      "params": {
+        "kind": "city-street",
+        "time": "day",
+        "camera": "still"
+      }
+    }
+  ]
+}

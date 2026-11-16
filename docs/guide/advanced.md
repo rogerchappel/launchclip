@@ -528,7 +528,9 @@ Captions have 17 presets shared by both renderers (`word-highlight`,
 `soft-card`), chosen with `{"type": "captions", "preset": "<name>"}` or by the
 style pack. `weight`, `letter_spacing` (em), `case` (`as-is`, `upper`,
 `title`, `lower`) and `plate_style` (`box` or `scrim`: how a line that does
-not read over the footage is helped) tune any preset.
+not read over the footage is helped; `box` puts it on a rounded plate,
+`scrim` on a band across the frame that is solid behind the words and fades
+out above and below) tune any preset.
 
 Captions never sit on a card's text. The layout check counts a card's whole
 time on screen against the caption band, its enter, its exit and the time it

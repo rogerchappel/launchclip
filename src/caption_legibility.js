@@ -19,7 +19,7 @@
 
 import { spawn } from "node:child_process";
 import { castCaptionZones, withPlacedZones } from "@launchclip/core/cast-captions.mjs";
-import { captionLineOnSurface, captionOptions, captionPlan, captionZoneIndex, captionsOverlayOf, chunksForCaptions } from "@launchclip/core/captions.mjs";
+import { CAPTION_SCRIM_BAND, captionLineOnSurface, captionOptions, captionPlan, captionZoneIndex, captionsOverlayOf, chunksForCaptions } from "@launchclip/core/captions.mjs";
 import { decodePng } from "./visual_snapshot.js";
 import { renderedModels } from "./direction_guardrails.js";
 
@@ -59,8 +59,7 @@ export function captionLines(story, chunks) {
     if (start === null) continue;
     const time = round(Math.min(end - 0.15, Math.max(start + 0.35, (start + end) / 2)), 3);
     const plated = /lc-cap-(plate|legible)/.test(node.cls);
-    // A scrim fades into what is behind it, so the line is judged on the pixels, as an unplated one.
-    const plate = /lc-cap-legible/.test(node.cls) ? (o.plateStyle === 'scrim' ? null : o.legiblePlate) : /lc-cap-plate/.test(node.cls) ? o.colors.plate : null;
+    const plate = /lc-cap-legible/.test(node.cls) ? o.legiblePlate : /lc-cap-plate/.test(node.cls) ? o.colors.plate : null;
     const backing = captionBacking(o, node.cls);
     lines.push({ id: node.id, text: words, chars: words.replace(/\s+/g, "").length, start, end, time: Math.max(start, time), colors: [colors.idle, colors.active, colors.spoken, colors.accent].filter(Boolean), plated, plate, backing });
   }
@@ -71,7 +70,7 @@ export function captionLines(story, chunks) {
  * What the preset draws right behind a line's words, as captionPlanCss draws
  * it: each word's chip (word "chip"), the band (layout "band"), else the
  * line's plate (the preset's own at 85%, or a card, opaque) or its legibility
- * plate (92%; a scrim fades out, so it is no backing). → {color, alpha} | null
+ * plate (92%; a scrim's band counts by its solid part). → {color, alpha} | null
  */
 export function captionBacking(o, cls = "") {
   if (o.word === "chip" && o.colors.chip) return { color: o.colors.chip, alpha: 1 };
@@ -81,7 +80,8 @@ export function captionBacking(o, cls = "") {
   // captionPlanCss draws it) and the line's type let the measurement find it
   // there (plateBoxAt).
   const line = (pad) => ({ pad, lineHeight: o.lineHeight, advance: captionAdvance(o) });
-  if (/lc-cap-legible/.test(cls) && o.plateStyle !== "scrim") return { color: o.legiblePlate, alpha: 0xeb / 255, line: line([0.18, 0.5, 0.22, 0.5]) };
+  // The scrim's band is as solid as the box behind the words; only its solid part counts.
+  if (/lc-cap-legible/.test(cls)) return { color: o.legiblePlate, alpha: 0xeb / 255, line: line(o.plateStyle === "scrim" ? [CAPTION_SCRIM_BAND.solid, 0.5, CAPTION_SCRIM_BAND.solid, 0.5] : [0.18, 0.5, 0.22, 0.5]) };
   if (/lc-cap-plate/.test(cls)) return o.plate === "card" ? { color: o.colors.plate, alpha: 1, line: line([0.3, 0.55, 0.38, 0.55]) } : { color: o.colors.plate, alpha: 0xd9 / 255, line: line([0.32, 0.6, 0.32, 0.6]) };
   return null;
 }
