@@ -9,12 +9,12 @@
     "fonts": {"display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono"}
   },
   "motion": {"feel": {"preset": "kinetic", "ambient": {"shift": 0.014, "period": [2.5, 4]}}},
-  "camera": {"mode": "cuts", "kicks": [{"at": 0.25}, {"at": 1.5}, {"at": 3}, {"at": 6}, {"at": 8}]},
+  "camera": {"mode": "cuts", "kicks": [{"at": 0.25}, {"at": 1.5}, {"at": 3}]},
   "cast": {"style": "chibi", "characters": [{"id": "bot", "name": "Bot", "kind": "robot", "position": "center"}]},
   "world": {"kind": "office", "time": "night"},
   "scenes": [
     {"id": "room", "module": "cast-scene", "start": 0, "end": 10, "params": {"set": "standing", "shot": "wide",
-      "cast": [{"id": "bot", "pose": "look", "expression": "happy", "cues": [{"at": 3, "pose": "cheer", "expression": "delighted"}, {"at": 4.7, "pose": "look", "expression": "happy"}]}]}},
+      "cast": [{"id": "bot", "pose": "look", "expression": "happy", "cues": [{"at": 1.2, "pose": "wave", "expression": "delighted"}, {"at": 2.2, "pose": "look", "expression": "happy"}, {"at": 3, "pose": "cheer", "expression": "delighted"}, {"at": 4.7, "pose": "look", "expression": "happy"}]}]}},
     {"id": "crew", "module": "node-graph", "track": 1, "start": 0, "end": 10, "params": {
       "hub": {"label": "Release", "icon": "rocket"},
       "nodes": [
