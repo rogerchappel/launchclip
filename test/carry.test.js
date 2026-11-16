@@ -75,13 +75,11 @@ test('the source is the last op-list scene on the track; a footage cutaway betwe
   assert.equal(state(b, 6).get('s3-title').opacity, 1);
 });
 
-test('carry needs a cut, a pan, a whip-pan, a push or a pull, and real elements', () => {
+test('carry needs a cut, a camera move or a slide, and real elements', () => {
   const fade = twoGraphs(undefined, {in: {type: 'fade', dur: 0.4}});
   assert.equal(stillPlateProblem(fade, {in: {type: 'push', dur: 0.6}}), null);
   assert.match(stillPlateProblem(fade, fade.scenes[1]), /fade/);
   assert.throws(() => resolveModule(fade.scenes[1], fade), /carry needs a cut/);
-  const overview = {...twoGraphs(undefined, {in: {type: 'overview', dur: 2.4}}), camera: {mode: 'world'}};
-  assert.throws(() => resolveModule(overview.scenes[1], overview), /overview camera move; carry rides/);
   for (const extra of [{in: {type: 'whip-pan', dur: 0.26, direction: 'left'}}, {in: {type: 'pan', dur: 0.8}}]) assert.equal(stillPlateProblem(twoGraphs(undefined, extra), twoGraphs(undefined, extra).scenes[1]), null);
   const missing = twoGraphs({map: {'s1-nope': 's2-title'}});
   assert.throws(() => resolveModule(missing.scenes[1], missing), /no element "s1-nope"/);
@@ -234,7 +232,7 @@ test('style packs carry flow: calm and premium seeds always have it, and applySt
 });
 
 // Carry through a moving camera (docs/rd/carry-moving-camera.md).
-import {cameraPlan, cameraStateAt, screenPoint, sceneObjectLookup, worldPoint} from '@launchclip/core/camera-world.mjs';
+import {cameraPlan, cameraStateAt, driftAt, screenPoint, sceneObjectLookup, worldPoint} from '@launchclip/core/camera-world.mjs';
 import {sceneWindows} from '@launchclip/core/transitions.mjs';
 import {sceneRenderEnd} from '@launchclip/core/modules.mjs';
 import {getEase} from '@launchclip/core/motion.mjs';
@@ -253,7 +251,9 @@ function onScreen(story, b, ids, t) {
   const plan = cameraPlan(story, {windows: sceneWindows(story), objects: sceneObjectLookup(story, (scene, value) => resolveModule(scene, value))});
   const {children, ops} = opList(b), boxes = visualBoxes(b, children, ops, t, ids);
   const layer = layerAt(story, b.id, t);
-  return Object.fromEntries(ids.map(id => [id, (({x, y}) => ({x: x + layer.x, y: y + layer.y}))(plan ? screenPoint(plan, worldPoint(plan.placements[b.id], {x: boxes[id].cx, y: boxes[id].cy}), t) : {x: boxes[id].cx, y: boxes[id].cy})]));
+  // Less the ambient drift, which moves the whole frame (carried elements too) and adds up over a long overview.
+  const still = ({x, y}) => { const d = driftAt(plan, t), W2 = plan.width / 2, H2 = plan.height / 2; return {x: W2 + (x - W2 - d.x) / d.scale, y: H2 + (y - H2 - d.y) / d.scale}; };
+  return Object.fromEntries(ids.map(id => [id, (({x, y}) => ({x: x + layer.x, y: y + layer.y}))(plan ? still(screenPoint(plan, worldPoint(plan.placements[b.id], {x: boxes[id].cx, y: boxes[id].cy}), t)) : {x: boxes[id].cx, y: boxes[id].cy})]));
 }
 
 for (const [name, transition, camera] of [
@@ -266,7 +266,9 @@ for (const [name, transition, camera] of [
   ['a pull in a world-camera story', {type: 'pull', dur: 0.9}, {mode: 'world'}],
   ['a pull in a cuts story', {type: 'pull', dur: 0.8}, {mode: 'cuts'}],
   ['an orbit in a world-camera story', {type: 'orbit', dur: 0.9, direction: 'right'}, {mode: 'world'}],
-  ['an orbit in a cuts story', {type: 'orbit', dur: 0.9, direction: 'left'}, {mode: 'cuts'}]
+  ['an orbit in a cuts story', {type: 'orbit', dur: 0.9, direction: 'left'}, {mode: 'cuts'}],
+  // Two legs (out to the span, a hold, in to B): the ride takes both, the FLIP spans them.
+  ['an overview in a world-camera story', {type: 'overview', dur: 2.4}, {mode: 'world'}]
 ]) {
   test(`carry rides ${name}: a straight line on screen with the camera's ease, a held title stays put`, () => {
     const story = movingStory(transition, camera);
@@ -276,7 +278,7 @@ for (const [name, transition, camera] of [
     assert.ok(items.every(item => !item.pin), 'nothing is a pin across a move: the plates sit apart in the world');
     // A zoom rides a layer whose scale is the camera's reciprocal on every sample (§6.6); pans and slides have none.
     const ride = b.carry.in.ride;
-    assert.equal(Boolean(ride), transition.type === 'orbit' || transition.type === 'pull' || (transition.type === 'push' && camera.mode === 'world'));
+    assert.equal(Boolean(ride), ['orbit', 'pull', 'overview'].includes(transition.type) || (transition.type === 'push' && camera.mode === 'world'));
     if (ride) {
       const plan = cameraPlan(story, {windows: sceneWindows(story), objects: sceneObjectLookup(story, (scene, value) => resolveModule(scene, value))});
       const zoomAt = t => (({zoom}) => zoom)(cameraStateAt(plan, t)) * plan.placements[b.id].scale;
@@ -307,15 +309,17 @@ for (const [name, transition, camera] of [
       assert.ok(Math.hypot(start[id].x - from[id].x, start[id].y - from[id].y) < 1.5, `${id} starts where A's copy was on screen`);
       assert.ok(Math.hypot(settled[id].x - slot[id].x, settled[id].y - slot[id].y) < 1.5, `${id} settles on its slot`);
     }
-    // In between: on the straight line from start to end, never past either end.
+    // In between: on the straight line from start to end, never past either end. Over a long move (an overview's
+    // 2.4 s) node-graph's own slow -cam push is 3.5% in by the landing and moves the slot with it: a few px.
+    const tol = move.duration > 1.5 ? 5 : 1.5;
     for (let k = 1; k < 10; k += 1) {
       const t = move.start + (move.duration * k) / 10, now = onScreen(story, b, ids, t);
       for (const id of ids) {
         const dx = end[id].x - start[id].x, dy = end[id].y - start[id].y, len = Math.hypot(dx, dy);
         const ox = now[id].x - start[id].x, oy = now[id].y - start[id].y;
-        if (len < 1) { assert.ok(Math.hypot(ox, oy) < 1.5, `${id} holds still on screen at ${t}`); continue; }
+        if (len < 1) { assert.ok(Math.hypot(ox, oy) < tol, `${id} holds still on screen at ${t}`); continue; }
         const along = (ox * dx + oy * dy) / len, off = Math.abs(ox * dy - oy * dx) / len;
-        assert.ok(off < 1.5 && along > -1 && along < len + 1, `${id} at ${t}: ${along.toFixed(1)} of ${len.toFixed(1)}, ${off.toFixed(1)} off the line`);
+        assert.ok(off < tol && along > -tol && along < len + tol, `${id} at ${t}: ${along.toFixed(1)} of ${len.toFixed(1)}, ${off.toFixed(1)} off the line`);
       }
     }
   });
