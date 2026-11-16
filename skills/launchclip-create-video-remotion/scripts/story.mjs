@@ -12,7 +12,9 @@ export const STORY_SCHEMA = "launchclip.story.v1";
 export const STORY_REVISION = 0;
 
 export const STORY_LANES = ["motion", "voiceover-motion", "footage-led"];
-export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe", "light-sweep", "push-blur", "light-leak", "before-after"];
+export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe", "light-sweep", "push-blur", "light-leak", "before-after", "burn-away", "slash-wipe", "shatter", "crt-off", "glitch-wipe", "blinds", "diamond-wipe", "star-iris", "pixel-dissolve"];
+/** Transitions the VFX layer draws as a pixel cover (kit/core/transitions.mjs VFX_COVER_TRANSITIONS); color names the cover's colour. */
+export const STORY_VFX_TRANSITIONS = ["burn-away", "slash-wipe", "shatter", "crt-off", "glitch-wipe", "blinds", "diamond-wipe", "star-iris", "pixel-dissolve"];
 export const STORY_ENDING_KEYS = Object.freeze(["loop_to", "in", "loop", "final"]);
 export const STORY_ENDING_FINALS = Object.freeze(["hold", "fade", "exit"]);
 // Camera transitions (kit/core/camera-world.mjs): the camera travels to the
@@ -24,7 +26,7 @@ export const STORY_CAMERA_LAYOUTS = ["row", "column", "grid", "path", "auto"];
 // story.motion.grammar presets (kit/core/grammar.mjs GRAMMAR_NAMES).
 // What a scene hit's moment asks the sound score for (kit/core/sound/options.mjs SCORE_MOMENTS; kept in step by test/sound_score.test.js).
 /** Effects a scene's vfx cues may name (kit/core/vfx/catalog.mjs VFX_EFFECT_NAMES, kept here so this file stays import-free). */
-export const STORY_VFX_EFFECTS = ["hit-spark", "crit-hit", "impact-frame", "ground-slam", "small-explosion", "smoke-bomb", "firework-burst", "poof", "sunburst", "collect-burst"];
+export const STORY_VFX_EFFECTS = ["hit-spark", "crit-hit", "impact-frame", "ground-slam", "small-explosion", "smoke-bomb", "firework-burst", "poof", "sunburst", "collect-burst", "combo-counter", "crit-number", "level-up", "achievement", "confetti", "firework-rocket"];
 export const STORY_MOMENTS = ["letdown", "promise", "reveal", "impact", "crystallise", "wonder", "miss", "resolve"];
 export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "documentary", "cinematic"];
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
@@ -82,7 +84,7 @@ export const STORY_MEDIUM_KINDS = ["none", "oil", "watercolour", "pastel", "ink"
 export const STORY_MEDIUM_KEYS = ["kind", "strength", "boil", "grain"];
 // story.look names and keys (kit/core/look.mjs LOOK_NAMES, LOOK_KEYS; kept in
 // step by test/look.test.js).
-export const STORY_LOOK_NAMES = ["none", "blueprint", "hologram", "thermal", "neon-night", "paper-cutout", "watercolour", "anime-cel", "ascii-terminal", "clay-2d", "isometric-layers"];
+export const STORY_LOOK_NAMES = ["none", "blueprint", "hologram", "thermal", "neon-night", "paper-cutout", "watercolour", "anime-cel", "ascii-terminal", "clay-2d", "isometric-layers", "pixel-arcade"];
 export const STORY_LOOK_KEYS = ["name", "strength", "step", "furniture", "palette", "labels"];
 // story.grade presets (kit/core/grade.mjs GRADE_PRESET_NAMES; kept in step by
 // test/grade.test.js, which also runs gradeErrors against validateGrade).
@@ -386,11 +388,21 @@ function beforeAfterOptionErrors(transition, path) {
   return errors;
 }
 
+/** Whether a story is retro (the pixel-arcade look, or its hits keep pixel words): it unlocks the retro-only VFX. */
+function retroStory(story) {
+  return story?.look === "pixel-arcade" || story?.look?.name === "pixel-arcade" || story?.vfx?.words === "pixel";
+}
+
 /** Validation messages for a dot-wipe's options (scene.in or ending.in); path names the transition. */
 function dotWipeOptionErrors(transition, path, fps) {
   const errors = [];
   // hold is also the overview's (seconds); color and cover are the wipe's
   // alone (color also the light-sweep's, checked there).
+  if (STORY_VFX_TRANSITIONS.includes(transition.type)) {
+    for (const key of ["cover", "hold"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a dot-wipe option; ${JSON.stringify(transition.type)} does not take it`);
+    if (transition.color !== undefined && !(DOT_WIPE_COLORS.includes(transition.color) || (typeof transition.color === "string" && /^#[0-9a-fA-F]{6}$/.test(transition.color)))) errors.push(`${path}.color must be one of ${DOT_WIPE_COLORS.join(", ")} or a #rrggbb hex; got ${JSON.stringify(transition.color)}`);
+    return errors;
+  }
   if (transition.type !== "dot-wipe") {
     for (const key of transition.type === "light-sweep" ? [] : ["color", "cover"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a dot-wipe option; ${JSON.stringify(transition.type)} does not take it`);
     return errors;
@@ -578,6 +590,11 @@ export function validateStory(story, { modules, moduleParams } = {}) {
 
   // motion.grammar and camera (kit/core/grammar.mjs, kit/core/camera-world.mjs).
   validateMotion(story.motion, err);
+  // vfx: the story's VFX layer settings (kit/core/vfx/plan.mjs). words "pixel" keeps a hit's words in its pixel font.
+  if (story.vfx !== undefined) {
+    if (!isObject(story.vfx)) err("vfx must be an object");
+    else if (story.vfx.words !== undefined && story.vfx.words !== "brand" && story.vfx.words !== "pixel") err('vfx.words must be "brand" (a hit\'s words in the brand\'s display face, the default) or "pixel"');
+  }
   const camera = validateCamera(story.camera, { err, warn, lane: story.lane });
   // world: the video-wide world for world scenes, usually from the style. Its
   // shape is checked here; kinds, times and props when a world scene resolves
@@ -733,8 +750,9 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (transition.from_object !== undefined) fromObjects.push({ index, path: `${path}.in.from_object`, value: transition.from_object });
         if (transition.type === "morph" && transition.from_object === undefined) warn(`${label} morphs without in.from_object; name the object handed across the boundary`);
         cameraTransitionRules(transition, `${path}.in`, { err, lane: story.lane, camera, track });
-        if ((transition.type === "dot-wipe" || transition.type === "light-sweep" || transition.type === "light-leak" || transition.type === "before-after") && track !== 0) err(`${path}.in.type "${transition.type}" covers the whole frame; only a track-0 scene can arrive with it`);
+        if ((transition.type === "dot-wipe" || transition.type === "light-sweep" || transition.type === "light-leak" || transition.type === "before-after" || STORY_VFX_TRANSITIONS.includes(transition.type)) && track !== 0) err(`${path}.in.type "${transition.type}" covers the whole frame; only a track-0 scene can arrive with it`);
         for (const message of dotWipeOptionErrors(transition, `${path}.in`, storyFps(story))) err(message);
+        if (transition.type === "pixel-dissolve" && !retroStory(story)) err(`${path}.in.type "pixel-dissolve" is retro only: set look "pixel-arcade" or vfx.words "pixel" (the retro-pixel style family sets both)`);
         for (const message of lightSweepOptionErrors(transition, `${path}.in`)) err(message);
         for (const message of beforeAfterOptionErrors(transition, `${path}.in`)) err(message);
         if (transition.type === "overview") overviews.push({ index, path: `${path}.in`, label, transition, start, track });
@@ -776,6 +794,8 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (cue.angle !== undefined && !(typeof cue.angle === "number" && cue.angle >= -180 && cue.angle <= 180)) err(`${cuePath}.angle must be degrees between -180 and 180`);
         if (cue.light !== undefined && !(typeof cue.light === "number" && cue.light >= 0 && cue.light <= 2)) err(`${cuePath}.light must be a number between 0 and 2`);
         if (cue.sfx !== undefined && !nonEmpty(cue.sfx)) err(`${cuePath}.sfx must be "auto" (the effect's paired sound, the default), "none" or a sound family`);
+        // A hit's words (kit/core/vfx/catalog.mjs VFX_WORDS): short, so they read in one glance.
+        for (const key of ["text", "label", "title"]) if (cue[key] !== undefined && !(nonEmpty(cue[key]) && cue[key].length <= 24)) err(`${cuePath}.${key} must be a word or two (1–24 characters)`);
       }
     }
     // Shot states (kit/core/shot-states.mjs checks the set and the module side).

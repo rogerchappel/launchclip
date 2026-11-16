@@ -1,0 +1,338 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "VFX transitions",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 16.0,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#06070d",
+      "primary": "#fdb022",
+      "accent": "#46d4ff",
+      "ink": "#06070d",
+      "paper": "#f2eee6"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "metric",
+      "start": 0.0,
+      "end": 1.6,
+      "energy": 1,
+      "params": {
+        "title": "Step 1",
+        "metric": {
+          "mode": "illustration",
+          "unit": "example minutes",
+          "format": "number",
+          "decimals": 0,
+          "values": [
+            {
+              "value": 10,
+              "at": 0.3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "s2",
+      "module": "checklist",
+      "start": 1.6,
+      "end": 3.2,
+      "energy": 2,
+      "in": {
+        "type": "burn-away",
+        "dur": 0.9
+      },
+      "params": {
+        "title": "Step 2",
+        "statusLabels": {
+          "pending": "Next",
+          "active": "Now",
+          "done": "Done"
+        },
+        "rows": [
+          {
+            "label": "Cache dependencies",
+            "status": "done",
+            "at": 0.35
+          },
+          {
+            "label": "Split the test suite",
+            "status": "done",
+            "at": 0.35
+          },
+          {
+            "label": "Ship smaller images",
+            "status": "done",
+            "at": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "id": "s3",
+      "module": "metric",
+      "start": 3.2,
+      "end": 4.8,
+      "energy": 1,
+      "params": {
+        "title": "Step 3",
+        "metric": {
+          "mode": "illustration",
+          "unit": "example minutes",
+          "format": "number",
+          "decimals": 0,
+          "values": [
+            {
+              "value": 30,
+              "at": 0.3
+            }
+          ]
+        }
+      },
+      "in": {
+        "type": "slash-wipe",
+        "dur": 0.9
+      }
+    },
+    {
+      "id": "s4",
+      "module": "checklist",
+      "start": 4.8,
+      "end": 6.4,
+      "energy": 2,
+      "in": {
+        "type": "shatter",
+        "dur": 0.9
+      },
+      "params": {
+        "title": "Step 4",
+        "statusLabels": {
+          "pending": "Next",
+          "active": "Now",
+          "done": "Done"
+        },
+        "rows": [
+          {
+            "label": "Cache dependencies",
+            "status": "done",
+            "at": 0.35
+          },
+          {
+            "label": "Split the test suite",
+            "status": "done",
+            "at": 0.35
+          },
+          {
+            "label": "Ship smaller images",
+            "status": "done",
+            "at": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "id": "s5",
+      "module": "metric",
+      "start": 6.4,
+      "end": 8.0,
+      "energy": 1,
+      "params": {
+        "title": "Step 5",
+        "metric": {
+          "mode": "illustration",
+          "unit": "example minutes",
+          "format": "number",
+          "decimals": 0,
+          "values": [
+            {
+              "value": 50,
+              "at": 0.3
+            }
+          ]
+        }
+      },
+      "in": {
+        "type": "crt-off",
+        "dur": 0.9,
+        "color": "accent"
+      }
+    },
+    {
+      "id": "s6",
+      "module": "checklist",
+      "start": 8.0,
+      "end": 9.6,
+      "energy": 2,
+      "in": {
+        "type": "glitch-wipe",
+        "dur": 0.9
+      },
+      "params": {
+        "title": "Step 6",
+        "statusLabels": {
+          "pending": "Next",
+          "active": "Now",
+          "done": "Done"
+        },
+        "rows": [
+          {
+            "label": "Cache dependencies",
+            "status": "done",
+            "at": 0.35
+          },
+          {
+            "label": "Split the test suite",
+            "status": "done",
+            "at": 0.35
+          },
+          {
+            "label": "Ship smaller images",
+            "status": "done",
+            "at": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "id": "s7",
+      "module": "metric",
+      "start": 9.6,
+      "end": 11.2,
+      "energy": 1,
+      "params": {
+        "title": "Step 7",
+        "metric": {
+          "mode": "illustration",
+          "unit": "example minutes",
+          "format": "number",
+          "decimals": 0,
+          "values": [
+            {
+              "value": 70,
+              "at": 0.3
+            }
+          ]
+        }
+      },
+      "in": {
+        "type": "blinds",
+        "dur": 0.9
+      }
+    },
+    {
+      "id": "s8",
+      "module": "checklist",
+      "start": 11.2,
+      "end": 12.8,
+      "energy": 2,
+      "in": {
+        "type": "diamond-wipe",
+        "dur": 0.9
+      },
+      "params": {
+        "title": "Step 8",
+        "statusLabels": {
+          "pending": "Next",
+          "active": "Now",
+          "done": "Done"
+        },
+        "rows": [
+          {
+            "label": "Cache dependencies",
+            "status": "done",
+            "at": 0.35
+          },
+          {
+            "label": "Split the test suite",
+            "status": "done",
+            "at": 0.35
+          },
+          {
+            "label": "Ship smaller images",
+            "status": "done",
+            "at": 0.35
+          }
+        ]
+      }
+    },
+    {
+      "id": "s9",
+      "module": "metric",
+      "start": 12.8,
+      "end": 14.4,
+      "energy": 1,
+      "params": {
+        "title": "Step 9",
+        "metric": {
+          "mode": "illustration",
+          "unit": "example minutes",
+          "format": "number",
+          "decimals": 0,
+          "values": [
+            {
+              "value": 90,
+              "at": 0.3
+            }
+          ]
+        }
+      },
+      "in": {
+        "type": "star-iris",
+        "dur": 0.9
+      }
+    },
+    {
+      "id": "s10",
+      "module": "checklist",
+      "start": 14.4,
+      "end": 16.0,
+      "energy": 2,
+      "in": {
+        "type": "pixel-dissolve",
+        "dur": 0.9
+      },
+      "params": {
+        "title": "Step 10",
+        "statusLabels": {
+          "pending": "Next",
+          "active": "Now",
+          "done": "Done"
+        },
+        "rows": [
+          {
+            "label": "Cache dependencies",
+            "status": "done",
+            "at": 0.35
+          },
+          {
+            "label": "Split the test suite",
+            "status": "done",
+            "at": 0.35
+          },
+          {
+            "label": "Ship smaller images",
+            "status": "done",
+            "at": 0.35
+          }
+        ]
+      }
+    }
+  ],
+  "vfx": {
+    "words": "pixel"
+  }
+}
