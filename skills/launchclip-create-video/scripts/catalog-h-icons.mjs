@@ -7,7 +7,7 @@ import {timingRules} from './catalog-b-base.mjs';
 import {VARIANT_PARAM, createHBase, fitText, inkOn, mixColor, r2, rt, toneColor} from './catalog-h-base.mjs';
 import {chromeNodes, chromeOps, el, label} from './catalog-h-view.mjs';
 import {iconNode, isIcon} from './icons.mjs';
-import {GRAPHIC_PARAM, cardHeight, fitGraphic, graphicNodes, graphicSpec, graphicWidth} from './graphic.mjs';
+import {SET_MEMBER_PARAM, fitMember, memberHeight, memberNodes, memberOf, memberOps, memberWidth} from './members.mjs';
 import {flockOps, idleAmplitude, idleFor, idleOps} from './fluid-motion.mjs';
 import {loopHome} from './loop.mjs';
 
@@ -22,12 +22,10 @@ function gridResolve(params, ctx) {
   const p = b.params;
   check.arr(p.items, 'params.items', 2, 12);
   const items = p.items.map((item, i) => {
-    const raw = typeof item === 'string' ? {icon: item} : check.obj(item, `params.items[${i}]`, ['icon', 'label', 'graphic']);
-    // A planner-drawn graphic (RFC §10) in place of the icon and label.
-    if (raw.graphic !== undefined) {
-      if (raw.icon !== undefined || raw.label !== undefined) check.fail(`params.items[${i}].graphic`, 'replaces icon and label; give the graphic or icon and label');
-      return {icon: null, label: null, graphic: graphicSpec(check, raw.graphic, `params.items[${i}].graphic`, {labelMax: 22})};
-    }
+    const raw = typeof item === 'string' ? {icon: item} : check.obj(item, `params.items[${i}]`, ['icon', 'label', 'graphic', 'member']);
+    // A planner-drawn graphic or a member module (RFC §10) in place of the icon and label.
+    const given = memberOf(check, raw, `params.items[${i}]`, {replaces: ['icon', 'label'], labelMax: 22, base: b});
+    if (given) return {icon: null, label: null, graphic: given};
     if (!isIcon(raw.icon)) check.fail(`params.items[${i}].icon`, `must be an icon name from kit/core/icons.mjs (got ${JSON.stringify(raw.icon)})`);
     return {icon: raw.icon, label: raw.label === undefined ? null : check.str(raw.label, `params.items[${i}].label`, 22)};
   });
@@ -51,10 +49,13 @@ function gridResolve(params, ctx) {
   const ink = inkOn(b.colors, color);
   for (const [i, item] of items.entries()) {
     if (!item.graphic) continue;
-    const gL = fitGraphic(check, `params.items[${i}].graphic`, item.graphic, cellW - u(16), {preferred: u(32), min: b.min.meta});
-    const gI = r2(Math.min(iconSize, (cellH - u(16) - gL * 1.25) * 66 / 138));
-    if (gI < u(40)) check.fail(`params.items[${i}].graphic`, 'does not fit its cell; use fewer items or set columns');
-    Object.assign(item, {gw: r2(Math.min(cellW - u(16), Math.max(graphicWidth(item.graphic, gL), gI * 2))), gh: cardHeight(gI, gL), gI, gL});
+    const path = `params.items[${i}].${item.graphic.module ? 'member' : 'graphic'}`;
+    const gL = fitMember(check, path, item.graphic, cellW - u(16), {preferred: u(32), min: b.min.meta});
+    let gI = r2(Math.min(iconSize, (cellH - u(16) - gL * 1.25) * 66 / 138));
+    // A member module taller than a card (a second line) takes a smaller icon.
+    while (item.graphic.module && gI >= u(40) && memberHeight(item.graphic, gI, gL) > cellH - u(16) + 1e-6) gI = r2(gI * 0.95);
+    if (gI < u(40)) check.fail(path, 'does not fit its cell; use fewer items or set columns');
+    Object.assign(item, {gw: r2(Math.min(cellW - u(16), Math.max(memberWidth(item.graphic, gL), gI * 2))), gh: memberHeight(item.graphic, gI, gL), gI, gL});
   }
   const gridH = cellH * rows;
   const y0 = r2(top + (rect.height - top - gridH) / 2);
@@ -81,7 +82,7 @@ function gridView(model) {
   c.cells.forEach((cell, i) => {
     if (cell.graphic) {
       const origin = `50% ${r2(cell.gh / 2)}px`;
-      const face = graphicNodes(cell.graphic, cell.gw, cell.gh, {color: c.color, ink: c.onColor, fg: c.ink, panel: model.theme.panel, fonts, unit: u, icon: cell.gI, labelSize: cell.gL, colors: model.theme, canvas: model.canvas, key: `${id}-g-${i}`});
+      const face = memberNodes(cell.graphic, cell.gw, cell.gh, {color: c.color, ink: c.onColor, fg: c.ink, panel: model.theme.panel, fonts, unit: u, icon: cell.gI, labelSize: cell.gL, colors: model.theme, canvas: model.canvas, key: `${id}-g-${i}`});
       kids.push(el('div', `${id}-cell-${i}`, {position: 'absolute', left: cell.x, top: cell.y, width: c.cellW, height: c.cellH, opacity: 0, transformOrigin: origin}, [
         el('div', `${id}-cell-${i}-idle`, {position: 'absolute', left: 0, top: 0, width: c.cellW, height: c.cellH, transformOrigin: origin}, [
           el('div', null, {position: 'absolute', left: r2((c.cellW - cell.gw) / 2), top: 0, width: cell.gw, height: cell.gh}, face)])]));
@@ -107,13 +108,16 @@ function gridTimeline(model, ops) {
   const settle = rt(motion.exitStart - 0.05);
   chromeOps(model, ops);
   const lands = flockOps(ops, c.cells.map((cell, i) => ({id: `${id}-cell-${i}`, x: r2(cell.x + c.cellW / 2), y: r2(cell.y + c.cellH / 2), at: cell.time})), start, c.origin, {duration: FLOCK});
-  c.cells.forEach((_, i) => idleOps(ops, `${id}-cell-${i}-idle`, start, rt(lands[i] + 0.3), settle, c.idle, loopHome(model)));
+  c.cells.forEach((cell, i) => {
+    idleOps(ops, `${id}-cell-${i}-idle`, start, rt(lands[i] + 0.3), settle, c.idle, loopHome(model));
+    if (cell.graphic) memberOps(ops, cell.graphic, {key: `${id}-g-${i}`, start, landAt: lands[i], settle});
+  });
 }
 
 export const iconGrid = {
   id: 'icon-grid',
   describe: 'A grid of 2–12 icons from the icon set (1,935: LaunchClip\'s own and Lucide\'s) that flock out of the middle of the grid on a stagger and breathe once they land, with optional labels: stroke icons, duotone icons, or icons on tinted tiles.',
-  params: {items: `[icon name | {icon, label? ≤ 22} | {graphic: ${GRAPHIC_PARAM}}] 2–12`, title: 'string ≤ 60 (optional)', columns: 'integer 1–6 (default by count and aspect)', tone: 'primary | accent | paper | #rrggbb', at: `build start: ${at}`, variant: VARIANT_PARAM, rect},
+  params: {items: `[icon name | {icon, label? ≤ 22} | ${SET_MEMBER_PARAM}] 2–12`, title: 'string ≤ 60 (optional)', columns: 'integer 1–6 (default by count and aspect)', tone: 'primary | accent | paper | #rrggbb', at: `build start: ${at}`, variant: VARIANT_PARAM, rect},
   events: ['build'], timing: timingRules({rules: ['icons launch 0.12 s apart (closer for many) from at and land 0.5 s later']}), variants: GRID_VARIANTS,
   resolve: gridResolve, view: gridView, timeline: gridTimeline
 };

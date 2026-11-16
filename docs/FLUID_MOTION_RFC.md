@@ -593,6 +593,39 @@ the painter:
   taller tiers, and a chip or ribbon with an icon is wider than a card, which
   shrank the labels under the 26 px floor.
 
+**Member modules: the hookup.** A member module is a catalogue module whose
+job is to be one member of a set (a card on a wall, a pin on a map): the
+forms past the closed list that other modules already take (`docs/ROADMAP.md`).
+It joins a set through the same path a graphic does, extended rather than
+doubled: `kit/core/members.mjs`. A set member is the module's default member,
+`{graphic: {kind, …}}` (the closed list), or `{member: {module, …}}` (a member
+module), never more than one, and the set reads either through the same calls:
+
+| Call | What the set module uses it for |
+|---|---|
+| `memberOf(check, raw, path, {replaces, labelMax, base})` | the spec an item gives, or null for the default member; fails when `graphic` and `member` are both given, or either with the default member's own keys (`replaces`) |
+| `memberWidth(spec, L)`, `fitMember(…)` | the width it needs at label size L; the largest label that fits a cell, failing under the brand's meta size |
+| `memberHeight(spec, I, L)` | its height with an I px icon (a card's unless the member says otherwise); node-graph gives every node the tallest, icon-grid shrinks the icon until it fits the cell |
+| `memberFace(spec)` | `card`: the set lights its rim; `glow`: it glows from behind |
+| `memberNodes(spec, W, H, look)` | its view nodes inside the set's own layout and `-idle` wrappers, so it flocks, breathes and lights like the default member |
+| `memberOps(ops, spec, {key, start, landAt, settle})` | its own ops after the set's flock and idle (status over time, a count) |
+
+A member module is a plain object in `MEMBERS` (one line per module in
+`members.mjs`): `id` (what `member.module` names), `describe`, `params` (its
+planner line; `SET_MEMBER_PARAM` lists every one on the set modules'
+params), `face`, `spec(check, raw, path, {labelMax, base})` returning a plain
+spec with a `label` (the member's name, or null; `base` is the set's
+`createHBase`, for colours and `timeOf`), `width(spec, L)` in proportion to L,
+`height?(spec, I, L)`, `nodes(spec, W, H, look)` (the painter's `look`; ids
+start with `look.key`, which is `<scene>-g-<node id>` in node-graph and
+`<scene>-g-<index>` in icon-grid) and `timeline?(ops, spec, at)` (ops only on
+its own ids; group and idle motion stay the set's, from `fluid-motion.mjs`).
+`node-graph` and `icon-grid` take members today; another set module joins by
+calling `memberOf` and the four draw calls where it now draws its default
+member. Graphics draw byte for byte as before. `test/members.test.js` proves
+the path with a stand-in member; each member module brings its own parity
+fixture, tests and 9:16 sample.
+
 ## 11. Phases
 
 1. **`node-graph` and `fluid-motion.mjs`** (this PR): flock, wave, idle, impact
