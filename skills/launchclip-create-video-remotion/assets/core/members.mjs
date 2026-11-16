@@ -23,12 +23,14 @@
 
 import {GRAPHIC_PARAM, cardHeight, fitGraphic, graphicNodes, graphicSpec, graphicWidth} from './graphic.mjs';
 import {r2} from './catalog-h-base.mjs';
+import {statusMember} from './member-status.mjs';
 import {toneMember} from './member-tone.mjs';
 import {valueCard} from './member-value-card.mjs';
 
 // One line per member module; each member session appends its own.
 const LIST = [
   toneMember,
+  statusMember,
   valueCard,
 ];
 

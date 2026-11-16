@@ -1,0 +1,251 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "The dinner rush, ticket by ticket (9:16 status members)",
+  "notes": "Sample for docs/FLUID_MOTION_RFC.md §10 (member modules): a robot runs the dinner rush while its tickets flock out of a head-chef hub, each a status member that goes pending → active → pass (or the cake sinks: fail) on beats of the 120 bpm grid, the colour and corner mark crossing over slow → fast → slow. No narration and no paid calls.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 10,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0b0d1a",
+      "primary": "#ffb547",
+      "accent": "#46d4ff",
+      "ink": "#0b0d1a",
+      "paper": "#f6f3ee"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "feel": {
+      "preset": "kinetic",
+      "ambient": {
+        "shift": 0.014,
+        "period": [
+          2.5,
+          4
+        ]
+      }
+    }
+  },
+  "camera": {
+    "mode": "cuts",
+    "kicks": [
+      {
+        "at": 0.25
+      },
+      {
+        "at": 1.5
+      },
+      {
+        "at": 3
+      },
+      {
+        "at": 6
+      },
+      {
+        "at": 8
+      }
+    ]
+  },
+  "cast": {
+    "style": "chibi",
+    "characters": [
+      {
+        "id": "bot",
+        "name": "Bot",
+        "kind": "robot",
+        "position": "center"
+      }
+    ]
+  },
+  "world": {
+    "kind": "kitchen",
+    "time": "night"
+  },
+  "scenes": [
+    {
+      "id": "room",
+      "module": "cast-scene",
+      "start": 0,
+      "end": 10,
+      "params": {
+        "set": "standing",
+        "shot": "wide",
+        "cast": [
+          {
+            "id": "bot",
+            "pose": "look",
+            "expression": "happy",
+            "cues": [
+              {
+                "at": 3,
+                "pose": "cheer",
+                "expression": "delighted"
+              },
+              {
+                "at": 4.7,
+                "pose": "look",
+                "expression": "happy"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "team",
+      "module": "node-graph",
+      "track": 1,
+      "start": 0,
+      "end": 10,
+      "params": {
+        "hub": {
+          "label": "Rush",
+          "icon": "chef-hat"
+        },
+        "nodes": [
+          {
+            "id": "soup",
+            "member": {
+              "module": "status",
+              "icon": "soup",
+              "label": "Soup",
+              "status": [
+                "pending",
+                {
+                  "state": "active",
+                  "beat": 4
+                },
+                {
+                  "state": "pass",
+                  "beat": 8
+                }
+              ]
+            }
+          },
+          {
+            "id": "steak",
+            "member": {
+              "module": "status",
+              "icon": "beef",
+              "label": "Steak",
+              "status": [
+                "pending",
+                {
+                  "state": "active",
+                  "beat": 5
+                },
+                {
+                  "state": "pass",
+                  "beat": 11
+                }
+              ]
+            }
+          },
+          {
+            "id": "salad",
+            "member": {
+              "module": "status",
+              "icon": "salad",
+              "label": "Salad",
+              "status": [
+                "active",
+                {
+                  "state": "pass",
+                  "beat": 6
+                }
+              ]
+            }
+          },
+          {
+            "id": "cake",
+            "member": {
+              "module": "status",
+              "icon": "cake-slice",
+              "label": "Cake",
+              "status": [
+                "pending",
+                {
+                  "state": "active",
+                  "beat": 7
+                },
+                {
+                  "state": "fail",
+                  "beat": 12
+                },
+                {
+                  "state": "active",
+                  "beat": 14
+                }
+              ]
+            }
+          },
+          {
+            "id": "bread",
+            "member": {
+              "module": "status",
+              "icon": "croissant",
+              "label": "Bread",
+              "status": "pass"
+            }
+          },
+          {
+            "id": "tart",
+            "member": {
+              "module": "status",
+              "icon": "cookie",
+              "label": "Tart",
+              "status": [
+                "pending",
+                {
+                  "state": "active",
+                  "beat": 10
+                },
+                {
+                  "state": "pass",
+                  "beat": 15
+                }
+              ]
+            }
+          },
+          {
+            "id": "pie",
+            "member": {
+              "module": "status",
+              "icon": "pizza",
+              "label": "Pie",
+              "status": [
+                "pending",
+                {
+                  "state": "active",
+                  "beat": 9
+                },
+                {
+                  "state": "pass",
+                  "beat": 13
+                }
+              ]
+            }
+          }
+        ],
+        "bpm": 120,
+        "converge": 3,
+        "rect": {
+          "x": 80,
+          "y": 280,
+          "width": 860,
+          "height": 640
+        }
+      }
+    }
+  ]
+}

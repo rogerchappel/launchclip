@@ -734,6 +734,24 @@ a tone runs its wire, pulse and lit rim in it too (the set takes a member's
 `examples/story/member-tone-9x16` (a kitchen whose hot stations sit in the
 primary's steps and cold ones in the accent's; finish's motion and pace gates
 pass).
+**Member module: `status`** (`kit/core/member-status.mjs`). A card (`icon`,
+`label`) whose status changes over time, as status-rack does for a whole
+module: `{member: {module: "status", icon, label, status}}`, where `status` is
+`pending | active | pass | fail` or up to four changes, `["pending", {state:
+"active", beat: 4}, {state: "pass", at: 5.5}]`. The first change holds from
+the scene start; each later one lands `at` seconds or `beat` beats from the
+scene start on the set's grid (node-graph's `bpm`, else 120 bpm), at least
+0.3 s after the one before, and is done before the module leaves. Pending is
+the muted foreground, active the brand primary, pass and fail a green and a
+red, each pushed to 3:1 on bg. The card is drawn once per state it reaches,
+face and corner mark (clock, loader, check, x) in that state's colour, and a
+change fades only the upper of the two layers (`sine.inOut`, 0.45 s: slow →
+fast → slow, no overshoot), so the card never turns see-through mid-change;
+the set's lit rim lies over every layer. Proof: parity fixture
+`h-node-graph-status-portrait` (min SSIM 0.9956, sampled mid-crossfade too),
+`test/member-status.test.js`, and the sample `examples/story/member-status-9x16`
+(a dinner rush, its tickets going pending → active → pass on the beat, the
+cake sinking to fail and back; finish's motion and pace gates pass).
 
 **Member module: `value-card`** (`kit/core/member-value-card.mjs`).
 `{member: {module: "value-card", value ≤ 10, label?}}`: a
