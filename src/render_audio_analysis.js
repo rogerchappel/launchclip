@@ -6,7 +6,7 @@ import { DEFAULT_NARRATED_MUSIC_VOLUME } from "./production_contracts.js";
 import { PLATFORM_LOUDNESS } from "./production_profiles.js";
 import { decodeAudio } from "./music/beats.js";
 import { fft, percussiveSpectra } from "./scripts/audio-features.mjs";
-import { SFX_TYPES, typingRuns } from "./sfx/classify.js";
+import { SFX_TYPES, sfxFeatures, sfxType, typingRuns } from "./sfx/classify.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -295,23 +295,8 @@ export function analyzeRhythm(samples, options = {}) {
   for (const candidate of [...candidates].sort((a, b) => b.ratio - a.ratio)) if (!kept.some((other) => Math.abs(other.t - candidate.t) < R.sfxGap)) kept.push(candidate);
   kept.sort((a, b) => a.t - b.t);
   const binHz = R.rate / R.nFft;
-  const sfx = kept.map(({ f, t, ratio, peakDb }) => {
-    const typeFrames = Math.max(1, Math.round(R.typeWindow / hopSeconds));
-    const sum = new Float64Array(spectra[0].length);
-    for (let g = f; g < Math.min(frames, f + typeFrames); g += 1) for (let k = 0; k < sum.length; k += 1) sum[k] += spectra[g][k] ** 2;
-    let total = 0, high = 0, moment = 0, max = 0, amplitude = 0;
-    for (let k = 1; k < sum.length; k += 1) {
-      total += sum[k]; moment += sum[k] * k * binHz; if (k * binHz >= 4000) high += sum[k];
-      max = Math.max(max, Math.sqrt(sum[k])); amplitude += Math.sqrt(sum[k]);
-    }
-    let end = f + db.slice(f, f + typeFrames).indexOf(peakDb);
-    while (end < frames && db[end] > peakDb - R.decayDb) end += 1;
-    const features = {
-      decay_seconds: round((end - f) * hopSeconds),
-      hf: round(total ? high / total : 0),
-      centroid_hz: Math.round(total ? moment / total : 0),
-      tonality: round(amplitude ? max / (amplitude / (sum.length - 1)) : 0, 1)
-    };
+  const sfx = kept.map(({ f, t, ratio }) => {
+    const features = sfxFeatures(spectra, db, f, { binHz, hopSeconds, window: R.typeWindow, decayDb: R.decayDb });
     return { at_seconds: round(t), type: sfxType(features), strength: round(Math.min(ratio, 99), 2), ...features };
   });
   typingRuns(sfx.map((entry) => ({ time: entry.at_seconds, type: entry.type })), { count: R.typingCount, within: R.typingSpan }).forEach((event, i) => { sfx[i].type = event.type; });
@@ -326,41 +311,6 @@ export function analyzeRhythm(samples, options = {}) {
   }
   return { tempo_bpm: tempo, beat_strength: round(strength), percussive_share_p90: round(shareP90, 4), beats, sfx, near_silences, speech, duration_seconds: round(duration) };
 }
-
-// SFX type thresholds. src/sfx/classify.js keeps rea-video's exactly (for
-// one isolated file); this scan needs them recalibrated. rea-video's were set on library SFX; ours are band
-// limited (most families keep < 5% of their energy above 4 kHz), so the
-// brightness tests also accept a centroid and whoosh also accepts "noisy and
-// sustained" (low tonality). Calibrated on the default kit (render_audio_rhythm.test.js).
-export const SFX_TYPE_RULES = Object.freeze({
-  whooshDecay: 0.25, whooshHf: 0.25, // rea-video: long and airy
-  whooshNoisyDecay: 0.18, whooshNoisyTonality: 15, // ours: long and noisy, not ringing
-  clickDecay: 0.08, clickHf: 0.3, clickCentroid: 550, // short, and bright or above the low mids
-  dingTonality: 25, dingCentroid: 1000, // a ringing partial above 1 kHz (rea-video: 1,200 Hz)
-  impactCentroid: 350, // energy sits in the lows
-  popHf: 0.2, popTonality: 15
-});
-
-/** The §4.3 type of one SFX from its decay, high-frequency share, centroid and tonality. */
-export function sfxType({ decay_seconds: decay, hf, centroid_hz: centroid, tonality }) {
-  const T = SFX_TYPE_RULES;
-  if (decay < T.clickDecay && (hf > T.clickHf || centroid > T.clickCentroid)) return "click";
-  if ((decay > T.whooshDecay && hf > T.whooshHf) || (decay > T.whooshNoisyDecay && tonality < T.whooshNoisyTonality && centroid >= T.impactCentroid)) return "whoosh";
-  if (tonality > T.dingTonality && centroid > T.dingCentroid) return "ding";
-  if (centroid < T.impactCentroid) return "impact";
-  if (hf > T.popHf || tonality > T.popTonality) return "pop";
-  return "hit";
-}
-
-/** The type each of our SFX families should measure as (null: no single type: a riser has no attack, a tally is a run of blips). */
-export const SFX_FAMILY_TYPES = Object.freeze({
-  whoosh: "whoosh", swipe: "whoosh", slide: "whoosh", "page-turn": "whoosh",
-  impact: "impact", subdrop: "impact", thud: "impact", door: "impact", footstep: "impact",
-  ding: "ding", chime: "ding", ping: "ding", notification: "ding", success: "ding", cash: "ding", shimmer: "ding", sparkle: "ding",
-  click: "click", tick: "click", keystroke: "click", "keystroke-space": "click", "keystroke-enter": "click", snap: "click", "camera-shutter": "click",
-  pop: "pop", boing: "pop",
-  riser: null, tally: null, "tape-stop": null, glitch: null, "error-buzz": null, "pen-scribble": null
-});
 
 /**
  * Cut and SFX sync against the beat grid (§4.3). cuts: hard cut times;
