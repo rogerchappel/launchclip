@@ -213,6 +213,30 @@ test("caption lines over a dark world switch to a colour that reads; over a ligh
   assert.doesNotMatch(plain.css, /lc-cap-on-/);
 });
 
+test("caption lines on a light brand surface take dark words and a brand-colour hero instead of a plate", async () => {
+  const { captionPlan, captionColorsOn, captionContrast } = await import("@launchclip/core/captions.mjs");
+  const mint = { colors: { bg: "#e5fcfc", primary: "#0f766e", accent: "#b45309", ink: "#0b2b2a", paper: "#ffffff" } };
+  // Pinned white is a preference: on mint it gives way to the first brand colour that reads, and the highlight stays the primary.
+  const on = captionColorsOn({ idle: "#ffffff", active: "#0f766e", accent: "#b45309", spoken: "#ffffff" }, "#e5fcfc", mint.colors);
+  assert.equal(on.swapped, true);
+  assert.equal(on.idle, "#0b2b2a");
+  assert.equal(on.active, "#0f766e");
+  assert.ok(captionContrast(on.accent, "#e5fcfc") >= 3);
+  // A highlight that does not read on the surface is replaced by a brand colour that does.
+  assert.equal(captionColorsOn({ idle: "#ffffff", active: "#ccffee" }, "#e5fcfc", mint.colors).active, "#0f766e");
+  // Colours that already read are kept.
+  assert.equal(captionColorsOn({ idle: "#0b2b2a", active: "#0f766e" }, "#e5fcfc", mint.colors).swapped, false);
+  const words = (start, texts) => texts.map((text, i) => ({ text, start: start + i * 0.3, end: start + i * 0.3 + 0.25 }));
+  const chunks = [{ id: "cap-001", start: 0.5, end: 1.4, words: words(0.5, ["the", "dearer"]) }, { id: "cap-002", start: 2, end: 2.9, words: words(2, ["gets", "hot"]) }];
+  const format = { width: 1080, height: 1920 };
+  const plan = captionPlan(chunks, { type: "captions", preset: "kinetic-hierarchy", colors: { idle: "#ffffff" }, surface: ["cap-001"] }, { brand: mint, format, story: { format, brand: mint, scenes: [] } });
+  assert.equal(plan.nodes.find((node) => node.id === "cap-001").cls, "lc-cap lc-cap-on-surface");
+  assert.equal(plan.nodes.find((node) => node.id === "cap-002").cls, "lc-cap");
+  assert.match(plan.css, /\.lc-cap-on-surface \.lc-cap-w \{ color: #0b2b2a; text-shadow: none; \}/);
+  assert.match(plan.css, /\.lc-cap-on-surface \.lc-cap-hero \{ color: #0f766e; \}/);
+  assert.doesNotMatch(plan.css, /lc-cap-legible/);
+});
+
 test("one-word presets show one word at a time on a real GSAP timeline, short words and blur sub-frames included", () => {
   // Words shorter than the pop entrance, seeked at 90 fps (three blur sub-frames a frame).
   const chunks = [["a", 1.1, 1.16], ["slick", 1.17, 1.5], ["it", 1.52, 1.58], ["works", 1.6, 2.1]].map(([text, start, end], i) => ({ id: `cap-00${i + 1}`, start, end, words: [{ text, start, end }] }));

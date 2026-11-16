@@ -626,6 +626,11 @@ export function captionOptions(given = {}, { brand, format, fonts, story } = {})
     // sets the look but never switches it off.
     plates: captionPlateIds(overlay?.plates),
     legiblePlate: captionLegiblePlate(idle, brandColors),
+    // Lines on the brand surface (a flat backdrop, not footage) take colours
+    // picked for it (captionColorsOn) instead of a plate: finish lists them.
+    surface: captionPlateIds(overlay?.surface),
+    surfaceUnder: captionColor('bg', brandColors, '#000000'),
+    surfaceIdle: captionColorsOn({ idle }, captionColor('bg', brandColors, '#000000'), brandColors).idle,
     colorFixes
   };
 }
@@ -782,21 +787,43 @@ export function captionWorldSpans(story) {
 
 /**
  * The colours a caption line uses over a world tone: the preset's own when
- * its text holds CAPTION_TONE_CONTRAST on the tone, else a contrasting set.
- * → {idle, accent, spoken, swapped}
+ * its text holds CAPTION_TONE_CONTRAST on the tone, else a contrasting set
+ * (captionColorsOn). → {idle, accent, active, spoken, swapped}
  */
 export function captionToneColors(colors, tone, brandColors = {}) {
-  const under = CAPTION_WORLD_TONES[tone];
-  if (!under || !isHex(colors.idle) || captionContrast(colors.idle, under) >= CAPTION_TONE_CONTRAST) return { ...colors, swapped: false };
-  // A brand colour that reads (4.5:1) first, else whichever stands furthest from the tone.
+  return captionColorsOn(colors, CAPTION_WORLD_TONES[tone], brandColors);
+}
+
+/**
+ * The colours a caption line uses on a flat backdrop (under: #rrggbb): the
+ * preset's own when its idle text holds CAPTION_TONE_CONTRAST there, else a
+ * contrasting set. A pinned idle colour is a preference, not a lock: it gives
+ * way when it does not read. The new idle is the first brand colour (paper,
+ * ink, bg) that reaches 4.5:1, else whichever of those, white or near-black
+ * stands furthest from the backdrop; the highlight (active) stays the
+ * preset's when it reads there (3:1, and apart from the idle colour), else
+ * the brand primary or accent that does, else it is pulled toward the idle
+ * colour until it reads; the accent is pulled the same way.
+ * → {idle, accent, active, spoken, swapped}
+ */
+export function captionColorsOn(colors, under, brandColors = {}) {
+  if (!isHex(under) || !isHex(colors.idle) || captionContrast(colors.idle, under) >= CAPTION_TONE_CONTRAST) return { ...colors, swapped: false };
   const brand = [brandColors.paper, brandColors.ink, brandColors.bg].filter(isHex);
   const idle = brand.find((hex) => captionContrast(hex, under) >= 4.5)
     ?? [...brand, '#ffffff', '#0b0b0f'].reduce((best, hex) => (captionContrast(hex, under) > captionContrast(best, under) ? hex : best));
-  let accent = isHex(colors.accent) ? colors.accent : idle;
-  for (let t = 0.15; captionContrast(accent, under) < CAPTION_TONE_CONTRAST && t <= 1.0001; t += 0.15) accent = mixHex(colors.accent, idle, Math.min(1, t));
+  const pull = (hex) => {
+    let out = isHex(hex) ? hex : idle;
+    for (let t = 0.15; captionContrast(out, under) < CAPTION_TONE_CONTRAST && t <= 1.0001; t += 0.15) out = mixHex(hex, idle, Math.min(1, t));
+    return out;
+  };
+  const reads = (hex) => isHex(hex) && captionContrast(hex, under) >= CAPTION_TONE_CONTRAST && rgbDistance(hex, idle) >= CAPTION_HIGHLIGHT_DISTANCE;
+  const active = [colors.active, brandColors.primary, brandColors.accent].find(reads) ?? pull(colors.active);
   const spoken = colors.spoken === colors.idle ? idle : colors.spoken;
-  return { ...colors, idle, accent, spoken, swapped: true };
+  return { ...colors, idle, accent: pull(colors.accent), active, spoken, swapped: true };
 }
+
+/** Is this caption line on the brand surface (overlay.surface: finish lists the lines on a flat backdrop)? */
+export const captionLineOnSurface = (o, id) => o.surface === 'all' || Boolean(o.surface?.has?.(id));
 
 /**
  * The caption plan for chunks under a captions overlay.
@@ -853,14 +880,14 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
     const roles = heroWords ? captionHierarchy(chunk.words, heroWords) : null;
     // A legibility plate holds the preset's own colours, so it takes no world tone.
     const legible = !o.plate && captionLinePlated(o, chunk.id);
-    const tone = o.plate || legible || !o.worldTone ? null : toneOf(...spoken(chunk));
-    const toned = tone ? captionToneColors(o.colors, tone, ctx.brand?.colors) : null;
-    if (toned) o.tones[tone] = { idle: toned.idle, accent: toned.accent, swapped: toned.swapped };
+    const tone = o.plate || legible || !o.worldTone ? null : toneOf(...spoken(chunk)) ?? (captionLineOnSurface(o, chunk.id) ? 'surface' : null);
+    const toned = tone === 'surface' ? captionColorsOn(o.colors, o.surfaceUnder, ctx.brand?.colors) : tone ? captionToneColors(o.colors, tone, ctx.brand?.colors) : null;
+    if (toned) o.tones[tone] = { idle: toned.idle, accent: toned.accent, active: toned.active, swapped: toned.swapped };
     if (legible) o.legible = true;
     const toneCls = toned ? ` lc-cap-on-${tone}` : '';
     const line = { tag: 'div', id: chunk.id, cls: `${o.plate ? 'lc-cap lc-cap-plate' : legible ? 'lc-cap lc-cap-legible' : 'lc-cap'}${zoneCls(zoneOf(...spoken(chunk)))}${toneCls}`, children: [] };
     nodes.push(line);
-    const C = toned?.swapped ? { ...o.colors, idle: toned.idle, accent: toned.accent, spoken: toned.spoken } : o.colors;
+    const C = toned?.swapped ? { ...o.colors, idle: toned.idle, accent: toned.accent, active: toned.active, spoken: toned.spoken } : o.colors;
     const inTo = Object.fromEntries(Object.keys(entrance.from).map((key) => [key, key === 'opacity' || key === 'scale' ? 1 : 0]));
     // One word at a time: the line leaves when the next arrives, and its
     // entrance ends before that exit starts. On a seeked GSAP timeline an
@@ -1049,10 +1076,14 @@ export function captionPlanCss(o, { zones = [], format } = {}) {
   // Lines over a world tone the preset's text cannot hold (captionToneColors).
   // Over any world a halo in the contrasting tone lifts the line off the
   // drawing behind it (presets with an outline keep their stroke).
+  // On the flat brand surface the type needs no halo or drop shadow (a dark
+  // shadow under dark words reads as a smudge), and a hierarchy hero takes the
+  // highlight colour.
   for (const [tone, colors] of Object.entries(o.tones ?? {})) {
-    const halo = o.stroke > 0 ? '' : ` text-shadow: ${captionContrast(colors.idle, '#000000') < captionContrast(colors.idle, '#ffffff') ? CAPTION_HALO.light : CAPTION_HALO.dark};`;
+    const halo = tone === 'surface' ? ' text-shadow: none;' : o.stroke > 0 ? '' : ` text-shadow: ${captionContrast(colors.idle, '#000000') < captionContrast(colors.idle, '#ffffff') ? CAPTION_HALO.light : CAPTION_HALO.dark};`;
     lines.push(`.lc-cap-on-${tone} .lc-cap-w { color: ${colors.idle};${halo} }`);
     if (o.emphasis) lines.push(`.lc-cap-on-${tone} .lc-cap-em { color: ${colors.accent}; }`);
+    if (tone === 'surface' && o.word === 'hierarchy') lines.push(`.lc-cap-on-surface .lc-cap-hero { color: ${colors.active}; }`);
   }
   if (o.plate === 'card') lines.push(`.lc-cap-plate { background: ${C.plate}; padding: 0.3em 0.55em 0.38em; border-radius: 0.3em; box-shadow: 0 12px 28px rgba(0,0,0,.28); }`);
   else if (o.plate) lines.push(`.lc-cap-plate { background: ${C.plate}d9; padding: 0.32em 0.6em; border-radius: 0.3em; }`);

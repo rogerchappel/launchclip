@@ -200,7 +200,11 @@ test("the gate flags captions and panels that lose contrast on the background", 
   // Grey captions without an outline on a light background.
   const s = story({ background: { kind: "mesh", params: { intensity: 1 } }, overlays: [{ type: "captions", preset: "minimal-line", colors: { idle: "#bbbbbb" } }] }, LIGHT);
   const captions = captionOptions(s.overlays[0], { brand: s.brand, format: s.format, story: s });
-  const findings = backgroundContrastFindings(s, { captions });
+  // The pinned grey is a preference: lines on the surface take a colour that reads there, so the gate passes.
+  assert.notEqual(captions.surfaceIdle, "#bbbbbb");
+  assert.deepEqual(backgroundContrastFindings(s, { captions }), []);
+  // Only a surface no caption colour reads on fails.
+  const findings = backgroundContrastFindings(s, { captions: { ...captions, surfaceIdle: "#bbbbbb" } });
   assert.equal(findings.length, 1);
   assert.equal(findings[0].rule, "background-contrast");
   assert.match(findings[0].detail, /caption words \(#bbbbbb, preset minimal-line\)/);
