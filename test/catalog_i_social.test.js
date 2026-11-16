@@ -178,6 +178,23 @@ test('social-wall: a drifting depth field, then the pulled posts come forward sh
   assert.throws(() => resolve('social-wall', {...SAMPLES['social-wall'], drift: 'sideways'}), /params\.drift/);
 });
 
+test('social-wall: the field arrives as one wave with the drift, and the pulled posts breathe in front, then rest', () => {
+  const model = resolve('social-wall', undefined, '9:16', {duration: 10});
+  const c = model.content, ops = catalogHTimeline(model);
+  const field = c.tiles.map((t, k) => ({t, k})).filter(({t}) => !t.front);
+  const firstSeen = ({k}) => { for (let s = c.buildAt; s < c.buildAt + 2; s += 1 / 30) if (frameState(ops, s).get(`scene-t${k}`).opacity > 0.05) return s; return Infinity; };
+  const byX = [...field].sort((a, b) => b.t.cx - a.t.cx), third = Math.floor(byX.length / 3);
+  const mean = list => list.reduce((sum, f) => sum + firstSeen(f), 0) / list.length;
+  assert.ok(mean(byX.slice(0, third)) + 0.3 < mean(byX.slice(-third)), 'drifting left, the right side arrives first');
+  const pulled = c.tiles.map((t, k) => ({t, k})).filter(({t}) => t.front);
+  const mid = frameState(ops, model.motion.exitStart - 2.6);
+  const poses = pulled.map(({k}) => mid.get(`scene-t${k}-idle`));
+  assert.ok(poses.every(s => Math.abs(s.y) > 0.3 || Math.abs(s.rotation) > 0.05), 'the pulled posts breathe');
+  assert.ok(poses.every(s => Math.abs(s.rotation) <= c.idle.tilt * 0.5 + 1e-6 && Math.abs(s.y) * c.frontScale <= c.idle.bob + 1e-6), 'gently: words stay readable');
+  const rest = frameState(ops, model.motion.exitStart - 0.04);
+  pulled.forEach(({k}) => assert.deepEqual([rest.get(`scene-t${k}-idle`).y, rest.get(`scene-t${k}-idle`).rotation], [0, 0]));
+});
+
 test('validateStory warns when a social post has no source.url, but not for demo posts', async () => {
   const {validateStory} = await import('@launchclip/core/story.mjs');
   const story = scenes => ({schema: 'launchclip.story.v1', title: 'Social', lane: 'motion', format: {width: 1920, height: 1080, fps: 30, duration: 6, platform: 'youtube'}, brand, base: null, scenes});
