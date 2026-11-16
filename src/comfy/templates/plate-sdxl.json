@@ -1,0 +1,34 @@
+{
+  "schema_version": "launchclip.comfy-template.v1",
+  "id": "plate-sdxl",
+  "kind": "image",
+  "description": "A still plate from a text prompt: SDXL base 1.0, core ComfyUI nodes only.",
+  "model": {
+    "name": "SDXL base 1.0",
+    "licence": "creativeml-openrail++-m",
+    "source": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0",
+    "files": [
+      { "node": "CheckpointLoaderSimple", "input": "ckpt_name", "file": "sd_xl_base_1.0.safetensors" }
+    ]
+  },
+  "inputs": {
+    "prompt": "an empty sunlit studio, wide shot",
+    "negative": "text, lettering, logo, watermark, people, blurry, lowres",
+    "width": 1344,
+    "height": 768,
+    "seed": 0,
+    "steps": 30,
+    "cfg": 7,
+    "prefix": "launchclip/plate"
+  },
+  "output_nodes": ["7"],
+  "workflow": {
+    "1": { "class_type": "CheckpointLoaderSimple", "inputs": { "ckpt_name": "sd_xl_base_1.0.safetensors" } },
+    "2": { "class_type": "CLIPTextEncode", "inputs": { "text": "{{prompt}}", "clip": ["1", 1] } },
+    "3": { "class_type": "CLIPTextEncode", "inputs": { "text": "{{negative}}", "clip": ["1", 1] } },
+    "4": { "class_type": "EmptyLatentImage", "inputs": { "width": "{{width}}", "height": "{{height}}", "batch_size": 1 } },
+    "5": { "class_type": "KSampler", "inputs": { "model": ["1", 0], "positive": ["2", 0], "negative": ["3", 0], "latent_image": ["4", 0], "seed": "{{seed}}", "steps": "{{steps}}", "cfg": "{{cfg}}", "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 1 } },
+    "6": { "class_type": "VAEDecode", "inputs": { "samples": ["5", 0], "vae": ["1", 2] } },
+    "7": { "class_type": "SaveImage", "inputs": { "images": ["6", 0], "filename_prefix": "{{prefix}}" } }
+  }
+}
