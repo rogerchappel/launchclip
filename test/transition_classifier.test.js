@@ -1,9 +1,17 @@
 // Transition classifier (docs/PLAN_AND_PACE_RFC.md §4.1, phase 4): synthetic
 // grey frames for each basic kind, a letterboxed copy, and the profile stats.
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 import { TRANSITION_TYPES } from "@launchclip/core/transitions.mjs";
-import { KIND_TRANSITION_TYPES, TRANSITION_KINDS, TRANSITION_TYPE_KINDS, classifyTransitions, pictureCrop, transitionStats } from "../src/render_motion_analysis.js";
+import { KIND_TRANSITION_TYPES, TRANSITION_KINDS, TRANSITION_TYPE_KINDS, analyzeTransitionsFile, classifyTransitions, pictureCrop, transitionStats } from "../src/render_motion_analysis.js";
+import { getRenderer } from "../src/renderers/index.js";
+import { compileStoryCommand } from "../src/story_cli.js";
+import { mediaSkip } from "./helpers/media.js";
 
 const W = 96, H = 54, FPS = 30;
 // Two textured pictures: diagonal stripes and a checker over a gradient.
@@ -65,4 +73,48 @@ test("transition stats: rate, mix and the median span without cuts", () => {
   const stats = transitionStats([{ kind: "cut", seconds: 0 }, { kind: "dissolve", seconds: 0.4 }, { kind: "dissolve", seconds: 0.6 }, { kind: "push", seconds: 0.3 }], 30);
   assert.deepEqual(stats, { transitions_per_min: 8, transition_mix: { dissolve: 0.5, cut: 0.25, push: 0.25 }, transition_seconds: 0.4 });
   assert.deepEqual(transitionStats([], 10), { transitions_per_min: 0, transition_mix: {}, transition_seconds: null });
+});
+
+// The RFC's test: every TRANSITION_TYPE (but overview, which needs a
+// chapter) between two footage stills, rendered by both renderers at
+// 360×640; the measured kinds must match TRANSITION_TYPE_KINDS for at least
+// 85% of them, and a letterboxed copy of each render must read the same.
+test("both renderers: every transition type is classified, letterboxed copies agree", { skip: mediaSkip(), timeout: 900_000 }, async (t) => {
+  const run = promisify(execFile);
+  const source = path.resolve(import.meta.dirname, "../examples/story/footage-transitions-9x16");
+  const work = await mkdtemp(path.join(os.tmpdir(), "launchclip-transitions-"));
+  try {
+    const base = JSON.parse(await readFile(path.join(source, "storyboard.json"), "utf8"));
+    const types = TRANSITION_TYPES.filter((type) => TRANSITION_TYPE_KINDS[type] !== null);
+    const seg = 1.6, media = ["assets/shots/ridge.svg", "assets/shots/boards.svg"];
+    const scene = (i, extra) => ({ id: `s${i}`, module: "clip", start: +(i * seg).toFixed(3), end: +((i + 1) * seg).toFixed(3), energy: 1, ...extra, params: { media: media[i % 2], focus: { x: 0.5, y: 0.5 }, move: "none" } });
+    const { camera, ...story } = base;
+    // vfx.words "pixel" lets pixel-dissolve (retro only) validate.
+    Object.assign(story, { title: "Every transition", vfx: { words: "pixel" }, format: { ...base.format, width: 360, height: 640, duration: +((types.length + 1) * seg).toFixed(3) },
+      scenes: [scene(0, {}), ...types.map((type, i) => scene(i + 1, { in: { type, dur: 0.5 } }))] });
+    const measured = {};
+    for (const name of ["hyperframes", "remotion"]) {
+      const project = path.join(work, name);
+      await cp(path.join(source, "assets"), path.join(project, "assets"), { recursive: true });
+      await writeFile(path.join(project, "storyboard.json"), JSON.stringify(story));
+      await compileStoryCommand(project, { renderer: name, ...(name === "hyperframes" ? { out: path.join(project, "hyperframes") } : {}) });
+      const video = path.join(work, `${name}.mp4`), boxed = path.join(work, `${name}-boxed.mp4`);
+      await getRenderer(name).render(name === "hyperframes" ? path.join(project, "hyperframes") : project, video, { quality: "draft" });
+      // Pillarboxed into 16:9 and letterboxed with bars on all sides.
+      await run("ffmpeg", ["-v", "error", "-i", video, "-vf", name === "hyperframes" ? "pad=1138:640:389:0:black" : "pad=480:900:60:130:black", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-y", boxed]);
+      for (const [key, file] of [[name, video], [`${name}-boxed`, boxed]]) {
+        const { transitions } = await analyzeTransitionsFile(file);
+        // The measured transition overlapping each planned one.
+        measured[key] = types.map((type, i) => { const at = (i + 1) * seg; return transitions.find((entry) => entry.start - 0.15 <= at + 0.5 && entry.end + 0.15 >= at)?.kind ?? "missed"; });
+      }
+    }
+    for (const name of ["hyperframes", "remotion"]) {
+      const right = types.filter((type, i) => measured[name][i] === TRANSITION_TYPE_KINDS[type]);
+      t.diagnostic(`${name}: ${right.length}/${types.length} right; misses: ${types.filter((type) => !right.includes(type)).map((type) => `${type} → ${measured[name][types.indexOf(type)]}`).join(", ") || "none"}`);
+      assert.ok(right.length >= 0.85 * types.length, `${name}: ${right.length}/${types.length}`);
+      assert.deepEqual(measured[`${name}-boxed`], measured[name], `${name}: the letterboxed copy reads the same`);
+    }
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
 });
