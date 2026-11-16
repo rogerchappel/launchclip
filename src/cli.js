@@ -473,8 +473,8 @@ export function makeExitCode(report, { allowNeedsRepair = false } = {}) {
   const status = report?.status;
   if (status === "failed") return MAKE_EXIT_CODES.failed;
   if (status === "needs-repair") return allowNeedsRepair ? 0 : MAKE_EXIT_CODES["needs-repair"];
-  // A run stopped after its storyboard (--stop-after storyboard) waits for an approval whatever kind of video it is.
-  if (status === "awaiting-approval" && report?.stopped?.after === "storyboard") return MAKE_EXIT_CODES[status];
+  // A run stopped after its storyboard (--stop-after storyboard) or for a comp pick (--comps) waits for an approval whatever kind of video it is.
+  if (status === "awaiting-approval" && ["storyboard", "comps"].includes(report?.stopped?.after)) return MAKE_EXIT_CODES[status];
   if (ANIMATION_ONLY_EXITS.includes(status) && report?.routing?.kind === "animation") return MAKE_EXIT_CODES[status];
   return 0;
 }
