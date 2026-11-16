@@ -179,6 +179,7 @@ entrances and variants. The clamps only cap their timing.
 - No frame region stays empty for long.
 - No card sits alone over an empty set.
 - No shot repeats back to back.
+- A list is separate items, never rows of checkboxes in one box.
 - A video pictures its subject: it is never only line diagrams, rows of dots
   and text cards.
 
@@ -210,6 +211,10 @@ entrances and variants. The clamps only cap their timing.
     footage, object, chart or interface in any scene, fails. Stories over a
     recording are exempt. The planner reports the same thing as a `variety:`
     note while a repair can still fix it.
+  - `boxed-list` (warning): a `checklist` scene, a list drawn as checkbox
+    rows with status labels inside one card. It reads as a template; draw the
+    list with `item-list`, each item its own element (stack, fan, scatter or
+    orbit, ticks landing one at a time).
 - **Planner prompt and skill: 9:16 composition.**
   - A card takes the top 30–40% of the frame and the cast stands in the lower
     half on the world's ground, so they share the frame.
@@ -372,7 +377,7 @@ duration, and how a module builds.
 | layout (captions) | rendered frames | a caption line is below 3:1 or camouflaged after the plate pass |
 | ghosting | ops at 10 Hz | two copies of a character; half-transparent text or characters held too long |
 | density | layout rects at 2 Hz | an empty region for more than 4 s; a lone card over an empty set for more than 3 s |
-| variety | cast scenes, track-0 scenes | the same shot back to back; a video of only diagrams and text cards |
+| variety | cast scenes, track-0 scenes | the same shot back to back; a video of only diagrams and text cards (a checklist card warns as a boxed list) |
 | holds | windows and ops at 4 Hz | nothing moves for more than 3 s (only the drift moving warns) |
 | states | shots, states and events | a shot holds one state for more than 10 s |
 | choreography | grammar, scene timing and ops | an entrance eases in, an exit eases out, a move is linear, an exit is slower than its entrance, a cascade runs over 2 s (crowded moves and states with no rest between them warn) |

@@ -15,6 +15,7 @@ LaunchClip's goal: **a SaaS founder points it at their product and gets a launch
 - Export to Final Cut Pro, Premiere Pro, DaVinci Resolve or OpenTimelineIO
 - **Demo autopilot:** point it at your SaaS codebase and it starts the app, records the key flows on safe demo data, and edits them in with zooms and callouts timed to every action ([guide](guide/demo-autopilot.md))
 - **Subject-aware effects:** in a talking-head recording, graphics can sit behind you (your product name behind your head, your app on the wall behind you, a dolly zoom), chosen by the art director like any other module, or put on a clip yourself with `launchclip fx` ([guide](guide/effects.md))
+- **Lists as separate items:** a list (steps, features, a checklist) is one free-type element per item, stacked, fanned, scattered or orbiting a subject, with ticks landing one at a time (`item-list`); the finish gate warns on a boxed checklist card
 - Published on npm
 
 ## Next
@@ -69,7 +70,6 @@ LaunchClip's goal: **a SaaS founder points it at their product and gets a launch
   - Node graphs with glowing wires, and pulses of light that travel along them to show data or work moving from one node to the next, with highlights that light a node as a pulse arrives.
   - Characters react to the graphics around them: they look at a card that lands, raise their arms as a fan opens.
   - Graphics drawn for the project (a card with its own icon, a prop, a badge) by the planner, in the style's palette and type, rather than only from the fixed module catalogue.
-- **List items as separate elements, never a boxed list:** a list (steps, features, a checklist) is drawn as one element per item, each with its own entrance, layout and motion, instead of rows of checkboxes inside one card. Items can scatter, stack, fan, orbit a subject or get ticked off one at a time. A finish gate flags a boxed list with checkbox rows as a tell.
 - **A fixed imperfection in every character:** one small, deliberate flaw (a dented antenna, a chipped mug) kept in `must_keep`, so drift is easy to spot for the vision check and for a person. A character you design yourself gets a full reference sheet and a word-for-word description that every shot reuses: silhouette, colours with hex codes, one signature item, one gesture and the flaw.
 - **The breakdown reel:** a short "how it was made" format: the finished shot plays, comes apart into labelled layers (the bible, the reference sheet, the animatic, the final) and snaps back, with the last frame matching the first so it loops. Built from what every project already has, with the exploded-view motion.
 - **A before-and-after wipe:** a cursor or handle drags across one shot, and the other version (a filter, the redesign, the raw take) is revealed behind it.

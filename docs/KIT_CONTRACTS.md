@@ -6594,6 +6594,27 @@ polaroid a brand gradient with an icon, so nothing shows empty.
 | `tooltip` | dark, light, brand | `text`, `title`, `target` (canvas px) | show | A dot lands on the target with a looping pulse ring; the box rises above it, or below when the rect has no room above |
 | `callout-arrow` | curve, straight, sketch | `text`, `target`, `from` (canvas px), `circle`, `tone` | point | The label pops, the shaft draws on, the head flicks, a ring draws round the target; sketch adds an echo stroke and an italic note |
 
+### Lists (`catalog-h-list.mjs`)
+
+A list (steps, features, a checklist) is never rows inside one card. `item-list`
+draws each item as its own element in the view tree (`<id>-item-<i>`), with its
+own entrance and settle, in free type with no panel behind it.
+
+| Module | Variants | Params (beyond title, at, rect) | Events | Build |
+| --- | --- | --- | --- | --- |
+| `item-list` | stack, fan, scatter, orbit | `items` 2–6 (string or `{label ≤ 40, detail? ≤ 60, at?, tickAt?}`), `ticks`, `numbered` (default true without ticks), `subject` ≤ 24 (orbit only, required there), `tone`, `stagger` | item-&lt;i&gt;, tick-&lt;i&gt; | Items enter in order, `stagger` apart (the motion grammar's stagger by default). stack: free type down the frame, each slides in from the left. fan: the stack bent on an arc (each item turned a few degrees), every item flies out from one pile to its place. scatter: a loose grid, each item tilted and dropped in with a small overshoot. orbit: the subject pops in the middle and the items fly out from it to an ellipse round it (the phase that keeps them clear of the subject; fails when none does). With `ticks`, each item's tick (`<id>-tick-<i>`) draws on by itself at `tickAt` (default just after the item enters) and the number, if any, fades |
+
+All items share the smallest fitted label size, so the list reads as one set,
+and each label block centres in its measured box (the text measure can count
+a line more than the label sets on). The module declares states
+(`states: {params: ['items'], items: ['item', 'tick']}`), so a multi-state shot
+can hold items back and land one tick per state: `{at, set: {reveal:
+["tick-2"]}}` shifts that tick's draw to the state. The `variety` finish gate
+warns (`boxed-list`) on any `checklist` scene: checkbox rows with status
+labels inside one card read as a template. The planner routes lists to
+`item-list`; `checklist` stays for footage-led stories, where its card sits
+beside the presenter and its rows type in.
+
 ### Data explainers (`catalog-h-data.mjs`)
 
 Built for the "the study says" format: a near-empty stage where each beat
