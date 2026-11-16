@@ -1,6 +1,6 @@
 // Media layouts (kit/core/catalog-d-media-layouts.mjs): library footage
 // inside the motion design (split-screen, landscape-card, picture-in-picture,
-// media-compare, media-stat, media-list, media-grid), at 9:16, 16:9 and 1:1,
+// media-compare, media-stat, media-list, media-grid, before-after), at 9:16, 16:9 and 1:1,
 // footage from the first visible frame, text clear of the captions and the
 // logo, seen by layout-check, both renderers, the shot provider and the
 // planner.
@@ -39,7 +39,9 @@ const SCENES = [
   {module: 'media-stat', params: {media: VIDEO, variant: 'behind', value: '30+', label: 'years building campers'}},
   {module: 'media-list', params: {title: 'Before you buy', items: [{text: 'Check your payload', media: STILL}, {text: 'Measure the tray', media: STILL, at: 0.9}, {text: 'Ask about the warranty', at: 1.8}]}},
   {module: 'media-grid', params: {title: 'Three deck options', items: [{media: STILL, label: 'Hardwood'}, {media: VIDEO, label: 'Composite', at: 0.9}, {media: STILL, label: 'Aluminium', at: 1.8}]}},
-  {module: 'media-grid', params: {items: [{media: STILL, label: 'Wash'}, {media: STILL, label: 'Sand', at: 0.7}, {media: STILL, label: 'Oil', at: 1.4}, {media: VIDEO, label: 'Seal', at: 2.1}]}}
+  {module: 'media-grid', params: {items: [{media: STILL, label: 'Wash'}, {media: STILL, label: 'Sand', at: 0.7}, {media: STILL, label: 'Oil', at: 1.4}, {media: VIDEO, label: 'Seal', at: 2.1}]}},
+  {module: 'before-after', params: {before: VIDEO, grade: 'flat', gradeSide: 'before', labels: {before: 'Raw', after: 'Graded'}}},
+  {module: 'before-after', params: {before: STILL, after: VIDEO, direction: 'up', stops: [0.6, 0.3, 1], labels: {after: 'Redesign'}}}
 ].map((scene, i) => ({id: `m${i}`, start: 0, end: 4, ...scene}));
 
 const resolve = (scene, format = FORMATS['9:16'], extra = {}) => resolveModule(scene, story([scene], format, extra));
@@ -190,7 +192,7 @@ test('media layouts: HyperFrames hoists each video window; stills stay in the sc
 test('media layouts: a video window\'s shadow and ring are drawn by a twin under it in HyperFrames', () => {
   // HyperFrames draws a video's frames without its box-shadow (Remotion draws
   // it), so the emitter moves the shadow to a <div> that follows the same ops.
-  const pip = resolve(SCENES[3]);
+  const pip = resolve(SCENES[3], FORMATS['16:9']);
   const out = EMITTERS['picture-in-picture'](pip);
   const video = out.html.match(/<video\b[^>]*>/)[0];
   assert.doesNotMatch(video, /box-shadow/);
@@ -206,6 +208,20 @@ test('media layouts: a video window\'s shadow and ring are drawn by a twin under
   // A still keeps its shadow on its own frame, and a full-frame video has none to move.
   assert.doesNotMatch(EMITTERS['media-stat'](resolve(SCENES[6])).html, /-shadow"/);
   assert.doesNotMatch(EMITTERS['media-stat'](resolve(SCENES[7])).html, /-shadow"/);
+});
+
+test('media layouts: picture-in-picture is a corner card on 16:9 and a split-screen on 9:16 and 1:1', () => {
+  for (const [scene, side] of [[SCENES[3], 'top'], [SCENES[4], 'bottom']]) {
+    const wide = resolve(scene, FORMATS['16:9']);
+    assert.ok(wide.content.corner, `${scene.id}: a corner card on 16:9`);
+    for (const aspect of ['9:16', '1:1']) {
+      const tall = resolve(scene, FORMATS[aspect]);
+      const split = resolve({...scene, module: 'split-screen', params: {...scene.params, variant: side}}, FORMATS[aspect]);
+      assert.equal(tall.content.corner, undefined, `${scene.id} ${aspect}`);
+      assert.deepEqual(tall.content.windows.map((win) => win.rect), split.content.windows.map((win) => win.rect), `${scene.id} ${aspect}: the footage spans the frame as a split-screen's`);
+      assert.deepEqual(tall.content.texts.map((t) => t.key), split.content.texts.map((t) => t.key), `${scene.id} ${aspect}`);
+    }
+  }
 });
 
 test('media layouts: a scene may ask the library for a shot in each footage slot', async () => {

@@ -12,7 +12,7 @@ export const STORY_SCHEMA = "launchclip.story.v1";
 export const STORY_REVISION = 0;
 
 export const STORY_LANES = ["motion", "voiceover-motion", "footage-led"];
-export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe", "light-sweep", "push-blur", "light-leak"];
+export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe", "light-sweep", "push-blur", "light-leak", "before-after"];
 export const STORY_ENDING_KEYS = Object.freeze(["loop_to", "in", "loop", "final"]);
 export const STORY_ENDING_FINALS = Object.freeze(["hold", "fade", "exit"]);
 // Camera transitions (kit/core/camera-world.mjs): the camera travels to the
@@ -358,6 +358,28 @@ function lightSweepOptionErrors(transition, path) {
   return errors;
 }
 
+/** Validation messages for a before-after wipe's options (kit/core/before-after.mjs); path names the transition. */
+function beforeAfterOptionErrors(transition, path) {
+  const errors = [];
+  if (transition.type !== "before-after") {
+    for (const key of ["pause", "labels"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a before-after option; ${JSON.stringify(transition.type)} does not take it`);
+    return errors;
+  }
+  const { pause, labels, dur } = transition;
+  if (pause !== undefined) {
+    if (!(typeof pause === "number" && Number.isFinite(pause) && pause >= 0)) errors.push(`${path}.pause must be the seconds the handle rests half-way, 0 or more; got ${JSON.stringify(pause)}`);
+    else if (typeof dur === "number" && pause > dur / 2) errors.push(`${path}.pause (${pause}s) must be at most half the wipe (${dur / 2}s) so the handle has time to travel`);
+  }
+  if (labels !== undefined) {
+    if (!isObject(labels)) errors.push(`${path}.labels must be {before?, after?}`);
+    else for (const [key, value] of Object.entries(labels)) {
+      if (key !== "before" && key !== "after") errors.push(`${path}.labels.${key} is not a side; use before or after`);
+      else if (!(typeof value === "string" && value.trim() && value.length <= 24)) errors.push(`${path}.labels.${key} must be a word or two (1–24 characters)`);
+    }
+  }
+  return errors;
+}
+
 /** Validation messages for a dot-wipe's options (scene.in or ending.in); path names the transition. */
 function dotWipeOptionErrors(transition, path, fps) {
   const errors = [];
@@ -689,9 +711,10 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (transition.from_object !== undefined) fromObjects.push({ index, path: `${path}.in.from_object`, value: transition.from_object });
         if (transition.type === "morph" && transition.from_object === undefined) warn(`${label} morphs without in.from_object; name the object handed across the boundary`);
         cameraTransitionRules(transition, `${path}.in`, { err, lane: story.lane, camera, track });
-        if ((transition.type === "dot-wipe" || transition.type === "light-sweep" || transition.type === "light-leak") && track !== 0) err(`${path}.in.type "${transition.type}" covers the whole frame; only a track-0 scene can arrive with it`);
+        if ((transition.type === "dot-wipe" || transition.type === "light-sweep" || transition.type === "light-leak" || transition.type === "before-after") && track !== 0) err(`${path}.in.type "${transition.type}" covers the whole frame; only a track-0 scene can arrive with it`);
         for (const message of dotWipeOptionErrors(transition, `${path}.in`, storyFps(story))) err(message);
         for (const message of lightSweepOptionErrors(transition, `${path}.in`)) err(message);
+        for (const message of beforeAfterOptionErrors(transition, `${path}.in`)) err(message);
         if (transition.type === "overview") overviews.push({ index, path: `${path}.in`, label, transition, start, track });
       }
     }
@@ -853,6 +876,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
           cameraTransitionRules(transition, "ending.in", { err, lane: story.lane, camera, track: 0 });
           for (const message of dotWipeOptionErrors(transition, "ending.in", storyFps(story))) err(message);
           for (const message of lightSweepOptionErrors(transition, "ending.in")) err(message);
+          for (const message of beforeAfterOptionErrors(transition, "ending.in")) err(message);
           if (transition.from_object !== undefined) {
             const sceneId = typeof transition.from_object === "string" ? transition.from_object.split(".")[0] : null;
             if (!sceneId || !ids.has(sceneId)) err(`ending.in.from_object references unknown scene "${sceneId ?? transition.from_object}"`);

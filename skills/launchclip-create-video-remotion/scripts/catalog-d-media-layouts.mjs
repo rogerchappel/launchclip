@@ -9,15 +9,21 @@
 //   landscape-card      a 16:9 clip letterboxed in a rounded window mid-frame,
 //                       a title above, a caption or chip below
 //   picture-in-picture  a rounded clip card in a corner of a panel that
-//                       carries a title, a stat or a list
+//                       carries a title, a stat or a list (16:9; on a tall or
+//                       square frame it is drawn as a split-screen)
 //   media-compare       two options side by side or stacked, each its own
 //                       footage and label, the second on its word
 //   media-stat          a figure that counts up beside or over footage
 //   media-list          2–5 list rows, each with a small thumbnail, one by one
 //   media-grid          2–4 tiles of footage (a grid or a mosaic) revealed one
 //                       by one with the narration
+//   before-after        one shot in two versions (two sources, or one with a
+//                       grade on one side): a handle drags across, can rest
+//                       and reverse, revealing the other version behind it
+//                       (kit/core/before-after.mjs, the same handle as the
+//                       before-after transition)
 //
-// All seven share one model shape and one view (mediaLayoutView): `base` (a
+// All eight share one model shape and one view (mediaLayoutView): `base` (a
 // fill and a panel, in the scene layer), `windows` (one <video> or a framed
 // <img> each) and `overlay` (dividers, chips and the text, drawn above the
 // footage). A video window is root media: HyperFrames hoists every <video>
@@ -49,6 +55,7 @@ import {contrastRatio, fitText, mixColor, r2, rt, textWidth} from './catalog-b-b
 import {abs, el, set, tw} from './catalog-b-view.mjs';
 import {createFootageBase} from './catalog-c.mjs';
 import {grammarEase, grammarStagger} from './grammar.mjs';
+import {BEFORE_AFTER, beforeAfterAxis} from './before-after.mjs';
 
 export const MEDIA_LAYOUT_TIMING = Object.freeze({minDuration: 1.5, lead: 0.15, stagger: 0.28, textFade: 0.3, textRise: 28, exit: 0.3, minHold: 1.2, push: 0.05, count: 0.9});
 const T = MEDIA_LAYOUT_TIMING;
@@ -132,11 +139,11 @@ function chipColors(b) {
  * A window: media in a rect, revealed at `at` (absolute) from an offset in
  * the grammar's entrance. from: {x, y} px offset (default a rise), scale.
  */
-function addWindow(b, {key, media, rect, radius, at = b.start, from = null, shadow = true, ring = null}) {
+function addWindow(b, {key, media, rect, radius, at = b.start, from = null, shadow = true, ring = null, filter = null}) {
   const e = b.entrance;
   const offset = from ?? {x: 0, y: b.u(e.rise)};
   b.windows.push({key, media, rect: roundRect(rect), radius: r2(radius ?? 0), at: rt(at), from: {x: r2(offset.x), y: r2(offset.y), scale: from?.scale ?? e.scale, rotation: from?.rotation ?? e.rotation},
-    shadow: shadow ? `0 ${b.u(18)}px ${b.u(48)}px #00000066` : null, ring});
+    shadow: shadow ? `0 ${b.u(18)}px ${b.u(48)}px #00000066` : null, ring, ...(filter ? {filter} : {})});
   if (at > b.lastReveal) b.lastReveal = at;
   return b.windows.at(-1);
 }
@@ -422,6 +429,12 @@ function resolvePip(params, ctx) {
   const aspect = p.aspect === undefined ? (b.shape === 'portrait' ? '1:1' : '16:9') : check.oneOf(p.aspect, 'params.aspect', Object.keys(ASPECTS));
   const align = p.align === undefined ? 'left' : check.oneOf(p.align, 'params.align', ['left', 'center']);
   const [vy, vx] = corner.split('-');
+  // On a tall or square frame a corner card shrinks the footage and leaves the panel beside it
+  // empty, so the line is drawn as a split-screen there: footage across the top or bottom.
+  if (b.shape !== 'wide') {
+    const {aspect: _aspect, variant: _variant, ...rest} = params;
+    return resolveSplit({...rest, variant: vy}, ctx);
+  }
   // The panel fills the safe area; the card sits in its corner, the content in the rest of it.
   const panel = {x: safe.x, y: safe.y, width: safe.width, height: safe.height};
   const pad = u(36), gap = u(32);
@@ -651,6 +664,69 @@ function resolveGrid(params, ctx) {
 }
 
 // ---------------------------------------------------------------------------
+// before-after
+
+/** The looks a before-after can grade one side of a single source with (CSS filters). */
+export const BEFORE_AFTER_GRADES = Object.freeze({
+  flat: 'saturate(0.55) contrast(0.78) brightness(1.08)',
+  mono: 'grayscale(1) contrast(1.06)',
+  warm: 'sepia(0.3) saturate(1.3) hue-rotate(-8deg)',
+  cool: 'saturate(1.1) hue-rotate(14deg) brightness(1.02)',
+  vivid: 'saturate(1.55) contrast(1.12)'
+});
+/** The handle's timing (s): the lead before it moves, a leg's longest travel, the longest rest between legs, the hold after the last. */
+export const BEFORE_AFTER_TIMING = Object.freeze({lead: 0.4, leg: 1.3, rest: 0.9, hold: 0.5, fade: 0.2});
+
+function resolveBeforeAfter(params, ctx) {
+  const b = layoutBase('before-after', params, ctx, ['before', 'after', 'grade', 'gradeSide', 'direction', 'stops', 'labels'], ['before']);
+  const {check, canvas, u} = b;
+  const p = b.params;
+  const before = layoutMedia(check, p.before, 'params.before');
+  const after = p.after === undefined ? before : layoutMedia(check, p.after, 'params.after');
+  const grade = p.grade === undefined ? null : check.oneOf(p.grade, 'params.grade', Object.keys(BEFORE_AFTER_GRADES));
+  if (p.after === undefined && !grade) check.fail('params', 'compares one source with itself; give params.after (the other version) or params.grade (a look on one side)');
+  const gradeSide = p.gradeSide === undefined ? 'after' : check.oneOf(p.gradeSide, 'params.gradeSide', ['before', 'after']);
+  if (p.gradeSide !== undefined && !grade) check.fail('params.gradeSide', 'needs params.grade');
+  const direction = p.direction === undefined ? BEFORE_AFTER.defaults.direction : check.oneOf(p.direction, 'params.direction', BEFORE_AFTER.directions);
+  const stops = (p.stops === undefined ? [0.5, 1] : check.arr(p.stops, 'params.stops', 1, 4)).map((stop, i) => check.num(stop, `params.stops[${i}]`, 0, 1));
+  if (stops.some((stop, i) => stop === (i ? stops[i - 1] : 0))) check.fail('params.stops', 'repeats a position; each stop moves the handle (the first from 0, the before side)');
+  // The legs: equal travel times, equal rests between them, the hold after the last.
+  const B = BEFORE_AFTER_TIMING, n = stops.length;
+  const room = b.duration - B.lead - B.hold - T.exit;
+  if (room < 0.8) check.fail('params.stops', `need at least ${r2(0.8 + B.lead + B.hold + T.exit)} s of scene for the handle to travel; lengthen the scene`);
+  const leg = Math.min(B.leg, n === 1 ? room : (0.65 * room) / n);
+  const rest = n === 1 ? 0 : Math.min(B.rest, (room - n * leg) / (n - 1));
+  const moves = stops.map((to, i) => ({start: rt(b.start + B.lead + i * (leg + rest)), duration: rt(leg), from: i ? stops[i - 1] : 0, to}));
+  const full = {x: 0, y: 0, width: canvas.width, height: canvas.height};
+  const still = {x: 0, y: 0, scale: 1, rotation: 0};
+  addWindow(b, {key: 'before', media: before, rect: full, radius: 0, from: still, shadow: false, filter: grade && gradeSide === 'before' ? BEFORE_AFTER_GRADES[grade] : null});
+  addWindow(b, {key: 'after', media: after, rect: full, radius: 0, from: still, shadow: false, filter: grade && gradeSide === 'after' ? BEFORE_AFTER_GRADES[grade] : null});
+  // The labels: free type on the footage, one on each side, clipped to it.
+  const labels = {};
+  if (p.labels !== undefined) {
+    const raw = check.obj(p.labels, 'params.labels', ['before', 'after'], []);
+    const g = beforeAfterAxis(direction, canvas.width, canvas.height);
+    const L = BEFORE_AFTER.label;
+    for (const side of ['before', 'after']) {
+      if (raw[side] === undefined) continue;
+      const text = check.str(raw[side], `params.labels.${side}`, 24).toUpperCase();
+      // Inside the module safe area: the top corners, or (vertical) the top and just under the middle.
+      const room = g.axis === 'x' ? b.safe.width / 2 - u(24) : b.safe.width;
+      const fit = fitText(check, `params.labels.${side}`, text, {family: 'display', width: room, preferred: u(L.size), min: b.min.key, maxLines: 1});
+      const width = r2(Math.min(room, textWidth(text, fit.size, 'display') * 1.08)), height = r2(fit.size * 1.1);
+      const first = g.axis === 'x' ? (side === 'before') === (g.before === 'right') : (side === 'before') === (g.before === 'bottom');
+      const x = g.axis === 'x' && !first ? b.safe.x + b.safe.width - width : b.safe.x;
+      const y = g.axis === 'x' || first ? b.safe.y : b.safe.y + b.safe.height / 2 + u(32);
+      labels[side] = {text, size: fit.size, box: {x: r2(x), y: r2(y), width, height}, align: g.axis === 'x' && !first ? 'right' : 'left'};
+      b.parts.push({id: `label-${side}`, role: 'text', rect: labels[side].box, minTextPx: fit.size, start: rt(b.start + T.lead), motion: {enterEnd: rt(b.start + T.lead + T.textFade), exitStart: rt(b.end - T.exit)}, over: ['win-0', 'win-1']});
+    }
+  }
+  moves.forEach((move, i) => b.events.push({id: `${b.id}-stop-${i}`, name: `stop-${i}`, time: rt(move.start + move.duration), endTime: rt(move.start + move.duration + 0.2), role: 'beat'}));
+  b.lastReveal = rt(moves.at(-1).start + moves.at(-1).duration);
+  return finishLayout(b, {allowOcclusion: ['*'], content: {compare: {direction, moves, labels, line: r2(u(BEFORE_AFTER.line)), knob: r2(u(BEFORE_AFTER.knob)), fade: B.fade}}});
+}
+
+// ---------------------------------------------------------------------------
 // View and timeline (shared)
 
 /** Element trees: {base, windows: [node], overlay}. A video window is the <video> itself; a still is a framed <img>. */
@@ -665,7 +741,7 @@ export function mediaLayoutView(model) {
   const windows = c.windows.map((win, i) => {
     const {rect, media} = win;
     const ring = win.ring && !win.ring.at ? `, 0 0 0 ${win.ring.width}px ${win.ring.color}` : '';
-    const frame = {borderRadius: win.radius, background: '#000000', opacity: 0, transformOrigin: '50% 50%', ...(win.shadow || ring ? {boxShadow: `${win.shadow ?? `0 0 0 0 #0000`}${ring}`} : {})};
+    const frame = {borderRadius: win.radius, background: '#000000', opacity: 0, transformOrigin: '50% 50%', ...(win.filter ? {filter: win.filter} : {}), ...(win.shadow || ring ? {boxShadow: `${win.shadow ?? `0 0 0 0 #0000`}${ring}`} : {})};
     if (media.kind === 'video') return el('video', `${id}-win-${i}`, abs(rect.x, rect.y, rect.width, rect.height, {...frame, objectFit: 'cover', objectPosition: media.objectPosition}), [], {src: media.src, muted: '', playsinline: ''});
     const img = el('img', `${id}-img-${i}`, abs(0, 0, rect.width, rect.height, {objectFit: 'cover', objectPosition: media.objectPosition, transformOrigin: '50% 50%'}), [], {src: media.src, alt: ''});
     return el('div', `${id}-win-${i}`, abs(rect.x, rect.y, rect.width, rect.height, {...frame, overflow: 'hidden'}), [img]);
@@ -687,8 +763,51 @@ export function mediaLayoutView(model) {
     }
     kids.push(node);
   }
+  if (c.compare) kids.push(...compareNodes(model));
   const overlay = el('div', `${id}-overlay`, full, kids);
   return {base, windows, overlay};
+}
+
+// before-after: each label in a full-frame wrapper clipped to its side, and
+// the handle (a line on the seam with its knob), moved by compareOps.
+function compareNodes(model) {
+  const {id, canvas, fonts} = model;
+  const k = model.content.compare;
+  const g = beforeAfterAxis(k.direction, canvas.width, canvas.height);
+  const nodes = [];
+  for (const [side, label] of Object.entries(k.labels)) {
+    const text = el('div', `${id}-label-${side}`, abs(label.box.x, label.box.y, label.box.width, label.box.height, {margin: 0, whiteSpace: 'nowrap', fontFamily: fonts.display, fontSize: label.size, lineHeight: '1.1', letterSpacing: '0.06em', color: '#ffffff', textAlign: label.align,
+      textShadow: `0 ${r2(2 * model.unit)}px ${r2(18 * model.unit)}px rgba(0,0,0,0.65)`}), [label.text]);
+    nodes.push(el('div', `${id}-side-${side}`, abs(0, 0, canvas.width, canvas.height), [text]));
+  }
+  const {line, knob} = k;
+  const shadow = `0 0 ${r2(14 * model.unit)}px rgba(0,0,0,0.45)`;
+  const chevrons = el('svg', null, {position: 'absolute', left: 0, top: 0, display: 'block', ...(g.axis === 'y' ? {transform: 'rotate(90deg)'} : {})},
+    [el('path', null, null, [], {d: 'M38 32 L24 46 L38 60 M54 32 L68 46 L54 60', fill: 'none', stroke: '#111111', strokeWidth: 6, strokeLinecap: 'round', strokeLinejoin: 'round'})], {width: knob, height: knob, viewBox: '0 0 92 92'});
+  const knobNode = el('div', `${id}-knob`, abs(g.axis === 'x' ? r2(line / 2 - knob / 2) : r2(canvas.width / 2 - knob / 2), g.axis === 'x' ? r2(canvas.height / 2 - knob / 2) : r2(line / 2 - knob / 2), knob, knob, {borderRadius: '50%', background: '#ffffff', boxShadow: shadow}), [chevrons]);
+  const box = g.axis === 'x' ? abs(r2(-line / 2), 0, line, canvas.height) : abs(0, r2(-line / 2), canvas.width, line);
+  nodes.push(el('div', `${id}-handle`, {...box, background: '#ffffff', boxShadow: shadow, opacity: 0}, [knobNode]));
+  return nodes;
+}
+
+// before-after: the after window and each label's side clipped at the
+// handle, the handle on the seam, faded in off the edge and out onto one.
+function compareOps(model, ops) {
+  const {id, canvas, start} = model;
+  const k = model.content.compare;
+  const g = beforeAfterAxis(k.direction, canvas.width, canvas.height);
+  const prop = side => ({top: 'clipT', right: 'clipR', bottom: 'clipB', left: 'clipL'}[side]);
+  const targets = [[`${id}-win-1`, prop(g.after), share => 100 * (1 - share)], [`${id}-handle`, g.axis, share => g.origin + share * g.span]];
+  if (k.labels.after) targets.push([`${id}-side-after`, prop(g.after), share => 100 * (1 - share)]);
+  if (k.labels.before) targets.push([`${id}-side-before`, prop(g.before), share => 100 * share]);
+  for (const [target, key, value] of targets) {
+    set(ops, target, start, {[key]: r2(value(0))});
+    for (const move of k.moves) tw(ops, target, move.start, move.duration, BEFORE_AFTER.ease, {[key]: r2(value(move.from))}, {[key]: r2(value(move.to))});
+  }
+  const [first, last] = [k.moves[0], k.moves.at(-1)];
+  set(ops, `${id}-handle`, start, {opacity: 0});
+  tw(ops, `${id}-handle`, first.start, k.fade, 'power1.out', {opacity: 0}, {opacity: 1});
+  if (last.to === 0 || last.to === 1) tw(ops, `${id}-handle`, rt(last.start + last.duration - k.fade), k.fade, 'power1.in', {opacity: 1}, {opacity: 0});
 }
 
 /** Renderer-neutral ops: root fades, each window's entrance and exit, a still's slow push, the decor, the text, the count-ups. */
@@ -759,6 +878,7 @@ export function mediaLayoutTimeline(model) {
       }
     }
   }
+  if (c.compare) compareOps(model, ops);
   return ops;
 }
 
@@ -785,7 +905,7 @@ export const landscapeCard = definition('landscape-card',
   {media: MEDIA, aspect: '16:9|4:3|1:1|4:5|21:9, the window (default 16:9)', kicker: CONTENT.kicker, title: 'string ≤ 60 above the window (optional)', caption: 'string ≤ 60 under the window (optional)', chip: 'string ≤ 24, a pill under the window (optional)'},
   [], resolveLandscape);
 export const pictureInPicture = definition('picture-in-picture',
-  'A rounded clip card in a corner of a panel that carries the line: a title, a stat or a short list beside or under it. Keeps captions.',
+  'A rounded clip card in a corner of a panel that carries the line: a title, a stat or a short list beside it. 16:9 only: on a 9:16 or square frame it is drawn as a split-screen (footage top for a top corner, bottom for a bottom one), so use split-screen there. Keeps captions.',
   {media: MEDIA, variant: 'top-right|top-left|bottom-right|bottom-left (default top-right)', aspect: '16:9|4:3|1:1|4:5|21:9, the card (default 1:1 on 9:16, else 16:9)', ...CONTENT, align: 'left|center (default left)'},
   ['item-<i>'], resolvePip);
 export const mediaCompare = definition('media-compare',
@@ -805,7 +925,14 @@ export const mediaGrid = definition('media-grid',
   {title: 'string ≤ 60 (optional)', items: `[{media: ${MEDIA}, label?: string ≤ 28, at?}] 2–4; the first shows at the scene start`, variant: 'grid|mosaic (default mosaic for three on 9:16 and 1:1, else grid)'},
   ['item-<i>'], resolveGrid);
 
-/** The seven media layouts, in catalogue order. */
-export const MEDIA_LAYOUTS = Object.freeze([splitScreen, landscapeCard, pictureInPicture, mediaCompare, mediaStat, mediaList, mediaGrid]);
+export const beforeAfter = definition('before-after',
+  'One shot in two versions, full frame: a handle drags across (slow, fast, slow) and the other version is revealed behind it, resting and reversing at its stops; for a redesign, a filter or grade, a fix, raw vs edited takes. Two sources (before, after) or one with a grade on one side; a label on each side (optional). Keeps captions.',
+  {before: MEDIA, after: `${MEDIA}, the other version (optional with grade: the same source)`, grade: `${Object.keys(BEFORE_AFTER_GRADES).join('|')}, a look on one side of the source (optional)`, gradeSide: 'before|after, the side the grade is on (default after; before for raw-vs-graded: grade flat on the before side)',
+    direction: 'left|right|up|down, where the handle travels (default left: before on the left, after opening from the right)', stops: '[0–1] 1–4, the share of the after side the handle opens to, in turn, resting between (default [0.5, 1]: half-way, rest, all the way; [0.6, 0.3, 1] reverses)',
+    labels: '{before?: string ≤ 24, after?: string ≤ 24}, a word on each side (optional)'},
+  ['stop-<i>'], resolveBeforeAfter, ['the handle starts 0.4 s in and rests 0.5 s at its last stop before the exit']);
+
+/** The eight media layouts, in catalogue order. */
+export const MEDIA_LAYOUTS = Object.freeze([splitScreen, landscapeCard, pictureInPicture, mediaCompare, mediaStat, mediaList, mediaGrid, beforeAfter]);
 /** Variants per media layout (the insert-variety pass rotates through them). */
 export const MEDIA_LAYOUT_VARIANTS = Object.freeze({'split-screen': SPLIT_VARIANTS, 'picture-in-picture': PIP_VARIANTS, 'media-compare': COMPARE_VARIANTS, 'media-stat': STAT_VARIANTS, 'media-grid': GRID_VARIANTS});
