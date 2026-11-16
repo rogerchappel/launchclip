@@ -209,3 +209,22 @@ test("the retake logic: failing shots, the cheapest step, a scoped storyboard an
   assert.equal(retakesDocument([], { verdict: "ship" }).status, "ship");
   assert.equal(RETAKES_SCHEMA, "launchclip.retakes.v1");
 });
+
+test("a recapture verdict rebuilds the evidence without touching the video, then the critic judges afresh", async (t) => {
+  const { report, finishCalls, criticCalls, repairs } = await make(t, { critic: [critiqueResult("recapture"), critiqueResult("ship")] });
+  assert.equal(repairs.length, 0, "the planner is not asked to change anything");
+  assert.equal(finishCalls.length, 2);
+  assert.equal(finishCalls[1].options.scenes, undefined);
+  assert.deepEqual({ mode: report.critic_repairs[0].mode, kept: report.critic_repairs[0].kept, rendered: report.critic_repairs[0].rendered }, { mode: "recapture", kept: true, rendered: [] });
+  assert.equal(criticCalls[1].prior, undefined, "the evidence was bad, so there is nothing to score");
+  assert.equal(report.critic.verdict, "ship");
+});
+
+test("a repair round's critic gets the earlier critique to score, and the keep list reaches the planner", async (t) => {
+  const first = critiqueResult("repair", [finding("major")]);
+  first.critique.keep = ["the count-up on s3"];
+  const { criticCalls, repairs } = await make(t, { critic: [first, critiqueResult("ship")] });
+  assert.equal(criticCalls[0].prior, undefined);
+  assert.equal(criticCalls[1].prior, first.critique, "the verdict pass scores the earlier findings");
+  assert.match(repairs[0], /keep \(it works; do not lose it\): the count-up on s3/);
+});

@@ -36,7 +36,7 @@ export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
 // Caption presets (kit/core/captions.mjs CAPTION_PRESETS; kept in step by test/caption_presets.test.js).
 export const STORY_CAPTION_PRESETS = ["word-highlight", "karaoke-fill", "pop-word", "seam-word", "bounce", "typewriter", "box-highlight", "underline-sweep", "kinetic-stack", "minimal-line", "glow", "outline-heavy", "split-color", "lower-band", "word-chip", "bubble", "quiet-accent", "kinetic-hierarchy", "soft-card", "tag-chips", "serif-accent"];
-const CAPTION_OPTION_ENUMS = { position: ["bottom", "middle", "low", "top", "auto", "seam", "chest"], case: ["as-is", "upper", "title", "lower"], plate_style: ["box", "scrim"], font: ["display", "body", "meta"], entrance: ["pop", "fade", "slide-up", "slide-left", "scale", "none"], exit: ["fade-up", "fade", "slide-down", "shrink", "none"] };
+const CAPTION_OPTION_ENUMS = { position: ["bottom", "lower-third", "middle", "low", "top", "auto", "seam", "chest"], case: ["as-is", "upper", "title", "lower"], plate_style: ["box", "scrim"], font: ["display", "body", "meta"], entrance: ["pop", "fade", "slide-up", "slide-left", "scale", "none"], exit: ["fade-up", "fade", "slide-down", "shrink", "none"] };
 const CAPTION_COLOR_KEYS = ["idle", "active", "spoken", "accent", "box", "boxText", "plate", "band", "bandEdge", "chip"];
 // audio.narration.provider: voice providers `launchclip finish` can synthesise with.
 export const STORY_VOICE_PROVIDERS = ["kokoro", "elevenlabs", "supplied", "test"];
@@ -66,19 +66,21 @@ export const STORY_BACKGROUND_PARAMS = Object.freeze({
   "icon-scatter": { scale: BG_SCALE, density: BG_UNIT, jitter: BG_UNIT, opacity: [0.04, 0.2], stroke: [1, 3], speed: BG_SPEED },
   "logo-pattern": { scale: BG_SCALE, spacing: BG_SCALE, offset: BG_UNIT, opacity: [0.04, 0.2], speed: BG_SPEED },
   motif: { scale: BG_SCALE, weight: [0.5, 3], opacity: [0.04, 0.3], angle: [0, 180], speed: BG_SPEED },
-  texture: { amount: BG_UNIT, scale: BG_SCALE }
+  texture: { amount: BG_UNIT, scale: BG_SCALE },
+  weather: { intensity: BG_UNIT, speed: BG_SPEED }
 });
 export const STORY_BACKGROUND_KINDS = Object.keys(STORY_BACKGROUND_PARAMS);
 export const STORY_BACKGROUND_COLORS = ["primary", "accent", "paper"];
 // Option params per kind (kit/core/backgrounds.mjs BACKGROUND_OPTIONS): color
 // on patterned kinds, fade on every kind but blobs, a motif's shape, a
-// texture's type. Icon kinds also take icons: "auto" or 1–8 icon names.
+// texture's or weather's type. Icon kinds also take icons: "auto" or 1–8 icon names.
 const BG_PLAIN = ["flat", "paper", "mesh", "blobs", "logo-pattern", "texture"];
 export const STORY_BACKGROUND_OPTIONS = Object.freeze(Object.fromEntries(STORY_BACKGROUND_KINDS.map((kind) => [kind, {
   ...(BG_PLAIN.includes(kind) ? {} : { color: STORY_BACKGROUND_COLORS }),
   ...(kind === "blobs" ? {} : { fade: ["none", "center", "top", "bottom", "left", "right"] }),
   ...(kind === "motif" ? { shape: ["plus", "circle", "chevron", "wave", "hatch", "crosshatch"] } : {}),
-  ...(kind === "texture" ? { type: ["noise", "fibre", "canvas", "linen"] } : {})
+  ...(kind === "texture" ? { type: ["noise", "fibre", "canvas", "linen"] } : {}),
+  ...(kind === "weather" ? { type: ["aurora", "blizzard", "cherry-blossoms", "clouds", "falling-leaves", "fireflies", "fog", "god-rays", "rain", "shooting-stars", "snow", "storm"] } : {})
 }])));
 export const STORY_PANEL_TREATMENTS = ["solid", "glass", "paper", "outline", "soft-shadow", "rim-glass"];
 // story.medium kinds and keys (kit/core/medium.mjs MEDIUM_KINDS, MEDIUM_KEYS;

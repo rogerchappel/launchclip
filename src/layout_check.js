@@ -137,6 +137,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
           id: scene.id, role, rect: model.layout.rect, start: Number(scene.start), end: Number(scene.end),
           motion: { enterEnd: model.layout.motion.enterEnd, exitStart: model.layout.motion.exitStart },
           ...(model.minTextPx != null && role !== "decor" ? { minTextPx: model.minTextPx } : {}),
+          ...(model.layout.textWeight ? { textWeight: model.layout.textWeight } : {}),
           ...(extras.allowOcclusion ? { allowOcclusion: extras.allowOcclusion } : {}),
           ...(model.hidesCaptions ? { hidesCaptions: true } : {}),
           ...(model.layout.fill?.stage ? { fill: { group: model.layout.fill.group ?? scene.id, stage: model.layout.fill.stage } } : {})
@@ -210,7 +211,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
     canvas,
     elements: elements.length,
     // Every element's rect and window (caption plates and the density gate read them).
-    rects: elements.map((element) => ({ id: element.id, role: element.role, module: element.module ?? null, rect: element.rect, start: element.start, end: element.end, ...(element.fullFrame ? { fullFrame: true } : {}), ...(element.role === "caption" && element.hide?.length ? { hide: element.hide } : {}) })),
+    rects: elements.map((element) => ({ id: element.id, role: element.role, module: element.module ?? null, rect: element.rect, start: element.start, end: element.end, ...(element.fullFrame ? { fullFrame: true } : {}), ...(element.minTextPx != null ? { minTextPx: element.minTextPx } : {}), ...(element.textWeight ? { textWeight: element.textWeight } : {}), ...(element.role === "caption" && element.hide?.length ? { hide: element.hide } : {}) })),
     // Full-frame media facts by scene id (the hold gate reads the moving spans).
     media,
     errors: findings.filter((finding) => finding.severity === "error").length,

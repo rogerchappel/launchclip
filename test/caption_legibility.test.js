@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { captionLegiblePlate, captionPlan, captionPresetName } from "@launchclip/core/captions.mjs";
-import { CAPTION_LEGIBILITY, captionBandRect, captionLines, lineLegibility, measureCaptionLegibility, predictCaptionPlates } from "../src/caption_legibility.js";
+import { CAPTION_LEGIBILITY, backdropOf, captionBandRect, captionLines, lineLegibility, measureCaptionLegibility, predictCaptionPlates, predictCaptionSurfaces } from "../src/caption_legibility.js";
 
 const brand = { colors: { bg: "#101820", primary: "#2a9d8f", accent: "#e9c46a", ink: "#101820", paper: "#f4f1ea" }, fonts: { display: "anton", body: "space-grotesk", meta: "jetbrains-mono" } };
 const chunks = [
@@ -71,6 +71,43 @@ test("measureCaptionLegibility samples every line in the middle of its words", a
   const result = await measureCaptionLegibility("video.mp4", s, { chunks, frame });
   assert.deepEqual(result.failed, ["cap-002"]);
   assert.ok(times[0] >= 0.35 && times[0] <= 0.85 && times[1] >= 1.55 && times[1] <= 2.25, times.join());
+});
+
+// A light brand surface (pale mint) with white captions pinned: the pilot's case.
+const MINT = { ...brand, colors: { bg: "#e5fcfc", primary: "#0f766e", accent: "#b45309", ink: "#0b2b2a", paper: "#ffffff" } };
+const mintStory = (overlay = {}) => ({ ...story({ preset: "kinetic-hierarchy", colors: { idle: "#ffffff" }, ...overlay }), brand: MINT });
+
+test("a failed line on a flat backdrop takes the surface colours; one on busy footage is plated", async () => {
+  const s = mintStory();
+  const { options } = captionLines(s, chunks);
+  const rect = captionBandRect(options, s.format);
+  const glyphs = { x: 360, y: rect.y + 80, width: 360, height: 70 };
+  // cap-001 over flat mint, cap-002 over busy footage (light and mid stripes, both too light for white).
+  const busy = (img) => { for (let y = rect.y; y < rect.y + rect.height; y++) for (let x = 0; x < 1080; x++) if (((x >> 2) + (y >> 2)) % 2 && !((x >> 3) % 2 === 0 && x >= glyphs.x && x < glyphs.x + glyphs.width && y >= glyphs.y && y < glyphs.y + glyphs.height)) { const o = (y * 1080 + x) * 4; img.pixels[o] = 200; img.pixels[o + 1] = 170; img.pixels[o + 2] = 120; } return img; };
+  const frame = async (_video, t) => { const img = image({ bg: rgb("#e5fcfc"), text: [255, 255, 255], rect: glyphs }); return t < 1.1 ? img : busy(img); };
+  const result = await measureCaptionLegibility("video.mp4", s, { chunks, frame });
+  assert.deepEqual(result.failed, ["cap-001", "cap-002"]);
+  assert.deepEqual(result.surface, ["cap-001"]);
+  const flat = result.lines.find((line) => line.id === "cap-001").backdrop;
+  assert.equal(flat.color, "#e5fcfc");
+  assert.ok(flat.flat >= 0.85 && result.lines.find((line) => line.id === "cap-002").backdrop.flat < 0.85);
+  // A line already on the surface that still fails is not offered the surface again (it gets a plate).
+  const again = await measureCaptionLegibility("video.mp4", mintStory({ surface: ["cap-001"] }), { chunks, frame: async () => image({ bg: rgb("#e5fcfc"), text: [255, 255, 255], rect: glyphs }) });
+  assert.ok(!again.surface.includes("cap-001"));
+});
+
+test("backdropOf: the median colour and the share of pixels near it", () => {
+  assert.deepEqual(backdropOf([[10, 20, 30], [10, 20, 30], [12, 20, 30], [250, 250, 250]]), { color: "#0c141e", flat: 0.75 });
+});
+
+test("lines with no media under them are on the surface before the first render, only when the idle colour fails there", () => {
+  const s = mintStory();
+  const { options } = captionLines(s, chunks);
+  const band = captionBandRect(options, s.format);
+  const elements = [{ id: "shot", role: "media", rect: { x: 0, y: band.y - 100, width: 1080, height: 600 }, start: 1.7, end: 4 }];
+  assert.deepEqual(predictCaptionSurfaces(s, chunks, elements), ["cap-001"]);
+  // Light captions on a dark brand read already: nothing to change.
+  assert.deepEqual(predictCaptionSurfaces(story({ preset: "kinetic-hierarchy" }), chunks, []), []);
 });
 
 test("lines whose band crosses a character are plated before the first render", () => {

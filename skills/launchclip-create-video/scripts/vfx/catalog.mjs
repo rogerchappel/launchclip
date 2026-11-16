@@ -25,6 +25,18 @@ import * as blinds from './vendor/fx/transitions/blinds.js';
 import * as diamondWipe from './vendor/fx/transitions/diamond-wipe.js';
 import * as starIris from './vendor/fx/transitions/star-iris.js';
 import * as pixelDissolve from './vendor/fx/transitions/pixel-dissolve.js';
+import * as wAurora from './vendor/fx/weather/aurora.js';
+import * as wBlizzard from './vendor/fx/weather/blizzard.js';
+import * as wCherryBlossoms from './vendor/fx/weather/cherry-blossoms.js';
+import * as wClouds from './vendor/fx/weather/clouds.js';
+import * as wFallingLeaves from './vendor/fx/weather/falling-leaves.js';
+import * as wFireflies from './vendor/fx/weather/fireflies.js';
+import * as wFog from './vendor/fx/weather/fog.js';
+import * as wGodRays from './vendor/fx/weather/god-rays.js';
+import * as wRain from './vendor/fx/weather/rain.js';
+import * as wShootingStars from './vendor/fx/weather/shooting-stars.js';
+import * as wSnow from './vendor/fx/weather/snow.js';
+import * as wStorm from './vendor/fx/weather/storm.js';
 
 /** Effect name → its vendored module ({meta, create?} or {meta, draw}). */
 export const VFX_MODULES = Object.freeze({
@@ -142,5 +154,25 @@ export const VFX_TRANSITIONS = Object.freeze({
   'pixel-dissolve': Object.freeze({module: pixelDissolve, sfx: 'glitch', cover: [0.842, 1.175], brand: true})
 });
 
-/** Every module the painter may draw, by plan name: the cue effects and the transitions. */
-export const VFX_DRAWABLE = Object.freeze({...VFX_MODULES, ...Object.fromEntries(Object.entries(VFX_TRANSITIONS).map(([type, info]) => [type, info.module]))});
+/**
+ * The weather loops (docs/VFX_LAYER_RFC.md §3e), by name: the `weather`
+ * background kind (kit/core/backgrounds.mjs) draws one behind every plate.
+ * Each fills a 320 × 180 screen edge to edge, is pure and loops seamlessly.
+ */
+export const VFX_WEATHER = Object.freeze({
+  aurora: wAurora,
+  blizzard: wBlizzard,
+  'cherry-blossoms': wCherryBlossoms,
+  clouds: wClouds,
+  'falling-leaves': wFallingLeaves,
+  fireflies: wFireflies,
+  fog: wFog,
+  'god-rays': wGodRays,
+  rain: wRain,
+  'shooting-stars': wShootingStars,
+  snow: wSnow,
+  storm: wStorm
+});
+
+/** Every module the painter may draw, by plan name: the cue effects, the weather loops and the transitions. */
+export const VFX_DRAWABLE = Object.freeze({...VFX_MODULES, ...VFX_WEATHER, ...Object.fromEntries(Object.entries(VFX_TRANSITIONS).map(([type, info]) => [type, info.module]))});

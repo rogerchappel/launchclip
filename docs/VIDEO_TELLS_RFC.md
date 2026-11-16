@@ -122,6 +122,7 @@ example.
 | baked-text | Words, fake buttons or logos inside a generated image (`uns`) | P · A | a generated asset whose prompt contains quoted text | Real text over a clean image |
 | buried-raster | A photo under a near-opaque wash or blur, so it never shows (`imp`) | F | `media_presence` finds no detail in an `image` plate with `dim` over 0.85 | Less dim; or no photo |
 | unblended-media | A media rect with a hard edge and a different black (`uns`) | F · A | edge contrast between the media rect and the plate | Match the ground, soften the edge |
+| thin-text-on-footage | Small or thin type set straight over a busy shot, often on a wash of the brand colour (pilot review) | F | a text element over media whose size is under 56 px (at 1080) or weight under 600, with 14% or more edge pixels around it | Larger, heavier type on a local dark grade, or off the busy part of the shot |
 | organic-mask | A polygon or circle mask faking a subject's outline (`imp` organic-clip-path, craft floor) | P | a clip path with more than 12 points on a photo | A real matte from subject matting |
 
 *Already covered* (no new rule; the gate that owns it is named): broken
@@ -223,6 +224,7 @@ both.
 | accent-everywhere | one quarter-size frame per main-track scene, mid-hold | over 10% of the frame within RGB distance 48 of `brand.colors.accent` (or `primary`), outside `direction.moments`. Off when the accent is within 48 of `bg`, `background` or `paper` |
 | buried-raster | each image or video plate with `dim` over 0.85, read from its asset (the media-presence grey frames) | the asset has detail (edge share at least 1%) and loses it once the edge step is scaled by 1 / (1 − dim) |
 | unblended-media | each media window the layout check placed (not full frame, not the footage base), full size, mid-time | a mean colour step of 60 or more across the edge on three of its measured sides, and black levels (the darkest tenth of the luma) 12 or more apart inside and around it |
+| thin-text-on-footage | each text element over media (a window, a full-frame shot or the footage base), full size, mid-time | a size under 56 px (scaled to the canvas) or a declared weight under 600, and at least 14% of a ring around the text on an edge (a luma step of 24) |
 
 Changes from the proposals: buried-raster reads the asset and the planned
 dim rather than the rendered frame, because cards drawn over the plate add
@@ -232,8 +234,48 @@ dimmed photo can slip by. The frame thresholds are set on synthetic frames
 renders of the example stories.
 
 **Left for later:** calibrating the frame thresholds on rendered examples;
-the plate blur in buried-raster; the critic reading `motion.thesis` and the
-template check (phase 4, the `specificity` category).
+the plate blur in buried-raster. (The critic reading `motion.thesis` and the
+template check landed in phase 4.)
+
+### Phase 4: what landed
+
+All in `runHeadlessCritic` (`src/make/critic.js`) and the repair loop
+(`src/make/critic_repair.js`, `criticRepairs` in `src/make/index.js`), as §4
+describes:
+
+- **The split.** Pass A (`launchclip_make_critic`) sees the sheets, the
+  shot list, the rules and the storyboard's `direction` and `motion.thesis`,
+  never the tooling. Its schema puts `template {swappable, why}` first, so the
+  model answers the template question before it lists findings; a swappable
+  video is a `specificity` finding. Pass B (`launchclip_make_critic_check`)
+  runs only when finish's coverage gate or tells gate found something: it gets
+  A's findings and each tooling finding and marks it `agree` or
+  `false-positive`. The answers land in `qa/critic.json` under
+  `tooling_checks` (`unchecked` when pass B failed or skipped one). The
+  coverage findings still count toward the verdict as before; a false positive
+  is a note for threshold tuning, not a waiver.
+- **`recapture`.** A verdict of the final review (not the animatic's). The
+  model may give it, and tooling sets it when the sheets are partial (a sheet
+  missing on disk, a sample with no evidence) and the model said ship. In
+  `make`, a recapture round deletes `qa/temporal-evidence` and
+  `qa/critic-sheets`, reruns finish (the render is cached, so only evidence and
+  gates run) and asks pass A again. The planner is not called.
+- **The verdict pass.** A repair or replan round calls the critic with
+  `prior` (the critique it answers). Its blocking and major findings are scored
+  `resolved | partial | unresolved` (`launchclip_make_critic_verdict`), with at
+  most three regressions and no new hunt. A finding the model did not score
+  counts as unresolved. Anything short of resolved stays a finding at its
+  severity, so it forbids ship. Only the new sheets are sent, never the
+  planner's account of its fix. The scores land in `verdict_pass`.
+- **`keep`.** Up to five lines, from pass A or the verdict pass (else carried
+  from the prior). They reach the planner as `keep (it works; do not lose
+  it): …` lines in a repair's seed errors, a "Keep these, they work" list in a
+  replan brief, and every chunk a long-form round directs.
+
+**Left for later:** the character-story retake rounds (`src/make/retakes.js`)
+still ask the critic afresh each round; a recapture there has no shot to aim
+at and stops the rounds. Nothing yet collects `tooling_checks` across runs for
+threshold tuning.
 
 ## 2. The copy check
 
