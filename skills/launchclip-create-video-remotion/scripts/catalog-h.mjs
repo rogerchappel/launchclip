@@ -65,12 +65,13 @@ import {GRID_MODULES} from './catalog-i-grids.mjs';
 import {TOKENIZER_MODULES} from './catalog-i-tokenizer.mjs';
 import {OBJECT_MODULES} from './catalog-i-3d.mjs';
 import {EXPLODED_MODULES} from './catalog-i-exploded.mjs';
+import {LAYER_MODULES} from './catalog-i-layers.mjs';
 import {EXPLAIN_MODULES} from './catalog-i-explain.mjs';
 import {TACTILE_MODULES} from './catalog-h-tactile.mjs';
 import {UI_MODULES} from './catalog-i-ui.mjs';
 
 const ASPECTS = ['9:16', '16:9'];
-const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...SOCIAL_MODULES, ...CHANNEL_MODULES, ...CODE_MODULES, ...PARTICLE_MODULES, ...GRID_MODULES, ...TOKENIZER_MODULES, ...OBJECT_MODULES, ...EXPLODED_MODULES, ...SCATTER, ...EXPLAIN_MODULES, ...TACTILE_MODULES, ...UI_MODULES];
+const DEFINITIONS = [...CHARTS, ...FLOWS, ...NUMBERS, ...FRAMES, ...PAPER, ...CALLOUTS, ...TEXT, ...ICON_MODULES, ...MAPS, ...DATA_MODULES, ...SOCIAL_MODULES, ...CHANNEL_MODULES, ...CODE_MODULES, ...PARTICLE_MODULES, ...GRID_MODULES, ...TOKENIZER_MODULES, ...OBJECT_MODULES, ...EXPLODED_MODULES, ...LAYER_MODULES, ...SCATTER, ...EXPLAIN_MODULES, ...TACTILE_MODULES, ...UI_MODULES];
 
 
 
