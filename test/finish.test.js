@@ -259,6 +259,9 @@ test("runFinish runs every stage, writes the resolved copy and report, then reus
     assert.equal(report.gates.coverage.status, "passed");
     assert.equal(report.gates.coverage.profile, "short-motion");
     assert.equal(report.gates.motion.profile, "short-motion", "the motion floors come from the cadence profile");
+    // On a render the pace gate reads the pixels and keeps the plan's verdict beside it.
+    assert.equal(report.gates.pace.source, "render");
+    assert.ok(report.gates.pace.plan, "the plan's pace verdict is kept");
     assert.equal(report.gates.layout.status, "passed");
     assert.equal(report.gates.loudness.status, "passed");
     assert.equal(report.gates.motion.status, "passed");
