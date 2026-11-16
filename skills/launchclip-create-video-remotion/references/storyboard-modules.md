@@ -263,6 +263,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | leads with a point, a figure or a short list that real footage backs up ("payload explained", "what you can carry"): the point in a panel, a rounded clip card in its corner (16:9 only; on 9:16 use split-screen) [motion, voiceover-motion] | picture-in-picture |
 | shows real footage while the line makes a point: the shot fills the top or bottom half (left or right on 16:9), the other half carries the title, a figure or a short list [motion, voiceover-motion] | split-screen |
 | shows a wide view in landscape footage (a vehicle side-on, a campsite, a road, a beach): the shot letterboxed in a rounded 16:9 window mid-frame, a title above and a caption or chip below, no heavy crop [motion, voiceover-motion] | landscape-card |
+| the ending: one action (a link, a comment keyword, follow, save, subscribe, download, visit, book, a launch date, or a loop back to the hook) as a designed end card from a library of ~30 layouts, dressed in the brand and its logo; leave params.layout out and it is picked from the action, the ground and the seed (pass params.avoid with the endings of recent videos) | end-card |
 | names the brand on a title or end card, with its logo and wordmark images (and an app-store badge or URL on the end card) | brand-lockup |
 | calls to action, or the loop ending | cta |
 | asks the viewer to subscribe, like or ring the bell partway through a long video ("if you're new here, subscribe"): a glass subscribe pill on an overlay track (track 1+) over the scene, clicked on the word | subscribe-cta |
@@ -727,6 +728,35 @@ params:
 - at: first beat (seconds from scene start (optional; else a matching hit, else a default); default 0.15 s)
 - stagger: seconds between beats (default 0.35, scaled by the grammar)
 events: mark, wordmark, eyebrow, headline, badge, url, shine
+
+### end-card (hides captions)
+The ending, from a library of designed end cards (docs/END_CARDS_RFC.md): a layout (or one picked from the action, the ground, the logo and the seed) dressed in the brand's fonts, colours and logo, which is tinted, plated or recoloured so it reads. Over footage it holds params.still or lets the shot play under it. Hides captions.
+params:
+- layout: one of sign-off, url-hero, handle-hero, keyword-ticket, keyword-stamp, last-line, stacked-index, bloom, split-panel, plate-centre, wordmark-wipe, mark-orbit, monogram, freeze-scrim, live-lower, frame-in-frame, cutout-type, grade-out, pointer, poster, receipt, typed-page, badge-row, countdown, diagonal-band, marquee, seam, rewind (default: picked from the action, the ground, the logo and the seed)
+- action: url|keyword|follow|save|subscribe|download|visit|book|launch|loop — what the ending asks for; narrows the pick
+- headline: string ≤ 80, the closing line
+- emphasis: words of the headline set in italic (optional)
+- url: address ≤ 48, no spaces
+- handle: @handle ≤ 32
+- keyword: one word viewers comment (shown in capitals)
+- offer: what they get for it ≤ 60
+- reason: why follow ≤ 60
+- next: the next video's title ≤ 60
+- date: launch or event date ≤ 16
+- place: where ≤ 40
+- slot: the booking action ≤ 32
+- app: app name ≤ 28
+- hook: the video's opening line, for loop endings ≤ 70
+- issue: issue or episode number ≤ 12
+- rating: stars, e.g. "4.8"
+- logo: "assets/…" or {src, ratio, tone: dark|light|mixed, clear: see-through?, box: "#rrggbb"} (tone and clear are measured when the story is read)
+- still: "assets/…" the last frame as an image: footage layouts hold it; without it the shot plays under the ending
+- badges: download: one or two store badge images (handed in)
+- avoid: layout ids used by recent videos; the pick avoids them
+- seed: string or number for the pick (default: from the scene and brand)
+- at: first beat, seconds from the scene start (default 0.1)
+- stagger: seconds between beats (default 0.28, scaled by the grammar)
+events: enter, ask
 
 ### punch-in (keeps captions)
 Footage-led: a spring zoom on the base recording toward a focus point, timed to a word (a camera on the base, not an overlay). Steps punch in, further in or back out on successive words; blur adds a few frames of zoom blur on each move.
@@ -2504,6 +2534,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | archive-card | 2 s | 0.5 s | scene − 0.65 s | stamp.at defaults to 0.35 s after the quote finishes revealing |
 | logo-row | 2 s | 0.5 s | scene − 0.65 s | logos pop in order; with no at, the first pops at 0.65 s and the rest follow by stagger (default 0.14 s) |
 | brand-lockup | 2 s | 0.5 s | scene − 0.65 s | elements land in this order: mark, wordmark, eyebrow, headline, badge, url, stagger apart (default 0.35 s), the first at 0 s; a hit on one moves the defaults after it |
+| end-card | 2 s | 0.5 s | scene − 0.65 s | elements land beat by beat, stagger apart (default 0.28 s), the ask (the action) last; holds until the scene ends |
 | punch-in | 0.8 s | 0 s | — | at (and every steps[i].at) ≤ scene − release − 0.25 s (release 0.3–2 s, default min(0.5, 0.3 × scene)); steps at least 0.3 s apart |
 | zoom-through | 0.8 s | — | — | the cut (at) needs rush before it and burst after it inside the scene (rush 0.15–0.6 s, default 0.3; burst 0.2–0.8 s, default 0.4) |
 | footage-callout | 1.5 s | 0 s | scene − 1.1 s | — |

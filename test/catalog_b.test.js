@@ -606,7 +606,7 @@ test('brand-lockup: validation names the param', () => {
 });
 
 test('catalogue B: every module is registered in all three registries', async () => {
-  const ids = ['function-chart', 'gauge-compare', 'flow-compare', 'process-steps', 'archive-card', 'logo-row', 'brand-lockup'];
+  const ids = ['function-chart', 'gauge-compare', 'flow-compare', 'process-steps', 'archive-card', 'logo-row', 'brand-lockup', 'end-card'];
   assert.deepEqual(Object.keys(MODULES).sort(), [...ids].sort());
   assert.deepEqual(Object.keys(EMITTERS).sort(), [...ids].sort());
   const registry = readFileSync(join(ROOT, 'kit/remotion/catalog/registry-b.ts'), 'utf8');
