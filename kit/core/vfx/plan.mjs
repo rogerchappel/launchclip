@@ -163,14 +163,13 @@ export function vfxSounds(story) {
   return sounds;
 }
 
-/** Cue rules (docs/VFX_LAYER_RFC.md §4): at most this many effect peaks in any `window` seconds, and one hit with words a scene. */
+/** Cue rules (docs/VFX_LAYER_RFC.md §4): at most this many effect peaks in any `window` seconds; one hit with words a scene is a planner rule only. */
 export const VFX_CUE_RULES = Object.freeze({crowd: 3, window: 1, words: 1});
 
 /**
  * The cue rules for a resolved story, as motion-check findings ({rule,
  * severity, at, ids, detail}), all warnings: vfx-crowd (more than three
- * effect peaks within 1 s), vfx-words (two hits with words in one scene),
- * vfx-over-caption (an effect centred in the caption band of a captioned story).
+ * effect peaks within 1 s) and vfx-over-caption (an effect centred in the caption band of a captioned story).
  */
 export function vfxCueFindings(story) {
   const findings = [], peaks = [];
@@ -182,10 +181,8 @@ export function vfxCueFindings(story) {
       const at = r3(cue.align === 'start' ? cue.at + VFX_EFFECTS[cue.effect].peak : cue.at);
       peaks.push({at, id: scene.id, effect: cue.effect});
       const y = cue.y ?? 0.5;
-      if (captioned && y >= band.top && y <= band.top + band.height) findings.push({rule: 'vfx-over-caption', severity: 'warning', at, ids: [scene.id], detail: `${scene.id}: ${cue.effect} is centred in the caption band (y ${y}); move it above ${band.top} or below ${r3(band.top + band.height)}`});
+      if (captioned && y > band.top && y < band.top + band.height) findings.push({rule: 'vfx-over-caption', severity: 'warning', at, ids: [scene.id], detail: `${scene.id}: ${cue.effect} is centred in the caption band (y ${y}); move it above ${band.top} or below ${r3(band.top + band.height)}`});
     }
-    const worded = cues.filter(cue => VFX_WORDS[cue.effect]);
-    if (worded.length > VFX_CUE_RULES.words) findings.push({rule: 'vfx-words', severity: 'warning', at: worded[1].at, ids: [scene.id], detail: `${scene.id} has ${worded.length} hits with words (${worded.map(cue => cue.effect).join(', ')}); keep one a scene`});
   }
   peaks.sort((a, b) => a.at - b.at);
   for (let i = 0; i + VFX_CUE_RULES.crowd < peaks.length; i += 1) {

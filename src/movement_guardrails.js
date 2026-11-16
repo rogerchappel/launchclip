@@ -222,7 +222,7 @@ export function stateGate(story) {
  * every scene's timing and op list against the rules of good motion. Errors:
  * linear-move, entrance-ease, exit-ease, exit-longer, long-stagger. Warnings:
  * crowded-move, no-rest, late-beat, and the VFX cue rules (vfx-crowd,
- * vfx-words, vfx-over-caption; kit/core/vfx/plan.mjs vfxCueFindings).
+ * vfx-over-caption; kit/core/vfx/plan.mjs vfxCueFindings).
  */
 export function choreographyGate(story) {
   const { entries } = renderedModels(story);

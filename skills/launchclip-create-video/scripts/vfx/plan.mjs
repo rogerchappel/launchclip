@@ -7,6 +7,7 @@
 // are that small and scaled up nearest-neighbour (the `pixel` render; the
 // `smooth` painter is phase 3 of the RFC).
 import {hashUnit} from '../fluid-motion.mjs';
+import {captionBandFor} from '../captions.mjs';
 import {brandFontStacks} from '../fonts.mjs';
 import {VFX_COVER_TRANSITIONS, sceneWindows} from '../transitions.mjs';
 import {VFX_EFFECTS, VFX_MODULES, VFX_TRANSITIONS, VFX_WORDS} from './catalog.mjs';
@@ -160,4 +161,35 @@ export function vfxSounds(story) {
     if (cover && typeof scene.start === 'number') sounds.push({scene_id: scene.id, at: r3(scene.start), cue: cover.sfx, effect: scene.in.type});
   }
   return sounds;
+}
+
+/** Cue rules (docs/VFX_LAYER_RFC.md §4): at most this many effect peaks in any `window` seconds; one hit with words a scene is a planner rule only. */
+export const VFX_CUE_RULES = Object.freeze({crowd: 3, window: 1, words: 1});
+
+/**
+ * The cue rules for a resolved story, as motion-check findings ({rule,
+ * severity, at, ids, detail}), all warnings: vfx-crowd (more than three
+ * effect peaks within 1 s) and vfx-over-caption (an effect centred in the caption band of a captioned story).
+ */
+export function vfxCueFindings(story) {
+  const findings = [], peaks = [];
+  // shortcut: the default caption band; a story that moves its captions (top, lower-third) is not followed yet
+  const band = captionBandFor(story?.format), captioned = Array.isArray(story?.overlays) && story.overlays.some(overlay => overlay?.type === 'captions');
+  for (const scene of Array.isArray(story?.scenes) ? story.scenes : []) {
+    const cues = (Array.isArray(scene?.vfx) ? scene.vfx : []).filter(cue => VFX_EFFECTS[cue?.effect] && typeof cue.at === 'number');
+    for (const cue of cues) {
+      const at = r3(cue.align === 'start' ? cue.at + VFX_EFFECTS[cue.effect].peak : cue.at);
+      peaks.push({at, id: scene.id, effect: cue.effect});
+      const y = cue.y ?? 0.5;
+      if (captioned && y > band.top && y < band.top + band.height) findings.push({rule: 'vfx-over-caption', severity: 'warning', at, ids: [scene.id], detail: `${scene.id}: ${cue.effect} is centred in the caption band (y ${y}); move it above ${band.top} or below ${r3(band.top + band.height)}`});
+    }
+  }
+  peaks.sort((a, b) => a.at - b.at);
+  for (let i = 0; i + VFX_CUE_RULES.crowd < peaks.length; i += 1) {
+    const run = peaks.slice(i, i + VFX_CUE_RULES.crowd + 1);
+    if (run.at(-1).at - run[0].at > VFX_CUE_RULES.window + 1e-9) continue;
+    findings.push({rule: 'vfx-crowd', severity: 'warning', at: run[0].at, ids: [...new Set(run.map(peak => peak.id))], detail: `${run.length} effects peak within ${VFX_CUE_RULES.window} s (${run.map(peak => `${peak.effect} ${peak.at}s`).join(', ')}); at most ${VFX_CUE_RULES.crowd}, so each one reads`});
+    i += VFX_CUE_RULES.crowd; // one finding per crowd
+  }
+  return findings;
 }

@@ -224,14 +224,14 @@ test('the planner sees the effects catalogue only when the direction or style as
   assert.doesNotMatch(planningPrompt({lane: 'motion', artDirection: 'calm editorial'}), /Effects \(VFX layer\)/);
 });
 
-test('the cue rules warn on a crowd of effects, two hits with words in a scene and an effect over the captions', async () => {
+test('the cue rules warn on a crowd of effects and an effect over the captions, not on two hits with words', async () => {
   const {vfxCueFindings} = await import('@launchclip/core/vfx/plan.mjs');
   const story = (vfx, overlays = []) => ({format: {width: 1080, height: 1920}, overlays, scenes: [{id: 's1', start: 0, end: 4, vfx}]});
   const rulesOf = s => vfxCueFindings(s).map(f => f.rule);
   assert.deepEqual(rulesOf(story([1, 1.3, 1.6].map(at => ({effect: 'hit-spark', at})))), []);
   const crowd = vfxCueFindings(story([1, 1.3, 1.6, 1.9].map(at => ({effect: 'hit-spark', at}))));
   assert.deepEqual(crowd.map(f => [f.rule, f.severity, f.at]), [['vfx-crowd', 'warning', 1]]);
-  assert.deepEqual(rulesOf(story([{effect: 'crit-number', at: 1}, {effect: 'level-up', at: 3}])), ['vfx-words']);
+  assert.deepEqual(rulesOf(story([{effect: 'crit-number', at: 1}, {effect: 'level-up', at: 3}])), [], 'one word hit a scene is a planner rule');
   const low = [{effect: 'poof', at: 2, y: 0.68}];
   assert.deepEqual(rulesOf(story(low)), [], 'no captions, no caption rule');
   assert.deepEqual(rulesOf(story(low, [{type: 'captions'}])), ['vfx-over-caption']);

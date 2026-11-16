@@ -61,28 +61,29 @@ export const VFX_MODULES = Object.freeze({
 export const VFX_EFFECT_NAMES = Object.freeze(Object.keys(VFX_MODULES));
 
 /**
- * Per effect: the SFX family a cue with sfx "auto" plays (kit/core/sound),
+ * Per effect: what it is for (the planner's catalogue, kit/core/planning-prompt.mjs
+ * vfxLines), the SFX family a cue with sfx "auto" plays (kit/core/sound),
  * and its peak, seconds from its start to its brightest frame, measured by
  * scripts/vfx-peaks.mjs (test/vfx_layer.test.js keeps them current). A cue
  * aligned on its peak starts that much early, and its sound lands there.
  */
 export const VFX_EFFECTS = Object.freeze({
-  'hit-spark': Object.freeze({sfx: 'impact', peak: 0}),
-  'crit-hit': Object.freeze({sfx: 'impact', peak: 0}),
-  'impact-frame': Object.freeze({sfx: 'impact', peak: 0.033}),
-  'ground-slam': Object.freeze({sfx: 'thud', peak: 0}),
-  'small-explosion': Object.freeze({sfx: 'impact', peak: 0}),
-  'smoke-bomb': Object.freeze({sfx: 'thud', peak: 0.967}),
-  'firework-burst': Object.freeze({sfx: 'sparkle', peak: 0.433}),
-  poof: Object.freeze({sfx: 'pop', peak: 0}),
-  sunburst: Object.freeze({sfx: 'sparkle', peak: 0.533}),
-  'collect-burst': Object.freeze({sfx: 'pop', peak: 0}),
-  'combo-counter': Object.freeze({sfx: 'tally', peak: 0.117}),
-  'crit-number': Object.freeze({sfx: 'impact', peak: 0.017}),
-  'level-up': Object.freeze({sfx: 'success', peak: 0.283}),
-  achievement: Object.freeze({sfx: 'chime', peak: 0.333}),
-  confetti: Object.freeze({sfx: 'pop', peak: 0.267}),
-  'firework-rocket': Object.freeze({sfx: 'sparkle', peak: 1.067})
+  'hit-spark': Object.freeze({use: 'the everyday hit: a number or word landing', sfx: 'impact', peak: 0}),
+  'crit-hit': Object.freeze({use: 'the biggest hit of a scene: a record, a win', sfx: 'impact', peak: 0}),
+  'impact-frame': Object.freeze({use: 'a freeze-frame flash on a hard turn', sfx: 'impact', peak: 0.033}),
+  'ground-slam': Object.freeze({use: 'something heavy landing at the foot of the frame', sfx: 'thud', peak: 0}),
+  'small-explosion': Object.freeze({use: 'a thing breaking or a launch going off, smoke after', sfx: 'impact', peak: 0}),
+  'smoke-bomb': Object.freeze({use: 'something vanishing in smoke', sfx: 'thud', peak: 0.967}),
+  'firework-burst': Object.freeze({use: 'a celebration in the air', sfx: 'sparkle', peak: 0.433}),
+  poof: Object.freeze({use: 'a thing appearing or disappearing', sfx: 'pop', peak: 0}),
+  sunburst: Object.freeze({use: 'a reveal: light opening behind the hero', sfx: 'sparkle', peak: 0.533}),
+  'collect-burst': Object.freeze({use: 'a tick, a gain, an item collected', sfx: 'pop', peak: 0}),
+  'combo-counter': Object.freeze({use: 'a streak counting up', sfx: 'tally', peak: 0.117}),
+  'crit-number': Object.freeze({use: 'a headline number slammed in', sfx: 'impact', peak: 0.017}),
+  'level-up': Object.freeze({use: 'a milestone', sfx: 'success', peak: 0.283}),
+  achievement: Object.freeze({use: 'an unlock toast', sfx: 'chime', peak: 0.333}),
+  confetti: Object.freeze({use: 'party poppers on a win or the ending', sfx: 'pop', peak: 0.267}),
+  'firework-rocket': Object.freeze({use: 'a launch: a rocket climbing and bursting', sfx: 'sparkle', peak: 1.067})
 });
 
 /**

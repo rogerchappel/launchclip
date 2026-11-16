@@ -379,9 +379,10 @@ effect here draws in `pixel` mode, which is what the retro look wants anyway.
   separate hit for it.
 - **Cue rules** are motion-check warnings (`vfxCueFindings` in
   `kit/core/vfx/plan.mjs`, run by `choreographyGate`): `vfx-crowd` (more
-  than three peaks within 1 s), `vfx-words` (two hits with words in one
-  scene) and `vfx-over-caption` (an effect centred in the default caption
-  band of a captioned story). `vfx-off-beat` is not built: the resolved
+  than three peaks within 1 s) and `vfx-over-caption` (an effect centred in
+  the default caption band of a captioned story). One hit with words a
+  scene (§3d) is a planner rule only: the hits showcase story packs two a
+  scene on purpose. `vfx-off-beat` is not built: the resolved
   story no longer knows which `at` was a beat, and the gate has no beat
   grid. Finish could check it once the music grid is known.
 
