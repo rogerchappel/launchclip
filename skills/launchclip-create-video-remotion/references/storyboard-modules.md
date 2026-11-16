@@ -1765,7 +1765,7 @@ events: title
 variants: per-character-rise (default), soft-blur-in, typewriter, bottom-up-letters, top-down-letters, stagger-from-center, stagger-from-edges, scramble, per-word-crossfade, spring-scale-in, shared-axis-y, blur-out-up, kinetic-center-build, short-slide-right, short-slide-down, depth-parallax-words, mask-reveal-up, line-by-line-slide, micro-scale-fade, shimmer-sweep, fade-through, shared-axis-z, scale-down-fade, focus-blur-resolve, shared-axis-x
 
 ### icon-grid (keeps captions)
-A grid of 2–12 icons from the icon set (1,935: LaunchClip's own and Lucide's) that pop in on a stagger, with optional labels: stroke icons, duotone icons, or icons on tinted tiles.
+A grid of 2–12 icons from the icon set (1,935: LaunchClip's own and Lucide's) that flock out of the middle of the grid on a stagger and breathe once they land, with optional labels: stroke icons, duotone icons, or icons on tinted tiles.
 params:
 - items: [icon name | {icon, label? ≤ 22}] 2–12
 - title: string ≤ 60 (optional)
@@ -2485,7 +2485,7 @@ params:
 events: build, node-<id>, converge
 
 ### drop-grid (keeps captions)
-Things pile up as they are said: 1–40 cards, coins or tiles drop into a grid one by one ("10 times a day": ten cards land), each with a weighted fall, a squash on contact, a contact shadow and a puff of dust, over faint empty slots; an optional counter climbs with every landing, and confetti bursts when the grid fills. Time each drop to its word with params.times.
+Things pile up as they are said: 1–40 cards, coins or tiles drop into a grid one by one ("10 times a day": ten cards land), each with a weighted fall, a squash on contact, a contact shadow and a puff of dust, over faint empty slots; an optional counter climbs with every landing, and confetti bursts and the grid ripples when it fills. Landed items rock gently on their base. Time each drop to its word with params.times.
 params:
 - count: 1–40 items (or items)
 - items: [label ≤ 16 | {label?, image? (assets/… photo)}] 1–40 (or count)
@@ -2733,7 +2733,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | tooltip | 2 s | 0.5 s | scene − 0.65 s | the callout lands at at |
 | callout-arrow | 2 s | 0.5 s | scene − 0.65 s | the callout lands at at |
 | motion-title | 2 s | 0.5 s | scene − 0.65 s | the build ends before the exit; long text with a character effect compresses its stagger to 1.4 s |
-| icon-grid | 2 s | 0.5 s | scene − 0.65 s | icons pop 0.12 s apart (closer for many) from at |
+| icon-grid | 2 s | 0.5 s | scene − 0.65 s | icons launch 0.12 s apart (closer for many) from at and land 0.5 s later |
 | map-highlight | 2 s | 0.5 s | scene − 0.65 s | the zoom runs 1.2 s from at + 0.35 (the dot matrix pushes in over 2 s); highlights, then pins, follow 0.12–0.5 s apart; each route leg draws as its pin lands; a journey route: legs take 1.2–2.4 s by length; a country lights when the head reaches it and its sequence takes 1.6 s, so the scene must run to the last arrival |
 | unit-grid | 2 s | 0.5 s | scene − 0.65 s | units pop in reading order within about 1.1 s from at; split or highlight comes after the build (default 0.45 s after it) |
 | number-line | 2 s | 0.5 s | scene − 0.65 s | the ruler draws in about 1 s from at; ranges, the marker, the points and the zoom follow the build in that order, up to 1 s apart by default |

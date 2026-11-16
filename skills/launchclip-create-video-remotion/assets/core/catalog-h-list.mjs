@@ -2,7 +2,8 @@
 // free element per item, never rows inside one card. Each item is its own node
 // in the view tree with its own entrance and settle, and an optional tick that
 // draws on by itself, so a shot state can reveal one tick per state
-// (states: reveal ["tick-2"]). Layouts are the variants: pills (each item its
+// (states: reveal ["tick-2"]). Once in, each item breathes on its own -idle
+// wrapper, out of step with the others (docs/FLUID_MOTION_RFC.md §4). Layouts are the variants: pills (each item its
 // own rounded chip, cascading down the frame), stack (free type down
 // the frame), fan (the stack fans out from a pile on an arc), scatter (tilted
 // type spread over the frame) and orbit (items fly out from a subject).
@@ -12,6 +13,7 @@ import {timingRules} from './catalog-b-base.mjs';
 import {grammarStagger} from './grammar.mjs';
 import {VARIANT_PARAM, createHBase, fitText, inkOn, mixColor, r2, rt, textWidth, toneColor} from './catalog-h-base.mjs';
 import {chromeNodes, chromeOps, drawOps, el, label, set, strokePath, tw} from './catalog-h-view.mjs';
+import {idleAmplitude, idleFor, idleOps} from './fluid-motion.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
 const rect = '{x, y, width, height} canvas px inside the safe zone (optional)';
@@ -19,6 +21,8 @@ export const LIST_VARIANTS = Object.freeze(['pills', 'stack', 'fan', 'scatter', 
 // The tick: one stroke in a 24-unit box, drawn on like a pen mark.
 const TICK = 'M4 12.5 L9.5 18 L20 6';
 const ENTER = 0.55, TICK_DRAW = 0.35;
+// Items are wide lines of type: half the idle tilt keeps their far ends steady.
+const LIST_TILT = 0.5;
 
 function listResolve(params, ctx) {
   const b = createHBase('item-list', params, ctx, {allowed: ['items', 'title', 'subject', 'ticks', 'numbered', 'tone', 'at', 'stagger'], required: ['items'], variants: LIST_VARIANTS});
@@ -93,7 +97,7 @@ function listResolve(params, ctx) {
   const content = {variant: layout, pill: layout === 'pills' ? {...pill, fill: mixColor(color, b.colors.bg, 0.14), border: mixColor(color, b.colors.bg, 0.45), discInk: inkOn(b.colors, color)} : null, title: titleFit ? {text: title, size: titleFit.size, lines: titleFit.lines} : null, source: null, align: centred ? 'center' : 'left',
     items, size, detailSize, marker, showMarker, numbered, ticks, centred, color, ink: b.theme.foreground, muted: b.theme.muted,
     subject: subjectFit ? {text: subject, size: subjectFit.size, lines: subjectFit.lines, x: r2(W / 2), y: r2(top + H0 / 2), time: rt(Math.max(b.motion.enterEnd - 0.2, items[0].time - 0.35))} : null,
-    buildEnd: rt(Math.max(...items.map(item => (item.tickTime ?? item.time) + ENTER)))};
+    buildEnd: rt(Math.max(...items.map(item => (item.tickTime ?? item.time) + ENTER))), idle: (a => ({bob: a.bob, tilt: r2(a.tilt * LIST_TILT)}))(idleFor(idleAmplitude(ctx?.grammar ?? null, b.unit), Math.min(...items.map(item => item.height))))};
   return b.finish(content, {minTextPx: Math.min(size, titleFit ? titleFit.size : Infinity, subjectFit ? subjectFit.size : Infinity)});
 }
 
@@ -194,9 +198,11 @@ function listView(model) {
     block.push(el('div', null, {margin: 0, fontFamily: fonts.body, fontWeight: 700, fontSize: c.size, lineHeight: '1.12', color: c.ink, textAlign: align}, [item.label]));
     if (item.detail) block.push(el('div', null, {margin: 0, marginTop: 10 * u, fontFamily: fonts.body, fontWeight: 450, fontSize: c.detailSize, lineHeight: '1.3', color: c.muted, textAlign: align}, [item.detail]));
     // The block centres in the item's measured box: a label that sets on fewer lines than measured keeps even gaps.
+    const origin = c.centred ? '50% 50%' : '0% 50%';
     const inner = [el('div', null, {position: 'absolute', left: 0, top: r2(item.height / 2), width: item.width, transform: 'translateY(-50%)'}, block)];
     kids.push(el('div', `${id}-item-${item.index}`, {position: 'absolute', left: item.x, top: item.y, width: item.width, height: item.height, opacity: 0,
-      transformOrigin: c.centred ? '50% 50%' : '0% 50%', ...(item.rotation ? {transform: `rotate(${item.rotation}deg)`} : {})}, inner));
+      transformOrigin: origin, ...(item.rotation ? {transform: `rotate(${item.rotation}deg)`} : {})}, [
+      el('div', `${id}-item-${item.index}-idle`, {position: 'absolute', left: 0, top: 0, width: item.width, height: item.height, transformOrigin: origin}, inner)]));
   }
   return kids;
 }
@@ -216,16 +222,19 @@ function pillNode(model, item) {
   const textX = c.ticks || c.numbered ? P.padX + d + P.gap : P.padX;
   const block = [el('div', null, {margin: 0, fontFamily: fonts.body, fontWeight: 650, fontSize: c.size, lineHeight: '1.12', color: theme.foreground}, [item.label])];
   if (item.detail) block.push(el('div', null, {margin: 0, marginTop: 6 * u, fontFamily: fonts.body, fontWeight: 450, fontSize: c.detailSize, lineHeight: '1.3', color: c.muted}, [item.detail]));
-  return el('div', `${id}-item-${item.index}`, {position: 'absolute', left: item.x, top: item.y, width: item.width, height: item.height, opacity: 0, boxSizing: 'border-box',
-    borderRadius: r2(Math.min(item.height / 2, 60 * u)), background: P.fill, border: `${r2(2 * u)}px solid ${P.border}`, boxShadow: `0 ${r2(14 * u)}px ${r2(36 * u)}px #00000066`, transformOrigin: '0% 50%'}, [
-    ...disc,
-    el('div', null, {position: 'absolute', left: r2(textX), top: r2(item.height / 2), width: r2(item.width - textX - P.padX + 8 * u), transform: 'translateY(-50%)'}, block)
+  return el('div', `${id}-item-${item.index}`, {position: 'absolute', left: item.x, top: item.y, width: item.width, height: item.height, opacity: 0, transformOrigin: '0% 50%'}, [
+    el('div', `${id}-item-${item.index}-idle`, {position: 'absolute', left: 0, top: 0, width: item.width, height: item.height, boxSizing: 'border-box',
+      borderRadius: r2(Math.min(item.height / 2, 60 * u)), background: P.fill, border: `${r2(2 * u)}px solid ${P.border}`, boxShadow: `0 ${r2(14 * u)}px ${r2(36 * u)}px #00000066`, transformOrigin: '0% 50%'}, [
+      ...disc,
+      el('div', null, {position: 'absolute', left: r2(textX), top: r2(item.height / 2), width: r2(item.width - textX - P.padX + 8 * u), transform: 'translateY(-50%)'}, block)
+    ])
   ]);
 }
 
 function listTimeline(model, ops) {
-  const {id, start, unit: u} = model;
+  const {id, start, unit: u, motion} = model;
   const c = model.content;
+  const settle = rt(motion.exitStart - 0.05);
   chromeOps(model, ops);
   if (c.subject) {
     set(ops, `${id}-subject`, start, {opacity: 0, x: 0, y: 0, scaleX: 0.85, scaleY: 0.85});
@@ -243,6 +252,7 @@ function listTimeline(model, ops) {
     set(ops, target, start, {opacity: 0, ...from});
     tw(ops, target, item.time, 0.2, 'power1.out', {opacity: 0}, {opacity: 1});
     tw(ops, target, item.time, ENTER, c.variant === 'scatter' || c.variant === 'pills' ? 'power3.out' : 'power3.out', from, rest);
+    idleOps(ops, `${target}-idle`, start, rt(item.time + ENTER + 0.15), settle, c.idle);
     if (item.tickTime !== null && c.pill) {
       // The disc fills and pops, then its check draws on.
       set(ops, `${id}-tick-${item.index}`, start, {opacity: 0, x: 0, y: 0, scaleX: 0.4, scaleY: 0.4});

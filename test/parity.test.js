@@ -72,7 +72,9 @@ const STORY_PARITY = Object.freeze([
   // Flow across scenes (docs/FLUID_MOTION_RFC.md §6): the pinned title held as the rest exits, the cards on their old rects on the first frame after the cut and mid-flight, and the same after a cutaway.
   {id: 'flow-carry-9x16', times: [3.9, 4, 4.35, 10, 10.4]},
   // Interface scenes on signal-ui (the CI smoke's times, scripts/parity-ci.mjs).
-  {id: 'ui-parity-9x16', times: [...CI_UI_STORY.times]}
+  {id: 'ui-parity-9x16', times: [...CI_UI_STORY.times]},
+  // Anchors (docs/FLUID_MOTION_RFC.md §7): a robot looks at each node-graph card as it lands and cheers at converge.
+  {id: 'node-graph-anchors-9x16', times: [1.5, 2.7, 3.3, 4.8]}
 ]);
 
 for (const {id, times} of STORY_PARITY) {

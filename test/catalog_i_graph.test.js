@@ -115,3 +115,9 @@ test('node-graph: validation and the planner phrase table', () => {
   assert.equal(three.content.nodes.length, 3);
   assert.ok(suggestModules('Seven agents work together and each one reports back to the director.').some(row => row.modules.includes('node-graph')));
 });
+
+test('idleFor caps the bob at a share of the element height and keeps the tilt', async () => {
+  const {IDLE_SHARE, idleFor} = await import('@launchclip/core/fluid-motion.mjs');
+  assert.deepEqual(idleFor({bob: 10, tilt: 1.8}, 100), {bob: 100 * IDLE_SHARE, tilt: 1.8});
+  assert.deepEqual(idleFor({bob: 10, tilt: 1.8}, 1000), {bob: 10, tilt: 1.8});
+});
