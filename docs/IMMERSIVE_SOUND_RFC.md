@@ -110,6 +110,70 @@ and hand chimes for ding, chime and ping; `cinematic` uses gran cassa, gong and
 the suspended-cymbal crescendo for impact and riser. A sampled hit still passes
 through the palette's finishing chain and room, so palettes keep their colour.
 
+**Shipped (phase 5).** orchestral-lite and acoustic-pluck play sampled when
+the instruments are installed:
+
+| Genre | Stem | Instrument | Library |
+|---|---|---|---|
+| orchestral-lite | strings | violins-sustain (22 zones, 2 layers) | VSCO 2 CE |
+| | pizz | violins-pizz (44 zones, 2 layers, 2 round robins) | VSCO 2 CE |
+| | celli | celli-sustain (16 zones, 2 layers) | VSCO 2 CE |
+| | timpani | timpani (5 drums, 2 layers, 2 round robins) | VSCO 2 CE |
+| | celesta | glockenspiel (6 zones) | VSCO 2 CE |
+| acoustic-pluck | guitar | nylon-guitar (48 zones) | FreePats Spanish Classical Guitar |
+| | pad | violins-sustain | VSCO 2 CE |
+| | bass | contrabass-pizz (36 zones; the jazz bass) | VSCO 2 CE |
+| | shaker | shaker (8 round robins) | VSCO 2 CE |
+
+The kick and rim stay synth. `launchclip sound fetch <core|all|library|instrument>`
+prints the size, asks (`--yes` skips the question) and downloads 152.8 MB for
+`core`, 147 MB on disk: VSCO 2 CE file by file from one pinned commit, the
+guitar as its 4.7 MB 7z (unpacked with the system `tar`, else `7z`; only the
+audio files are kept). Every file is checked against its SHA-256 in
+`kit/core/sound/instruments.mjs`, and a mismatch keeps nothing. The fetch
+then writes `$LAUNCHCLIP_CACHE/instruments/index.json` (instruments, zones,
+roots, layers, round robins, libraries). The sampler (`kit/core/sound/sampler.mjs`)
+plays a stem's notes into one cycle; `synth-audio-kit.mjs` writes that cycle
+through the stem's filter and from there it is balanced, looped, enveloped and
+sent to the room like a synth stem. `finish` passes the instruments folder,
+re-renders the kit when the index changes, writes `renders/credits.txt` and
+lists the credits in AUDIO-MANIFEST.json (`music.credits`) and in the sound
+stage's details (`credits`). An instrument that is not installed plays synth
+and the run warns once, naming `launchclip sound fetch core`.
+
+Differences from the plan above:
+
+- **Libraries.** Two, both CC0 1.0: VSCO 2 CE and the FreePats Spanish
+  Classical Guitar. The jazz bass is VSCO's solo double bass pizzicato, not
+  Karoryfer's. No CC BY library is used yet, so `credits.txt` carries only the
+  thanks lines; a library with `credit_required` would put its line first.
+- **Roots are measured.** VSCO names notes an octave low (its `C1` sounds
+  MIDI 36) and its timpani by drum; roots were measured (YIN for pitched
+  zones, the strongest mode for timpani: 41.45, 46.8, 49.5, 52.4, 54.6). Two
+  contrabass zones whose measured pitch disagreed with their name were left out.
+- **Manifest** is `instruments.mjs`, not `.json`, so the skills' copies of
+  `kit/core` carry it.
+- **Transposition** reads the decoded recording with a 4-point Hermite
+  interpolator in JS rather than an FFmpeg soxr pass per (file, semitones);
+  zones are decoded once per render with FFmpeg's default resampler.
+- **Sustain** past the recording loops 35–80 % of it with a 150 ms
+  equal-power crossfade. The seam is not aligned to the pitch period and
+  there is no gain matching: section strings hide both. A solo sustain will
+  need the grain splice. The held notes in today's recipes (at most two bars)
+  fit inside the 9–15 s recordings, so the loop rarely runs.
+- **Not built:** pan, the darkening lowpass for a one-layer instrument played
+  soft, the Karplus-Strong presets as a guitar fallback (`pluck` stays the
+  additive synth), the other genres' mappings, palette hits, and `sound sheet`.
+
+Tests (`test/sound_sampler.test.js`): every zone is pinned and every mapped
+stem exists; the index lists an instrument only when all its zones are on
+disk at their pinned size; fetch asks first and keeps nothing with the wrong
+SHA-256; round robins alternate, the soft layer is picked for soft notes and a
+transposed note is in tune; sampled stems are byte-identical for a seed; a
+10 s extended sustain drifts under 1.5 dB with no jump over 0.05; credits
+name the libraries and instruments; with nothing fetched the bed renders on
+synth with one fallback line.
+
 ## 2. Sound directing
 
 Today the score drops the room before a big hit, pans detail to where it happens
@@ -465,8 +529,8 @@ Tests:
 
 | Item | Source path | Licence | Use | Notices |
 |---|---|---|---|---|
-| Zone pick, round-robin, velocity gain, release, steady-section search, grain splice, SFZ parse | lemo-opuscar `core/audio/sampler.py` | MIT | port to JS | MIT notice in `sampler.mjs` header and `THIRD_PARTY_NOTICES.md` |
-| Instrument registry (folders, kinds, release times, timpani roots) | same file, `REG` | MIT | port data | same |
+| Zone pick, round-robin, velocity gain, release, steady-section search, grain splice, SFZ parse | lemo-opuscar `core/audio/sampler.py` | MIT | phase 5: written fresh from this RFC's description; no code copied | none needed |
+| Instrument registry (folders, kinds, release times, timpani roots) | same file, `REG` | MIT | phase 5: not used; our registry and measured roots | none |
 | Noise-IR room | same file, `room()` | MIT | compare only; we have our own IR | none |
 | Karplus-Strong waveguide and presets | `core/audio/pluck.py` | MIT | port to JS | MIT notice |
 | Library names, licences, credit wording | `core/audio/INSTRUMENTS.md` | CC BY-NC 4.0 (docs) | facts only; our text, wording from each library's own LICENSE | none |
@@ -476,6 +540,6 @@ Tests:
 | `sfx_type`, HPSS, onset and cut-on-beat measures | rea-video `rea_video/audio.py` | Apache-2.0 | port to JS, changes stated | Apache-2.0 header; NOTICE line "rea-video, Copyright 2026 JuneYaooo" |
 | Spectrum, waveform, bass-reactive, log scaling | remotion-skills `skills/remotion-markup/audio-visualization.md` | none stated | rewrite from the ideas | none |
 | HTTP API, node names | ComfyUI | GPL-3.0 | none copied; HTTP only, our own workflow JSON | none |
-| Sample libraries | VSCO 2 CE, VCSL, FreePats, Karoryfer | CC0 1.0 | downloaded by the user | optional thanks |
+| Sample libraries | VSCO 2 CE (`sgossner/VSCO-2-CE` at 4403009), FreePats Spanish Classical Guitar 2019-06-18; later VCSL, Karoryfer | CC0 1.0 (each library's own LICENSE / cc0.txt checked) | downloaded by the user with `launchclip sound fetch` | optional thanks, written to `renders/credits.txt` |
 | Salamander Grand Piano V3; MuldjordKit | upstream | CC BY 3.0; CC BY 4.0 | downloaded by the user | required credit lines in `renders/credits.txt` |
 | Stable Audio Open 1.0; MMAudio | user-supplied | Stability AI Community License; non-commercial weights | user brings them | licence printed per sound |

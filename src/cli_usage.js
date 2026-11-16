@@ -118,6 +118,7 @@ export const USAGE = Object.freeze([
   ["sfx seed", "sfx seed [--provider elevenlabs|comfy|synth] [--allow-model-licence <id>] [--comfy-url http://127.0.0.1:8188] [--variants 3] [--only whoosh,impact | --missing] [--reroll typing] [--dir .launchclip/sfx] [--force]"],
   ["sfx reroll", "sfx reroll <family> [--dir .launchclip/sfx]"],
   ["sfx list", "sfx list [--dir .launchclip/sfx]"],
+  ["sound fetch", "sound fetch <core|all|library|instrument> [--yes] [--dir ~/.cache/launchclip/instruments]", {comment: "download the CC0 sample libraries the sampled music genres play (asks first; renders never download)"}],
   ["sfx audition", "sfx audition <family> [--dir .launchclip/sfx] [--out audition.wav] [--gap 0.35]"],
   ["init", "init <repo> --out <workspace>"],
   ["demo", "demo <repo> --out <workspace> --demo-cmd \"npm run smoke\" --capture terminal [--demo-media path/to/screenshot.png]"],
@@ -261,6 +262,8 @@ export const SUMMARIES = Object.freeze({
   "sfx reroll": "Regenerate one SFX family.",
   "sfx list": "List the SFX libraries, what each family resolves to, and the families missing compared with the prompt set.",
   "sfx audition": "Write one audition file with every variant of a family.",
+  sound: "Manage the sample libraries the sampled music genres play.",
+  "sound fetch": "Download CC0 sample libraries into $LAUNCHCLIP_CACHE/instruments (core: everything orchestral-lite and acoustic-pluck play, about 155 MB). Prints the size and asks first (--yes skips the question); every file is checked against its pinned SHA-256. finish never downloads: a missing instrument plays synth, with one warning.",
   init: "Initialise a packet workspace for a repository.",
   demo: "Capture a demo for the packet workspace, or record a SaaS app's product flows (demo record) and approve them for use (demo approve).",
   "demo doctor": "Check a demo recipe before recording. Without --plan it surveys the repo (start and seed commands, test accounts, auth, e2e mocks and sign-ins, MSW, API contracts, env vars, first-run flags, docs placeholders) and recommends a setup rung, running nothing. With --plan it starts the app (asks first, like record), then runs each flow at full speed with off-origin requests blocked: every step must resolve to a visible element, nothing may cover the page or sign it out, and API requests must be answered. Each check reports a fix; --json for agents; exit 1 on any failure.",
@@ -287,7 +290,7 @@ export const SUMMARIES = Object.freeze({
   direct: "Direct a talking-head or TTS video from a creative prompt."
 });
 
-export const USAGE_GROUPS = Object.freeze(["library", "skills", "style", "collection", "recipe", "profile", "skeletons", "cast", "bible", "story", "sfx", "module", "subject", "demo", "evidence", "script", "history"]);
+export const USAGE_GROUPS = Object.freeze(["library", "skills", "style", "collection", "recipe", "profile", "skeletons", "cast", "bible", "story", "sfx", "sound", "module", "subject", "demo", "evidence", "script", "history"]);
 const GROUPS = new Set(USAGE_GROUPS);
 const COMMENT_COLUMN = 52;
 
