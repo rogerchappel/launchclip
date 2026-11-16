@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920" width="1080" height="1920">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3f5f4f"/><stop offset="0.55" stop-color="#1d3a30"/><stop offset="1" stop-color="#0d1f1a"/></linearGradient>
+    <linearGradient id="deck" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9a6a42"/><stop offset="1" stop-color="#4a2e1a"/></linearGradient>
+    <radialGradient id="sun" cx="0.78" cy="0.12" r="0.5"><stop offset="0" stop-color="#e8f3c8" stop-opacity="0.55"/><stop offset="1" stop-color="#e8f3c8" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="1080" height="1920" fill="url(#sky)"/>
+  <g fill="#244a3a"><circle cx="120" cy="520" r="260"/><circle cx="420" cy="430" r="220"/><circle cx="760" cy="500" r="280"/><circle cx="1010" cy="420" r="230"/></g>
+  <g fill="#173528"><circle cx="260" cy="760" r="240"/><circle cx="640" cy="740" r="260"/><circle cx="980" cy="800" r="220"/></g>
+  <rect width="1080" height="1920" fill="url(#sun)"/>
+  <polygon points="0,1180 1080,1080 1080,1920 0,1920" fill="url(#deck)"/>
+  <g stroke="#2e1b0f" stroke-width="6" opacity="0.7">
+    <line x1="0" y1="1290" x2="1080" y2="1200"/><line x1="0" y1="1420" x2="1080" y2="1340"/><line x1="0" y1="1570" x2="1080" y2="1500"/><line x1="0" y1="1740" x2="1080" y2="1690"/>
+  </g>
+  <g stroke="#d9c7a6" stroke-width="10" opacity="0.8"><line x1="80" y1="1170" x2="80" y2="880"/><line x1="540" y1="1130" x2="540" y2="840"/><line x1="1000" y1="1090" x2="1000" y2="800"/><line x1="40" y1="900" x2="1080" y2="810"/></g>
+</svg>

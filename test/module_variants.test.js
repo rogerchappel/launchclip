@@ -45,8 +45,8 @@ test('the style picks the variant; a scene\'s params.variant wins', () => {
 });
 
 test('an unknown variant name fails with the list of names', () => {
-  assert.throws(() => resolve('concept-card', {variant: 'sparkly'}), /params\.variant must be one of stacked, side-icon, banner, marker \(the concept-card variants\); got "sparkly"/);
-  assert.throws(() => resolve('icon-row', {}, '9:16', {variants: {'icon-row': 'grid'}}), /style variants\.icon-row must be one of tiles, pills, orbit, list/);
+  assert.throws(() => resolve('concept-card', {variant: 'sparkly'}), /params\.variant must be one of stacked, side-icon, banner, marker, free, scrim, glass, sticker \(the concept-card variants\); got "sparkly"/);
+  assert.throws(() => resolve('icon-row', {}, '9:16', {variants: {'icon-row': 'grid'}}), /style variants\.icon-row must be one of tiles, pills, orbit, list, chips, ticks, glass, tags/);
 });
 
 test('story.variants is validated as {module: name}', () => {
