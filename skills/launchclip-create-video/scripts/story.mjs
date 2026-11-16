@@ -309,6 +309,8 @@ export function samePlaceCuts(story) {
 // CARD_TRANSITIONS, kept here so this file stays import-free (kept in step by
 // test/transition_frames.test.js).
 export const STORY_FOOTAGE_PLATES = ["clip", "photo-scene"];
+// Behaviour kinds (kit/core/behaviours.mjs BEHAVIOUR_KINDS), kept here so this file stays import-free.
+export const STORY_BEHAVIOURS = ["wiggle", "jitter", "orbit", "lissajous", "drift", "pendulum", "wobble", "spin", "pulse", "heartbeat", "breathe", "squash", "flicker", "fade-pulse"];
 export const STORY_CARD_TRANSITIONS = ["card-to-card", "rack-focus", "morph", "card-flip"];
 
 /**
@@ -774,6 +776,20 @@ export function validateStory(story, { modules, moduleParams } = {}) {
     }
 
     validateAmbient(scene.ambient, `${path}.ambient`, err);
+
+    // An opt-in idle motion on the scene's content (kit/core/behaviours.mjs).
+    if (scene.behaviour !== undefined) {
+      const b = scene.behaviour;
+      if (!isObject(b) || !STORY_BEHAVIOURS.includes(b.kind)) err(`${path}.behaviour must be {kind, amount?, period?, angle?, bpm?, direction?} with kind one of ${STORY_BEHAVIOURS.join(", ")}`);
+      else {
+        for (const key of Object.keys(b)) if (!["kind", "amount", "period", "angle", "bpm", "direction"].includes(key)) err(`${path}.behaviour.${key} is not supported (allowed: kind, amount, period, angle, bpm, direction)`);
+        if (b.amount !== undefined && !(typeof b.amount === "number" && b.amount >= 0 && b.amount <= 2)) err(`${path}.behaviour.amount must be 0 to 2 (1 is the grammar's idle size)`);
+        if (b.period !== undefined && !(typeof b.period === "number" && b.period >= 0.1 && b.period <= 20)) err(`${path}.behaviour.period must be 0.1 to 20 seconds`);
+        if (b.angle !== undefined && (b.kind !== "drift" || !(typeof b.angle === "number" && Number.isFinite(b.angle)))) err(`${path}.behaviour.angle is the drift's direction in degrees (0 up, 90 right); only drift takes it`);
+        if (b.bpm !== undefined && (!["pulse", "heartbeat"].includes(b.kind) || !(typeof b.bpm === "number" && b.bpm >= 30 && b.bpm <= 240))) err(`${path}.behaviour.bpm is the beat of a pulse or heartbeat, 30 to 240`);
+        if (b.direction !== undefined && (b.kind !== "spin" || !["left", "right"].includes(b.direction))) err(`${path}.behaviour.direction is a spin's way round, left or right; only spin takes it`);
+      }
+    }
 
     if (scene.in !== undefined && scene.in !== null) {
       const transition = scene.in;
