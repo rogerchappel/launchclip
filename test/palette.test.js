@@ -32,7 +32,7 @@ test("a pale ground moves to paper over the deep step", () => {
   assert.equal(out.paper, MINT.bg);
   assert.ok(!isPale(out.bg));
   assert.ok(contrastRatio(out.paper, out.bg) >= 4.5);
-  assert.ok(contrastRatio(out.accent, out.bg) >= 3, "the near-black accent is lifted to read on the deep ground");
+  assert.ok(contrastRatio(out.accent, out.bg) >= 4.5, "the near-black accent is lifted to read on the deep ground");
   assert.ok(contrastRatio(out.ink, out.paper) >= 4.5, "ink still reads on paper cards");
   for (const step of ["deep", "mid", "light"]) assert.match(out[step], /^#[0-9a-f]{6}$/);
   // A white brand goes the same way; its own black is the ground.

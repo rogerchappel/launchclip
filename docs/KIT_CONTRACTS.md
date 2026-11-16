@@ -3068,7 +3068,7 @@ same palette by construction.
   white) is never the full-frame ground. The deep step becomes `bg` and the
   pale colour becomes `paper` (type and cards) when it has 4.5:1 on it, else
   the old paper or the light step. `ink` that loses 4.5:1 on the new paper
-  becomes `bg`. `primary` and `accent` are lifted to 3:1 on the new `bg`. The
+  becomes `bg`. `primary` and `accent` are lifted to 4.5:1 on the new `bg` (highlight words are type). The
   ramp is added as `colors.deep`, `colors.mid` and `colors.light` (roles a
   panel or background can name). A story with no `bg` (a one-colour brand)
   gets the same. Dark, mid and saturated grounds (a yellow) stay as given.

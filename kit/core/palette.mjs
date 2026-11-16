@@ -17,7 +17,7 @@
 //                                  step becomes bg; a story with no bg gets
 //                                  the deep step (a one-colour brand). Dark
 //                                  and mid grounds stay as given. primary and
-//                                  accent then keep 3:1 on the new bg, and an
+//                                  accent then keep 4.5:1 on the new bg, and an
 //                                  ink lost on the new paper becomes bg. The
 //                                  ramp is added as colors.deep / mid / light
 //                                  when anything moved. "as-given": untouched.
@@ -80,8 +80,9 @@ export function workingColors(colors, mode = 'auto') {
   out.paper = bg && contrastRatio(bg, ramp.deep) >= 4.5 ? bg : HEX.test(String(colors.paper)) && contrastRatio(colors.paper, ramp.deep) >= 4.5 ? colors.paper : ramp.light;
   // ink (type on primary and on paper cards) follows the swap: the deep ground when the old ink vanishes on the new paper.
   if (HEX.test(String(out.ink)) && contrastRatio(out.ink, out.paper) < 4.5) out.ink = out.bg;
+  // Highlight words set in primary and accent sit on the new ground: hold them to text contrast.
   for (const role of ['primary', 'accent']) {
-    if (HEX.test(String(out[role])) && contrastRatio(out[role], out.bg) < 3) out[role] = fitContrast(hexToOklch(out[role]), out.bg, 3) ?? out[role];
+    if (HEX.test(String(out[role])) && contrastRatio(out[role], out.bg) < 4.5) out[role] = fitContrast(hexToOklch(out[role]), out.bg, 4.5) ?? out[role];
   }
   for (const [step, hex] of Object.entries(ramp)) if (out[step] === undefined) out[step] = hex;
   return out;
