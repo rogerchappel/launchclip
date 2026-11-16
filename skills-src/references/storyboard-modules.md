@@ -234,7 +234,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | runs something in a terminal ("clone the repo", "pip install", "run the tests", "38 scripts pass"): commands type, output streams PASS/FAIL rows, a ⏩ timer fast-forwards long runs | terminal-session |
 | gives a number, time, price or count | count-up |
 | gives a sourced figure that should stay on screen with captions | metric |
-| lists steps, features or duties | checklist |
+| lists steps, features or duties: each item its own free-type element (stack, fan, scatter, or orbit round a subject), ticks one at a time with ticks: true | item-list |
 | explains a sequence or mechanism | process-steps |
 | walks through the stages of a workflow | step-rail |
 | names a law or formula | equation-lockup |
@@ -2398,6 +2398,22 @@ params:
 - stage: {tilt deg (look-down, e.g. 8), dolly {x, y design px, scale} (a slow camera move over the scene; far layers move less)} (optional)
 events: enter, beat, pose
 
+### item-list (keeps captions)
+A list (steps, features, a checklist) as separate free-type items, each with its own entrance: stacked down the frame, fanned out from a pile, scattered with a tilt, or orbiting a subject. Ticks draw on one item at a time. Use this, not a boxed checklist card, for any list.
+params:
+- items: [string | {label ≤ 40, detail? ≤ 60, at?, tickAt?}] 2–6
+- title: string ≤ 48 (optional)
+- subject: string ≤ 24, the centre the items circle (required for orbit, ignored by the others)
+- ticks: boolean: each item gets a tick that draws on at tickAt (default: just after it enters)
+- numbered: boolean (default true without ticks)
+- tone: primary | accent | paper | #rrggbb (numbers and ticks)
+- stagger: seconds between entrances (default min(0.35, 1.6 / count))
+- at: first item: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: item-<i>, tick-<i>
+variants: stack (default), fan, scatter, orbit
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), framed wide, medium or close, acting on cues: named poses and expressions at times or narration words, mouths moving on their lines, cuts in on a character. The screen set plays a real capture.
 params:
@@ -2606,6 +2622,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | live-counter | 2 s | 0.5 s | scene − 0.65 s | the count runs from at until just before the exit, so the figure is moving whenever it is on screen |
 | live-bars | 2 s | 0.5 s | scene − 0.65 s | the bars climb from at until just before the exit |
 | ui-scene | 2 s | 0 s | scene − 0.65 s | the first element enters by 0.6 s; a scene that opens on a whip-pan or opens the video enters its hero panel with enter "cut" at 0, so it is built when the move lands; every time is seconds from the scene start, inside the scene; a child enters no earlier than its parent |
+| item-list | 2 s | 0.5 s | scene − 0.65 s | items enter in order from at, stagger apart; a tick lands after its item enters |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | sprite-scene | 2 s | 0 s | scene − 0.4 s | cue, prop and card times sit at least 0.4 s before the scene ends; a pose cue swaps the sprite; a character speaking its says ranges shows its talk sprite (or a jaw bounce) on each word |
