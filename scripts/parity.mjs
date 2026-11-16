@@ -345,7 +345,7 @@ export async function runParity(fixturePath, {out, times, entry, compiler = 'aut
 // files: {relative path: text | {from}} written into the copy (a fixture's
 // logo, say); {from} copies a binary file from the repository (a still).
 // The story's finish as (still, frame) => finished in place, or null without one.
-async function stillFinisher(project, story) {
+export async function stillFinisher(project, story) {
   const {resolveFinish} = await import('@launchclip/core/finish.mjs');
   const chain = resolveFinish(story);
   if (!chain) return null;

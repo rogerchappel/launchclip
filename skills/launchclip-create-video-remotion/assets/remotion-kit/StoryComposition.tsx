@@ -87,6 +87,7 @@ import { VFX_Z, vfxPlan } from "../core/vfx/plan.mjs";
 // @ts-ignore plain ESM core module
 import { AUDIO_REACT_Z, audioReactPlan, audioReactStyle } from "../core/audio-react.mjs";
 import { VfxCanvas } from "./catalog/VfxCanvas";
+import { GlCanvas } from "./catalog/GlCanvas";
 // @ts-ignore plain ESM from kit/core
 import { worldBackdrops } from "../core/world-backdrops.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -239,6 +240,8 @@ export const PlateLayer: React.FC<{ layer: any; t: number; from?: number }> = ({
   const style = backgroundLayerStyle(layer, t) as React.CSSProperties;
   // a weather loop: the VFX painter's canvas pair in the layer's box
   if (layer.vfx) return <div style={style}><VfxCanvas plan={layer.vfx} t={t} zIndex={0} /></div>;
+  // a GL generator: one canvas the GL painter draws in the layer's box
+  if (layer.gl) return <div style={style}><GlCanvas plan={layer.gl} t={t} /></div>;
   if (!layer.video) return <div style={style} dangerouslySetInnerHTML={layer.svg ? { __html: layerSvg(layer, assetUrl) } : undefined} />;
   return (
     <div style={{ ...style, overflow: "hidden" }}>

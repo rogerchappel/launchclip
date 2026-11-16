@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Background contact sheet (docs/KIT_CONTRACTS.md, "Backgrounds and panels").
 //
-//   node scripts/background-sheet.mjs [--out qa/background-sheet] [--time 5.5] [--project examples/story/minimal]
+//   node scripts/background-sheet.mjs [--out qa/background-sheet] [--time 5.5] [--project examples/story/minimal] [--kinds aurora,fog]
 //
 // Renders one HyperFrames still of the project for every background kind
 // (kit/core/backgrounds.mjs BACKGROUND_KINDS), on a dark and a light palette,
@@ -69,6 +69,7 @@ async function main(argv) {
   const value = (flag, fallback) => (argv.includes(flag) ? argv[argv.indexOf(flag) + 1] : fallback);
   const out = path.resolve(value('--out', path.join(ROOT, 'qa', 'background-sheet')));
   const time = Number(value('--time', '5.5'));
+  const kinds = value('--kinds', BACKGROUND_KINDS.join(',')).split(',').filter(kind => BACKGROUND_KINDS.includes(kind));
   const project = path.resolve(value('--project', path.join(ROOT, 'examples', 'story', 'minimal')));
   await mkdir(out, {recursive: true});
   const loaded = await readProjectStory(project);
@@ -78,7 +79,7 @@ async function main(argv) {
   const panels = [];
   try {
     for (const [palette, colors] of Object.entries(SHEET_PALETTES)) {
-      for (const kind of BACKGROUND_KINDS) {
+      for (const kind of kinds) {
         const story = {...loaded.resolved, brand: {...loaded.resolved.brand, colors: {...colors}}, background: {kind}, ...(kind === 'logo-pattern' ? {frame: {logo: 'assets/sheet-logo.svg', kicker: {logo: false, label: 'Logo pattern'}}} : {})};
         const dir = path.join(work, `${palette}-${kind}`);
         await compileStoryToHyperFrames(story, {projectDir: dir, sourceDir: project});
@@ -110,7 +111,7 @@ async function main(argv) {
     await rm(work, {recursive: true, force: true});
   }
   const sheet = path.join(out, 'sheet.png');
-  await tile(cells, BACKGROUND_KINDS.length, 360, sheet);
+  await tile(cells, kinds.length, 360, sheet);
   await tile(panels, 2, 960, path.join(out, 'panels.png'));
   process.stdout.write(`${sheet}\n${path.join(out, 'panels.png')}\n`);
   return 0;

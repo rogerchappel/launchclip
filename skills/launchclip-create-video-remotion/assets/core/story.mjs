@@ -122,7 +122,13 @@ export const STORY_BACKGROUND_PARAMS = Object.freeze({
   weather: { intensity: BG_UNIT, speed: BG_SPEED },
   rings: { density: BG_UNIT, intensity: BG_UNIT, weight: [0.5, 3], bpm: [40, 200], speed: BG_SPEED },
   bokeh: { density: BG_UNIT, intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED },
-  "flow-field": { seed: [0, 99999], lines: [80, 400], scale: BG_SCALE, octaves: [1, 4], intensity: BG_UNIT, speed: BG_SPEED }
+  "flow-field": { seed: [0, 99999], lines: [80, 400], scale: BG_SCALE, octaves: [1, 4], intensity: BG_UNIT, speed: BG_SPEED },
+  // GL generators (kit/core/gl-backgrounds.mjs).
+  aurora: { intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED },
+  fog: { intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED },
+  plasma: { intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED },
+  cells: { intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED },
+  caustics: { intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED }
 });
 export const STORY_BACKGROUND_KINDS = Object.keys(STORY_BACKGROUND_PARAMS);
 export const STORY_BACKGROUND_COLORS = ["primary", "accent", "paper"];
@@ -135,7 +141,8 @@ export const STORY_BACKGROUND_OPTIONS = Object.freeze(Object.fromEntries(STORY_B
   ...(kind === "blobs" ? {} : { fade: ["none", "center", "top", "bottom", "left", "right"] }),
   ...(kind === "motif" ? { shape: ["plus", "circle", "chevron", "wave", "hatch", "crosshatch", "checker", "grid"] } : {}),
   ...(kind === "texture" ? { type: ["noise", "fibre", "canvas", "linen"] } : {}),
-  ...(kind === "weather" ? { type: ["aurora", "blizzard", "cherry-blossoms", "clouds", "falling-leaves", "fireflies", "fog", "god-rays", "rain", "shooting-stars", "snow", "storm"] } : {})
+  ...(kind === "weather" ? { type: ["aurora", "blizzard", "cherry-blossoms", "clouds", "falling-leaves", "fireflies", "fog", "god-rays", "rain", "shooting-stars", "snow", "storm"] } : {}),
+  ...({ fog: { type: ["fog", "cloud", "smoke", "ember"] }, plasma: { type: ["plasma", "silk"] }, cells: { type: ["cells", "facets", "hex"] } })[kind] ?? {}
 }])));
 export const STORY_PANEL_TREATMENTS = ["solid", "glass", "paper", "outline", "soft-shadow", "rim-glass"];
 // story.medium kinds and keys (kit/core/medium.mjs MEDIUM_KINDS, MEDIUM_KEYS;
@@ -144,7 +151,7 @@ export const STORY_MEDIUM_KINDS = ["none", "oil", "watercolour", "pastel", "ink"
 export const STORY_MEDIUM_KEYS = ["kind", "strength", "boil", "grain"];
 // story.look names and keys (kit/core/look.mjs LOOK_NAMES, LOOK_KEYS; kept in
 // step by test/look.test.js).
-export const STORY_LOOK_NAMES = ["none", "blueprint", "hologram", "thermal", "neon-night", "paper-cutout", "watercolour", "anime-cel", "ascii-terminal", "clay-2d", "isometric-layers", "pixel-arcade"];
+export const STORY_LOOK_NAMES = ["none", "blueprint", "hologram", "thermal", "neon-night", "paper-cutout", "watercolour", "anime-cel", "ascii-terminal", "clay-2d", "isometric-layers", "pixel-arcade", "risograph", "one-bit", "pen-plotter", "lidar", "stained-glass", "silkscreen"];
 export const STORY_LOOK_KEYS = ["name", "strength", "step", "furniture", "palette", "labels"];
 // story.grade presets (kit/core/grade.mjs GRADE_PRESET_NAMES; kept in step by
 // test/grade.test.js, which also runs gradeErrors against validateGrade).
@@ -160,6 +167,8 @@ export const STORY_GRADE_KEYS = ["preset", "cube", "strength", "tint"];
 export const STORY_FINISH_MAX = 8;
 export const STORY_FINISH_TIMES = 32;
 export const STORY_FINISH_PASSES = Object.freeze({
+  "stained-glass": Object.freeze({ cell: [16, 160, 36], lead: [1, 12, 4], glow: [0, 1, 0.6], edges: [0, 1, 0.5], seed: [0, 999999, 0] }),
+  silkscreen: Object.freeze({ inks: [2, 6, 6], cell: [4, 32, 9], angle: [0, 90, 22], registration: [0, 4, 1.5], paper: "#f2ead8", ink: "#1d1b26", one: "#e4572e", two: "#2b6cb0", three: "#f2c14e", four: "#3aa17e", seed: [0, 999999, 0] }),
   bloom: Object.freeze({ threshold: [0.5, 0.95, 0.75], radius: [0.5, 2, 1], strength: [0, 2, 0.6], tint: "#ffffff" }),
   aberration: Object.freeze({ px: [0.5, 4, 1.5], falloff: [0, 1, 1] }),
   "zoom-blur": Object.freeze({ amount: [0, 0.5, 0.12], centre: [0, 1, [0.5, 0.5]], samples: [4, 24, 16], at: Object.freeze({ times: STORY_FINISH_TIMES, default: [] }) }),

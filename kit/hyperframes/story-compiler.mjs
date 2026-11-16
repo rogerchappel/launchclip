@@ -35,6 +35,7 @@ import { LIGHT_OVER_ID, LIGHT_Z, lightLayerActive, lightLayerCss, lightPlan, lig
 import { VFX_Z, vfxPlan } from '../core/vfx/plan.mjs';
 import { vfxWordBox } from '../core/vfx/paint.mjs';
 import { VFX_RUNTIME } from '../core/vfx/runtime.mjs';
+import { installGl } from '../core/gl-backgrounds.mjs';
 import { AUDIO_REACT_Z, audioReactCss, audioReactPlan } from '../core/audio-react.mjs';
 import { worldBackdrops } from '../core/world-backdrops.mjs';
 import { shotZooms, zoomOps } from '../core/zooms.mjs';
@@ -173,6 +174,8 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   const backdrop = isolate ? null : worldCamera ? backgroundPlan(story) : storyPlatePlan(story) ?? backgroundPlan(story);
   const field = isolate || backdrop || (worldCamera && everyShotPlated && storyPlatePlan(story)) ? null : ambientField(story);
   const plateFor = (scene) => (isolate ? null : scenePlatePlan(story, scene));
+  // A GL generator background anywhere: the page inlines its painter once.
+  const glUsed = [backdrop, ...(story.scenes ?? []).map(plateFor)].some((plan) => plan?.layers?.some((layer) => layer.gl));
   const drawsBackground = (scene) => Boolean(plateFor(scene)) || sceneBackground(story, scene);
   const geometry = profileGeometry({ width: W, height: H });
   const backdropLayer = (key, from, to, backdrop) => {
@@ -182,6 +185,13 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     for (const layer of backdrop.layers.filter((layer) => layer.vfx)) lines.push(`(function () {
   var id = ${js(`lc-bg-${key}-${layer.id}`)}, color = document.getElementById(id + '-color').getContext('2d'), light = document.getElementById(id + '-light').getContext('2d'), plan = ${JSON.stringify(layer.vfx)}, clock = {t: ${num(from)}};
   var paint = function (t) { window.lcVfx.paint(color, light, plan, t); };
+  paint(${num(from)});
+  tl.fromTo(clock, {t: ${num(from)}}, {t: ${num(to)}, duration: ${num(Math.max(0, to - from))}, ease: 'none', immediateRender: false, onUpdate: function () { paint(clock.t); }}, ${num(from)});
+})();`);
+    // a GL generator (kit/core/gl-backgrounds.mjs): the inlined painter draws its canvas from a proxy tween, as Remotion's GlCanvas does per frame
+    for (const layer of backdrop.layers.filter((layer) => layer.gl)) lines.push(`(function () {
+  var canvas = document.getElementById(${js(`lc-bg-${key}-${layer.id}-gl`)}), plan = ${JSON.stringify(layer.gl)}, clock = {t: ${num(from)}};
+  var paint = function (t) { window.lcGl.paint(canvas, plan, t); };
   paint(${num(from)});
   tl.fromTo(clock, {t: ${num(from)}}, {t: ${num(to)}, duration: ${num(Math.max(0, to - from))}, ease: 'none', immediateRender: false, onUpdate: function () { paint(clock.t); }}, ${num(from)});
 })();`);
@@ -718,7 +728,7 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     ${audio}
     ${feelLines.length ? '<div id="lc-feel" class="lc-feel">' : ''}${plan ? cameraMarkup(plan, story.brand, world, worldField.html, !worldBackdrop && !covered, stack?.html ?? '') : ''}
     ${hoisted.join('\n    ')}
-    ${markup.join('\n    ')}${feelLines.length ? '\n    </div>' : ''}${lightOver ? `\n    <div id="${LIGHT_OVER_ID}" data-launchclip-light="over" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:${LIGHT_Z.hyperframes}">${lightOver.html}</div>` : ''}${audioReactHtml ? `\n    ${audioReactHtml}` : ''}${vfx ? `\n    ${vfxCanvas('color')}${vfxCanvas('light')}${vfxWords}` : ''}${vfx || backdrop?.layers.some((layer) => layer.vfx) ? `\n    <script>\n${VFX_RUNTIME}\n    </script>` : ''}${wipeMarkup.length ? `\n    ${wipeMarkup.join('\n    ')}` : ''}
+    ${markup.join('\n    ')}${feelLines.length ? '\n    </div>' : ''}${lightOver ? `\n    <div id="${LIGHT_OVER_ID}" data-launchclip-light="over" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:${LIGHT_Z.hyperframes}">${lightOver.html}</div>` : ''}${audioReactHtml ? `\n    ${audioReactHtml}` : ''}${vfx ? `\n    ${vfxCanvas('color')}${vfxCanvas('light')}${vfxWords}` : ''}${vfx || backdrop?.layers.some((layer) => layer.vfx) ? `\n    <script>\n${VFX_RUNTIME}\n    </script>` : ''}${glUsed ? `\n    <script>\n(${installGl.toString()})(window);\n    </script>` : ''}${wipeMarkup.length ? `\n    ${wipeMarkup.join('\n    ')}` : ''}
     ${look?.under ? `${lookGradeMarkup(look)}\n    ` : ''}${medium ? `${mediumDefs(medium)}<div id="${MEDIUM_LAYER_ID}" data-launchclip-medium="${medium.kind}" aria-hidden="true"></div>\n    ` : ''}${look && (look.furniture || (look.grade && !look.under)) ? `${look.under ? '' : lookGradeMarkup(look)}${lookFurnitureMarkup(look)}\n    ` : ''}${frame ? `<div id="lc-frame-root" aria-hidden="true"></div>\n    <script>\n${brandFrameRuntime(frame)}</script>\n    ` : ''}${captions ? '<div id="lc-captions" class="lc-captions"></div>' : ''}
     ${captions ? `<script>\n${captionPlanRuntime(captions.plan)}</script>` : ''}
     <script>
@@ -1025,6 +1035,7 @@ function boundaryAttrs(boundary) {
 // track of its own. HyperFrames seeks it where it sits: no wrapper above it
 // is timed. Matches the Remotion PlateLayer.
 function plateLayerHtml(layer, id, from, to, allocate) {
+  if (layer.gl) return `<div id="${id}" class="lc-bg-layer" style="${layerCss(layer, from)}"><canvas id="${id}-gl" data-launchclip-gl="${layer.gl.kind}" width="${layer.gl.w}" height="${layer.gl.h}" style="position:absolute;left:0;top:0;width:100%;height:100%"></canvas></div>`;
   if (layer.vfx) return `<div id="${id}" class="lc-bg-layer" style="${layerCss(layer, from)}">${['color', 'light'].map((part) => `<canvas id="${id}-${part}" data-launchclip-vfx="${part}" width="${layer.vfx.aw}" height="${layer.vfx.ah}" style="position:absolute;left:0;top:0;width:${layer.vfx.aw * layer.vfx.grid}px;height:${layer.vfx.ah * layer.vfx.grid}px;image-rendering:pixelated${part === 'light' ? ';mix-blend-mode:plus-lighter' : ''}"></canvas>`).join('')}</div>`;
   if (!layer.video) return `<div id="${id}" class="lc-bg-layer" style="${layerCss(layer, from)}">${layerSvg(layer) ?? ''}</div>`;
   const timing = `data-start="${num(from)}" data-duration="${num(Math.max(0, to - from))}" data-media-start="${num(Number(layer.video.start) || 0)}" data-track-index="${allocate(from, to)}"`;

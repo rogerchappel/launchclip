@@ -17,6 +17,7 @@ import {LOOK_NAMES, applyLook} from '@launchclip/core/look.mjs';
 import {resolveStory} from '@launchclip/core/story.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
 import {getRenderer} from '../src/renderers/index.js';
+import {stillFinisher} from './parity.mjs';
 
 const args = process.argv.slice(2);
 const flag = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : fallback; };
@@ -58,8 +59,14 @@ async function main() {
     const story = lookTestStory(look, {landscape, world: flag('--world', 'office'), frame: has('--frame')});
     await writeFile(join(project, 'storyboard.json'), `${JSON.stringify(story, null, 2)}\n`);
     if (renderers.includes('hyperframes')) await compileStoryToHyperFrames(resolveStory(story), {projectDir: project});
+    // A finish look (stained-glass, silkscreen) runs its passes over each still, as after a render.
+    const finish = await stillFinisher(project, resolveStory(story));
     await Promise.all(renderers.map(async renderer => {
-      for (const t of times) await getRenderer(renderer).still(project, t, join(project, 'qa', `${t}-${renderer}.png`));
+      for (const t of times) {
+        const file = join(project, 'qa', `${t}-${renderer}.png`);
+        await getRenderer(renderer).still(project, t, file);
+        if (finish) await finish(file, Math.round(t * story.format.fps));
+      }
     }));
     const files = times.flatMap(t => renderers.map(renderer => join(project, 'qa', `${t}-${renderer}.png`)));
     const scores = renderers.length === 2 ? times.map(t => {

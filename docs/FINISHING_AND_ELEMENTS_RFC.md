@@ -145,6 +145,22 @@ Grid and Scrolling Stripes (`blueprint` look, `motif`, `stripes`).
 | Cell Drift, Crystal Facets, Hex Mosaic | `cells`: Worley, variants `cells`/`facets`/`hex` (GL) |
 | Water Caustics | `caustics` (GL) |
 
+Built (phase 7): `aurora`, `fog` (`type`: fog, cloud, smoke, ember),
+`plasma` (plasma, silk), `cells` (cells, facets, hex) and `caustics` are
+background kinds with `intensity`, `scale`, `speed`, `color` and `fade`.
+Each is one layer carrying a `gl` plan beside weather's `vfx`, so the plate,
+fade, ambient level and plate tween paths are the weather's, not a second
+pipeline. One painter, `kit/core/gl-backgrounds.mjs`, holds the five
+fragment shaders (written fresh; pcg3d hash as in the finish shaders):
+Remotion's `PlateLayer` paints it in a layout effect (`GlCanvas`), and the
+HyperFrames compiler inlines `installGl` once and paints from a proxy tween.
+The canvas is half the frame size (the fields are soft) and draws two palette
+roles at a contrast-clamped opacity, so `backgroundContrastFindings` still
+holds. Not done: `WEBGL_MODULES` and a CSS fallback kind; without WebGL2 the
+layer draws nothing and the brand background shows. Opt-in only: the style
+seed's background list does not include them. Parity:
+`test/fixtures/parity-backgrounds/bg-{aurora,fog,plasma,cells,caustics}*.json`.
+
 **Behaviours (idle motions).** Ours: idle bob and tilt
 (`fluid-motion.mjs`), impact shake, kinetic drift; these cover Float, Sway
 and Shake. Add, each a closed-form `loop` op on the `-idle` wrapper scaled
@@ -225,6 +241,36 @@ furniture, so it needs no GL; the two marked GL wait for E.1.
 | `lidar` | dark ground, points coloured by height, a scan plane sweeps and reveals returns that glow then settle | painter (points), furniture (scan line label) |
 | `stained-glass` | cells bounded by thick lead lines, backlit glass with streaks and bubbles, bloom eating into the lead | GL: edge detect + Voronoi lead + `bloom` (E.1) |
 | `silkscreen` | ≤ 6 flat inks, halftone in the mid-tones, slight registration | `halftone` pass + posterize (GL) |
+
+Built (phase 6): all six, opt-in by `story.look` only (the seed never draws
+one). Where they differ from the table:
+
+- `risograph`: three inks (pink, blue, yellow), each plate one colour matrix
+  from the channel it absorbs, grained, nudged off register and multiplied
+  onto the paper. The offset jumps at each **cut**, not on beats (the look
+  plan has shots, not the beat grid). The knocked-out halo around the cast
+  is not built: a whole-frame filter cannot tell the cast apart.
+- `one-bit`: the 8 × 8 Bayer tile at 2 px a threshold (1080p), so the
+  pattern survives an encode. No error diffusion, stills included.
+- `pen-plotter`: not a stroke-order draw mode. The grade turns the frame into
+  outline and hatching; at each cut a gantry pen uncovers the frame in ten
+  rows, back and forth, at a trapezoidal speed with pen-up travel between
+  rows. Its `honest` note says the plot is a row sweep. No pen rack.
+- `lidar`: SVG, not a painter. Points are a square lattice coloured by
+  brightness (its `honest` note: not measured depth); the scan plane, its
+  afterglow and the label are furniture.
+- `stained-glass` and `silkscreen` are **finish looks**: no SVG grade; the
+  look's `finish` list (`lookFinish`) joins `story.finish`, the story's own
+  entries winning pass by pass. Two new GL passes run first in the chain:
+  `stained-glass` (seeded Voronoi panes at each site's colour, lead on pane
+  borders and on Sobel edges, streaks and bubbles; the look adds `bloom`)
+  and `silkscreen` (nearest of up to six inks, a halftone of the second
+  ink in the mid-tones read off register; the look adds light `grain`).
+  Halftone is inside the silkscreen pass, not the `halftone` pass.
+
+Parity: `test/fixtures/parity-backgrounds/look-*.json` (world-cast-16x9 with
+the look patched in); `scripts/look-sheet.mjs` now runs a finish look's
+passes on its stills.
 
 Two techniques are not looks: a **transit map** (octilinear lines drawn by
 pen tips, stations lit as the line arrives) is a variant of E.5, and

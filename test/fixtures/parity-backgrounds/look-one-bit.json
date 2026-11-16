@@ -1,0 +1,12 @@
+{
+  "describe": "look one-bit over a world, a cast and a card (world-cast-16x9)",
+  "project": "examples/story/world-cast-16x9",
+  "times": [
+    0.5,
+    3,
+    6
+  ],
+  "patch": {
+    "look": "one-bit"
+  }
+}
