@@ -66,7 +66,12 @@ const present = fields => new Set(Object.entries(fields).filter(([, value]) => v
  * has a shot under the ending), the logo, the aspect and the content.
  * → [{id, weight}] with the style's tags and recent endings weighed in.
  */
-export function endCardCandidates({action, footage = false, logo = null, aspect = '9:16', fields = {}, tags = [], avoid = []} = {}) {
+export function endCardCandidates({action, footage = false, onFootage = false, logo = null, aspect = '9:16', fields = {}, tags = [], avoid = []} = {}) {
+  // onFootage: the scene's own plate is footage, so only a layout drawn on footage alone lets it show (else any that fits).
+  if (onFootage) {
+    const over = endCardCandidates({action, footage: true, logo, aspect, fields, tags, avoid}).filter(entry => BY_ID[entry.id].grounds.every(ground => ground === 'footage'));
+    if (over.length) return over;
+  }
   const have = present(fields), cls = logoClass(logo);
   return END_CARD_LAYOUTS.filter(layout => (!action || layout.actions.includes(action) || layout.actions.includes('any'))
     && (footage || !layout.grounds.every(ground => ground === 'footage'))
@@ -154,7 +159,7 @@ function resolve(params, ctx) {
   const styled = ctx.variants && typeof ctx.variants === 'object' ? ctx.variants['end-card'] : undefined;
   let layoutId = p.layout ?? (BY_ID[styled] ? styled : undefined);
   if (layoutId === undefined) {
-    layoutId = pickEndCard({action, footage: !!still || ctx.footage === true || !!ctx.base, logo, aspect: b.portrait ? '9:16' : '16:9', fields: {...fields, logo, still, badges: badges.length ? badges : undefined},
+    layoutId = pickEndCard({action, footage: !!still || ctx.footage === true || !!ctx.base, onFootage: ctx.footage === true && !still, logo, aspect: b.portrait ? '9:16' : '16:9', fields: {...fields, logo, still, badges: badges.length ? badges : undefined},
       tags: Array.isArray(ctx.tags) ? ctx.tags : [], avoid, seed: p.seed ?? `${id}:${colors.primary}:${fields.headline ?? fields.url ?? ''}`});
     if (!layoutId) check.fail('params', `no end-card layout fits ${action ? `action "${action}"` : 'this ending'} with these fields; set params.layout or add a headline, url or handle`);
   }
