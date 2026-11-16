@@ -174,10 +174,35 @@ lands). A cast cue can then target `{scene: "s2", anchor: "node-3"}`, and the
 cue's time defaults to that anchor's event, so the character looks at the card
 as it lands and raises its arms as the fan opens (`converge`).
 
+**Shipped (phase 4).** `kit/core/anchors.mjs` makes publishing generic: a
+catalogue module declares `anchors(model) → [{name, element, event}]`, and
+`publishAnchors` measures each element on the module's view tree at rest
+(its centre, canvas px) and takes the event's time, so any module that draws
+its elements as a view tree can publish them without code of its own.
+`modules.mjs` `sceneAnchors(story, id)` resolves a scene's anchors and hands
+every module a memoised `ctx.anchorsOf`. `node-graph` publishes `hub` (at
+`build`), `converge` (the hub, at `converge`) and `node-<id>` (each card's
+centre as it lands).
+
+A cast cue or actor `target` may be `{scene, anchor}`; a cue with one and no
+`at` plays at the anchor's time, which is already on the beat grid (§8)
+because the module's default event times are. An anchor is in the picture
+plane, so the character keeps a front view and its face follows the point all
+the way (`gazeOffset` drops its half-turn floor for plate points): four cards
+side by side read as four looks, not one three-quarter turn. Errors name the
+cue: an unknown scene, a scene whose module publishes none (listing those
+that do), an unknown anchor (listing the scene's), and a defaulted time
+outside the cast scene. Both renderers resolve modules through
+`resolveModule`, so the cues are ordinary states and in parity by
+construction; `examples/story/node-graph-anchors-9x16` is the sample and a
+story parity fixture.
+
 **Unproven.** Anchors are in the module's rect space; a cast scene's targets
 are in its set's space. Both are canvas pixels on the same plate, which is
 enough for a still camera; a world camera between them needs the same mapping
-as §6.
+as §6. Anchors are measured at rest, so a camera move inside the module
+(node-graph's slow 1 → 1.05 push) is not followed; at that size the look
+still lands on the card.
 
 ## 8. Beat grid, impact shake, loop
 
@@ -242,7 +267,7 @@ world kit), any icon from `kit/core/icons.mjs`, text that fits; nothing else.
 2. **Motion check additions**: `static-hold`, `loop-seam`, `shake-overshoot`;
    the idle suffix in crowding.
 3. **Carry across scenes** (§6) on still-camera plates.
-4. **Anchors and character reactions** (§7).
+4. **Anchors and character reactions** (§7). Shipped.
 5. **Planner-drawn graphics** (§10), then group patterns and idle on the other
    catalogue H modules that draw sets of things (icon-grid, drop-grid,
    social-wall).
