@@ -68,6 +68,7 @@ qa/music/
 
 # SFX library QA renders and auditions
 qa/sfx/
+qa/vfx/
 qa/parity-footage/
 qa/parity-backgrounds/
 qa/background-sheet/

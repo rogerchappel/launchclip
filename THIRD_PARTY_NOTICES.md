@@ -193,6 +193,71 @@ of that file. Its glyph outlines are drawn from the MathJax TeX fonts and are
 written into a typeset equation's `params.typeset`. MathJax is not relicensed
 under LaunchClip's MIT License.
 
+## Pixel effects (pixelfx and Sprite Fusion)
+
+`kit/core/vfx/vendor/` vendors part of pixelfx 0.3.1
+(<https://github.com/patch-gg/pixelfx>): its core (painter, colour, maths,
+particles, shapes, the simulation helpers and a cut-down `fx.js`) and the
+effects the VFX layer uses. LaunchClip modified it: the actor rig and
+`createFx` are left out, and `kit/core/vfx/driver.mjs` steps simulated effects
+on a fixed grid instead. Every vendored file keeps a header naming its source,
+and the licence text is kept verbatim in `kit/core/vfx/vendor/LICENSE`. The
+pixelfx gallery fonts are not MIT and are not included. pixelfx is not
+relicensed under LaunchClip's MIT License.
+
+```text
+MIT License
+
+Copyright (c) 2026 Patch
+Copyright (c) 2026 Hugo Duprez
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+`kit/core/vfx/vendor/core/sim.js` and the effects whose headers say so adapt
+Sprite Fusion's open-source pixel art VFX
+(<https://www.spritefusion.com/pixel-art-vfx>), under the MIT License:
+
+```text
+MIT License
+
+Copyright (c) 2026 Hugo Duprez
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## impeccable (copy checks)
 
 The copy-tell rules in `src/script_check.js` (the `buzzword` phrase list, the

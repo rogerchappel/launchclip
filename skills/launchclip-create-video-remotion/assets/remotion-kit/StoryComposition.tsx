@@ -80,6 +80,9 @@ import { backgroundPlan, fieldStyle, layerStyle as backgroundLayerStyle, layerSv
 import { scenePlatePlan, scenePlateSpec, storyPlatePlan } from "../core/plates.mjs";
 // @ts-ignore plain ESM from kit/core
 import { LIGHT_OVER_ID, LIGHT_Z, lightLayerStyle, lightOverStyle, lightPlan } from "../core/lighting.mjs";
+// @ts-ignore plain ESM core module
+import { VFX_Z, vfxPlan } from "../core/vfx/plan.mjs";
+import { VfxCanvas } from "./catalog/VfxCanvas";
 // @ts-ignore plain ESM from kit/core
 import { worldBackdrops } from "../core/world-backdrops.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -638,6 +641,8 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
   const backdropFor = (scene: any) => scenePlatePlan(story, scene) ?? (backdrop && sceneBackground(story, scene) ? backdrop : null);
   // Story lighting: the under group on every plate that draws a background, as the HyperFrames compiler.
   const light = React.useMemo(() => lightPlan(story), [story]);
+  // The VFX layer (kit/core/vfx): effect cues over every scene and the light, under the wipes and captions.
+  const vfx = React.useMemo(() => vfxPlan(story), [story]);
   const lightFor = (scene: any) => (light?.under.length && (scenePlatePlan(story, scene) || sceneBackground(story, scene)) ? light.under : null);
   const plan = React.useMemo(() => cameraPlan(story, { windows, objects: sceneObjectLookup(story, (scene: any, value: any) => resolveModule(scene, value)) }), [story, windows]);
   const backdrops = React.useMemo(() => (plan?.mode === "world" ? worldBackdrops(story, plan, windows) : null), [story, plan, windows]);
@@ -732,6 +737,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
         {sweepDips.length ? <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes, pointerEvents: "none" }}>{sweepDips}</AbsoluteFill> : null}
         {sweepLights.length ? <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes, mixBlendMode: "screen", pointerEvents: "none" }}>{sweepLights}</AbsoluteFill> : null}
         {light?.over.length ? <LightOver plan={light} zIndex={CAMERA_STACK.scenes} /> : null}
+        {vfx ? <VfxCanvas plan={vfx} t={pictureFrame / fps} zIndex={CAMERA_STACK.scenes} /> : null}
         {/* Dot wipes, the frame and captions stack above the overlays, outside the feel's wrapper. */}
         <AbsoluteFill style={{ zIndex: CAMERA_STACK.scenes }}>
           {wipeLayers}
@@ -778,6 +784,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
       {sweepDips}
       {sweepLights}
       {light?.over.length ? <LightOver plan={light} zIndex={LIGHT_Z.remotion} /> : null}
+      {vfx ? <VfxCanvas plan={vfx} t={pictureFrame / fps} zIndex={VFX_Z.remotion} /> : null}
       {wipeLayers}
       {look?.under ? <LookLayer plan={look} under /> : null}
       {medium ? <MediumLayer plan={medium} /> : null}
