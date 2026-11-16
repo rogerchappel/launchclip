@@ -143,6 +143,40 @@ function graphResolve(params, ctx) {
   return b.finish(content, {minTextPx: Math.min(hubSize, tb.title ? tb.title.size : Infinity)});
 }
 
+const glow = (color, px, u) => `drop-shadow(0 0 ${r2(px * u)}px ${color})`;
+
+/**
+ * One wire on path d (RFC §5, §6.4), drawn from its start: a dim base stroke
+ * with a soft glow that draws on, a dotted copy the flow streams down and a
+ * bright pulse dash. Ids <id>-wire-<key>, -flow-<key>, -pulse-<key>; play it
+ * with wireOps and pulseOps.
+ */
+export function wireNodes(id, key, d, color, u) {
+  const path = (pid, style, stroke, width) => el('path', pid, style, [], {d, stroke, strokeWidth: r2(width * u), strokeLinecap: 'round', fill: 'none', pathLength: 1});
+  return [
+    path(`${id}-wire-${key}`, {strokeDasharray: 1, strokeDashoffset: 1, opacity: 0, filter: glow(hex2(color, 0.7), 7, u)}, hex2(color, 0.6), 4),
+    path(`${id}-flow-${key}`, {strokeDasharray: '0.012 0.03', strokeDashoffset: 0, opacity: 0}, mixColor(color, '#ffffff', 0.3), 5),
+    path(`${id}-pulse-${key}`, {strokeDasharray: `${PULSE.length} 2`, strokeDashoffset: PULSE.length, opacity: 0, filter: `${glow(color, 10, u)} ${glow(hex2(color, 0.8), 4, u)}`}, mixColor(color, '#ffffff', 0.55), 10)
+  ];
+}
+
+/** A wire draws on at drawAt (0.45 s), then dots stream down it until end. */
+export function wireOps(ops, id, key, {start, drawAt, end}) {
+  set(ops, `${id}-wire-${key}`, start, {opacity: 0, strokeDashoffset: 1});
+  tw(ops, `${id}-wire-${key}`, drawAt, 0.45, 'power2.inOut', {opacity: 1, strokeDashoffset: 1}, {opacity: 1, strokeDashoffset: 0});
+  set(ops, `${id}-pulse-${key}`, start, {opacity: 0, strokeDashoffset: PULSE.length});
+  // Work flowing along it all the time: dots stream down the wire once it is drawn (continuous, so linear).
+  set(ops, `${id}-flow-${key}`, start, {opacity: 0, strokeDashoffset: 0});
+  tw(ops, `${id}-flow-${key}`, rt(drawAt + 0.3), 0.3, 'power1.out', {opacity: 0}, {opacity: 0.85});
+  tw(ops, `${id}-flow-${key}`, rt(drawAt + 0.3), rt(end - drawAt - 0.3), 'none', {strokeDashoffset: 0}, {strokeDashoffset: r2(-PULSE.flow * (end - drawAt - 0.3))});
+}
+
+/** A pulse leaves the wire's start at go and reaches its end travel later. */
+export function pulseOps(ops, id, key, go, travel) {
+  set(ops, `${id}-pulse-${key}`, go, {opacity: 1});
+  tw(ops, `${id}-pulse-${key}`, go, travel, PULSE.ease, {strokeDashoffset: PULSE.length}, {strokeDashoffset: -1});
+}
+
 const wirePath = (n, hub) => {
   const my = r2((n.cy + hub.y) / 2);
   return `M${n.cx} ${n.cy} C${n.cx} ${my} ${r2(hub.x + (n.cx - hub.x) * 0.3)} ${r2(hub.y - (hub.y - n.cy) * 0.2)} ${hub.x} ${hub.y}`;
@@ -152,16 +186,7 @@ function graphView(model) {
   const {id, fonts, unit: u} = model;
   const c = model.content, h = c.hub, C = c.card;
   const W = model.rect.width, H = model.rect.height;
-  const glow = (color, px) => `drop-shadow(0 0 ${r2(px * u)}px ${color})`;
-  const wires = svgRoot(W, H, c.nodes.flatMap(n => {
-    const d = wirePath(n, h);
-    return [
-      el('path', `${id}-wire-${n.id}`, {strokeDasharray: 1, strokeDashoffset: 1, opacity: 0, filter: glow(hex2(n.color, 0.7), 7)}, [], {d, stroke: hex2(n.color, 0.6), strokeWidth: r2(4 * u), strokeLinecap: 'round', fill: 'none', pathLength: 1}),
-      el('path', `${id}-flow-${n.id}`, {strokeDasharray: '0.012 0.03', strokeDashoffset: 0, opacity: 0}, [], {d, stroke: mixColor(n.color, '#ffffff', 0.3), strokeWidth: r2(5 * u), strokeLinecap: 'round', fill: 'none', pathLength: 1}),
-      el('path', `${id}-pulse-${n.id}`, {strokeDasharray: `${PULSE.length} 2`, strokeDashoffset: PULSE.length, opacity: 0, filter: `${glow(n.color, 10)} ${glow(hex2(n.color, 0.8), 4)}`}, [],
-        {d, stroke: mixColor(n.color, '#ffffff', 0.55), strokeWidth: r2(10 * u), strokeLinecap: 'round', fill: 'none', pathLength: 1})
-    ];
-  }));
+  const wires = svgRoot(W, H, c.nodes.flatMap(n => wireNodes(id, n.id, wirePath(n, h), n.color, u)));
   const R = h.r;
   const ring = (rid, r, dash, opacity) => el('div', rid, {...abs(r2(R * 2 - r), r2(R * 2 - r), r2(r * 2), r2(r * 2)), boxSizing: 'border-box', borderRadius: '50%', border: `${r2(2 * u)}px ${dash} ${hex2(h.color, opacity)}`, transformOrigin: '50% 50%'});
   const hubNode = el('div', `${id}-hub`, {...abs(r2(h.x - R * 2), r2(h.y - R * 2), r2(R * 4), r2(R * 4)), opacity: 0, transformOrigin: '50% 50%'}, [
@@ -217,19 +242,12 @@ function graphTimeline(model, ops) {
   c.nodes.forEach(n => {
     idleOps(ops, `${id}-node-${n.id}-idle`, start, rt(n.landAt + 0.35), settle, c.idle);
     set(ops, `${id}-node-${n.id}-lit`, start, {opacity: 0});
-    set(ops, `${id}-wire-${n.id}`, start, {opacity: 0, strokeDashoffset: 1});
-    tw(ops, `${id}-wire-${n.id}`, n.wireAt, 0.45, 'power2.inOut', {opacity: 1, strokeDashoffset: 1}, {opacity: 1, strokeDashoffset: 0});
-    set(ops, `${id}-pulse-${n.id}`, start, {opacity: 0, strokeDashoffset: PULSE.length});
-    // Work flowing into the hub all the time: dots stream down the wire once it is drawn (continuous, so linear).
-    set(ops, `${id}-flow-${n.id}`, start, {opacity: 0, strokeDashoffset: 0});
-    tw(ops, `${id}-flow-${n.id}`, rt(n.wireAt + 0.3), 0.3, 'power1.out', {opacity: 0}, {opacity: 0.85});
-    tw(ops, `${id}-flow-${n.id}`, rt(n.wireAt + 0.3), rt(model.end - n.wireAt - 0.3), 'none', {strokeDashoffset: 0}, {strokeDashoffset: r2(-PULSE.flow * (model.end - n.wireAt - 0.3))});
+    wireOps(ops, id, n.id, {start, drawAt: n.wireAt, end: model.end});
   });
   // Pulses: each runs node → hub and lands on its beat; the node's rim lights as it leaves, the hub as it lands.
   for (const pulse of c.pulses) {
     const n = c.nodes[pulse.node], go = rt(pulse.arrive - c.travel);
-    set(ops, `${id}-pulse-${n.id}`, go, {opacity: 1});
-    tw(ops, `${id}-pulse-${n.id}`, go, c.travel, PULSE.ease, {strokeDashoffset: PULSE.length}, {strokeDashoffset: -1});
+    pulseOps(ops, id, n.id, go, c.travel);
     tw(ops, `${id}-node-${n.id}-lit`, go, 0.12, 'power1.out', {opacity: 0}, {opacity: 1});
     tw(ops, `${id}-node-${n.id}-lit`, rt(go + 0.12), 0.5, 'power2.out', {opacity: 1}, {opacity: 0});
   }
