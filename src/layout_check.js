@@ -10,6 +10,7 @@ import { checkCameraSweeps, checkLayout, elementsFromEditorialLayout, elementsFr
 import { cameraPlan, captionDipWindows, sceneObjectLookup, screenPoint, worldPoint } from "@launchclip/core/camera-world.mjs";
 import { captionDipHidden, captionLineExtent, captionMoveHide, captionOptions, captionsOverlayOf, chunkWords } from "@launchclip/core/captions.mjs";
 import { backgroundContrastFindings } from "@launchclip/core/backgrounds.mjs";
+import { paleSurfaceFindings } from "@launchclip/core/palette.mjs";
 import { driftExtent, sceneDrift } from "@launchclip/core/ambient.mjs";
 import { emptyPlates, sceneWindows } from "@launchclip/core/transitions.mjs";
 import { storyBase } from "@launchclip/core/story.mjs";
@@ -136,6 +137,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
           id: scene.id, role, rect: model.layout.rect, start: Number(scene.start), end: Number(scene.end),
           motion: { enterEnd: model.layout.motion.enterEnd, exitStart: model.layout.motion.exitStart },
           ...(model.minTextPx != null && role !== "decor" ? { minTextPx: model.minTextPx } : {}),
+          ...(model.layout.textWeight ? { textWeight: model.layout.textWeight } : {}),
           ...(extras.allowOcclusion ? { allowOcclusion: extras.allowOcclusion } : {}),
           ...(model.hidesCaptions ? { hidesCaptions: true } : {}),
           ...(model.layout.fill?.stage ? { fill: { group: model.layout.fill.group ?? scene.id, stage: model.layout.fill.stage } } : {})
@@ -197,7 +199,10 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   // against every tone the story's background kind lays over bg.
   const overlay = captionsOverlayOf(resolved);
   const backgroundFindings = backgroundContrastFindings(resolved, { captions: overlay && overlay.style !== "none" ? captionOptions(overlay, { brand: resolved.brand, format: resolved.format, story: resolved }) : null });
-  const findings = [...specFindings, ...report.findings, ...plateFindings, ...sweepFindings, ...faceFindings, ...textFindings, ...densityFindings, ...frameFindings, ...backgroundFindings].sort((a, b) => a.at - b.at);
+  // Palette (kit/core/palette.mjs): a warning when most of the frame sits bare on a pale ground.
+  const footage = elements.filter((element) => element.role === "media" && element.rect).map((element) => ({ start: Number(element.start), end: Number(element.end), area: (element.rect.width * element.rect.height) / (canvas.width * canvas.height) }));
+  const paletteFindings = paleSurfaceFindings({ colors: resolved.brand?.colors, duration: Number(resolved.resolved?.duration) || 0, media: footage });
+  const findings = [...specFindings, ...report.findings, ...plateFindings, ...sweepFindings, ...faceFindings, ...textFindings, ...densityFindings, ...frameFindings, ...backgroundFindings, ...paletteFindings].sort((a, b) => a.at - b.at);
   return {
     stage: "layout-check",
     project,
@@ -206,7 +211,7 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
     canvas,
     elements: elements.length,
     // Every element's rect and window (caption plates and the density gate read them).
-    rects: elements.map((element) => ({ id: element.id, role: element.role, module: element.module ?? null, rect: element.rect, start: element.start, end: element.end, ...(element.fullFrame ? { fullFrame: true } : {}), ...(element.role === "caption" && element.hide?.length ? { hide: element.hide } : {}) })),
+    rects: elements.map((element) => ({ id: element.id, role: element.role, module: element.module ?? null, rect: element.rect, start: element.start, end: element.end, ...(element.fullFrame ? { fullFrame: true } : {}), ...(element.minTextPx != null ? { minTextPx: element.minTextPx } : {}), ...(element.textWeight ? { textWeight: element.textWeight } : {}), ...(element.role === "caption" && element.hide?.length ? { hide: element.hide } : {}) })),
     // Full-frame media facts by scene id (the hold gate reads the moving spans).
     media,
     errors: findings.filter((finding) => finding.severity === "error").length,

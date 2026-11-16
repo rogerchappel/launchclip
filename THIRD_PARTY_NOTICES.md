@@ -95,6 +95,21 @@ your project (`assets/audio/music.mp3`) and your local cache
 (`$LAUNCHCLIP_CACHE/elevenlabs/music`), and `AUDIO-MANIFEST.json` records the
 provider of every track.
 
+## Sampled instruments
+
+`launchclip sound fetch` (opt-in) downloads sample libraries into
+`$LAUNCHCLIP_CACHE/instruments/`; LaunchClip ships none of their audio, only
+the list of files and their SHA-256 (`kit/core/sound/instruments.mjs`).
+Both libraries are dedicated to the public domain under
+[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/), so no credit is
+required; `finish` still thanks them in `renders/credits.txt` when a render
+used them:
+
+- [VS Chamber Orchestra: Community Edition](https://github.com/sgossner/VSCO-2-CE)
+  by Versilian Studios (recorded by Sam Gossner and Simon Dalzell), CC0 1.0.
+- [FreePats Spanish Classical Guitar](https://freepats.zenvoid.org/Guitar/acoustic-guitar.html)
+  (2019-06-18) by the FreePats project, CC0 1.0.
+
 ## Sound effects
 
 The procedural SFX kit (`skills/launchclip-create-video/scripts/synth-audio-kit.mjs`:

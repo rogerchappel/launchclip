@@ -18,7 +18,7 @@
 // last shot (track 2): with params.still (the last frame as an image) they
 // hold it and push in, without it the shot keeps playing under them.
 
-import {createBase, fitText, r2, rt, textWidth, contrastRatio, timingRules} from './catalog-b-base.mjs';
+import {createBase, fitText, isUrlish, r2, rt, textWidth, contrastRatio, timingRules} from './catalog-b-base.mjs';
 import {abs, el, set, tw} from './catalog-b-view.mjs';
 import {grammarEase, grammarStagger} from './grammar.mjs';
 import {TYPE_LAYOUTS} from './end-card-layouts-type.mjs';
@@ -66,7 +66,12 @@ const present = fields => new Set(Object.entries(fields).filter(([, value]) => v
  * has a shot under the ending), the logo, the aspect and the content.
  * → [{id, weight}] with the style's tags and recent endings weighed in.
  */
-export function endCardCandidates({action, footage = false, logo = null, aspect = '9:16', fields = {}, tags = [], avoid = []} = {}) {
+export function endCardCandidates({action, footage = false, onFootage = false, logo = null, aspect = '9:16', fields = {}, tags = [], avoid = []} = {}) {
+  // onFootage: the scene's own plate is footage, so only a layout drawn on footage alone lets it show (else any that fits).
+  if (onFootage) {
+    const over = endCardCandidates({action, footage: true, logo, aspect, fields, tags, avoid}).filter(entry => BY_ID[entry.id].grounds.every(ground => ground === 'footage'));
+    if (over.length) return over;
+  }
   const have = present(fields), cls = logoClass(logo);
   return END_CARD_LAYOUTS.filter(layout => (!action || layout.actions.includes(action) || layout.actions.includes('any'))
     && (footage || !layout.grounds.every(ground => ground === 'footage'))
@@ -154,7 +159,7 @@ function resolve(params, ctx) {
   const styled = ctx.variants && typeof ctx.variants === 'object' ? ctx.variants['end-card'] : undefined;
   let layoutId = p.layout ?? (BY_ID[styled] ? styled : undefined);
   if (layoutId === undefined) {
-    layoutId = pickEndCard({action, footage: !!still || ctx.footage === true || !!ctx.base, logo, aspect: b.portrait ? '9:16' : '16:9', fields: {...fields, logo, still, badges: badges.length ? badges : undefined},
+    layoutId = pickEndCard({action, footage: !!still || ctx.footage === true || !!ctx.base, onFootage: ctx.footage === true && !still, logo, aspect: b.portrait ? '9:16' : '16:9', fields: {...fields, logo, still, badges: badges.length ? badges : undefined},
       tags: Array.isArray(ctx.tags) ? ctx.tags : [], avoid, seed: p.seed ?? `${id}:${colors.primary}:${fields.headline ?? fields.url ?? ''}`});
     if (!layoutId) check.fail('params', `no end-card layout fits ${action ? `action "${action}"` : 'this ending'} with these fields; set params.layout or add a headline, url or handle`);
   }
@@ -222,8 +227,8 @@ function resolve(params, ctx) {
     /** Fit `value` without drawing it: → {size, lines, height, width}. */
     measure(value, {width = W, family = 'display', preferred = 96, min, maxLines = 2, lineHeight = 1.05, upper = false, spacing = 0, meta = false, key = 'text'} = {}) {
       const shown = upper ? value.toUpperCase() : value;
-      const fit = fitText(check, `params (${key})`, shown, {family, width, preferred: u(preferred), min: min ?? (meta ? b.min.meta : b.min.key), maxLines});
-      return {size: fit.size, lines: fit.lines, height: r2(fit.lines * fit.size * lineHeight), width: r2(Math.min(width, textWidth(shown, fit.size, family, spacing) * 1.02))};
+      const fit = fitText(check, `params (${key})`, shown, {family, width, preferred: u(preferred), min: min ?? (meta ? b.min.meta : b.min.key), maxLines, spacing});
+      return {size: fit.size, lines: fit.lines, rows: fit.rows, height: r2(fit.lines * fit.size * lineHeight), width: r2(Math.min(width, textWidth(shown, fit.size, family, spacing) * 1.02))};
     },
     /** Count a size drawn by hand toward the key-text floor. */
     keyText(size) { keyText.push(size); },
@@ -238,11 +243,14 @@ function resolve(params, ctx) {
       if (!meta) keyText.push(fit.size);
       const family_ = b.fonts[family] ?? b.fonts.body;
       const height = fit.height;
-      const children = italic && fields.emphasis && value.includes(fields.emphasis)
+      // A URL is set line by line as measured (shrunk to fit, else broken after a "/"), never wrapped by the browser mid-word.
+      const url = shown.split(/\s+/).some(isUrlish);
+      const children = url ? fit.rows.map(row => el('span', null, {display: 'block'}, [row]))
+        : italic && fields.emphasis && value.includes(fields.emphasis)
         ? (() => { const at = shown.indexOf(upper ? fields.emphasis.toUpperCase() : fields.emphasis), e = shown.slice(at, at + fields.emphasis.length); return [shown.slice(0, at), el('em', null, {fontStyle: 'italic'}, [e]), shown.slice(at + e.length)].filter(part => part !== ''); })()
         : [shown];
       k.node('div', key, abs(r2(x), r2(y), r2(width), undefined, {margin: 0, fontFamily: family_, fontSize: fit.size, lineHeight: String(lineHeight), color, textAlign: align,
-        ...(spacing ? {letterSpacing: `${spacing}em`} : {}), ...(weight ? {fontWeight: weight} : {}), whiteSpace: maxLines === 1 ? 'nowrap' : 'normal', textWrap: 'balance', transformOrigin: align === 'center' ? '50% 50%' : '0% 50%', ...style}), children, undefined, motion);
+        ...(spacing ? {letterSpacing: `${spacing}em`} : {}), ...(weight ? {fontWeight: weight} : {}), whiteSpace: maxLines === 1 || url ? 'nowrap' : 'normal', textWrap: 'balance', transformOrigin: align === 'center' ? '50% 50%' : '0% 50%', ...style}), children, undefined, motion);
       return {key, size: fit.size, lines: fit.lines, height, width: fit.width};
     },
     /**

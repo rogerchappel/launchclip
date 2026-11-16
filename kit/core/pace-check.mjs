@@ -25,6 +25,7 @@
 
 import { mergeEvents } from './cadence.mjs';
 import { LONG_FORM_SECONDS } from './long-form.mjs';
+import { CALM_CUT, cutMotionScore, curveP90, beatPeriod } from './calm-cut.mjs';
 
 // Events closer than this are one event (cadence.mjs merges visual changes the same way).
 export const PACE_MERGE_SECONDS = 0.25;
@@ -83,6 +84,85 @@ export function paceFindings({ events = [], opaque = [], duration, frozen = [], 
   if (still !== null && still !== undefined) {
     for (const [from, to, ids = []] of frozen) {
       if (to - from > still + 1e-6) findings.push(finding('frozen-frame', maxStill !== null ? 'error' : hard, from, ids, `nothing moves for ${round(to - from, 2)} s (${round(from)}–${round(to)} s)${ids.length ? ` on ${ids.join(', ')}` : ''}; hold still for at most ${still} s: keep a slow push-in or drift under the shot`));
+    }
+  }
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
+// The render (phase 7): what the plan said against what the pixels show.
+
+export const RENDER_PACE = Object.freeze({
+  match: 0.25, // a planned event shows when the render changes within 0.25 s of it (the merge window)
+  missingShare: 0.25, // warn when more than a quarter of the planned events never show
+  onBeat: 0.07, // a cut is on the beat within 70 ms (src/render_audio_analysis.js AUDIO_RHYTHM.onBeat)
+  chanceLift: 1.8, // short motion wants cuts on the beat 1.8× more often than chance
+  minCuts: 4, // the beat rules need at least this many cuts to mean anything
+  everyBeat: 8, // cuts on 8 beats in a row is mechanical
+  cutLead: 2, // score a cut 2 curve samples before it, out of the cut's own spike
+});
+
+/**
+ * A profile's measured pace fields tighten the format's band, never loosen it:
+ * hook_rate_ratio p10 raises hook_ratio, max_event_gap_seconds p90 lowers
+ * gap_warn, cuts_on_beat_ratio p10 raises cuts_on_beat. Only a measured
+ * profile: a seed profile's pace fields are this table, before style scaling.
+ */
+export function profilePace(pace, profile = null) {
+  if (profile?.provenance?.kind !== 'measured') return pace;
+  const m = profile.measures ?? {};
+  const out = { ...pace };
+  if (Number.isFinite(m.hook_rate_ratio?.p10)) out.hook_ratio = Math.max(pace.hook_ratio, m.hook_rate_ratio.p10);
+  if (Number.isFinite(m.max_event_gap_seconds?.p90)) out.gap_warn = Math.min(pace.gap_warn, m.max_event_gap_seconds.p90);
+  if (Number.isFinite(m.cuts_on_beat_ratio?.p10) && pace.cuts_on_beat != null) out.cuts_on_beat = Math.max(pace.cuts_on_beat, m.cuts_on_beat_ratio.p10);
+  return out;
+}
+
+/**
+ * Planned against measured, on a render. planned: the plan's event times;
+ * cuts: the plan's hard cuts; measured: the render's event times (cuts,
+ * motion bursts, flow onsets); measuredCuts: the render's detected cuts;
+ * curve: the render's motion curve (kit/core/calm-cut.mjs); beats: the music's
+ * beat times; pace: the format's band (with cuts_on_beat).
+ * Rules (all warnings):
+ *   planned-events-missing  over a quarter of the planned events show no change on the render
+ *   hook-lost               the render's hook has fewer events than the plan's
+ *   cut-mid-motion          a planned cut scores over CALM_CUT.midMotion (mid-move, off the beat)
+ *   cuts-off-beat           with a beat grid, too few cuts land on a beat
+ *   cuts-on-every-beat      cuts on RENDER_PACE.everyBeat beats in a row
+ */
+export function renderPaceFindings({ planned = [], cuts = [], measured = [], measuredCuts = [], curve = null, beats = null, pace, duration } = {}) {
+  const R = RENDER_PACE;
+  const findings = [];
+  if (!pace || !(duration > 0)) return findings;
+  const near = (list, t, within) => list.some((other) => Math.abs(other - t) <= within);
+  const plan = mergeEvents(planned.filter((t) => t >= 0 && t < duration), PACE_MERGE_SECONDS);
+  const missing = plan.filter((t) => !near(measured, t, R.match));
+  if (plan.length && missing.length / plan.length > R.missingShare) findings.push(finding('planned-events-missing', 'warning', missing[0], [], `${missing.length} of ${plan.length} planned events show no change on the render (first at ${missing.slice(0, 4).map((t) => `${round(t)} s`).join(', ')}); a build or state that does not read on screen does not count toward the pace`));
+  const window = Math.min(pace.hook_window, duration);
+  const planHook = plan.filter((t) => t < window).length;
+  const shownHook = mergeEvents(measured.filter((t) => t >= 0 && t < window), PACE_MERGE_SECONDS).length;
+  if (shownHook < planHook && shownHook < pace.hook_events) findings.push(finding('hook-lost', 'warning', 0, [], `the plan opens with ${planHook} events in ${window} s and the render shows ${shownHook}`));
+  if (curve) {
+    const p90 = curveP90(curve), period = beatPeriod(beats ?? []);
+    for (const cut of cuts) {
+      const scored = cutMotionScore(curve, cut - R.cutLead / curve.fps, { beats, p90, period });
+      if (scored && scored.score > CALM_CUT.midMotion) findings.push(finding('cut-mid-motion', 'warning', cut, [], `the cut at ${round(cut)} s lands mid-move${scored.beat != null && scored.beat >= CALM_CUT.beatTag ? ' and off the beat' : ''} (score ${round(scored.score)}, over ${CALM_CUT.midMotion}); move it to a still moment or onto a beat`));
+    }
+  }
+  if (beats?.length && measuredCuts.length >= R.minCuts && pace.cuts_on_beat != null) {
+    const on = measuredCuts.map((cut) => near(beats, cut, R.onBeat));
+    const ratio = on.filter(Boolean).length / on.length;
+    const chance = Math.min(1, (beats.length / duration) * 2 * R.onBeat);
+    const want = Math.max(pace.cuts_on_beat, pace.chance_lift ? pace.chance_lift * chance : 0);
+    if (ratio < want - 1e-9) findings.push(finding('cuts-off-beat', 'warning', null, [], `${Math.round(ratio * 100)}% of the cuts land on a beat (chance ${Math.round(chance * 100)}%); this format wants at least ${Math.round(want * 100)}%`));
+    // Cuts on consecutive beats: a cut on every beat for everyBeat beats.
+    const index = (t) => beats.findIndex((beat) => Math.abs(beat - t) <= R.onBeat);
+    let run = 1;
+    const hits = measuredCuts.map(index).filter((i) => i >= 0);
+    for (let i = 1; i < hits.length; i += 1) {
+      run = hits[i] === hits[i - 1] + 1 ? run + 1 : 1;
+      if (run === R.everyBeat) { findings.push(finding('cuts-on-every-beat', 'warning', beats[hits[i]], [], `a cut on every beat for ${R.everyBeat} beats; let some beats pass`)); break; }
     }
   }
   return findings;

@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { ffmpegMissing, mediaSkip } from "./helpers/media.js";
 import { masterFilter, masterLoudness, nextLimit, preGain } from "../src/scripts/master-loudness.mjs";
 
 test("the master chain runs loudnorm, then a 4x oversampled limiter that keeps sounds on their frames", () => {
@@ -24,7 +25,7 @@ test("a silent mix is not normalised and a mix over 0 LUFS is turned down to the
   assert.deepEqual(preGain(-20, -14), { silent: false, gain: 0 });
 });
 
-test("delivery measures -14 ± 1 LUFS and at most -1 dBTP after AAC, for a peaky, a too-loud, a short and a silent mix", async () => {
+test("delivery measures -14 ± 1 LUFS and at most -1 dBTP after AAC, for a peaky, a too-loud, a short and a silent mix", { skip: mediaSkip(ffmpegMissing()) }, async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-master-"));
   try {
     const clip = (name, audio) => {

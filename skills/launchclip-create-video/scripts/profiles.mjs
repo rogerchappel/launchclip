@@ -54,6 +54,10 @@ export const PROFILE_MEASURES = Object.freeze({
   change_energy_p50: { unit: 'energy', check: 'min', describe: 'median frame-change energy' },
   first_motion_seconds: { unit: 's', check: 'max', describe: 'when the first meaningful motion arrives' },
   hook_events: { unit: 'events', check: 'min', describe: 'distinct cuts or motion bursts inside the hook window' },
+  // Pace (docs/PLAN_AND_PACE_RFC.md §2): read by the pace gate (profilePace), which they only tighten.
+  hook_rate_ratio: { unit: 'ratio', check: 'min', describe: 'events per second in the opening 4 s over the rest of the video\'s' },
+  max_event_gap_seconds: { unit: 's', check: 'max', describe: 'longest stretch after the opening 4 s with no cut, motion burst or flow onset' },
+  cuts_on_beat_ratio: { unit: 'share', check: 'min', describe: 'share of cuts within 70 ms of a music beat (only when the beat is strong, 0.3 and up)' },
   still_share: { unit: 'share', check: 'max', describe: 'share of frame pairs that barely change (mean change under 0.4 grey levels on a 72×128 grey grid at 30 fps)' },
   longest_still_seconds: { unit: 's', check: 'max', describe: 'longest near-still run inside the video (a closing hold does not count)' },
   camera_moves_per_min: { unit: '/min', check: 'min', describe: 'whole-frame camera moves (shifts, pans, zooms) per minute' },
@@ -77,6 +81,8 @@ export const PROFILE_MEASURES = Object.freeze({
   longest_framing_seconds: { unit: 's', check: 'max', describe: 'longest stretch on one framing (the same set, shot size and people)' }
 });
 
+// The measures the pace gate reads (src/quality_gates.js renderPaceGate).
+export const PACE_MEASURES = Object.freeze(['hook_rate_ratio', 'max_event_gap_seconds', 'cuts_on_beat_ratio']);
 // The measures the motion gate reads (src/cinematic_check.js).
 export const MOTION_MEASURES = Object.freeze(['flow_velocity_p90', 'hold_ratio', 'motion_bursts_per_min', 'change_energy_p50', 'first_motion_seconds', 'hook_events', 'still_share', 'longest_still_seconds', 'camera_moves_per_min', 'moving_sharpness_ratio', 'soft_frame_share', 'change_p99', 'top_light_ratio', 'midtone_share', 'burst_change_mean']);
 // The look measures among them: they gate only when a profile carries them.

@@ -22,6 +22,7 @@ import { MODULES as WORLD, castStandsIn, propStatesBefore, worldBeneath } from '
 import { plateBleed, rideOf } from './camera-world.mjs';
 import { CARRY_TRANSITIONS, sceneWindows } from './transitions.mjs';
 import { storyBase } from './story.mjs';
+import { scenePlateSpec } from './plates.mjs';
 import { isEditorialGrammar, resolveGrammar } from './grammar.mjs';
 import { profileGeometry } from './layout-check.mjs';
 import { brandFrameSafe, intersectRects } from './brand-frame.mjs';
@@ -566,7 +567,7 @@ function resolveModuleInner(scene, story, { track, end }) {
   if (!definition) throw new Error(`module "${module}" is not a known module`);
   if (typeof definition.resolve !== 'function') throw new Error(`module "${module}" has no resolve()`);
   let model;
-  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, look: story?.look ?? null, variants: story?.variants ?? null, world: story?.world ?? null, beneath: beneathWithWindow(story, scene), castAbove: castStandsIn(story, scene), propStates: propStatesBefore(story, scene), layer: Number.isInteger(scene.track) ? scene.track : 0, rides: rideOf(story, scene)?.plate ?? null, ride: rideOf(story, scene), bleed: plateBleed(story), castNeighbours: castNeighbours(story, scene), passage: scenePassage(story, scene), captions: storyCaptionPosition(story), audio: story?.audio?.features ?? null }); }
+  try { model = definition.resolve(params, { id, start, duration, format, brand: story?.brand ?? {}, aspect, hits: Array.isArray(scene.hits) ? scene.hits : [], base: storyBase(story), subject: subjectContext(story, start, { end: start + duration }), layout: story?.lane === 'footage-led' ? sceneLayoutAt(story, start, start + duration) : null, lane: story?.lane ?? null, insert: scene.insert === true, frame: story?.frame ? { safe: brandFrameSafe(story) } : null, grammar, ambient: sceneAmbient(story, scene), cast: story?.cast ?? null, look: story?.look ?? null, variants: story?.variants ?? null, world: story?.world ?? null, beneath: beneathWithWindow(story, scene), castAbove: castStandsIn(story, scene), propStates: propStatesBefore(story, scene), layer: Number.isInteger(scene.track) ? scene.track : 0, rides: rideOf(story, scene)?.plate ?? null, ride: rideOf(story, scene), bleed: plateBleed(story), castNeighbours: castNeighbours(story, scene), passage: scenePassage(story, scene), captions: storyCaptionPosition(story), audio: story?.audio?.features ?? null, footage: sceneOnFootage(story, scene) }); }
   catch (error) { throw Object.assign(new Error(`module "${module}" params: ${error.message}`), error.timing ? { timing: error.timing } : {}); }
   if (!model || typeof model !== 'object') throw new Error(`module "${module}" resolve() returned no model`);
   const finished = finishModel(model, { module, scene });
@@ -578,6 +579,12 @@ function resolveModuleInner(scene, story, { track, end }) {
   // Catalogue B/C timelines remap their pop eases from model.grammar.
   if (styled) finished.grammar = grammar;
   return finished;
+}
+
+// Whether a scene sits on footage of its own (a video or image plate): a card
+// that paints a solid ground over it hides the shot the plan placed there.
+function sceneOnFootage(story, scene) {
+  try { return ['video', 'image'].includes(scenePlateSpec(story, scene)?.kind); } catch { return false; }
 }
 
 // Characters in a scene: a cast-scene's cast, a cameo's character.

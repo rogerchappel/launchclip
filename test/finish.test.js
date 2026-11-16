@@ -259,6 +259,9 @@ test("runFinish runs every stage, writes the resolved copy and report, then reus
     assert.equal(report.gates.coverage.status, "passed");
     assert.equal(report.gates.coverage.profile, "short-motion");
     assert.equal(report.gates.motion.profile, "short-motion", "the motion floors come from the cadence profile");
+    // On a render the pace gate reads the pixels and keeps the plan's verdict beside it.
+    assert.equal(report.gates.pace.source, "render");
+    assert.ok(report.gates.pace.plan, "the plan's pace verdict is kept");
     assert.equal(report.gates.layout.status, "passed");
     assert.equal(report.gates.loudness.status, "passed");
     assert.equal(report.gates.motion.status, "passed");
@@ -1421,21 +1424,26 @@ test("finish --prototype renders only the opening 20–30 s, cut at a scene end,
   }
 });
 
-test("finish plates every caption line instead of failing when fixed white captions lose contrast on a light background", async () => {
+test("finish gives white captions on a light background surface colours instead of plates or a failed gate", async () => {
   const project = await mkdtemp(path.join(os.tmpdir(), "launchclip-finish-contrast-"));
   try {
     await cp(MINIMAL, project, { recursive: true });
     const file = path.join(project, "storyboard.json");
     const story = JSON.parse(await readFile(file, "utf8"));
     story.brand.colors = { bg: "#f4fbfb", primary: "#0f766e", accent: "#b45309", ink: "#f4fbfb", paper: "#14201f" };
+    // As given: the auto palette would move this pale ground off the full frame (kit/core/palette.mjs).
+    story.brand.palette = "as-given";
     story.background = { kind: "texture" };
     story.overlays = [{ type: "captions", preset: "kinetic-hierarchy", colors: { idle: "#ffffff" } }];
     await writeFile(file, JSON.stringify(story));
     const report = await runFinish(project, {}, fakeAdapters());
     assert.equal(report.gates.layout.status, "passed", JSON.stringify(report.gates.layout.findings));
-    assert.ok(report.warnings.some((line) => /^layout: tooling plated every caption line: caption words \(#ffffff, preset kinetic-hierarchy\)/.test(line)), JSON.stringify(report.warnings));
+    assert.ok(!report.warnings.some((line) => /tooling plated every caption line/.test(line)), JSON.stringify(report.warnings));
     const resolved = JSON.parse(await readFile(path.join(project, PATHS.resolved), "utf8"));
-    assert.equal(resolved.overlays.find((entry) => entry.type === "captions").plates, "all");
+    const captions = resolved.overlays.find((entry) => entry.type === "captions");
+    // No media under the band: every line is on the surface, and none is plated.
+    assert.ok(captions.surface.length > 0, JSON.stringify(captions));
+    assert.deepEqual(captions.plates, []);
   } finally {
     await rm(project, { recursive: true, force: true });
   }

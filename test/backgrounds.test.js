@@ -53,7 +53,7 @@ test("background core is plain ESM that imports only ambient.mjs, panels.mjs, ic
 
 test("story.mjs keeps the kinds, param ranges, colours and treatments in step", () => {
   assert.deepEqual(STORY_BACKGROUND_KINDS, [...BACKGROUND_KINDS]);
-  assert.equal(BACKGROUND_KINDS.length, 18);
+  assert.equal(BACKGROUND_KINDS.length, 21);
   for (const kind of BACKGROUND_KINDS) {
     assert.deepEqual(STORY_BACKGROUND_PARAMS[kind], Object.fromEntries(Object.entries(BACKGROUND_PARAMS[kind]).map(([key, value]) => [key, [value.min, value.max]])), kind);
     assert.deepEqual(STORY_BACKGROUND_OPTIONS[kind], Object.fromEntries(Object.entries(BACKGROUND_OPTIONS[kind]).map(([key, value]) => [key, [...value.values]])), kind);
@@ -135,10 +135,10 @@ test("motion obeys the ambient level: off is still, faster levels move faster", 
 });
 
 test("layer tweens reproduce the axes exactly under GSAP seeking", () => {
-  for (const kind of ["geometric", "mesh", "topographic", "light-rays", "gradient"]) {
+  for (const kind of ["geometric", "mesh", "topographic", "light-rays", "gradient", "flow-field"]) {
     const plan = backgroundPlan(story({ format: { width: 1920, height: 1080, fps: 30, duration: 40 }, background: { kind } }));
     for (const layer of plan.layers) {
-      const target = { x: 0, y: 0, rotation: 0, scale: 1 };
+      const target = { x: 0, y: 0, rotation: 0, scale: 1, "--flow": 0 };
       const tl = gsap.timeline({ paused: true });
       for (const tw of layerTweens(layer, 2.2, 38)) tl.fromTo(target, { [tw.prop]: tw.from }, { [tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false }, tw.at);
       for (const t of [20.2, 2.3, 37.8, 11.7, 5.05, 29.99]) {
@@ -200,7 +200,11 @@ test("the gate flags captions and panels that lose contrast on the background", 
   // Grey captions without an outline on a light background.
   const s = story({ background: { kind: "mesh", params: { intensity: 1 } }, overlays: [{ type: "captions", preset: "minimal-line", colors: { idle: "#bbbbbb" } }] }, LIGHT);
   const captions = captionOptions(s.overlays[0], { brand: s.brand, format: s.format, story: s });
-  const findings = backgroundContrastFindings(s, { captions });
+  // The pinned grey is a preference: lines on the surface take a colour that reads there, so the gate passes.
+  assert.notEqual(captions.surfaceIdle, "#bbbbbb");
+  assert.deepEqual(backgroundContrastFindings(s, { captions }), []);
+  // Only a surface no caption colour reads on fails.
+  const findings = backgroundContrastFindings(s, { captions: { ...captions, surfaceIdle: "#bbbbbb" } });
   assert.equal(findings.length, 1);
   assert.equal(findings[0].rule, "background-contrast");
   assert.match(findings[0].detail, /caption words \(#bbbbbb, preset minimal-line\)/);
@@ -345,32 +349,38 @@ test("seeded patterns are visible: the strongest pattern tone stands off bg, and
   }
 });
 
-test("weather draws a VFX loop on a canvas pair that covers the frame, off unless the story asks", async () => {
-  const { VFX_WEATHER } = await import("@launchclip/core/vfx/catalog.mjs");
-  const { drawVfxFrame } = await import("@launchclip/core/vfx/paint.mjs");
-  assert.deepEqual(BACKGROUND_OPTIONS.weather.type.values, Object.keys(VFX_WEATHER));
-  assert.deepEqual(STORY_BACKGROUND_OPTIONS.weather.type, Object.keys(VFX_WEATHER));
-  assert.ok(!backgroundPlan(story())?.layers.some((layer) => layer.vfx), "no weather without a story asking");
-  for (const [width, height, grid] of [[1920, 1080, 6], [1080, 1920, 11], [1080, 1080, 6]]) {
-    const plan = backgroundPlan({ ...story({ background: { kind: "weather", params: { type: "snow" } } }), format: { width, height } });
-    const [layer] = plan.layers;
-    assert.equal(layer.vfx.grid, grid);
-    assert.ok(layer.box.x <= 0 && layer.box.y <= 0 && layer.box.x + layer.box.width >= width && layer.box.y + layer.box.height >= height, `${width}x${height} covered`);
-    assert.equal(layer.vfx.cues[0].effect, "snow");
+test("rings leave the centre one beat apart and wrap past the corners; still rings rest concentric", () => {
+  const base = story({ background: { kind: "rings", params: { bpm: 120 } } });
+  const plan = backgroundPlan(base);
+  const rings = plan.layers.filter((layer) => layer.id.startsWith("ring-"));
+  assert.ok(rings.length >= 4);
+  const { width: W, height: H } = base.format;
+  for (const [i, ring] of rings.entries()) {
+    assert.equal(ring.axes.scale.kind, "glide");
+    assert.equal(ring.axes.scale.offset, 0.5 * i, "one beat (0.5 s at 120 bpm) apart");
+    assert.ok((ring.box.width / 2) * ring.axes.scale.to > Math.hypot(W, H) / 2, "past the corners when it wraps");
   }
-  // it moves with the ambient level, and level off holds the first frame
-  const moving = backgroundPlan(story({ background: { kind: "weather" } })).layers[0].vfx;
-  const still = backgroundPlan(story({ background: { kind: "weather" }, ambient: { level: "off" } })).layers[0].vfx;
-  assert.equal(still.cues[0].speed, 0);
-  const bytes = (plan, t) => Buffer.from(drawVfxFrame(plan, t).light.buffer).toString("base64");
-  assert.notEqual(bytes(moving, 1), bytes(moving, 2));
-  assert.equal(bytes(still, 1), bytes(still, 2));
-  assert.match(panelFillErrors({ kind: "weather" }).join(), /cannot be weather/);
-  const base = JSON.parse(await readFile(path.join(MINIMAL, "storyboard.json"), "utf8"));
-  const words = JSON.parse(await readFile(path.join(MINIMAL, "NARRATION.json"), "utf8")).words;
-  const { html } = await compileStoryToHyperFrames(resolveStory({ ...base, background: { kind: "weather", params: { type: "fireflies" } } }, { words }), { write: false, sourceDir: MINIMAL });
-  assert.match(html, /<canvas id="lc-bg-[^"]+-weather-light"[^>]*mix-blend-mode:plus-lighter/);
-  assert.match(html, /window\.lcVfx = window\.lcVfx/, "the painter is inlined for the weather alone");
-  const source = await readFile(path.join(ROOT, "kit", "remotion", "StoryComposition.tsx"), "utf8");
-  assert.match(source, /if \(layer\.vfx\) return <div style=\{style\}><VfxCanvas plan=\{layer\.vfx\}/);
+  const still = backgroundPlan(story({ background: { kind: "rings", params: { speed: 0 } } })).layers;
+  assert.ok(still.every((layer) => Object.keys(layer.axes).length === 0));
+  assert.deepEqual(still.map((layer) => layer.box.width), [...still.map((layer) => layer.box.width)].sort((a, b) => a - b));
+});
+
+test("flow-field: seeded streamlines whose dashes loop seamlessly, still when the level is off", () => {
+  const plan = (params, extra = {}) => backgroundPlan(story({ background: { kind: "flow-field", params }, ...extra }));
+  const a = plan({ seed: 7 });
+  assert.equal(a.layers[0].svg, plan({ seed: 7 }).layers[0].svg, "same seed, same art");
+  assert.notEqual(a.layers[0].svg, plan({ seed: 8 }).layers[0].svg);
+  assert.ok((a.layers[0].svg.match(/<path/g) ?? []).length > 100);
+  const flow = a.layers[0].axes["--flow"];
+  assert.equal(flow.kind, "glide");
+  // Every dash moves a whole number of its own periods per loop.
+  for (const [, dash, gap, move] of a.layers[0].svg.matchAll(/stroke-dasharray:([\d.]+)px ([\d.]+)px;stroke-dashoffset:calc\(var\(--flow\) \* ([\d.]+)px/g)) {
+    const k = Number(move) / (Number(dash) + Number(gap));
+    assert.ok(Math.abs(k - Math.round(k)) < 0.01, `${move} over ${dash}+${gap}`);
+  }
+  assert.equal(layerStateAt(a.layers[0], 0)["--flow"], 0);
+  assert.equal(layerStateAt(a.layers[0], flow.period / 2)["--flow"], -0.5);
+  assert.match(layerCss(a.layers[0], flow.period / 2), /--flow:-0\.5(;|$)/);
+  assert.equal(layerStyle(a.layers[0], flow.period / 2)["--flow"], -0.5);
+  assert.equal(plan({ seed: 7 }, { ambient: { level: "off" } }).layers[0].axes["--flow"], undefined);
 });

@@ -10,8 +10,14 @@
 // the particle runtime uses for its bitmaps. The cached state is a function
 // of the step count alone, so the cache changes only the cost, never a pixel.
 
+import {resolveOptions as vendorOptions} from './vendor/core/fx.js';
+import {vfxStandIn} from './silhouette.mjs';
+
 /** The vendored frame helpers, for stills, sheets and tests outside kit/. */
-export {clearFrame, composite, createFrame, painterFor, resolveOptions} from './vendor/core/fx.js';
+export {clearFrame, composite, createFrame, painterFor} from './vendor/core/fx.js';
+
+/** An effect's options with its defaults; a silhouette effect without an actor draws round the stand-in, as upstream's previews do round their stock hero. */
+export const resolveOptions = (meta, opts = {}) => vendorOptions(meta, meta.actor && !opts.actor ? {...opts, actor: vfxStandIn()} : opts);
 
 /** Seconds per simulation step. */
 export const VFX_STEP = 1 / 120;

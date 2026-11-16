@@ -1,0 +1,9 @@
+{
+  "project": "examples/story/promo-16x9",
+  "mode": "story",
+  "patch": {
+    "frame": { "figure": true }
+  },
+  "times": [0.3, 2, 8.5, 15, 25],
+  "threshold": { "ssim": 0.97 }
+}

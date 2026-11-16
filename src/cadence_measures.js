@@ -22,11 +22,14 @@ import { promisify } from "node:util";
 import { distribution, storyboardMeasures } from "@launchclip/core/cadence.mjs";
 import { CADENCE_PROFILE_SCHEMA, PROFILE_MEASURES, REFERENCE_RIGHTS, percentiles, validateProfile } from "@launchclip/core/profiles.mjs";
 import { analyzeRenderMotion, flowOnsetSeconds, hookEventSeconds } from "./render_motion_analysis.js";
+import { analyzeRhythmFile, rhythmSync } from "./render_audio_analysis.js";
 
 const execFileAsync = promisify(execFile);
 export const REFERENCE_VIDEO = /\.(mp4|mov|m4v|webm|mkv)$/i;
 // Hook window for hook_events, as the cinematic profiles use.
 const HOOK_WINDOW_SECONDS = 4;
+// The beat must be at least this strong for cuts on it to mean anything (RFC §2's table).
+const BEAT_STRENGTH = 0.3;
 // Below this many references a band's p10 and p90 are the smallest and
 // largest reference values (aggregateMeasures).
 export const EXTREME_BAND_REFERENCES = 10;
@@ -43,6 +46,7 @@ export function motionMeasures(motion) {
     change_energy_p50: numberOrNull(motion.motion?.change_energy?.p50),
     first_motion_seconds: bursts.length ? round(bursts[0]) : null,
     hook_events: hookEventSeconds(motion, HOOK_WINDOW_SECONDS).length,
+    ...paceMeasures(motion),
     still_share: numberOrNull(motion.motion?.still_share),
     longest_still_seconds: numberOrNull(motion.motion?.longest_still_seconds),
     camera_moves_per_min: numberOrNull(motion.motion?.camera_moves_per_minute),
@@ -53,6 +57,23 @@ export function motionMeasures(motion) {
     midtone_share: numberOrNull(motion.look?.midtone_share),
     burst_change_mean: numberOrNull(motion.look?.burst_change_mean)
   };
+}
+
+/**
+ * The pace fields (docs/PLAN_AND_PACE_RFC.md §2): the hook's event rate over
+ * the body's (hook window HOOK_WINDOW_SECONDS) and the longest gap between
+ * events after it, from the render's cuts, motion bursts and flow onsets.
+ */
+export function paceMeasures(motion) {
+  const duration = Number(motion?.duration_seconds);
+  if (!(duration >= HOOK_WINDOW_SECONDS * 2)) return { hook_rate_ratio: null, max_event_gap_seconds: null };
+  const events = hookEventSeconds(motion, duration);
+  const hook = events.filter((t) => t < HOOK_WINDOW_SECONDS).length;
+  const bodyRate = (events.length - hook) / (duration - HOOK_WINDOW_SECONDS);
+  const edges = [HOOK_WINDOW_SECONDS, ...events.filter((t) => t > HOOK_WINDOW_SECONDS), duration];
+  let gap = 0;
+  for (let i = 1; i < edges.length; i += 1) gap = Math.max(gap, edges[i] - edges[i - 1]);
+  return { hook_rate_ratio: bodyRate > 0 ? round(hook / HOOK_WINDOW_SECONDS / bodyRate) : null, max_event_gap_seconds: round(gap) };
 }
 
 /** Measures of one of our renders: the storyboard's exact numbers plus the motion report's. */
@@ -100,6 +121,15 @@ export async function measureReference(file, options = {}, adapters = {}) {
     const holds = runs.filter((run) => run.on).map((run) => run.length);
     if (holds.length) measures.text_hold_seconds = distribution(holds).p50;
     notes.push("coverage, undressed runs and holds are estimated from designed regions in sampled frames");
+  }
+  // Cuts on the beat, when the reference's music has one (§4.3: strength ≥ 0.3).
+  if (adapters.rhythm !== null) {
+    try {
+      const rhythm = await (adapters.rhythm ?? analyzeRhythmFile)(resolved);
+      if (rhythm?.beat_strength >= BEAT_STRENGTH && cuts.length >= 4) measures.cuts_on_beat_ratio = rhythmSync({ beats: rhythm.beats, cuts, duration }).cuts_on_beat_ratio;
+    } catch (error) {
+      notes.push(`cuts on the beat not measured (${String(error?.message ?? error).split("\n")[0]})`);
+    }
   }
   if (adapters.face !== null) {
     try {

@@ -122,6 +122,7 @@ example.
 | baked-text | Words, fake buttons or logos inside a generated image (`uns`) | P · A | a generated asset whose prompt contains quoted text | Real text over a clean image |
 | buried-raster | A photo under a near-opaque wash or blur, so it never shows (`imp`) | F | `media_presence` finds no detail in an `image` plate with `dim` over 0.85 | Less dim; or no photo |
 | unblended-media | A media rect with a hard edge and a different black (`uns`) | F · A | edge contrast between the media rect and the plate | Match the ground, soften the edge |
+| thin-text-on-footage | Small or thin type set straight over a busy shot, often on a wash of the brand colour (pilot review) | F | a text element over media whose size is under 56 px (at 1080) or weight under 600, with 14% or more edge pixels around it | Larger, heavier type on a local dark grade, or off the busy part of the shot |
 | organic-mask | A polygon or circle mask faking a subject's outline (`imp` organic-clip-path, craft floor) | P | a clip path with more than 12 points on a photo | A real matte from subject matting |
 
 *Already covered* (no new rule; the gate that owns it is named): broken
@@ -223,6 +224,7 @@ both.
 | accent-everywhere | one quarter-size frame per main-track scene, mid-hold | over 10% of the frame within RGB distance 48 of `brand.colors.accent` (or `primary`), outside `direction.moments`. Off when the accent is within 48 of `bg`, `background` or `paper` |
 | buried-raster | each image or video plate with `dim` over 0.85, read from its asset (the media-presence grey frames) | the asset has detail (edge share at least 1%) and loses it once the edge step is scaled by 1 / (1 − dim) |
 | unblended-media | each media window the layout check placed (not full frame, not the footage base), full size, mid-time | a mean colour step of 60 or more across the edge on three of its measured sides, and black levels (the darkest tenth of the luma) 12 or more apart inside and around it |
+| thin-text-on-footage | each text element over media (a window, a full-frame shot or the footage base), full size, mid-time | a size under 56 px (scaled to the canvas) or a declared weight under 600, and at least 14% of a ring around the text on an edge (a luma step of 24) |
 
 Changes from the proposals: buried-raster reads the asset and the planned
 dim rather than the rendered frame, because cards drawn over the plate add
@@ -274,6 +276,39 @@ describes:
 still ask the critic afresh each round; a recapture there has no shot to aim
 at and stops the rounds. Nothing yet collects `tooling_checks` across runs for
 threshold tuning.
+
+### Phase 6: what landed
+
+`make --comps` adds a `comps` stage after the storyboard (`src/make/comps.js`,
+`stageComps` in `src/make/index.js`). It runs only with the flag, so other
+runs keep their stage list.
+
+- **Three comps of the hook.** Comp 1 is the planner's opening scene. Comps 2
+  and 3 come from the opening designer (`designOpening` in
+  `src/make/candidates.js`), each with a note that fixes its shape (2 is
+  sparse, one element alone; 3 is dense, several elements in one layout),
+  lists the comps already made and tells it to lead with another element in
+  another layout. Palette and type stay as the direction set them. A design
+  that repeats a comp, or fails the storyboard checks, is dropped with a note.
+  At least two comps are needed. Each comp is `comps/<id>/storyboard.json`
+  (the plan-only storyboard) and `comps/<id>/still.png`, one still at the
+  hook's peak from the project's renderer.
+- **One pick.** `--comp N` is the person's pick. An attended run (a terminal,
+  or the app's `ask`) stops `awaiting-approval` (exit 3) with the stills
+  listed, and the same command with `--comp N` picks from the same comps
+  without designing them again. A headless run lets the vision judge
+  (`judgeCandidates`) pick from the stills, recorded as `by: "critic",
+  delegated: true`. With no model that can see, comp 1 stands (`by:
+  "default"`) and the run warns. The picked comp's storyboard becomes
+  `storyboard.json`.
+- **The record.** `MAKE.json` `comps`: the hook scene and time, each comp's
+  module, still and storyboard, and `picked {id, still, storyboard, by,
+  delegated, rationale?}`. The candidates stage then leaves the hook alone and
+  compares only the risky transition.
+
+**Left for later:** footage-led, long-form and visual-explainer videos skip
+comps, for the same reasons the candidates stage skips them. The comps change
+only the hook scene, not the whole layout of the video.
 
 ## 2. The copy check
 

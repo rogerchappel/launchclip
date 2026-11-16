@@ -1195,13 +1195,15 @@ export const TRANSITION_KINDS = Object.freeze(['cut', 'dip', 'flash', 'iris', 'w
 // world turns push into a dolly, which measures as zoom). Between two
 // footage plates morph, rack-focus and card-to-card play as a fade. The
 // VFX covers, dot-wipe and light-sweep cover the whole frame at their
-// midpoint, so they read as dips. overview needs a chapter: null.
+// midpoint, so they read as dips, as does card-flip (both cards edge-on at
+// its midpoint). overview needs a chapter: null.
 export const TRANSITION_TYPE_KINDS = Object.freeze({
   cut: 'cut', fade: 'dissolve', push: 'push', whip: 'whip', zoom: 'zoom', iris: 'iris', morph: 'dissolve',
   pan: 'push', pull: 'zoom', orbit: 'push', 'whip-pan': 'whip', 'rack-focus': 'dissolve', 'glow-wipe': 'wipe',
   'card-to-card': 'dissolve', overview: null, 'dot-wipe': 'dip', 'light-sweep': 'dip', 'push-blur': 'whip',
   'light-leak': 'flash', 'before-after': 'wipe', 'burn-away': 'dip', 'slash-wipe': 'dip', shatter: 'dip',
-  'crt-off': 'dip', 'glitch-wipe': 'dip', blinds: 'dip', 'diamond-wipe': 'dip', 'star-iris': 'dip', 'pixel-dissolve': 'dip'
+  'crt-off': 'dip', 'glitch-wipe': 'dip', blinds: 'dip', 'diamond-wipe': 'dip', 'star-iris': 'dip', 'pixel-dissolve': 'dip',
+  wipe: 'wipe', 'clock-wipe': 'wipe', 'card-flip': 'dip'
 });
 
 // Measured kind → our types to prefer, first first (the RFC's map, plus the

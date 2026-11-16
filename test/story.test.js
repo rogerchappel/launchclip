@@ -49,11 +49,14 @@ test("src/story.js re-exports the kit core", () => {
   assert.equal(storyApi.STORY_SCHEMA, "launchclip.story.v1");
 });
 
-test("kit/core/story.mjs has no imports", async () => {
-  const source = await readFile(path.join(root, "kit/core/story.mjs"), "utf8");
-  assert.doesNotMatch(source, /^\s*import\s/m);
-  assert.doesNotMatch(source, /\bimport\(/);
-  assert.doesNotMatch(source, /\brequire\(/);
+test("kit/core/story.mjs imports only import-free siblings (palette.mjs, then oklch.mjs)", async () => {
+  const imports = { "story.mjs": ["./palette.mjs"], "palette.mjs": ["./oklch.mjs"], "oklch.mjs": [] };
+  for (const [file, allowed] of Object.entries(imports)) {
+    const source = await readFile(path.join(root, "kit/core", file), "utf8");
+    assert.deepEqual([...source.matchAll(/^\s*import\s[^;]*?from\s+["']([^"']+)["']/gm)].map((match) => match[1]), allowed, file);
+    assert.doesNotMatch(source, /\bimport\(/);
+    assert.doesNotMatch(source, /\brequire\(/);
+  }
 });
 
 test("a minimal valid story passes", () => {
