@@ -154,7 +154,9 @@ test("the headless critic is told the measured findings and records them with ci
   const result = await runHeadlessCritic({ project, client, quality });
   assert.equal(result.status, "written");
   assert.match(seen[0].instructions, /missed-opportunity: a line whose intent calls for a visual/);
-  assert.match(seen[0].input, /Measured from the direction map and the storyboard/);
+  assert.doesNotMatch(seen[0].input, /missed-opportunity|sparseness/, "pass A judges blind to the tooling findings");
+  assert.equal(seen[1].schemaName, "launchclip_make_critic_check", "pass B checks the tooling findings");
+  assert.match(seen[1].input, /The tooling findings to check:\n {2}q1 /);
   const critique = JSON.parse(await readFile(path.join(project, "qa/critic.json"), "utf8"));
   assert.equal(critique.verdict, "repair", "a ship verdict with major measured findings is recorded as repair");
   assert.ok(critique.findings.some((finding) => finding.category === "missed-opportunity"));
