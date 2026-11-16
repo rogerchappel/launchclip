@@ -6,9 +6,13 @@
 // ground until it clears 3:1 on bg (graphics contrast). The ink on it is the
 // brand colour that reads best.
 //
-// Plain ESM; imports only colour maths. Canonical copy: kit/core/member-tone.mjs.
+// The `tone` member module (kit/core/members.mjs) is a card in its tone: the
+// card's fields plus `tone`; node-graph runs its wire and lit rim in it too.
+//
+// Canonical copy: kit/core/member-tone.mjs.
 
 import {contrastRatio, fitContrast, hexToOklab, hexToOklch, oklchToHex} from './oklch.mjs';
+import {graphicNodes, graphicSpec, graphicWidth} from './graphic.mjs';
 
 export const TONE_HUES = Object.freeze(['primary', 'accent', 'paper']);
 // OKLCH lightness offset per step from the brand colour as given.
@@ -47,3 +51,23 @@ export function memberTone(check, raw, path, colors) {
   const color = toneHex(colors, name);
   return {name, color, ink: inkOn(colors, color)};
 }
+
+// A card's fields plus its tone.
+const CARD = ['icon', 'label', 'badge'];
+
+/** The `tone` member module: a card in its own tone. */
+export const toneMember = {
+  id: 'tone',
+  describe: 'A member in its own colour: a card (icon, label, count badge) in a step of the brand palette instead of the set\'s colour.',
+  params: {tone: TONE_PARAM, icon: 'icon name (optional)', label: 'string (optional; one of icon or label)', badge: '≤ 3 chars (optional)'},
+  face: 'card',
+  spec(check, raw, path, {labelMax, base}) {
+    for (const key of Object.keys(raw)) if (key !== 'tone' && !CARD.includes(key)) check.fail(`${path}.${key}`, `is not supported (allowed: module, tone, ${CARD.join(', ')})`);
+    if (raw.tone === undefined) check.fail(`${path}.tone`, `is required: ${TONE_PARAM}`);
+    const {tone, ...card} = raw;
+    const {name, color, ink} = memberTone(check, tone, `${path}.tone`, base.colors);
+    return {...graphicSpec(check, {kind: 'card', ...card}, path, labelMax ? {labelMax} : undefined), tone: name, color, ink};
+  },
+  width: (spec, L) => graphicWidth({...spec, kind: 'card'}, L),
+  nodes: (spec, W, H, look) => graphicNodes({...spec, kind: 'card'}, W, H, {...look, color: spec.color, ink: spec.ink})
+};

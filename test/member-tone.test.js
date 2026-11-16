@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {makeCheck} from '@launchclip/core/catalog-b-base.mjs';
 import {contrastRatio} from '@launchclip/core/oklch.mjs';
+import {MODULES, catalogHView} from '@launchclip/core/catalog-h.mjs';
 import {TONE_NAMES, memberTone, toneHex} from '@launchclip/core/member-tone.mjs';
 
 const dark = {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'};
@@ -22,4 +23,17 @@ test('member tone: a hex is refused with the nearest step; an unknown name lists
   const tone = memberTone(check, 'primary-deep', 'tone', dark);
   assert.equal(tone.ink, dark.ink);
   assert.ok(contrastRatio(tone.ink, tone.color) >= 4.5);
+});
+
+test('member tone: a node-graph node and an icon-grid item take a tone member, wire and rim in its tone', () => {
+  const brand = {colors: dark, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
+  const resolve = (module, params) => MODULES[module].resolve(params, {id: 's', start: 0, duration: 6, format: {width: 1080, height: 1920, fps: 30}, brand, aspect: '9:16', hits: []});
+  const member = {module: 'tone', tone: 'primary-deep', icon: 'flame', label: 'Oven'};
+  const graph = resolve('node-graph', {hub: 'Lead', nodes: ['Mix', {member}, 'Bake']});
+  assert.equal(graph.content.nodes[1].color, toneHex(dark, 'primary-deep'));
+  assert.equal(graph.content.nodes[1].label, 'Oven');
+  const grid = resolve('icon-grid', {items: ['star', {member}]});
+  assert.ok(JSON.stringify(catalogHView({...grid, module: 'icon-grid'})).includes(toneHex(dark, 'primary-deep')));
+  assert.throws(() => resolve('icon-grid', {items: ['star', {member: {module: 'tone', label: 'x'}}]}), /member.tone is required/);
+  assert.throws(() => resolve('icon-grid', {items: ['star', {member: {...member, sub: 'x'}}]}), /member.sub is not supported/);
 });
