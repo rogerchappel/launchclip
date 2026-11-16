@@ -41,7 +41,7 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 const NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 const TOP = new Set(['schema', 'name', 'description', 'brand', 'motion', 'camera', 'ambient', 'captions', 'sound', 'modules', 'layout', 'intro', 'outro', 'loop', 'references', 'reference_stats', 'notes', 'created_at', 'upgraded_from']);
 // v3 fields (docs/VIDEO_QUALITY_RFC.md §9.1–9.3).
-const TOP_V3 = new Set(['layouts', 'vocabulary', 'profile', 'cast', 'brand_frame', 'dials', 'segments', 'generated', 'background', 'variants', 'world', 'medium', 'plate', 'light', 'look']);
+const TOP_V3 = new Set(['layouts', 'vocabulary', 'profile', 'cast', 'brand_frame', 'dials', 'segments', 'generated', 'background', 'variants', 'world', 'medium', 'plate', 'light', 'look', 'vfx']);
 // Footage layouts (RFC §7.1). The layouts session owns their geometry; a
 // style only names them, so an unknown name is a warning, not an error.
 export const STYLE_LAYOUTS = Object.freeze(['full', 'split-left', 'split-right', 'framed', 'stacked', 'insert']);
@@ -566,6 +566,7 @@ function seededFieldErrors(pack, { err, warn, known }) {
   if (pack.world !== undefined) for (const message of storyWorldErrors(pack.world, 'world')) err(message);
   for (const message of mediumErrors(pack.medium, 'medium')) err(message);
   for (const message of lookErrors(pack.look, 'look')) err(message);
+  if (pack.vfx !== undefined && !(isObject(pack.vfx) && Object.keys(pack.vfx).every((key) => key === 'words') && [undefined, 'brand', 'pixel'].includes(pack.vfx.words))) err('vfx must be {words: "brand" | "pixel"}');
 }
 
 // Recurring segment formats (long form, RFC §10.2): named chapter templates a
@@ -722,6 +723,8 @@ export function applyStyle(story, pack, options = {}) {
   // Medium (kit/core/medium.mjs): the pack's material when the story names
   // none; "none" adds nothing, so the story renders as before.
   if (pack.medium != null && pack.medium !== 'none' && pack.medium.kind !== 'none' && out.medium === undefined) { out.medium = clone(pack.medium); applied.push('medium'); }
+  // VFX settings (kit/core/vfx/plan.mjs): the pack's (a retro family keeps its hits' pixel words) when the story sets none.
+  if (isObject(pack.vfx) && out.vfx === undefined) { out.vfx = clone(pack.vfx); applied.push('vfx'); }
   // Cast (the characters kit's castFromStyle): the pack's people and drawing
   // style when the story has no cast; only the drawing style when it lists
   // characters but names no style.

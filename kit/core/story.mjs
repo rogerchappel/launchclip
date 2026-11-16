@@ -84,7 +84,7 @@ export const STORY_MEDIUM_KINDS = ["none", "oil", "watercolour", "pastel", "ink"
 export const STORY_MEDIUM_KEYS = ["kind", "strength", "boil", "grain"];
 // story.look names and keys (kit/core/look.mjs LOOK_NAMES, LOOK_KEYS; kept in
 // step by test/look.test.js).
-export const STORY_LOOK_NAMES = ["none", "blueprint", "hologram", "thermal", "neon-night", "paper-cutout", "watercolour", "anime-cel", "ascii-terminal", "clay-2d", "isometric-layers"];
+export const STORY_LOOK_NAMES = ["none", "blueprint", "hologram", "thermal", "neon-night", "paper-cutout", "watercolour", "anime-cel", "ascii-terminal", "clay-2d", "isometric-layers", "pixel-arcade"];
 export const STORY_LOOK_KEYS = ["name", "strength", "step", "furniture", "palette", "labels"];
 // story.light (kit/core/lighting.mjs LIGHT_PARAMS, LIGHT_PRESETS): ranges per
 // layer, kept in step by test/lighting.test.js.
@@ -382,6 +382,11 @@ function beforeAfterOptionErrors(transition, path) {
     }
   }
   return errors;
+}
+
+/** Whether a story is retro (the pixel-arcade look, or its hits keep pixel words): it unlocks the retro-only VFX. */
+function retroStory(story) {
+  return story?.look === "pixel-arcade" || story?.look?.name === "pixel-arcade" || story?.vfx?.words === "pixel";
 }
 
 /** Validation messages for a dot-wipe's options (scene.in or ending.in); path names the transition. */
@@ -727,6 +732,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         cameraTransitionRules(transition, `${path}.in`, { err, lane: story.lane, camera, track });
         if ((transition.type === "dot-wipe" || transition.type === "light-sweep" || transition.type === "light-leak" || transition.type === "before-after" || STORY_VFX_TRANSITIONS.includes(transition.type)) && track !== 0) err(`${path}.in.type "${transition.type}" covers the whole frame; only a track-0 scene can arrive with it`);
         for (const message of dotWipeOptionErrors(transition, `${path}.in`, storyFps(story))) err(message);
+        if (transition.type === "pixel-dissolve" && !retroStory(story)) err(`${path}.in.type "pixel-dissolve" is retro only: set look "pixel-arcade" or vfx.words "pixel" (the retro-pixel style family sets both)`);
         for (const message of lightSweepOptionErrors(transition, `${path}.in`)) err(message);
         for (const message of beforeAfterOptionErrors(transition, `${path}.in`)) err(message);
         if (transition.type === "overview") overviews.push({ index, path: `${path}.in`, label, transition, start, track });
