@@ -38,6 +38,7 @@ import { PROMISE_ID } from './long-form.mjs';
 import { resolveModule } from './modules.mjs';
 import { parseAnchor, resolveAnchor, storyBase, storySections, validateStory } from './story.mjs';
 import { ZOOM, zoomFitError, zoomFrame } from './zooms.mjs';
+import { calmCut } from './calm-cut.mjs';
 
 export const CUTDOWN_SCHEMA = 'launchclip.cutdown.v1';
 export const CUTDOWN_TARGETS = Object.freeze({
@@ -200,10 +201,11 @@ export function mapTime(raw, seconds, start, words) {
  * chooseCutWindow; profile: the Shorts cadence profile.
  * → {story, map, words, hook: {id, text, line}, carried: [ids], added: [ids], warnings}
  */
-export function cutdownStory(resolved, { story = resolved, words, window, profile = null, target = CUTDOWN_TARGETS.shorts } = {}) {
+export function cutdownStory(resolved, { story = resolved, words, window, profile = null, target = CUTDOWN_TARGETS.shorts, motion = null, beats = null } = {}) {
   const warnings = [];
   const fps = Number(resolved.format?.fps ?? 30);
-  const { start, end } = paddedWindow(window, words, fps);
+  const calm = [];
+  const { start, end } = paddedWindow(window, words, fps, motion && { curve: motion, beats, cuts: seams(resolved), log: calm });
   const duration = round(end - start);
   const local = cutWords(words, start, end);
   const raw = new Map((story?.scenes ?? []).map((scene) => [scene?.id, scene]));
@@ -319,7 +321,7 @@ export function cutdownStory(resolved, { story = resolved, words, window, profil
 
   const draft = shortMap(cut, local, window, lines.map((line) => ({ ...line, words: line.words.map((index) => index - window.words[0]) })), profile?.id ?? target.profile);
   fitZooms(cut, local, warnings);
-  return { story: cut, map: draft, words: local, hook: { id: hook.id, text: hookText, line: hookLine.words.map((index) => index - window.words[0]) }, carried, added, warnings };
+  return { story: cut, map: draft, words: local, hook: { id: hook.id, text: hookText, line: hookLine.words.map((index) => index - window.words[0]) }, carried, added, calm, warnings };
 }
 
 // Cut away until the presenter is on screen no more than the profile allows
@@ -389,13 +391,15 @@ const SHED_PARAMS = ['source', 'title', 'sub', 'eyebrow'];
  * → {story, map, words, segments: [{start, end, offset}] (the long form's
  *   seconds each piece of narration comes from), hook, carried, added, warnings}
  */
-export function cutdownMotionStory(resolved, { story = resolved, words, window, profile = null, target = CUTDOWN_TARGETS.shorts } = {}) {
+export function cutdownMotionStory(resolved, { story = resolved, words, window, profile = null, target = CUTDOWN_TARGETS.shorts, motion = null, beats = null } = {}) {
   const warnings = [];
   const fps = Number(resolved.format?.fps ?? 30);
   const segments = [];
+  const calm = [];
+  const cuts = motion ? seams(resolved) : [];
   let clock = 0;
   for (const segment of window.segments ?? [window]) {
-    const { start, end } = paddedWindow(segment, words, fps);
+    const { start, end } = paddedWindow(segment, words, fps, motion && { curve: motion, beats, cuts, log: calm });
     segments.push({ start, end, offset: round(clock, 6), words: segment.words });
     clock += end - start;
   }
@@ -499,7 +503,7 @@ export function cutdownMotionStory(resolved, { story = resolved, words, window, 
   const hookLine = lines[0];
   const hookText = local.slice(hookLine.words[0], hookLine.words[1] + 1).map((word) => word.text).join(' ');
   const draft = shortMap(cut, local, window, lines, profile?.id ?? target.motionProfile);
-  return { story: cut, map: draft, words: local, segments: segments.map(({ start, end, offset }) => ({ start, end, offset })), hook: { id: first.id, text: hookText, line: hookLine.words }, carried, added, warnings };
+  return { story: cut, map: draft, words: local, segments: segments.map(({ start, end, offset }) => ({ start, end, offset })), hook: { id: first.id, text: hookText, line: hookLine.words }, carried, added, calm, warnings };
 }
 
 // A carried shot's zooms (kit/core/zooms.mjs) on the Short's clock: the ones
@@ -645,14 +649,38 @@ function openOnImage(story, words, opening, added, warnings) {
 }
 
 // The window padded to breathe: a beat before the first word, a little after
-// the last, never into the neighbouring words, on the frame grid.
-function paddedWindow(window, words, fps) {
+// the last, never into the neighbouring words, on the frame grid. With a
+// motion curve of the long form (calm: {curve, beats, cuts, log}), each edge
+// moves to the calmest moment in its silence (§4.4): a long-form cut first,
+// then a still moment on a beat.
+function paddedWindow(window, words, fps, calm = null) {
   const list = narrationWords(words);
   const before = list[window.words[0] - 1];
   const after = list[window.words[1] + 1];
-  const start = Math.max(0, window.start - 0.15, before ? before.end + 0.02 : 0);
-  const end = Math.min(window.end + 0.35, after ? after.start - 0.02 : Infinity);
+  let start = Math.max(0, window.start - 0.15, before ? before.end + 0.02 : 0);
+  let end = Math.min(window.end + 0.35, after ? after.start - 0.02 : Infinity);
+  if (calm) {
+    const step = window.end - window.start;
+    const edge = (name, target, min, max) => {
+      const found = calmCut(calm.curve, { target, step, min, max, beats: calm.beats, cuts: calm.cuts });
+      if (!found) return target;
+      calm.log.push({ edge: name, at: found.at, tag: found.tag, moved: found.moved, score: found.score });
+      return found.at;
+    };
+    // A Short opens on its words: at most CALM_PAD of silence at either edge.
+    start = edge('start', start, Math.max(0, window.start - CALM_PAD, before ? before.end + 0.02 : 0), window.start - 0.02);
+    end = edge('end', end, window.end + 0.02, Math.min(window.end + CALM_PAD, after ? after.start - 0.02 : Infinity));
+  }
   return { start: round(Math.ceil(start * fps - 1e-6) / fps, 6), end: round(Math.floor(end * fps + 1e-6) / fps, 6) };
+}
+
+const CALM_PAD = 0.75;
+
+// The long form's own cuts: every scene start and base-edit join, free seams for a Short's edges.
+function seams(resolved) {
+  const base = storyBase(resolved);
+  const times = [...(resolved.scenes ?? []).map((scene) => Number(scene.start)), ...(base?.segments ?? []).map((segment) => Number(segment.start))];
+  return [...new Set(times.filter((t) => t > 0))].sort((a, b) => a - b);
 }
 
 // A card that fits the Short's canvas: as given, without its sub-line, then
