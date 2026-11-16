@@ -9,6 +9,8 @@ import { execFile } from "node:child_process";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { frameBackdrop } from "@launchclip/core/brand-frame.mjs";
+import { contrastRatio } from "@launchclip/core/style.mjs";
 
 const run = promisify(execFile);
 const SIZE = 128;
@@ -80,9 +82,21 @@ export function logoTrim(bytes, size = SIZE) {
   return { x: share(left), y: share(top), width: share(right - left), height: share(bottom - top) };
 }
 
+/** RGBA pixels → true when the image's edges are see-through (a mark on no background of its own). */
+export function logoClear(bytes, size = SIZE) {
+  if ((bytes?.length ?? 0) < size * size * 4) return false;
+  let edges = 0, clear = 0;
+  for (let y = 0; y < size; y += 1) for (let x = 0; x < size; x += 1) {
+    if (x !== 0 && y !== 0 && x !== size - 1 && y !== size - 1) continue;
+    edges += 1;
+    if (bytes[(y * size + x) * 4 + 3] < 24) clear += 1;
+  }
+  return clear / edges > 0.85;
+}
+
 const cache = new Map();
 
-/** An image file → {tone?, aspect?, trim?} (each may be missing), or null when ffmpeg cannot read it. */
+/** An image file → {tone?, aspect?, trim?, clear} (each may be missing), or null when ffmpeg cannot read it. */
 export async function measureLogoMark(file) {
   const key = `${file}:${(await stat(file).catch(() => null))?.mtimeMs ?? "missing"}`;
   if (!cache.has(key)) cache.set(key, readLogoMark(file).catch(() => null));
@@ -96,7 +110,7 @@ async function readLogoMark(file) {
   const { stdout } = await run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", file, "-frames:v", "1", "-vf", `scale=${SIZE}:${SIZE},format=rgba`, "-f", "rawvideo", "-"], { encoding: "buffer", maxBuffer: 1024 * 1024 });
   const tone = logoTone(stdout);
   const trim = aspect ? logoTrim(stdout) : null;
-  return tone || aspect ? { ...(tone ? { tone } : {}), ...(aspect ? { aspect } : {}), ...(trim ? { trim } : {}) } : null;
+  return tone || aspect ? { ...(tone ? { tone } : {}), ...(aspect ? { aspect } : {}), ...(trim ? { trim } : {}), clear: logoClear(stdout) } : null;
 }
 
 /**
@@ -109,11 +123,49 @@ export async function withLogoMark(story, projectDir = process.cwd()) {
   if (!frame || typeof frame !== "object" || Array.isArray(frame) || typeof frame.logo !== "string" || !frame.logo.trim()) return story;
   const known = frame.logo_mark && typeof frame.logo_mark === "object" ? frame.logo_mark : {};
   if (known.tone && known.aspect) return story;
-  const measured = await measureLogoMark(path.resolve(projectDir, frame.logo.trim()));
-  if (!measured) return story;
+  const found = await measureLogoMark(path.resolve(projectDir, frame.logo.trim()));
+  if (!found) return story;
+  const { clear: _clear, ...measured } = found;
   // A stated aspect belongs with its own trim (or none), not the measured one.
   const logo_mark = { ...(known.aspect ? { ...measured, trim: undefined } : measured), ...known };
   if (logo_mark.trim === undefined) delete logo_mark.trim;
   if (logo_mark.tone === known.tone && logo_mark.aspect === known.aspect) return story;
   return { ...story, frame: { ...frame, logo_mark } };
+}
+
+/**
+ * The tint a brand-lockup image needs to read on `backdrop` (a hex, or null
+ * for footage or an unknown base, taken as dark): "paper" for a dark mark on a
+ * dark backdrop, "ink" for a light mark on a light one, else null. Only a mark
+ * with a see-through background is tinted; one that carries its own box keeps
+ * it, since a tint would paint the box solid.
+ */
+export function lockupTint(measured, backdrop) {
+  if (!measured?.clear || !["dark", "light"].includes(measured.tone)) return null;
+  const dark = !backdrop || contrastRatio("#ffffff", backdrop) >= contrastRatio("#000000", backdrop);
+  return measured.tone === "dark" && dark ? "paper" : measured.tone === "light" && !dark ? "ink" : null;
+}
+
+/**
+ * The story with every brand-lockup scene's untinted mark and wordmark tinted
+ * to read on its backdrop (lockupTint), measured from the files. A stated
+ * tint or markTint (even "none") wins. → the same story when nothing changes.
+ */
+export async function withLockupTints(story, projectDir = process.cwd(), measure = measureLogoMark) {
+  const scenes = Array.isArray(story?.scenes) ? story.scenes : [];
+  let changed = false;
+  const next = await Promise.all(scenes.map(async (scene) => {
+    if (scene?.module !== "brand-lockup" || !scene.params || typeof scene.params !== "object") return scene;
+    const params = { ...scene.params };
+    let tinted = false;
+    const src = (value) => (typeof value === "string" ? value : value?.src);
+    for (const [image, key] of [["mark", "markTint"], ["wordmark", "tint"]]) {
+      const file = src(params[image]);
+      if (params[key] !== undefined || typeof file !== "string" || !file.trim()) continue;
+      const tint = lockupTint(await measure(path.resolve(projectDir, file.trim())), frameBackdrop(scene, story));
+      if (tint) { params[key] = tint; tinted = changed = true; }
+    }
+    return tinted ? { ...scene, params } : scene;
+  }));
+  return changed ? { ...story, scenes: next } : story;
 }

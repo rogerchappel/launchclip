@@ -16,7 +16,7 @@ import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { brandFrameErrors } from "@launchclip/core/style.mjs";
 import { compileStoryToHyperFrames } from "../kit/hyperframes/story-compiler.mjs";
 import { brandFrameFindings } from "../src/layout_check.js";
-import { logoTone, logoTrim } from "../src/logo_mark.js";
+import { lockupTint, logoClear, logoTone, logoTrim, withLockupTints } from "../src/logo_mark.js";
 
 const require = createRequire(import.meta.url);
 const { gsap } = require("gsap");
@@ -368,4 +368,36 @@ test("logoTrim and a trimmed mark: the plate holds the visible logo, not the fil
   assert.match(plan.css, /\.lc-frame-logo-clip \{ width: 195\.84px; height: 108\.8px; overflow: hidden;/);
   assert.match(plan.css, /\.lc-frame-logo \{[^}]*width: 326\.4px; height: 108\.8px; max-width: none; margin-left: 0px; margin-top: 0px;/);
   assert.match(brandFrameErrors({ logo_mark: { trim: { x: 0, y: 0, width: 2, height: 1 } } }).join("\n"), /logo_mark\.trim must be/);
+});
+
+test("lockupTint: a see-through dark mark reads on a dark card, a boxed logo keeps its box", () => {
+  assert.equal(lockupTint({ tone: "dark", clear: true }, "#0b0f10"), "paper");
+  assert.equal(lockupTint({ tone: "dark", clear: true }, null), "paper", "footage or an unknown base counts as dark");
+  assert.equal(lockupTint({ tone: "dark", clear: true }, "#f4f1ea"), null);
+  assert.equal(lockupTint({ tone: "light", clear: true }, "#f4f1ea"), "ink");
+  assert.equal(lockupTint({ tone: "light", clear: true }, "#0b0f10"), null);
+  assert.equal(lockupTint({ tone: "dark", clear: false }, "#0b0f10"), null, "a logo on its own white box is not painted solid");
+  assert.equal(lockupTint({ tone: "mixed", clear: true }, "#0b0f10"), null);
+  assert.equal(lockupTint(null, "#0b0f10"), null);
+});
+
+test("logoClear: see-through edges only", () => {
+  const size = 8, image = (fill) => Buffer.from(Array.from({ length: size * size }, (_, i) => fill(i % size, Math.floor(i / size))).flat());
+  const inside = (x, y) => x > 1 && y > 1 && x < 6 && y < 6;
+  assert.equal(logoClear(image((x, y) => (inside(x, y) ? [0, 0, 0, 255] : [0, 0, 0, 0])), size), true);
+  assert.equal(logoClear(image((x, y) => (inside(x, y) ? [0, 0, 0, 255] : [255, 255, 255, 255])), size), false);
+});
+
+test("withLockupTints: fills an untinted mark and wordmark, keeps a stated tint", async () => {
+  const story = { brand: { colors: { bg: "#0b0f10" } }, scenes: [
+    { id: "end", module: "brand-lockup", start: 0, end: 3, params: { variant: "end", mark: "assets/mark.png", wordmark: { src: "assets/word.png", ratio: 4 } } },
+    { id: "kept", module: "brand-lockup", start: 3, end: 6, params: { mark: "assets/mark.png", markTint: "none" } },
+    { id: "other", module: "cta", start: 6, end: 9, params: { action: "Go" } }
+  ] };
+  const out = await withLockupTints(story, "/p", async () => ({ tone: "dark", clear: true }));
+  assert.equal(out.scenes[0].params.markTint, "paper");
+  assert.equal(out.scenes[0].params.tint, "paper");
+  assert.equal(out.scenes[1], story.scenes[1]);
+  assert.equal(out.scenes[2], story.scenes[2]);
+  assert.equal(await withLockupTints(story, "/p", async () => null), story, "unreadable files change nothing");
 });
