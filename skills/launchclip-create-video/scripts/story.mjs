@@ -1533,8 +1533,9 @@ function validateThesis(thesis, err) {
 function validateMotion(motion, err) {
   if (motion === undefined || motion === null) return;
   if (!isObject(motion)) { err("motion must be an object {grammar}"); return; }
-  for (const key of Object.keys(motion)) if (!["grammar", "feel", "blur", "thesis"].includes(key)) err(`motion.${key} is not supported (allowed: grammar, feel, blur, thesis)`);
+  for (const key of Object.keys(motion)) if (!["grammar", "feel", "blur", "thesis", "flow"].includes(key)) err(`motion.${key} is not supported (allowed: grammar, feel, blur, thesis, flow)`);
   validateThesis(motion.thesis, err);
+  validateFlow(motion.flow, err);
   validateFeel(motion.feel, err);
   validateBlur(motion.blur, err);
   const grammar = motion.grammar;
@@ -1580,6 +1581,15 @@ function validateMotion(motion, err) {
 export const STORY_FEELS = ["kinetic", "snap", "steady"];
 const feelRange = (value, lo, hi) => typeof value === "number" && Number.isFinite(value) && value >= lo && value <= hi;
 const feelPair = (value, lo, hi) => Array.isArray(value) && value.length === 2 && value.every((v) => feelRange(v, lo, hi)) && value[0] <= value[1];
+
+// motion.flow (kit/core/flow.mjs resolveFlow): carry and pin elements across still cuts.
+function validateFlow(flow, err) {
+  if (flow === undefined || typeof flow === "boolean") return;
+  if (!isObject(flow)) { err('motion.flow must be true, false or {carry: "auto" | false, pin: true | false}'); return; }
+  for (const key of Object.keys(flow)) if (!["carry", "pin"].includes(key)) err(`motion.flow.${key} is not supported (allowed: carry, pin)`);
+  if (flow.carry !== undefined && flow.carry !== "auto" && flow.carry !== false) err('motion.flow.carry must be "auto" or false');
+  if (flow.pin !== undefined && typeof flow.pin !== "boolean") err("motion.flow.pin must be true or false");
+}
 
 // motion.blur: real motion blur from sub-frames (kit/core/motion-blur.mjs
 // MOTION_BLUR, repeated here import-free; src/motion_blur.js).
