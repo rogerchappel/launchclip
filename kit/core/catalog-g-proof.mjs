@@ -76,7 +76,7 @@ function resolveStat(params, ctx) {
   const valueColor = b.resolveColor(tone, 'params.tone', 'primary');
   const sourceText = `Source: ${source}`;
   const fitLabel = (width, k, preferred = 50, maxLines = 2) => fitText(check, 'params.label', label, {family: 'body', width, preferred: Math.max(b.min.key, u(preferred * Math.max(1, k * 0.9))), min: b.min.key, maxLines});
-  const fitSource = (width, k) => fitText(check, 'params.source', sourceText, {family: 'meta', width, preferred: u(28 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 2});
+  const fitSource = (width, k) => fitText(check, 'params.source', sourceText, {family: 'body', width, preferred: u(28 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 2});
   const variant = (width, k) => {
     const mode = 'stack';
     const iconSize = glyph ? u(110 * k) : 0, iconGap = glyph ? u(20 * k) : 0;
@@ -92,7 +92,7 @@ function resolveStat(params, ctx) {
     const gap = u(32), valueW = r2(width * 0.42), textW = r2(width - valueW - gap);
     const big = fitText(check, 'params.value', value, {family: 'display', width: valueW, preferred: u(170 * k), min: u(88), maxLines: 1});
     const lab = fitText(check, 'params.label', label, {family: 'body', width: textW, preferred: u(46), min: b.min.key, maxLines: 3});
-    const src = fitText(check, 'params.source', sourceText, {family: 'meta', width: textW, preferred: u(26), min: b.min.meta, maxLines: 2});
+    const src = fitText(check, 'params.source', sourceText, {family: 'body', width: textW, preferred: u(26), min: b.min.meta, maxLines: 2});
     const sourceGap = u(12);
     const textH = r2(lab.lines * lab.size * 1.2 + sourceGap + src.lines * src.size * 1.3);
     return {mode: 'inline', iconSize: 0, iconGap: 0, value: big, label: lab, source: src, labelGap: 0, sourceGap, gap, valueW, textW, height: r2(Math.max(big.size, textH))};
@@ -166,16 +166,18 @@ function statView(model) {
       flowText(`${id}-value`, L.valueW, {...hidden, fontFamily: fonts.display, fontSize: L.value.size, lineHeight: '1', color: c.valueColor, textAlign: 'right', whiteSpace: 'nowrap', transformOrigin: '100% 60%'}, c.start),
       flow(null, L.textW, undefined, {display: 'flex', flexDirection: 'column'}, [
         flowText(`${id}-label`, L.textW, {...hidden, fontFamily: fonts.body, fontWeight: 600, fontSize: L.label.size, lineHeight: '1.2', color: c.labelColor}, c.label),
-        flowText(`${id}-source`, L.textW, {...hidden, marginTop: L.sourceGap, fontFamily: fonts.meta, fontSize: L.source.size, lineHeight: '1.3', color: c.sourceColor}, c.sourceText)
+        flowText(`${id}-source`, L.textW, {...hidden, marginTop: L.sourceGap, fontFamily: fonts.body, fontSize: L.source.size, lineHeight: '1.3', color: c.sourceColor}, c.sourceText)
       ])
     ])];
   }
+  // The default stack sets flush left (docs/VIDEO_TELLS_RFC.md hero-metric):
+  // the figure leads a column instead of floating centred over a small label.
   return [column(B.x, B.y, B.width, L.height, [
     c.icon ? flow(`${id}-icon`, L.iconSize, L.iconSize, {...hidden, marginBottom: L.iconGap, transformOrigin: '50% 50%'}, [iconNode(c.icon, {size: L.iconSize, color: c.iconColor})]) : null,
-    flowText(`${id}-value`, B.width, {...hidden, fontFamily: fonts.display, fontSize: L.value.size, lineHeight: '1', color: c.valueColor, textAlign: 'center', whiteSpace: 'nowrap', transformOrigin: '50% 60%'}, c.start),
-    flowText(`${id}-label`, B.width, {...hidden, marginTop: L.labelGap, fontFamily: fonts.body, fontWeight: 600, fontSize: L.label.size, lineHeight: '1.2', color: c.labelColor, textAlign: 'center'}, c.label),
-    flowText(`${id}-source`, B.width, {...hidden, marginTop: L.sourceGap, fontFamily: fonts.meta, fontSize: L.source.size, lineHeight: '1.3', color: c.sourceColor, textAlign: 'center'}, c.sourceText)
-  ].filter(Boolean))];
+    flowText(`${id}-value`, B.width, {...hidden, fontFamily: fonts.display, fontSize: L.value.size, lineHeight: '1', color: c.valueColor, textAlign: 'left', whiteSpace: 'nowrap', transformOrigin: '0% 60%'}, c.start),
+    flowText(`${id}-label`, B.width, {...hidden, marginTop: L.labelGap, fontFamily: fonts.body, fontWeight: 600, fontSize: L.label.size, lineHeight: '1.2', color: c.labelColor, textAlign: 'left'}, c.label),
+    flowText(`${id}-source`, B.width, {...hidden, marginTop: L.sourceGap, fontFamily: fonts.body, fontSize: L.source.size, lineHeight: '1.3', color: c.sourceColor, textAlign: 'left'}, c.sourceText)
+  ].filter(Boolean), {align: 'start'})];
 }
 
 const statText = (model, width, align, top = 0) => {
@@ -183,7 +185,7 @@ const statText = (model, width, align, top = 0) => {
   const c = model.content, L = c.layout;
   return [
     flowText(`${id}-label`, width, {...hidden, marginTop: top, fontFamily: fonts.body, fontWeight: 600, fontSize: L.label.size, lineHeight: '1.2', color: c.labelColor, textAlign: align}, c.label),
-    flowText(`${id}-source`, width, {...hidden, marginTop: L.sourceGap, fontFamily: fonts.meta, fontSize: L.source.size, lineHeight: '1.3', color: c.sourceColor, textAlign: align}, c.sourceText)
+    flowText(`${id}-source`, width, {...hidden, marginTop: L.sourceGap, fontFamily: fonts.body, fontSize: L.source.size, lineHeight: '1.3', color: c.sourceColor, textAlign: align}, c.sourceText)
   ];
 };
 
@@ -563,7 +565,7 @@ function resolveExcerpt(params, ctx) {
     const size = Math.min(...sizes.filter(Boolean).map(f => f.size));
     return {size, rows: sizes.map(f => (f ? f.lines : 1))};
   };
-  const fitSource = (width, k) => fitText(check, 'params.source', sourceText, {family: 'meta', width, preferred: u(28 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 2});
+  const fitSource = (width, k) => fitText(check, 'params.source', sourceText, {family: 'body', width, preferred: u(28 * Math.max(1, k * 0.85)), min: b.min.meta, maxLines: 2});
   // terminal: a bar with dots (and the title), a gutter of line numbers.
   const terminal = (width, k) => {
     const padX = u(32 * Math.min(1, k)), padY = u(26 * Math.min(1, k)), barH = u(64 * Math.min(1.2, k)), gutter = u(64 * Math.min(1.2, k));
@@ -626,7 +628,7 @@ const lineText = (model, line, h, width, extra = {}) => {
 const sourceLine = (model, width, extra = {}) => {
   const {id, fonts} = model;
   const c = model.content, L = c.layout;
-  return flowText(`${id}-source`, width, {...hidden, marginTop: L.sourceGap, fontFamily: fonts.meta, fontSize: L.source.size, lineHeight: '1.3', color: c.sourceColor, ...extra}, c.sourceText);
+  return flowText(`${id}-source`, width, {...hidden, marginTop: L.sourceGap, fontFamily: fonts.body, fontSize: L.source.size, lineHeight: '1.3', color: c.sourceColor, ...extra}, c.sourceText);
 };
 
 const EXCERPT_VIEWS = {
@@ -675,7 +677,7 @@ const EXCERPT_VIEWS = {
       el('div', null, abs(textX, 0, L.inner, L.blockH), [...head, ...rows]),
       el('div', null, abs(textX, r2(L.blockH + L.sourceGap), L.inner, undefined, {display: 'flex', flexDirection: 'column'}), [
         flow(null, r2(Math.min(L.inner * 0.25, 140 * unit)), r2(2 * unit), {background: c.border, marginBottom: r2(14 * unit)}, []),
-        flowText(`${id}-source`, L.inner, {...hidden, fontFamily: fonts.meta, fontSize: L.source.size, lineHeight: '1.3', color: c.sourceColor}, c.sourceText)
+        flowText(`${id}-source`, L.inner, {...hidden, fontFamily: fonts.body, fontSize: L.source.size, lineHeight: '1.3', color: c.sourceColor}, c.sourceText)
       ])
     ])];
   },
@@ -769,7 +771,7 @@ function excerptView(model) {
     el('div', null, abs(0, r2(L.padY + L.head.size * 1.3 + 10 * unit), B.width, r2(2 * unit), {background: c.border}))] : [];
   return [column(B.x, B.y, B.width, L.height, [
     flow(`${id}-panel`, B.width, L.panelH, {boxSizing: 'border-box', borderRadius: r2(24 * unit), background: c.panel, border: `${r2(2 * unit)}px solid ${c.border}`}, [...head, ...rows]),
-    flowText(`${id}-source`, B.width, {...hidden, marginTop: L.sourceGap, fontFamily: fonts.meta, fontSize: L.source.size, lineHeight: '1.3', color: c.sourceColor}, c.sourceText)
+    flowText(`${id}-source`, B.width, {...hidden, marginTop: L.sourceGap, fontFamily: fonts.body, fontSize: L.source.size, lineHeight: '1.3', color: c.sourceColor}, c.sourceText)
   ], {align: 'start'})];
 }
 
