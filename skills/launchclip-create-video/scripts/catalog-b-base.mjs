@@ -275,27 +275,45 @@ export function glyphBoxes(text, {x, baseline, size, family, letterSpacingEm = 0
   const height = size * capHeight;
   return [...String(text)].map((char, index) => ({index, char, x: x + index * advance, y: baseline - height, width: advance, height})).filter(glyph => /\S/.test(glyph.char));
 }
-// Greedy word wrap with the conservative advance model → line count.
-function lineCount(text, size, family, width) {
-  const words = String(text).split(/\s+/).filter(Boolean);
-  let lines = 1, used = 0;
-  const space = size * ADVANCE[family];
-  for (const word of words) {
-    const w = textWidth(word, size, family);
-    if (w > width) return Infinity;
-    if (used && used + space + w > width) { lines++; used = w; } else used += (used ? space : 0) + w;
+// A URL or handle: a word with a ".", "/" or "@" inside it.
+export const isUrlish = word => /\S[./@]\S/.test(word);
+// Greedy word wrap with the conservative advance model (letter spacing in em)
+// → the lines, or null where a word does not fit the width. A URL is one word,
+// never broken mid-word; with slash, one too wide may break after a "/" (the
+// rest joins the next line with no space).
+export function textLines(text, size, family, width, spacing = 0, slash = false) {
+  const pieces = [];
+  for (const word of String(text).split(/\s+/).filter(Boolean)) {
+    if (!slash || !isUrlish(word) || textWidth(word, size, family, spacing) <= width) pieces.push([word, true]);
+    else word.split(/(?<=\/)(?=.)/).forEach((part, i) => pieces.push([part, i === 0]));
   }
-  return lines;
+  const lines = [];
+  let line = '', used = 0;
+  const space = size * (ADVANCE[family] + spacing);
+  for (const [piece, spaced] of pieces) {
+    const w = textWidth(piece, size, family, spacing);
+    if (w > width) return null;
+    const gap = line && spaced ? space : 0;
+    if (line && used + gap + w > width) { lines.push(line); line = piece; used = w; } else { line += gap ? ` ${piece}` : piece; used += gap + w; }
+  }
+  if (line) lines.push(line);
+  return lines.length ? lines : [''];
 }
 // Largest size in [min, preferred] (step 2) where text fits maxLines lines:
 // first at the brand face's real width (brandTextScale), so a wide face gets
 // smaller type, then, when nothing fits that way, at the calibrated width.
-export function fitText(check, path, text, {family, width, preferred, min, maxLines = 1}) {
+// Text with a URL shrinks before it breaks: only when no size fits does a URL
+// break after a "/", onto one more line if it needs it. → {size, lines, rows}
+export function fitText(check, path, text, {family, width, preferred, min, maxLines = 1, spacing = 0}) {
   const scale = brandTextScale(family);
-  for (const fitWidth of scale > 1 ? [width / scale, width] : [width]) {
-    for (let size = Math.floor(preferred); size >= Math.ceil(min); size -= 2) {
-      const lines = lineCount(text, size, family, fitWidth);
-      if (lines <= maxLines) return {size, lines};
+  const urlish = String(text).split(/\s+/).some(isUrlish);
+  for (const slash of urlish ? [false, true] : [false]) {
+    const most = slash ? maxLines + 1 : maxLines;
+    for (const fitWidth of scale > 1 ? [width / scale, width] : [width]) {
+      for (let size = Math.floor(preferred); size >= Math.ceil(min); size -= 2) {
+        const rows = textLines(text, size, family, fitWidth, spacing, slash);
+        if (rows && rows.length <= most) return {size, lines: rows.length, rows};
+      }
     }
   }
   return check.fail(path, `is too long: ${JSON.stringify(text)} does not fit ${maxLines} line${maxLines === 1 ? '' : 's'} at ${Math.ceil(min)} px in ${Math.round(width)} px; shorten it`);

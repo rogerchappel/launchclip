@@ -715,9 +715,12 @@ export function cardFillStyles(plan) {
  * detail}] for the layout gate. Checks, on every tone:
  *   - panel text (paper) on the story's panel fill composited over the tone,
  *     at 4.5:1 (an opaque panel is checked once, on its own fill);
- *   - caption words (idle colour) at 3:1, the large-type floor, unless they
- *     carry an outline of 4 px or more, a plate (the preset's, or a legibility
- *     plate on every line), a band or a chip behind them.
+ *   - caption words at 3:1, the large-type floor, unless they carry an
+ *     outline of 4 px or more, a plate (the preset's, or a legibility plate
+ *     on every line), a band or a chip behind them. The colour checked is the
+ *     one drawn on the surface: an idle colour that does not read there gives
+ *     way to the surface set (captions.mjs captionColorsOn, surfaceIdle) on the lines
+ *     finish finds on it, so only a surface no caption colour reads on fails.
  * captions: captionOptions() of the story's captions overlay, or null.
  */
 export function backgroundContrastFindings(story, { captions = null } = {}) {
@@ -744,9 +747,10 @@ export function backgroundContrastFindings(story, { captions = null } = {}) {
   if (captions && captions.preset !== 'none') {
     const backed = captions.plate || captions.plates === 'all' || captions.layout === 'band' || captions.word === 'chip' || Number(captions.stroke) >= 4;
     if (!backed && HEX.test(captions.colors?.idle ?? '')) {
-      const onCaption = worst(captions.colors.idle, tones);
+      const idle = worst(captions.colors.idle, tones).ratio >= 3 ? captions.colors.idle : captions.surfaceIdle ?? captions.colors.idle;
+      const onCaption = worst(idle, tones);
       if (onCaption.ratio < 3) findings.push({ rule: 'background-contrast', severity: 'error', ids: ['captions'], at: 0,
-        detail: `caption words (${captions.colors.idle}, preset ${captions.preset}) have ${onCaption.ratio.toFixed(2)}:1 on the ${plan.kind} background's ${onCaption.tone}; captions need 3:1. Give them an outline or plate, or change the caption colour` });
+        detail: `caption words (${idle}, preset ${captions.preset}) have ${onCaption.ratio.toFixed(2)}:1 on the ${plan.kind} background's ${onCaption.tone}; captions need 3:1. Give them an outline or plate, or change the caption colour` });
     }
   }
   return findings;

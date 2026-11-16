@@ -234,6 +234,33 @@ test("FFmpeg: the mux keeps the last frame (B-frames, fractional rate) and the a
   }
 });
 
+test("FFmpeg: a whole render whose own audio runs past its last frame is cut there, so it never ends on black", { skip: mediaSkip() }, async (t) => {
+  const missing = await ffmpegMissing();
+  if (missing) { t.skip(`FFmpeg is unavailable: ${missing}`); return; }
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-whole-"));
+  try {
+    const tools = defaultSegmentTools();
+    // 87 frames (2.9 s) with 3.2 s of audio, as a renderer muxes a longer soundtrack.
+    const whole = path.join(dir, "whole.mp4"), output = path.join(dir, "out.mp4");
+    const frames = path.join(dir, "frames.mp4"), long = path.join(dir, "long.m4a");
+    await ffmpeg(["-f", "lavfi", "-i", "testsrc2=size=160x120:rate=30", "-frames:v", "87", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", frames]);
+    await ffmpeg(["-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "3.2", "-c:a", "aac", long]);
+    await ffmpeg(["-i", frames, "-i", long, "-map", "0:v", "-map", "1:a", "-c", "copy", whole]);
+    assert.ok(await probeDuration(whole, "a:0") > 3.1, "the fixture's audio runs past its video");
+    assert.equal(await tools.lastFrame(whole, output, { fps: 30 }), 87);
+    assert.equal((await packets(output)).length, 87, "every frame is kept");
+    const audioEnd = await probeDuration(output, "a:0");
+    assert.ok(audioEnd <= (87 + 0.5) / 30 + 1024 / 48000, `the audio ends with the last frame (${audioEnd})`);
+    // A render with no audio is copied as it is.
+    const silent = path.join(dir, "silent.mp4"), copy = path.join(dir, "copy.mp4");
+    await ffmpeg(["-f", "lavfi", "-i", "testsrc2=size=160x120:rate=30", "-frames:v", "30", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", silent]);
+    assert.equal(await tools.lastFrame(silent, copy, { fps: 30 }), null);
+    assert.deepEqual(await readFile(copy), await readFile(silent));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("FFmpeg: the join stamps every frame on its slot, whatever the segments' container durations say", { skip: mediaSkip() }, async (t) => {
   const missing = await ffmpegMissing();
   if (missing) { t.skip(`FFmpeg is unavailable: ${missing}`); return; }
