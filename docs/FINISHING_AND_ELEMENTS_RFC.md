@@ -70,6 +70,13 @@ M4 at 1080×1920: about 4 s to start, then about 86 ms a frame for three
 passes. The shaders are written fresh. Contract:
 [KIT_CONTRACTS.md](KIT_CONTRACTS.md), "Finish passes".
 
+Built (phase 2): `bloom`, `zoom-blur`, `burn`, `crt` and `halftone`, also
+written fresh (no code copied from the sources listed under Provenance).
+Bloom's pyramid is the mip chain of a bright-pass texture. `zoom-blur` and
+`burn` take hit times (`at`: seconds, or `"cuts"`); driving `zoom-blur`
+from `kinetic.mjs` kicks is not wired yet. Halftone's two-ink mode is
+`duotone` (`accent` to `paper`, dots in `ink`).
+
 WGSL to GLSL is mechanical (compute entry points become fragment shaders).
 We take the maths and constants, not the compatibility plumbing (`P.u`/`P.f`
 slots, premultiply round trips). `story.finish = [{pass, ...params}]`, at

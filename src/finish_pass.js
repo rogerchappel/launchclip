@@ -5,7 +5,7 @@ import { rename, rm } from "node:fs/promises";
 import path from "node:path";
 import { FINISH_PROTECT_FEATHER, FINISH_PROTECT_MAX, resolveFinish } from "@launchclip/core/finish.mjs";
 import { applyGrade, storyGradeCube } from "./grade.js";
-import { VERTEX, fragmentShader, passProtects, passUniforms } from "./finish_shaders.js";
+import { VERTEX, fragmentShader, passProtects, passUniforms, preShader } from "./finish_shaders.js";
 
 // The finishing pass (docs/FINISHING_AND_ELEMENTS_RFC.md §E.1): ffmpeg
 // decodes the finished render to RGBA, one headless Chrome page runs the
@@ -99,14 +99,35 @@ window.finishRun = async () => {
     const data = new Float32Array(await (await fetch('/lut')).arrayBuffer());
     lut = texture(cfg.lut * cfg.lut, cfg.lut, gl.RGBA32F, gl.FLOAT, data, gl.NEAREST);
   }
-  const passes = cfg.passes.map((pass) => {
+  // A program and a setter that picks the uniform call from its declared type.
+  const program = (fragment) => {
     const prog = gl.createProgram();
-    gl.attachShader(prog, vert); gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, pass.fragment)); gl.linkProgram(prog);
+    gl.attachShader(prog, vert); gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, fragment)); gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
-    const ints = new Set();
-    for (let i = 0; i < gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS); i++) { const u = gl.getActiveUniform(prog, i); if (u.type === gl.INT) ints.add(u.name); }
-    return { ...pass, prog, ints, at: (name) => gl.getUniformLocation(prog, name) };
-  });
+    const types = {};
+    for (let i = 0; i < gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS); i++) { const u = gl.getActiveUniform(prog, i); types[u.name.endsWith('[0]') ? u.name.slice(0, -3) : u.name] = u; }
+    const set = (name, v) => {
+      const u = types[name], at = gl.getUniformLocation(prog, name);
+      if (!u) return;
+      if (u.type === gl.INT || u.type === gl.SAMPLER_2D) gl.uniform1i(at, v);
+      else if (u.type === gl.FLOAT_VEC2) gl.uniform2fv(at, v);
+      else if (u.type === gl.FLOAT_VEC3) gl.uniform3fv(at, v);
+      else if (u.type === gl.FLOAT_VEC4) gl.uniform4fv(at, v);
+      else if (u.size > 1) gl.uniform1fv(at, v);
+      else gl.uniform1f(at, v);
+    };
+    return { prog, set };
+  };
+  const passes = cfg.passes.map((pass) => ({ ...pass, main: program(pass.fragment), pre: pass.pre ? program(pass.pre) : null }));
+  // The pre-pass target: mipmapped, so a pass reads it at any pyramid level.
+  let pre = null;
+  if (passes.some((pass) => pass.pre)) {
+    const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texStorage2D(gl.TEXTURE_2D, Math.floor(Math.log2(Math.max(W, H))) + 1, gl.RGBA8, W, H);
+    for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+    const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+    pre = { t, f };
+  }
   const src = texture(W, H, gl.RGBA, gl.UNSIGNED_BYTE, null, gl.LINEAR);
   const targets = [0, 1].map(() => { const t = texture(W, H, gl.RGBA, gl.UNSIGNED_BYTE, null, gl.LINEAR); const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0); return { t, f }; });
   gl.viewport(0, 0, W, H);
@@ -126,18 +147,24 @@ window.finishRun = async () => {
     gl.bindTexture(gl.TEXTURE_2D, src);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, frame);
     let input = src;
-    passes.forEach((pass, i) => {
-      const out = targets[i % 2];
-      gl.bindFramebuffer(gl.FRAMEBUFFER, out.f);
-      gl.useProgram(pass.prog);
-      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, input); gl.uniform1i(pass.at('u_src'), 0);
-      if (lut) { gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, lut); gl.uniform1i(pass.at('u_lut'), 1); gl.uniform1i(pass.at('u_n'), cfg.lut); }
-      gl.uniform2f(pass.at('u_res'), W, H);
-      gl.uniform1f(pass.at('u_frame'), index); gl.uniform1f(pass.at('u_t'), t);
-      gl.uniform1i(pass.at('u_protect'), pass.protect ? 1 : 0);
-      gl.uniform4fv(pass.at('u_rects'), flat); gl.uniform1i(pass.at('u_nrects'), rects.length); gl.uniform1f(pass.at('u_feather'), cfg.feather);
-      for (const [name, v] of Object.entries(pass.uniforms)) (pass.ints.has(name) ? gl.uniform1i : gl.uniform1f).call(gl, pass.at(name), v);
+    const draw = ({ prog, set }, pass, target, protect) => {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, target.f);
+      gl.useProgram(prog);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, input); set('u_src', 0);
+      if (lut) { gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, lut); set('u_lut', 1); set('u_n', cfg.lut); }
+      if (pre && target !== pre) { gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, pre.t); set('u_pre', 2); }
+      set('u_res', [W, H]); set('u_frame', index); set('u_t', t); set('u_fps', cfg.fps);
+      set('u_protect', protect ? 1 : 0); set('u_rects', flat); set('u_nrects', rects.length); set('u_feather', cfg.feather);
+      for (const [name, v] of Object.entries(pass.uniforms)) set(name, v);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
+    };
+    passes.forEach((pass, i) => {
+      if (pass.pre) {
+        draw(pass.pre, pass, pre, false);
+        gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, pre.t); gl.generateMipmap(gl.TEXTURE_2D);
+      }
+      const out = targets[i % 2];
+      draw(pass.main, pass, out, pass.protect);
       input = out.t;
     });
     const pixels = new Uint8Array(size);
@@ -183,7 +210,7 @@ export async function runFinishPass({ input, output, chain, width, height, fps, 
   const lut = cube ? Float32Array.from({ length: cube.size ** 3 * 4 }, (_, i) => (i % 4 === 3 ? 1 : cube.data[(i >> 2) * 3 + (i % 4)])) : null;
   const config = {
     width, height, fps, frameStart, rects, feather: FINISH_PROTECT_FEATHER, vertex: VERTEX, lut: cube?.size ?? 0,
-    passes: chain.map(({ pass, params }) => ({ pass, fragment: fragmentShader(pass), protect: passProtects(pass), uniforms: passUniforms(pass, params) }))
+    passes: chain.map(({ pass, params }) => ({ pass, fragment: fragmentShader(pass), pre: preShader(pass), protect: passProtects(pass), uniforms: passUniforms(pass, params) }))
   };
   const server = createServer(async (req, res) => {
     try {
