@@ -43,7 +43,7 @@ import { WORLD_KINDS, suggestWorld } from './worlds/index.mjs';
 import { mediumErrors } from './medium.mjs';
 import { lookErrors } from './look.mjs';
 import { GRADE_LOOK_DEFAULTS, GRADE_TONE_DEFAULTS } from './grade.mjs';
-import { FONT_REGISTRY, registeredFamily } from './fonts.mjs';
+import { FONT_REGISTRY, FONT_ROLE_DEFAULTS, registeredFamily } from './fonts.mjs';
 import { fitContrast, hexToOklab, hexToOklch, hueGap, oklchToHex } from './oklch.mjs';
 import { brandFonts, brandIsEmpty, brandRoles, normalizeBrand } from './style-brand.mjs';
 import { drawBackdrops, drawMotionFeel } from './style-feel.mjs';
@@ -168,22 +168,24 @@ export const STYLE_FAMILIES = Object.freeze({
 /**
  * Curated type pairings over the bundled fonts (kit/core/fonts.mjs): display
  * plus body plus meta, with the display case and weight. `tones` are the
- * tones a pairing suits; a tone narrows the table to its pairings.
+ * tones a pairing suits; a tone narrows the table to its pairings. A third or
+ * fewer use a body face the overused-font tell lists (kit/core/tells.mjs);
+ * Inter stays where it suits the tone (technical, serious).
  */
 export const FONT_PAIRINGS = Object.freeze([
   { id: 'anton-inter', display: 'anton', body: 'inter', case: 'upper', weight: 400, tones: ['energetic', 'serious', 'technical'] },
   { id: 'anton-space', display: 'anton', body: 'space-grotesk', case: 'upper', weight: 400, tones: ['energetic', 'technical'] },
-  { id: 'archivo-inter', display: 'archivo-black', body: 'inter', case: 'upper', weight: 400, tones: ['energetic', 'playful'] },
+  { id: 'archivo-dm', display: 'archivo-black', body: 'dm-sans', case: 'upper', weight: 400, tones: ['energetic', 'playful'] },
   { id: 'archivo-space', display: 'archivo-black', body: 'space-grotesk', case: 'title', weight: 400, tones: ['energetic', 'technical'] },
   { id: 'unbounded-inter', display: 'unbounded', body: 'inter', case: 'title', weight: 700, tones: ['playful', 'energetic', 'technical'] },
-  { id: 'unbounded-space', display: 'unbounded', body: 'space-grotesk', case: 'upper', weight: 800, tones: ['playful', 'energetic'] },
-  { id: 'syne-inter', display: 'syne', body: 'inter', case: 'title', weight: 700, tones: ['premium', 'calm', 'warm'] },
+  { id: 'unbounded-lexend', display: 'unbounded', body: 'lexend', case: 'upper', weight: 800, tones: ['playful', 'energetic'] },
+  { id: 'syne-manrope', display: 'syne', body: 'manrope', case: 'title', weight: 700, tones: ['premium', 'calm', 'warm'] },
   { id: 'syne-space', display: 'syne', body: 'space-grotesk', case: 'upper', weight: 800, tones: ['energetic', 'technical', 'premium'] },
-  { id: 'bricolage-inter', display: 'bricolage-grotesque', body: 'inter', case: 'title', weight: 700, tones: ['warm', 'playful', 'calm'] },
-  { id: 'bricolage-space', display: 'bricolage-grotesque', body: 'space-grotesk', case: 'title', weight: 800, tones: ['playful', 'warm'] },
+  { id: 'bricolage-outfit', display: 'bricolage-grotesque', body: 'outfit', case: 'title', weight: 700, tones: ['warm', 'playful', 'calm'] },
+  { id: 'bricolage-manrope', display: 'bricolage-grotesque', body: 'manrope', case: 'title', weight: 800, tones: ['playful', 'warm'] },
   { id: 'space-inter', display: 'space-grotesk', body: 'inter', case: 'title', weight: 700, tones: ['technical', 'calm', 'serious'] },
   { id: 'instrument-inter', display: 'instrument-serif', body: 'inter', case: 'title', weight: 400, tones: ['premium', 'calm', 'warm', 'serious'] },
-  { id: 'instrument-space', display: 'instrument-serif', body: 'space-grotesk', case: 'title', weight: 400, tones: ['premium', 'warm'] },
+  { id: 'instrument-dm', display: 'instrument-serif', body: 'dm-sans', case: 'title', weight: 400, tones: ['premium', 'warm'] },
   { id: 'stix-space', display: 'stix-two-text', body: 'space-grotesk', case: 'title', weight: 600, tones: ['serious', 'calm', 'premium'] },
   { id: 'stix-bricolage', display: 'stix-two-text', body: 'bricolage-grotesque', case: 'title', weight: 600, tones: ['warm', 'serious'] },
   { id: 'anton-manrope', display: 'anton', body: 'manrope', case: 'upper', weight: 400, tones: ['energetic', 'serious'] },
@@ -428,7 +430,7 @@ export function styleFingerprint(pack) {
   return {
     palette: Object.fromEntries(['bg', 'paper', 'primary', 'accent'].map((role) => [role, hexToOklab(colors[role]).map((v) => round(v, 4))])),
     theme: hexToOklch(colors.bg).l < 0.6 ? 'dark' : 'light',
-    fonts: `${slug(fonts.display ?? 'anton')}/${slug(fonts.body ?? 'inter')}`,
+    fonts: `${slug(fonts.display ?? 'anton')}/${slug(fonts.body ?? FONT_ROLE_DEFAULTS.body)}`,
     panel: pack?.layouts?.panel?.treatment ?? 'solid',
     grammar: grammarOf(pack),
     caption: pack?.captions?.preset ?? 'word-highlight'
@@ -464,7 +466,7 @@ export function fingerprintDistance(a, b) {
 // The looks a generated style must not resemble: the starters in
 // kit/styles (test/style_seed.test.js checks this table against the files)
 // and the renderers' fallback when a story names no brand.
-const FALLBACK_LOOK = Object.freeze({ name: 'fallback', colors: Object.freeze({ bg: '#0b0b0f', paper: '#f5f3ee', ink: '#0b0b0f', primary: '#ffd23f', accent: '#46d4ff' }), fonts: Object.freeze({ display: 'anton', body: 'inter' }), panel: 'solid', grammar: 'editorial', caption: 'word-highlight' });
+const FALLBACK_LOOK = Object.freeze({ name: 'fallback', colors: Object.freeze({ bg: '#0b0b0f', paper: '#f5f3ee', ink: '#0b0b0f', primary: '#ffd23f', accent: '#46d4ff' }), fonts: Object.freeze({ display: 'anton', body: 'manrope' }), panel: 'solid', grammar: 'editorial', caption: 'word-highlight' });
 export const AVOID_LOOKS = Object.freeze([
   Object.freeze({ name: 'bold-creator', colors: { bg: '#0b0b0b', paper: '#ffffff', ink: '#0b0b0b', primary: '#ffe14d', accent: '#ff3d7f' }, fonts: { display: 'anton', body: 'archivo-black' }, panel: 'solid', grammar: 'snappy', caption: 'outline-heavy' }),
   Object.freeze({ name: 'editorial-dark', colors: { bg: '#0e0f12', paper: '#f1ede4', ink: '#0e0f12', primary: '#e8b04a', accent: '#7fb8a4' }, fonts: { display: 'stix-two-text', body: 'inter' }, panel: 'solid', grammar: 'editorial', caption: 'minimal-line' }),
@@ -835,7 +837,7 @@ export function styleSummary(pack, { seed = true } = {}) {
   const fonts = pack?.brand?.fonts ?? {};
   const medium = typeof pack?.medium === 'string' ? pack.medium : pack?.medium?.kind;
   const look = typeof pack?.look === 'string' ? pack.look : pack?.look?.name;
-  const inner = `${theme}, ${grammarOf(pack)}, ${familyName(fonts.display ?? 'anton')} / ${familyName(fonts.body ?? 'inter')}${medium && medium !== 'none' ? `, ${medium}` : ''}${look && look !== 'none' ? `, ${look}` : ''}`;
+  const inner = `${theme}, ${grammarOf(pack)}, ${familyName(fonts.display ?? 'anton')} / ${familyName(fonts.body ?? FONT_ROLE_DEFAULTS.body)}${medium && medium !== 'none' ? `, ${medium}` : ''}${look && look !== 'none' ? `, ${look}` : ''}`;
   return seed && pack?.generated?.seed ? `seed ${pack.generated.seed} (${inner})` : inner;
 }
 
