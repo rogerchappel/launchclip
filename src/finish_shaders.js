@@ -111,7 +111,8 @@ vec4 effect(vec2 p) {
     border = min(border, dot(0.5 * (a + b) - q, normalize(b - a)));
   }
   vec3 pane = px(clamp(a * s, vec2(0.5), u_res - 0.5)).rgb;
-  vec3 c = mix(pane, px(p).rgb, 0.25);
+  // The pane colour over the picture: shapes and type inside a pane still read.
+  vec3 c = mix(pane, px(p).rgb, 0.6);
   float l = luma(c);
   c = clamp(mix(vec3(l), c, 1.6), 0.0, 1.0);
   // Backlight: a glow that falls off toward the lead.
