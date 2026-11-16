@@ -626,6 +626,19 @@ member. Graphics draw byte for byte as before. `test/members.test.js` proves
 the path with a stand-in member; each member module brings its own parity
 fixture, tests and 9:16 sample.
 
+Member modules shipped:
+
+- `value-card` (`kit/core/member-value-card.mjs`): `{value ≤ 10, label?}`, a
+  value or multiplier too long for a badge ("$7.15", "×3.2", "1,250") set in
+  the display face at 1.9× the label in the member's colour, the label under
+  it. Its width is measured from the label size, so the fit that keeps labels
+  over the brand's meta floor also keeps the longest value inside its card,
+  and node-graph widens every card to it while icon-grid fails a cell it cannot
+  fill rather than overflow. A badge or count past three characters, or a
+  `value` on a graphic, now names it. Proof: `h-node-graph-value-card-portrait`,
+  `h-icon-grid-value-card-portrait`, `test/member_value_card.test.js`, and
+  `examples/story/members-value-9x16` (the bakery's morning in numbers).
+
 ## 11. Phases
 
 1. **`node-graph` and `fluid-motion.mjs`** (this PR): flock, wave, idle, impact
