@@ -54,6 +54,8 @@ function measureOverflow() {
       const s = getComputedStyle(a);
       if (s.overflowX !== 'visible' || s.overflowY !== 'visible' || s.clipPath !== 'none') { box = a.getBoundingClientRect(); break; }
     }
+    // A run wholly outside its box is parked off stage (carousels, tickers), not overflowing.
+    if (r.left >= box.right || r.right <= box.left || r.top >= box.bottom || r.bottom <= box.top) continue;
     const by = Math.max(r.right - box.right, box.left - r.left, r.bottom - box.bottom, box.top - r.top);
     if (by > 1) found.push({text: text.slice(0, 60), by: Math.round(by)});
   }
@@ -93,10 +95,12 @@ async function main(argv) {
       const file = path.join(FIXTURES, files[i]);
       try {
         const base = await measure(page, file, opts.baseline);
-        const baseBy = new Map(base.map(item => [item.text, item.by]));
+        // Repeated texts (weekday labels) pair up in document order.
+        const keyed = list => { const seen = new Map(); return list.map(item => { const n = seen.get(item.text) ?? 0; seen.set(item.text, n + 1); return [`${item.text}#${n}`, item]; }); };
+        const baseBy = new Map(keyed(base).map(([key, item]) => [key, item.by]));
         for (const body of opts.fonts) {
-          for (const item of await measure(page, file, body)) {
-            if (item.by > (baseBy.get(item.text) ?? 0) + 2) report.added.push({fixture: files[i], body, ...item, baseline: baseBy.get(item.text) ?? 0});
+          for (const [key, item] of keyed(await measure(page, file, body))) {
+            if (item.by > (baseBy.get(key) ?? 0) + 2) report.added.push({fixture: files[i], body, ...item, baseline: baseBy.get(key) ?? 0});
           }
         }
         report.fixtures += 1;
