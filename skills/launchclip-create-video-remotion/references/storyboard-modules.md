@@ -2484,7 +2484,7 @@ params:
 events: build, node-<id>, converge
 
 ### drop-grid (keeps captions)
-Things pile up as they are said: 1–40 cards, coins or tiles drop into a grid one by one ("10 times a day": ten cards land), each with a weighted fall, a squash on contact, a contact shadow and a puff of dust, over faint empty slots; an optional counter climbs with every landing, and confetti bursts when the grid fills. Time each drop to its word with params.times.
+Things pile up as they are said: 1–40 cards, coins or tiles drop into a grid one by one ("10 times a day": ten cards land), each with a weighted fall, a squash on contact, a contact shadow and a puff of dust, over faint empty slots; an optional counter climbs with every landing, and confetti bursts and the grid ripples when it fills. Landed items rock gently on their base. Time each drop to its word with params.times.
 params:
 - count: 1–40 items (or items)
 - items: [label ≤ 16 | {label?, image? (assets/… photo)}] 1–40 (or count)

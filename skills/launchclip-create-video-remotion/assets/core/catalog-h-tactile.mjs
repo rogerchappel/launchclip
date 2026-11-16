@@ -5,7 +5,9 @@
 //   drop-grid     cards, coins or tiles drop into a grid one by one, each
 //                 timed to a word ("10 times a day": ten cards), with a fall,
 //                 a squash on contact, a contact shadow and a puff of dust;
-//                 an optional counter climbs with every landing
+//                 an optional counter climbs with every landing; landed
+//                 items rock gently on their base, and the full grid
+//                 ripples as it fills (docs/FLUID_MOTION_RFC.md §3, §4)
 //   live-counter  a big figure that keeps ticking up for the whole scene,
 //                 with milestones that stamp and burst as it passes them and
 //                 an optional delta chip ("+2,312 today")
@@ -20,6 +22,7 @@
 import {progress, timingRules} from './catalog-b-base.mjs';
 import {VARIANT_PARAM, FORMAT_PARAM, createHBase, fitText, inkOn, numberFormat, r2, rt, textWidth, titleBlock, toneColor} from './catalog-h-base.mjs';
 import {abs, chromeNodes, chromeOps, countOps, countSamples, el, label, popOps, riseOps, set, tw} from './catalog-h-view.mjs';
+import {idleAmplitude, idleOps, waveOps} from './fluid-motion.mjs';
 import {TACTILE, burstNodes, burstOps, burstParticles, dropOps, pulseOps, shadowNode, shadowOps, stampOps, tactileDepth, tactileFace} from './tactile.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
@@ -36,6 +39,8 @@ const DROP_VARIANTS = Object.freeze(['cards', 'coins', 'tiles']);
 export const DROP_MAX = 40;
 const DROP_SHAPE = {cards: 0.78, coins: 1, tiles: 1};
 const DROP_CUE = {cards: 'thud', coins: 'tick', tiles: 'snap'};
+// Things with weight rock on their base rather than float: a share of the idle bob and tilt.
+const DROP_IDLE = Object.freeze({bob: 0.3, tilt: 0.7});
 
 function dropResolve(params, ctx) {
   const b = createHBase('drop-grid', params, ctx, {allowed: ['count', 'items', 'columns', 'times', 'cadence', 'counter', 'title', 'source', 'tone', 'slots', 'at'], variants: DROP_VARIANTS});
@@ -129,7 +134,9 @@ function dropResolve(params, ctx) {
   const finale = burstParticles(`${b.id}|finale`, `${b.id}-fin`, {x: ox - gap / 2 + gridW / 2, y: oy + gridH * 0.4, count: 18, spread: Math.min(W, gridW) * 0.6, size: u(16), colors: burstColors(b), kind: 'confetti'});
   b.events.push({id: `${b.id}-filled`, name: 'filled', time: rt(last.land + 0.02), role: 'emphasis', cue: 'sparkle', sfx: 'burst'});
 
+  const idle = idleAmplitude(ctx?.grammar ?? null, b.unit);
   const content = {variant: b.variant, cells, itemW, itemH, gap, dropH, fill, ink, labelSize, counter, counterY: chrome.top, finale, finaleAt: rt(last.land + 0.02),
+    idle: {bob: r2(idle.bob * DROP_IDLE.bob), tilt: r2(idle.tilt * DROP_IDLE.tilt)},
     slots: p.slots === undefined ? true : check.bool(p.slots, 'params.slots'), title: chrome.title, source: chrome.source, buildEnd: last.land};
   const minText = Math.min(counter ? counter.size : Infinity, counter?.label ? counter.label.size : Infinity, chrome.title ? chrome.title.size : Infinity);
   return b.finish(content, {minTextPx: Number.isFinite(minText) ? minText : b.min.key});
@@ -149,7 +156,7 @@ function dropItem(model, cell, i) {
     const y = cell.image && c.variant === 'cards' ? r2(h * 0.76) : r2((h - c.labelSize * 1.2) / 2);
     kids.push(label(null, 0, y, w, cell.label, {size: c.labelSize, family: fonts.body, color: c.ink, align: 'center', weight: 750}));
   }
-  return el('div', `${id}-i${i}`, {...abs(cell.x, cell.y, w, h), ...face}, kids);
+  return el('div', `${id}-i${i}`, abs(cell.x, cell.y, w, h, {transformOrigin: '50% 100%'}), [el('div', `${id}-i${i}-idle`, {...abs(0, 0, w, h), ...face}, kids)]);
 }
 
 function dropView(model) {
@@ -173,6 +180,7 @@ function dropView(model) {
 function dropTimeline(model, ops) {
   const {id, start, motion, unit: u} = model;
   const c = model.content;
+  const settle = rt(motion.exitStart - 0.05);
   chromeOps(model, ops);
   if (c.counter) {
     const k = c.counter;
@@ -191,13 +199,16 @@ function dropTimeline(model, ops) {
     shadowOps(ops, `${id}-sh${i}`, start, cell.time);
     dropOps(ops, `${id}-i${i}`, start, cell.time, c.dropH);
     burstOps(ops, cell.particles, start, cell.land);
+    idleOps(ops, `${id}-i${i}-idle`, start, rt(cell.land + TACTILE.squash + TACTILE.settle + 0.1), settle, c.idle);
   });
   burstOps(ops, c.finale, start, c.finaleAt);
+  // The full grid ripples once, left to right, after the last item has settled.
+  waveOps(ops, c.cells.map((cell, i) => ({id: `${id}-i${i}`, x: cell.x})), rt(c.buildEnd + TACTILE.squash + TACTILE.settle + 0.06), r2(Math.min(14 * u, c.itemH * 0.12)));
 }
 
 export const dropGrid = {
   id: 'drop-grid',
-  describe: 'Things pile up as they are said: 1–40 cards, coins or tiles drop into a grid one by one ("10 times a day": ten cards land), each with a weighted fall, a squash on contact, a contact shadow and a puff of dust, over faint empty slots; an optional counter climbs with every landing, and confetti bursts when the grid fills. Time each drop to its word with params.times.',
+  describe: 'Things pile up as they are said: 1–40 cards, coins or tiles drop into a grid one by one ("10 times a day": ten cards land), each with a weighted fall, a squash on contact, a contact shadow and a puff of dust, over faint empty slots; an optional counter climbs with every landing, and confetti bursts and the grid ripples when it fills. Landed items rock gently on their base. Time each drop to its word with params.times.',
   params: {count: `1–${DROP_MAX} items (or items)`, items: `[label ≤ 16 | {label?, image? (assets/… photo)}] 1–${DROP_MAX} (or count)`, columns: 'columns 1–10 (optional; default the layout with the biggest items)',
     times: `[number] 1–${DROP_MAX}, seconds from scene start, one per item, rising: each drop on its word (optional)`, cadence: 'seconds between drops 0.05–1.5 (optional, when times is not set; default fits the scene)',
     counter: 'true | {prefix? ≤ 4, suffix? ≤ 8 ("×"), label? ≤ 30, from?} a big count above the grid that climbs with each landing (optional)', title: 'string ≤ 60 (optional)', source: 'string ≤ 80 (optional)',
