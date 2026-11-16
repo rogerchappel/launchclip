@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {existsSync, readFileSync, readdirSync} from 'node:fs';
 import {resolveStory} from '@launchclip/core/story.mjs';
-import {PLAN_TELLS, TELL_REGISTRY, planTells} from '@launchclip/core/tells.mjs';
+import {FRAME_TELLS, PLAN_TELLS, TELL_REGISTRY, frameTells, planTells} from '@launchclip/core/tells.mjs';
 import {tellsGate} from '../src/direction_guardrails.js';
 
 const fonts = {display: '"Anton", sans-serif', body: '"Manrope", sans-serif', meta: '"JetBrains Mono", monospace', serif: '"Instrument Serif", serif'};
@@ -28,7 +28,7 @@ test('the registry: every entry dated, typed and sourced; plan rules have a dete
     assert.match(t.added, /^\d{4}-\d{2}-\d{2}$/, t.id);
     assert.equal(t.retired, null, t.id);
     assert.ok(t.fix && t.source, t.id);
-    assert.equal(Boolean(t.detector), t.applies === 'plan', `${t.id}: plan rules have a detector, frame rules wait for their phase`);
+    assert.ok(t.applies === 'script' || t.detector, `${t.id}: plan and frame rules have a detector`);
   }
   assert.deepEqual(TELL_REGISTRY.filter(t => t.applies === 'frame').map(t => t.id), ['accent-everywhere', 'buried-raster', 'unblended-media']);
 });
@@ -160,7 +160,13 @@ const CASES = [
     {scenes: [scene('s', 'photo-scene', 0, 3, {scene: {params: {prompt: 'a blank poster on a wall'}}})]}],
   ['organic-mask',
     {scenes: [scene('s', 'photo-scene', 0, 3, {view: box([], {clipPath: `polygon(${Array.from({length: 16}, (_, i) => `${i}% ${i * 2}%`).join(', ')})`})})]},
-    {scenes: [scene('s', 'photo-scene', 0, 3, {view: box([], {clipPath: 'polygon(0 0, 100% 0, 100% 100%, 0 100%)'})})]}]
+    {scenes: [scene('s', 'photo-scene', 0, 3, {view: box([], {clipPath: 'polygon(0 0, 100% 0, 100% 100%, 0 100%)'})})]}],
+  ['hero-missing',
+    {story: story({direction: {product: 'x'}}), scenes: [scene('a', 'concept-card', 0, 3, {scene: {hero: 'a.title'}}), scene('b', 'concept-card', 3, 6)]},
+    {story: story({direction: {product: 'x'}}), scenes: [scene('a', 'concept-card', 0, 3, {scene: {hero: 'a.title'}}), scene('b', 'concept-card', 3, 6, {scene: {hero: 'b.chart'}})]}],
+  ['signature-thin',
+    {story: story({direction: {signature: {detail: 'a stopwatch hand', element: 'stopwatch'}}}), scenes: [scene('a', 'concept-card', 0, 3, {scene: {params: {icon: 'stopwatch'}}}), scene('b', 'concept-card', 3, 6, {scene: {params: {icon: 'stopwatches'}}}), scene('c', 'concept-card', 6, 9)]},
+    {story: story({direction: {signature: {detail: 'a stopwatch hand', element: 'stopwatch'}}}), scenes: [scene('a', 'concept-card', 0, 3, {scene: {params: {icon: 'stopwatch'}}}), scene('b', 'concept-card', 3, 6, {scene: {hero: 'stopwatch'}}), scene('c', 'concept-card', 6, 9, {view: box([], {}, 'stopwatch')})]}]
 ];
 
 test('every plan detector has a hit and a near miss', () => {
@@ -201,4 +207,45 @@ test('the gate reads the resolved story: an emoji in a planned card fails it', (
   const gate = tellsGate(resolved, {words});
   assert.equal(gate.status, 'failed');
   assert.equal(gate.findings[0].rule, 'emoji-icons');
+});
+
+// Frame rules: synthetic frames, one hit and one near miss each.
+const image = (width, height, paint) => {
+  const pixels = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) { const [r, g, b] = paint(x, y); pixels.set([r, g, b, 255], (y * width + x) * 4); }
+  return {width, height, pixels};
+};
+const ground = [25, 23, 20], peach = [255, 176, 138];
+const accentFrame = (share) => image(100, 100, (x) => (x < share * 100 ? peach : ground));
+// A media window at (30,30) 40×40 on the ground: a hard edge and a lifted black, or a soft edge into the ground.
+const mediaFrame = (blended) => image(100, 100, (x, y) => {
+  if (x < 30 || x >= 70 || y < 30 || y >= 70) return ground;
+  if (blended) { const d = Math.min(x - 30, 69 - x, y - 30, 69 - y); return d < 8 ? ground : (x + y) % 2 ? [200, 200, 200] : ground; }
+  return (x + y) % 2 ? [220, 220, 220] : [90, 90, 90];
+});
+const FRAME_CASES = [
+  ['accent-everywhere',
+    {frames: [{id: 's1', at: 1, image: accentFrame(0.3)}]},
+    {frames: [{id: 's1', at: 1, image: accentFrame(0.05)}]}],
+  ['buried-raster',
+    {plates: [{id: 'plate', at: 0, path: 'plate', dim: 0.9, raw: 0.2, dimmed: 0.002, minimum: 0.01}]},
+    {plates: [{id: 'plate', at: 0, path: 'plate', dim: 0.9, raw: 0.2, dimmed: 0.03, minimum: 0.01}]}],
+  ['unblended-media',
+    {media: [{id: 's2-media', at: 2, rect: {x: 30, y: 30, width: 40, height: 40}, image: mediaFrame(false)}]},
+    {media: [{id: 's2-media', at: 2, rect: {x: 30, y: 30, width: 40, height: 40}, image: mediaFrame(true)}]}]
+];
+const frameRules = (input) => frameTells({story: story(), ...input}).map(f => f.rule);
+
+test('every frame detector has a hit and a near miss', () => {
+  assert.deepEqual(FRAME_CASES.map(([id]) => id).sort(), FRAME_TELLS.map(t => t.id).sort(), 'a case for every frame rule');
+  for (const [id, hit, miss] of FRAME_CASES) {
+    assert.ok(frameRules(hit).includes(id), `${id} fires on its hit: ${JSON.stringify(frameTells({story: story(), ...hit}))}`);
+    assert.ok(!frameRules(miss).includes(id), `${id} stays quiet on its near miss`);
+  }
+});
+
+test('accent-everywhere: a direction moment may be rich, and an accent that is the ground never fires', () => {
+  const frames = [{id: 's1', at: 1, image: accentFrame(0.3)}];
+  assert.deepEqual(frameRules({story: story({direction: {moments: ['s1']}}), frames}), []);
+  assert.deepEqual(frameTells({story: story({brand: {colors: {bg: '#ffb08a', accent: '#ffb08a'}}}), frames}), []);
 });
