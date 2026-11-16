@@ -360,6 +360,40 @@ effect here draws in `pixel` mode, which is what the retro look wants anyway.
   Checks: purity covers the loops, `test/backgrounds.test.js` the plan,
   compile and level, and three background parity fixtures (`bg-weather-rain`,
   `-snow`, `-fireflies`). The contact sheet gains two weather sheets.
+- **Masks (phase 8):** fourteen silhouette effects are vendored and
+  catalogued as cue effects, listed in `VFX_MASKED`: electrified, glitch,
+  scanner, halo and hit-flash, and the nine status loops (confused, sleep,
+  stunned, charmed, rage, haste, slowed, frozen, burning). hit-flash drops
+  its hero-rig pose track. The rest of the (m) column (freeze, frost-nova,
+  warp-in/out, dissolve-burn, blink-in/out, divine-shield …) is left for the
+  catalogue batches: several draw fixed geometry sized for upstream's
+  24 × 38 hero (freeze's ice block), so each needs a look on a real mask.
+  A cue's `mask` is `"module"` (the scene's card: its model rect, filled in
+  the theme's panel colour) or `"cast:<id>"` (a cast member as drawn at the
+  cue's moment). Without one, a cast scene's first member, else the card.
+  The silhouette is not an alpha read back from the page: both renderers
+  are DOM, so the plan rasterises it. A cast member's drawing
+  (`drawCharacter` at its state at that time) is flattened to polygons by the
+  same walk `characters/bounds.mjs` uses for reach, scan-filled at the art
+  grid in each shape's own colour, strokes stamped as lines
+  (`kit/core/vfx/mask.mjs`, `silhouette.mjs`). The pixels go in the plan as
+  base64 (the mask is where a pixel is set), so the page carries them as
+  data and the runtime bundles no character code. A masked cue sits on its
+  silhouette's feet; `x`/`y` are refused. `vfxPlan(story, {resolve})` takes
+  the module resolver from the renderers, because the plan cannot import
+  `modules.mjs` without an import cycle. A status loop defaults to `align:
+  "start"` and sounds on its moment (aligning a loop on its peak would start
+  it up to 1.7 s early, over the scene before). Pairs: glitch, shimmer,
+  chime, impact, boing, pop, sparkle, thud, whoosh, tape-stop, riser.
+  Without an actor (sheets, peaks, purity), the driver's `resolveOptions`
+  hands the effect a stand-in figure, as upstream's previews use their
+  stock hero. Limits: the mask is still (taken at the cue's start, not
+  following later poses), ignores the set in front of a seated character,
+  and is placed in frame pixels, so a world-camera move or a shot zoom will
+  slide it off its subject. Checks: `test/vfx_masks.test.js` (rasteriser,
+  wire round trip, cast silhouettes inside their reach, validation, plan,
+  runtime byte for byte, page) and story parity on `vfx-masks-9x16`. The
+  contact sheet draws the new rows round the stand-in.
 
 ## 5. Phases
 

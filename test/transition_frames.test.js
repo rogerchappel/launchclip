@@ -194,21 +194,21 @@ test('HyperFrames plays the tweens the check evaluates, and GSAP gives the same 
         assert.equal(lines.length, tweens.length, `${name} ${entry.id}: ${lines.length} GSAP tweens for ${tweens.length} layer tweens`);
         tweens.forEach((tw, k) => {
           const {duration, ease, immediateRender, ...to} = lines[k].to;
-          assert.deepEqual(lines[k].from, gsapVars(tw.prop, tw.from), `${name} ${entry.id} tween ${k} from`);
-          assert.deepEqual(to, gsapVars(tw.prop, tw.to), `${name} ${entry.id} tween ${k} to`);
+          assert.deepEqual(lines[k].from, gsapVars(tw.prop, tw.from, tw.args), `${name} ${entry.id} tween ${k} from`);
+          assert.deepEqual(to, gsapVars(tw.prop, tw.to, tw.args), `${name} ${entry.id} tween ${k} to`);
           assert.equal(immediateRender, false);
           assert.equal(ease, tw.ease);
           assert.ok(Math.abs(duration - tw.duration) < 1e-4 && Math.abs(lines[k].at - tw.at) < 1e-4, `${name} ${entry.id} tween ${k} timing`);
         });
         // The same list on a GSAP timeline, as HyperFrames seeks it, against the state Remotion draws.
-        const proxy = {...LAYER_IDENTITY, iris: 0, wipeT: 0, wipeR: 0, wipeB: 0, wipeL: 0};
+        const proxy = {...LAYER_IDENTITY, mask: 0, iris: 0, wipeT: 0, wipeR: 0, wipeB: 0, wipeL: 0};
         const tl = gsap.timeline({paused: true});
         for (const tw of tweens) tl.fromTo(proxy, {[tw.prop]: tw.from}, {[tw.prop]: tw.to, duration: tw.duration, ease: tw.ease, immediateRender: false}, tw.at);
         for (let frame = Math.round(entry.start * FPS); frame < Math.round(entry.renderEnd * FPS); frame += 1) {
           const t = frame / FPS;
           tl.seek(t, false);
           const state = layerStateAt(t, entry.tweens, getEase);
-          for (const prop of ['opacity', 'x', 'y', 'scale', 'blur', 'glow', 'rackIn', 'veil', 'dip', 'focus', 'iris', 'wipeT', 'wipeR', 'wipeB', 'wipeL']) {
+          for (const prop of ['opacity', 'x', 'y', 'scale', 'blur', 'glow', 'rackIn', 'veil', 'dip', 'focus', 'iris', 'wipeT', 'wipeR', 'wipeB', 'wipeL', 'mask', 'flip']) {
             // A finished iris or wipe is no clip at all.
             if (state[prop] === null) continue;
             assert.ok(Math.abs(proxy[prop] - state[prop]) < 1e-3, `${name} ${entry.id} ${prop} at frame ${frame}: GSAP ${proxy[prop]}, layerStateAt ${state[prop]}`);
