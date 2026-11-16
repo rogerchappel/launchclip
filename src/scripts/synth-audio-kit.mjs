@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // Synthesize an original, license-free SFX kit, an optional music bed and an
 // optional ambience loop with local FFmpeg only. Nothing is downloaded and no
-// provider is called, so the output can ship inside any project.
+// provider is called, so the output can ship inside any project. A genre bed
+// plays sampled instruments only when `launchclip sound fetch` installed them
+// (sound/sampler.mjs; all CC0); AUDIO-KIT.json then lists them under music.credits.
 // Usage:
 //   node synth-audio-kit.mjs <out-dir> [--palette <id>] [--seed <s>]
 //     [--only whoosh,keystroke] [--with chime,ding]
 //     [--bed <seconds>] [--genre <id>] [--bpm 100] [--key A] [--progression 0]
-//     [--kick-from <s>] [--kick-to <s>] [--ambience <bed>]
+//     [--kick-from <s>] [--kick-to <s>] [--ambience <bed>] [--instruments <dir>]
 // With no --palette the historic families render exactly as they always
 // have; with one, every family is drawn in that palette from the seed. With
 // no --genre the bed is the historic pad and kick; with one, it is that
@@ -25,6 +27,8 @@ import { palette as paletteTimbre } from '@launchclip/core/sound/palettes.mjs';
 import { AMBIENCE_BEDS, HISTORIC_SFX_FAMILIES, SFX_FAMILY_NAMES, SOUND_PALETTES } from '@launchclip/core/sound/options.mjs';
 import { ambienceSpec } from '@launchclip/core/sound/ambience.mjs';
 import { genreBed } from '@launchclip/core/sound/music.mjs';
+import { assignZones, mixNotes, sampleCredits, sampledPlan } from '@launchclip/core/sound/sampler.mjs';
+import { installedInstruments, instrumentsDir, loadZone } from '../music/samples.js';
 
 const run = promisify(execFile);
 
@@ -547,16 +551,45 @@ export function genreGraph(bed, { seconds, kickFrom, kickTo, gains }) {
   return parts.join(';\n');
 }
 
-/** Render a genre bed to <directory>/bed.wav; returns the BEATS fields. */
-export async function synthGenreBed(directory, { seconds, genre, bpm, key, progression, kickFrom = 0, kickTo = seconds, seed = DEFAULT_KIT_SEED }) {
+/**
+ * One stem's cycle played on a sampled instrument (sound/sampler.mjs), through
+ * the stem's own filter, to a float WAV like the synth stems.
+ */
+async function sampledCycle(bed, entry, { instrument, dynamic }, { dir, seed, work, index }) {
+  const assigned = assignZones({ notes: entry.notes, instrument, dynamic, seed: `${seed}|${bed.genre}|${entry.name}` });
+  const audio = new Map();
+  for (const { zone } of assigned) if (!audio.has(zone.file)) audio.set(zone.file, await loadZone(dir, sampledLibrary(instrument), zone.file));
+  const [left, right] = mixNotes(assigned, { cycle: bed.cycle, instrument, audio: (zone) => audio.get(zone.file) });
+  const interleaved = new Float32Array(left.length * 2);
+  for (let i = 0; i < left.length; i++) { interleaved[2 * i] = left[i]; interleaved[2 * i + 1] = right[i]; }
+  const raw = path.join(work, `${index}-${entry.name}.f32`);
+  await writeFile(raw, Buffer.from(interleaved.buffer));
+  const file = path.join(work, `${index}-${entry.name}.wav`);
+  await ffmpeg(['-f', 'f32le', '-ar', String(RATE), '-ac', '2', '-i', raw, '-af', entry.filter, '-c:a', 'pcm_f32le', file]);
+  return file;
+}
+
+const sampledLibrary = (instrument) => sampleCredits([instrument])[0].library;
+
+/**
+ * Render a genre bed to <directory>/bed.wav; returns the BEATS fields plus
+ * {instruments: {stem: instrument}, credits, fallback}. Stems a genre plays
+ * sampled (sampler.mjs SAMPLED_GENRES) use the installed instruments in
+ * `instruments` (a folder; nothing is downloaded); missing ones stay synth.
+ */
+export async function synthGenreBed(directory, { seconds, genre, bpm, key, progression, kickFrom = 0, kickTo = seconds, seed = DEFAULT_KIT_SEED, instruments = instrumentsDir() }) {
   const bed = genreBed({ genre, bpm, key, progression }, seed);
+  const sampled = sampledPlan(bed, installedInstruments(instruments));
   const work = path.join(directory, '.stems');
   await mkdir(work, { recursive: true });
   const cycles = await pool(bed.stems, 4, async (entry, index) => {
     const script = path.join(work, `${index}.filtergraph`);
-    const file = path.join(work, `${index}-${entry.name}.wav`);
-    await writeFile(script, stemCycleGraph(bed, entry));
-    await ffmpeg(['-filter_complex_script', script, '-map', '[o]', '-ac', '2', '-c:a', 'pcm_f32le', file]);
+    let file = path.join(work, `${index}-${entry.name}.wav`);
+    if (sampled.stems[entry.name]) file = await sampledCycle(bed, entry, sampled.stems[entry.name], { dir: instruments, seed, work, index });
+    else {
+      await writeFile(script, stemCycleGraph(bed, entry));
+      await ffmpeg(['-filter_complex_script', script, '-map', '[o]', '-ac', '2', '-c:a', 'pcm_f32le', file]);
+    }
     const lufs = await measureLufs(file);
     return { file, gain: lufs === null ? 0 : 10 ** ((entry.level - lufs) / 20) };
   });
@@ -567,7 +600,9 @@ export async function synthGenreBed(directory, { seconds, genre, bpm, key, progr
   await rm(work, { recursive: true, force: true });
   const beats = [];
   for (let t = 0; t < seconds; t += bed.beat) beats.push(Math.round(t * 1000) / 1000);
-  return { file: output, bpm: bed.bpm, key: bed.key, genre: bed.genre, progression: bed.progression, beat_seconds: bed.beat, beats, downbeats: beats.filter((_, i) => i % 4 === 0), kick_from: kickFrom, kick_to: kickTo };
+  const used = Object.fromEntries(Object.entries(sampled.stems).map(([stem, { instrument }]) => [stem, instrument]));
+  const fallback = sampled.missing.length ? `music: ${bed.genre} plays synth in place of ${sampled.missing.join(', ')} (not installed); \`launchclip sound fetch core\` downloads the sampled instruments` : null;
+  return { file: output, bpm: bed.bpm, key: bed.key, genre: bed.genre, progression: bed.progression, beat_seconds: bed.beat, beats, downbeats: beats.filter((_, i) => i % 4 === 0), kick_from: kickFrom, kick_to: kickTo, instruments: used, credits: sampleCredits(Object.values(used)), fallback };
 }
 
 async function synthBed(directory, options) {
@@ -634,10 +669,13 @@ async function main(argv) {
     const kickTo = Number(flag('--kick-to') ?? seconds);
     const genre = flag('--genre');
     const bed = genre
-      ? await synthGenreBed(musicDir, { seconds, genre, bpm: flag('--bpm') !== undefined ? Number(flag('--bpm')) : undefined, key: flag('--key'), progression: flag('--progression') !== undefined ? Number(flag('--progression')) : undefined, kickFrom, kickTo, seed })
+      ? await synthGenreBed(musicDir, { seconds, genre, bpm: flag('--bpm') !== undefined ? Number(flag('--bpm')) : undefined, key: flag('--key'), progression: flag('--progression') !== undefined ? Number(flag('--progression')) : undefined, kickFrom, kickTo, seed, instruments: flag('--instruments') ?? instrumentsDir() })
       : await synthBed(musicDir, { seconds, bpm: Number(flag('--bpm') ?? 100), key: flag('--key') ?? 'A', kickFrom, kickTo });
-    kit.music = { file: bed.file, bpm: bed.bpm, ...(genre ? { genre: bed.genre, key: bed.key, progression: bed.progression } : {}) };
-    await writeFile(path.join(outDir, 'BEATS.json'), `${JSON.stringify({ schema_version: 'launchclip.beats.v1', source: bed.file, ...bed }, null, 2)}\n`);
+    const { instruments: sampledStems, credits, fallback, ...beatFields } = bed;
+    kit.music = { file: bed.file, bpm: bed.bpm, ...(genre ? { genre: bed.genre, key: bed.key, progression: bed.progression, instruments: sampledStems, credits, fallback } : {}) };
+    if (credits?.length) kit.license = `Original procedural synthesis, except music stems played on sample libraries (${credits.map((credit) => `${credit.title}, ${credit.licence}`).join('; ')}).`;
+    if (fallback) console.error(fallback);
+    await writeFile(path.join(outDir, 'BEATS.json'), `${JSON.stringify({ schema_version: 'launchclip.beats.v1', source: bed.file, ...beatFields }, null, 2)}\n`);
   }
   await writeFile(path.join(outDir, 'AUDIO-KIT.json'), `${JSON.stringify(kit, null, 2)}\n`);
   console.log(JSON.stringify({ sfx: cues.map((cue) => cue.name), music: kit.music?.file ?? null }));

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Background and panel parity (docs/KIT_CONTRACTS.md, "Backgrounds and panels").
+// Background, panel and look parity (docs/KIT_CONTRACTS.md, "Backgrounds and panels";
+// look-*.json fixtures patch story.look).
 //
 //   node scripts/parity-backgrounds.mjs [--only bg-mesh,panel-glass-light] [--out qa/parity-backgrounds]
 //

@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 // Media tests: the ones that drive FFmpeg, render with Remotion or HyperFrames,
 // or record with Playwright. They take most of the suite's wall-clock time, so
 // the default `npm test` skips them; `npm run test:media` runs every file that
@@ -12,3 +13,6 @@ export const MEDIA_SKIP = "media test: run with npm run test:media (LAUNCHCLIP_M
 export function mediaSkip(reason = false) {
   return MEDIA_TESTS ? reason : MEDIA_SKIP;
 }
+
+/** False when ffmpeg runs, else a skip reason: the plain test jobs have no ffmpeg. */
+export const ffmpegMissing = () => (spawnSync("ffmpeg", ["-version"]).status === 0 ? false : "ffmpeg is not installed");

@@ -46,6 +46,7 @@ import { GRADE_LOOK_DEFAULTS, GRADE_TONE_DEFAULTS } from './grade.mjs';
 import { FONT_REGISTRY, FONT_ROLE_DEFAULTS, registeredFamily } from './fonts.mjs';
 import { fitContrast, hexToOklab, hexToOklch, hueGap, oklchToHex } from './oklch.mjs';
 import { brandFonts, brandIsEmpty, brandRoles, normalizeBrand } from './style-brand.mjs';
+import { isPale } from './palette.mjs';
 import { drawBackdrops, drawMotionFeel } from './style-feel.mjs';
 import { MIN_AVOID_DISTANCE, styleDistance, styleTraits } from './style-distance.mjs';
 import { STYLE_FRAME_POSITIONS, STYLE_ICON_STYLES, STYLE_ILLUSTRATIONS, STYLE_SCHEMA, STYLE_V3_DEFAULTS, STYLE_WORLD_TIMES, contrastRatio, validateStylePack } from './style.mjs';
@@ -792,7 +793,8 @@ function buildPack(hex, toneName, t, fixed, attempt, ctx) {
   const pack = {
     schema: STYLE_SCHEMA,
     name: `seed-${hex}`,
-    brand: { colors: palette.colors, fonts },
+    // A drawn palette is already a working one (patterns and contrast are tuned to its ground); a brand's raw pale ground is not (palette.mjs).
+    brand: { colors: palette.colors, fonts, ...(isPale(ctx.roles.bg) ? {} : { palette: 'as-given' }) },
     motion: feel ? { grammar: feel.grammar, transition_preference: feel.transitions, feel: feel.feel } : { grammar, transition_preference: preference },
     camera,
     // A plate only draws where the story draws a background (plates.mjs scenePlateSpec).

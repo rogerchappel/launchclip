@@ -110,6 +110,70 @@ and hand chimes for ding, chime and ping; `cinematic` uses gran cassa, gong and
 the suspended-cymbal crescendo for impact and riser. A sampled hit still passes
 through the palette's finishing chain and room, so palettes keep their colour.
 
+**Shipped (phase 5).** orchestral-lite and acoustic-pluck play sampled when
+the instruments are installed:
+
+| Genre | Stem | Instrument | Library |
+|---|---|---|---|
+| orchestral-lite | strings | violins-sustain (22 zones, 2 layers) | VSCO 2 CE |
+| | pizz | violins-pizz (44 zones, 2 layers, 2 round robins) | VSCO 2 CE |
+| | celli | celli-sustain (16 zones, 2 layers) | VSCO 2 CE |
+| | timpani | timpani (5 drums, 2 layers, 2 round robins) | VSCO 2 CE |
+| | celesta | glockenspiel (6 zones) | VSCO 2 CE |
+| acoustic-pluck | guitar | nylon-guitar (48 zones) | FreePats Spanish Classical Guitar |
+| | pad | violins-sustain | VSCO 2 CE |
+| | bass | contrabass-pizz (36 zones; the jazz bass) | VSCO 2 CE |
+| | shaker | shaker (8 round robins) | VSCO 2 CE |
+
+The kick and rim stay synth. `launchclip sound fetch <core|all|library|instrument>`
+prints the size, asks (`--yes` skips the question) and downloads 152.8 MB for
+`core`, 147 MB on disk: VSCO 2 CE file by file from one pinned commit, the
+guitar as its 4.7 MB 7z (unpacked with the system `tar`, else `7z`; only the
+audio files are kept). Every file is checked against its SHA-256 in
+`kit/core/sound/instruments.mjs`, and a mismatch keeps nothing. The fetch
+then writes `$LAUNCHCLIP_CACHE/instruments/index.json` (instruments, zones,
+roots, layers, round robins, libraries). The sampler (`kit/core/sound/sampler.mjs`)
+plays a stem's notes into one cycle; `synth-audio-kit.mjs` writes that cycle
+through the stem's filter and from there it is balanced, looped, enveloped and
+sent to the room like a synth stem. `finish` passes the instruments folder,
+re-renders the kit when the index changes, writes `renders/credits.txt` and
+lists the credits in AUDIO-MANIFEST.json (`music.credits`) and in the sound
+stage's details (`credits`). An instrument that is not installed plays synth
+and the run warns once, naming `launchclip sound fetch core`.
+
+Differences from the plan above:
+
+- **Libraries.** Two, both CC0 1.0: VSCO 2 CE and the FreePats Spanish
+  Classical Guitar. The jazz bass is VSCO's solo double bass pizzicato, not
+  Karoryfer's. No CC BY library is used yet, so `credits.txt` carries only the
+  thanks lines; a library with `credit_required` would put its line first.
+- **Roots are measured.** VSCO names notes an octave low (its `C1` sounds
+  MIDI 36) and its timpani by drum; roots were measured (YIN for pitched
+  zones, the strongest mode for timpani: 41.45, 46.8, 49.5, 52.4, 54.6). Two
+  contrabass zones whose measured pitch disagreed with their name were left out.
+- **Manifest** is `instruments.mjs`, not `.json`, so the skills' copies of
+  `kit/core` carry it.
+- **Transposition** reads the decoded recording with a 4-point Hermite
+  interpolator in JS rather than an FFmpeg soxr pass per (file, semitones);
+  zones are decoded once per render with FFmpeg's default resampler.
+- **Sustain** past the recording loops 35–80 % of it with a 150 ms
+  equal-power crossfade. The seam is not aligned to the pitch period and
+  there is no gain matching: section strings hide both. A solo sustain will
+  need the grain splice. The held notes in today's recipes (at most two bars)
+  fit inside the 9–15 s recordings, so the loop rarely runs.
+- **Not built:** pan, the darkening lowpass for a one-layer instrument played
+  soft, the Karplus-Strong presets as a guitar fallback (`pluck` stays the
+  additive synth), the other genres' mappings, palette hits, and `sound sheet`.
+
+Tests (`test/sound_sampler.test.js`): every zone is pinned and every mapped
+stem exists; the index lists an instrument only when all its zones are on
+disk at their pinned size; fetch asks first and keeps nothing with the wrong
+SHA-256; round robins alternate, the soft layer is picked for soft notes and a
+transposed note is in tune; sampled stems are byte-identical for a seed; a
+10 s extended sustain drifts under 1.5 dB with no jump over 0.05; credits
+name the libraries and instruments; with nothing fetched the bed renders on
+synth with one fallback line.
+
 ## 2. Sound directing
 
 Today the score drops the room before a big hit, pans detail to where it happens
@@ -137,6 +201,42 @@ with the few-millisecond inter-channel delay `scoreGraph` already uses.
 Whooshes travel in the camera's direction. Ambience is wide; the bed is
 moderately wide; a `hush` narrows everything towards centre, so the hit after
 it feels wide.
+
+**Shipped (phase 6).** `scenes[i].sound` is validated in `kit/core/story.mjs`
+(`sceneSoundProblems`, so the file stays import-free) and carried out by
+`kit/core/sound/directing.mjs`. Where it departs from the table above:
+
+- **Meanings.** `hush.at` is the line or hit the hush sets up; the quiet runs
+  `for` seconds before it (a word anchor works). `prelap` sits on the scene that
+  arrives early, `tail` on the scene that rings over, `into` on the scene being
+  entered. A cut takes a prelap or a tail, not both; `into: silence` takes no prelap.
+- **One curve, not per-scene segments.** The ambience is still one loop per
+  story, so a prelap or tail moves where the cut's level change happens on one
+  curve multiplied into the bed, ambience and score room (`levels`), and
+  `directCues` moves the arriving scene's first sounds (within 0.5 s before to
+  0.25 s after its cut) early by the prelap. A plain cut crossfades over 0.1 s.
+  Levels are evaluated every 10 ms (`asetnsamples` before `volume`), because
+  `eval=frame` alone steps every 21 ms and blurs a 40 ms hush fade.
+- **focus is a bed gain, not a duck depth.** `sidechaincompress` cannot change
+  over time, so music lifts the bed +7 dB and fx lowers it 3 dB against the
+  default duck (about −13 dB), in speech and pauses alike.
+- **space.** The score mix's reverb send follows the curve (×0, ×1, ×2). The
+  plain mix has no send, so it gains one only where a scene is `hall`; `dry`
+  cannot remove the room a palette bakes into its files.
+- **into.** riser and swell (the riser at 0.6×) end on the cut, tape-stop runs
+  out on it, hit is an impact on it, all `source: "directing"`; silence gates the
+  beds and cues (not the voice) for two frames before the cut.
+- **Checks.** The plan-and-pace counts are story warnings when any scene has a
+  sound block: one hush from 20 s, two from 45 s, one of 0.4 s or more (the held
+  breath), a prelap or tail from 30 s, and no words inside a hush. After the mix,
+  `measureDirecting` re-reads the mix file: each hush ≥ 18 dB under the mix
+  median with a transient within 0.1 s of its end, and each prelap or tail
+  half way across (in dB) at least a quarter of its lead on the planned side of
+  the cut (the ramp is linear in gain, so the dB midpoint comes early). It is
+  measured only where the two scenes' bed levels differ by 3 dB or more, and a
+  loud cue on the cut can hide it: the whole mix is measured, not the bed alone. Failures are finish warnings; the
+  results go in `qa/sfx.json` under `directing`. Pairing every sound with
+  something on screen stays the phase 3 pairs check, run before directing moves cues.
 
 ## 3. SFX typed and placed
 
@@ -369,6 +469,36 @@ licence. MMAudio's weights were released for non-commercial use. LaunchClip
 never ships or downloads either model; the user brings them, and `finish`
 prints the licence each generated sound came under.
 
+**Shipped (phase 7).** The adapter is `launchclip sfx seed --provider comfy`
+(and `sfx reroll`), on a base shared with the plate and draft provider
+(`src/comfy/`): `client.js` (loopback only unless `--comfy-allow-remote`;
+health from `/system_stats` and `/object_info`, which must list every node
+class and model file the template needs; `/prompt`, `/history`, `/view`,
+`/interrupt`; a job-time and download cap), `templates.js` (templates in
+`src/comfy/templates/`, inputs bound by name and type, a licence allowlist)
+and `generate.js` (the cache keyed by the bound workflow, so by prompt, model
+files, seed and every other value, and a JSONL ledger line per generation).
+Setup is in `docs/guide/comfyui.md`. Differences from the plan above:
+
+- **Seed, not a render flag.** Sounds are generated into the SFX library once,
+  like ElevenLabs takes, rather than per render with `--sfx comfy`; every
+  render then uses the library.
+- **The template lives with the others**, `src/comfy/templates/sfx-stable-audio.json`,
+  not under `kit/core/sound/`.
+- **The licence is an opt-in.** Stability AI Community is off the open-licence
+  allowlist, so `--allow-model-licence stability-ai-community` is required;
+  without it nothing is sent. The licence is stored per family and per take
+  in `library.json`, and `finish` adds it to `AUDIO-MANIFEST.json`'s licence
+  line and its notes.
+- **The ledger is the library's** (`<library>/generation-log.jsonl`), since
+  SFX belong to the library, not a project.
+- **Families with no classifier row** (riser, tally, tape-stop, glitch,
+  error-buzz, pen-scribble) keep every take that survives processing.
+- **Open:** the MMAudio video-to-audio template (a custom node, so not
+  shipped); progress over `/ws` (we poll `/history`); pinning model files by
+  hash (the API does not expose one); a real run (not yet made: no ComfyUI
+  or weights on the build machine).
+
 ## 8. Phases, effort and tests
 
 | Phase | Work | Effort |
@@ -378,7 +508,7 @@ prints the licence each generated sound came under.
 | 3 | `classify.js`; family-name test; pairs table and check | 3 days |
 | 4 | KS pluck in `music.mjs`; sonification for the seven chart modules | 4 days |
 | 5 | `sampler.mjs`, `sound fetch`, index, credits; orchestral-lite and acoustic-pluck sampled | 6–8 days |
-| 6 | `sound` block in the planner (hush, prelap, tail, into, space, focus) and the mixer | 4 days |
+| 6 | `sound` block in the planner (hush, prelap, tail, into, space, focus) and the mixer (shipped, see §2) | 4 days |
 | 7 | ComfyUI SFX adapter | 3 days |
 
 Tests:
@@ -399,8 +529,8 @@ Tests:
 
 | Item | Source path | Licence | Use | Notices |
 |---|---|---|---|---|
-| Zone pick, round-robin, velocity gain, release, steady-section search, grain splice, SFZ parse | lemo-opuscar `core/audio/sampler.py` | MIT | port to JS | MIT notice in `sampler.mjs` header and `THIRD_PARTY_NOTICES.md` |
-| Instrument registry (folders, kinds, release times, timpani roots) | same file, `REG` | MIT | port data | same |
+| Zone pick, round-robin, velocity gain, release, steady-section search, grain splice, SFZ parse | lemo-opuscar `core/audio/sampler.py` | MIT | phase 5: written fresh from this RFC's description; no code copied | none needed |
+| Instrument registry (folders, kinds, release times, timpani roots) | same file, `REG` | MIT | phase 5: not used; our registry and measured roots | none |
 | Noise-IR room | same file, `room()` | MIT | compare only; we have our own IR | none |
 | Karplus-Strong waveguide and presets | `core/audio/pluck.py` | MIT | port to JS | MIT notice |
 | Library names, licences, credit wording | `core/audio/INSTRUMENTS.md` | CC BY-NC 4.0 (docs) | facts only; our text, wording from each library's own LICENSE | none |
@@ -410,6 +540,6 @@ Tests:
 | `sfx_type`, HPSS, onset and cut-on-beat measures | rea-video `rea_video/audio.py` | Apache-2.0 | port to JS, changes stated | Apache-2.0 header; NOTICE line "rea-video, Copyright 2026 JuneYaooo" |
 | Spectrum, waveform, bass-reactive, log scaling | remotion-skills `skills/remotion-markup/audio-visualization.md` | none stated | rewrite from the ideas | none |
 | HTTP API, node names | ComfyUI | GPL-3.0 | none copied; HTTP only, our own workflow JSON | none |
-| Sample libraries | VSCO 2 CE, VCSL, FreePats, Karoryfer | CC0 1.0 | downloaded by the user | optional thanks |
+| Sample libraries | VSCO 2 CE (`sgossner/VSCO-2-CE` at 4403009), FreePats Spanish Classical Guitar 2019-06-18; later VCSL, Karoryfer | CC0 1.0 (each library's own LICENSE / cc0.txt checked) | downloaded by the user with `launchclip sound fetch` | optional thanks, written to `renders/credits.txt` |
 | Salamander Grand Piano V3; MuldjordKit | upstream | CC BY 3.0; CC BY 4.0 | downloaded by the user | required credit lines in `renders/credits.txt` |
 | Stable Audio Open 1.0; MMAudio | user-supplied | Stability AI Community License; non-commercial weights | user brings them | licence printed per sound |

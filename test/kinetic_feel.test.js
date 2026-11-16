@@ -18,7 +18,8 @@ import {getEase, springEase} from '@launchclip/core/motion.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const paper = {colors: {bg: '#f2eee6', primary: '#e2412b', accent: '#1f6feb', ink: '#f2eee6', paper: '#151515'}, fonts: {display: 'bricolage-grotesque', body: 'inter', meta: 'jetbrains-mono'}};
+// A paper look on purpose: as given, not moved off the full frame (kit/core/palette.mjs).
+const paper = {palette: 'as-given', colors: {bg: '#f2eee6', primary: '#e2412b', accent: '#1f6feb', ink: '#f2eee6', paper: '#151515'}, fonts: {display: 'bricolage-grotesque', body: 'inter', meta: 'jetbrains-mono'}};
 const dark = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
 const card = (id, start, end, extra = {}) => ({id, module: 'stat-card', start, end, params: {value: '12', label: 'videos a week', source: 'Example log'}, ...extra});
 const story = (extra = {}, scenes = [card('a', 0, 4), card('b', 4, 8, {in: {type: 'whip-pan', dur: 0.26, direction: 'left'}}), card('c', 8, 12, {in: {type: 'dot-wipe', dur: 0.5}})]) =>

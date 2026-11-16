@@ -1,0 +1,32 @@
+{
+  "schema_version": "launchclip.comfy-template.v1",
+  "id": "plate-flux-schnell",
+  "kind": "image",
+  "description": "A still plate from a text prompt in four steps: FLUX.1 schnell from the single-file fp8 checkpoint, core ComfyUI nodes only.",
+  "model": {
+    "name": "FLUX.1 schnell",
+    "licence": "apache-2.0",
+    "source": "https://huggingface.co/black-forest-labs/FLUX.1-schnell",
+    "files": [
+      { "node": "CheckpointLoaderSimple", "input": "ckpt_name", "file": "flux1-schnell-fp8.safetensors" }
+    ]
+  },
+  "inputs": {
+    "prompt": "an empty sunlit studio, wide shot",
+    "width": 1344,
+    "height": 768,
+    "seed": 0,
+    "steps": 4,
+    "prefix": "launchclip/plate"
+  },
+  "output_nodes": ["7"],
+  "workflow": {
+    "1": { "class_type": "CheckpointLoaderSimple", "inputs": { "ckpt_name": "flux1-schnell-fp8.safetensors" } },
+    "2": { "class_type": "CLIPTextEncode", "inputs": { "text": "{{prompt}}", "clip": ["1", 1] } },
+    "3": { "class_type": "CLIPTextEncode", "inputs": { "text": "", "clip": ["1", 1] } },
+    "4": { "class_type": "EmptySD3LatentImage", "inputs": { "width": "{{width}}", "height": "{{height}}", "batch_size": 1 } },
+    "5": { "class_type": "KSampler", "inputs": { "model": ["1", 0], "positive": ["2", 0], "negative": ["3", 0], "latent_image": ["4", 0], "seed": "{{seed}}", "steps": "{{steps}}", "cfg": 1, "sampler_name": "euler", "scheduler": "simple", "denoise": 1 } },
+    "6": { "class_type": "VAEDecode", "inputs": { "samples": ["5", 0], "vae": ["1", 2] } },
+    "7": { "class_type": "SaveImage", "inputs": { "images": ["6", 0], "filename_prefix": "{{prefix}}" } }
+  }
+}

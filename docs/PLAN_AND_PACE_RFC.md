@@ -79,6 +79,11 @@ required on bespoke.
 | `sound.breath` | "Give the viewer one held moment, 0.4 s or more, where nothing moves." | Plan: no tween runs in the window except idle (the motion check reads the ops). Render: stillness spans it. A declared breath is exempt from `max_still`. |
 | `sound.drop` | "If the music has a drop, start the track so it lands on the signature." | `audio.music` offset is solved from the track's measured section change (§4.3). |
 
+The silences, prelaps and breath are planned per scene instead, as
+`scenes[i].sound` (hush, prelap, tail), and checked in the mix: see
+[IMMERSIVE_SOUND_RFC.md](IMMERSIVE_SOUND_RFC.md) §2, "Shipped (phase 6)".
+`treatment.sound` does not take them.
+
 The planner prompt lines go in a new `treatmentLines()` beside
 `guardrailLines()`. The style pack gains `avoid` tokens so `banned` starts
 from the look, not from nothing.
@@ -188,6 +193,52 @@ What shipped, and where it departs from the text above:
   and the pace change rule wait for the beat data of §4.3.
   Phase 3 now measures tempo, beats and cuts on beat on references; the
   gate does not read them yet.
+
+### Built so far (phase 7, the render)
+
+- **Gate on renders.** `renderPaceGate` in `src/quality_gates.js`, filed by
+  `finish` as `pace` (with `source: "render"`, and the plan's verdict kept
+  as `plan`) when the render's motion report exists; prototypes keep the
+  plan's. Events are the render's cuts, motion bursts and flow onsets
+  (`hookEventSeconds` over the whole runtime); frozen spans are the motion
+  report's still spans, the closing hold left out. `slow-hook`, `flat-hook`
+  and `frozen-frame` fail here, as planned.
+- **Planned against measured** (`renderPaceFindings` in
+  `kit/core/pace-check.mjs`, constants in `RENDER_PACE`; all warnings):
+  `planned-events-missing` (over a quarter of the plan's events show no
+  change within 0.25 s), `hook-lost` (the render opens with fewer events
+  than the plan and fewer than the band), `cut-mid-motion` (a planned cut
+  scoring over 1.2 on the render's 12 fps curve, read two samples before
+  the cut so the cut's own spike is left out), `cuts-off-beat` (with
+  `BEATS.json` and four cuts or more, fewer on a beat within 70 ms than
+  the format's `cuts_on_beat`, and for short motion than 1.8× chance) and
+  `cuts-on-every-beat` (eight in a row). The beat-strength condition of
+  the table is taken as given: the beats are the music finish put under
+  the video.
+- **Bands.** Each `CADENCE_TARGETS` pace gains `cuts_on_beat` (the table's
+  row; `animated` 0.5) and short motion `chance_lift: 1.8`. A measured
+  profile's `hook_rate_ratio` p10, `max_event_gap_seconds` p90 and
+  `cuts_on_beat_ratio` p10 tighten the band (`profilePace`); a seed
+  profile's do not, so a calm style's longer gaps stand.
+- **Profiles.** The three fields are profile measures (`PACE_MEASURES` in
+  `kit/core/profiles.mjs`). `launchclip profile measure` reads the first
+  two from the motion report (a fixed 4 s hook window, like `hook_events`)
+  and cuts on the beat from the reference's audio when its beat strength
+  is 0.3 or more. Seed profiles carry the table's values. The four
+  measured profiles (`animated-explainer-reel`, `paper-diorama`,
+  `ui-explainer-reel`, `ui-steady-reel`) were not re-measured: their
+  reference videos are not kept in the repository or on the machine this
+  ran on. Their notes say the pace fields wait for a re-measure, and
+  `kit/profiles/PROVENANCE.md` is regenerated.
+- **Scorecard.** `eval:formats` gains `hook ×`, `max gap`, `on beat` and
+  `plan/rndr` (`renderedPace` in `eval/scorecard.mjs`): events from scene
+  detection at the event threshold, cuts from the highest, freezes from
+  `freezedetect` (one second and up, so a short-form `max_still` of 0.5 s
+  is only partly seen there), beats from the sample's `BEATS.json`.
+  `plan/rndr` only warns.
+- **Not yet:** the pace change rule, `bar:` section starts on the render,
+  and a scorecard run with the new columns (renders are rationed across
+  sessions; the columns are tested on synthetic measures).
 
 ## 3. Techniques catalogue
 
@@ -364,6 +415,80 @@ them. On our renders the measured ease must match the grammar's role; an
 ease-in measured on an entrance is the `entrance-ease` rule, caught from
 pixels when the ops missed it (a custom module).
 
+#### Built so far (phase 5, entrances)
+
+What shipped, and where it departs from the text above:
+
+- **Code.** `classifyEntrances`, `entranceAccumulator`, `entranceStats` and
+  `analyzeEntrancesFile` in `src/render_motion_analysis.js`, every
+  threshold in `ENTRANCE_CLASSIFY`. `ENTRANCE_EASE_ROLES` maps a measured
+  ease to the grammar role it plays (ease-out → enter, ease-in → exit,
+  in-out → move, linear → none).
+- **Decode.** 180 px wide at 30 fps, not ≤ 15: at 15 fps a start is known
+  only to 67 ms and the stagger test is one 30 fps frame. Frames are
+  reduced one at a time to per-cell stats (means, detail, changed share,
+  change size), so no pixels are kept; only the first 120 s are read.
+- **Shots.** The RFC leaves "a shot" open: a frame pair with at least half
+  the cells active and three times both neighbours splits shots.
+- **Continuous layer.** The slow-drift test counts only 1 s windows in which
+  the cell is never active, so an element that enters and stays is not
+  drift. Drifting cells still take part in events (they are never active,
+  so they make none); only the busy cells (active > 70%) are left out.
+- **Events.** New: an event over 60% of the frame is a transition or a
+  camera move and is dropped. Each event has a role from the luma detail
+  in its cells before and after (≥ 1.25× more after is an entrance, 1.25×
+  less an exit, else a change), so exits and colour changes do not count
+  as entrances.
+- **Ease.** The thresholded span misses an ease's slow ends and keeps
+  bridged noise, which shifts the midpoint (a power2.inOut bell read as
+  ease-out): the activity curve is the raw change less its noise floor
+  (the lower of the medians over six pairs each side), and the span runs
+  out from the curve's peak, up to six pairs past the thresholded span,
+  while the activity stays above 5% of the peak. The entrance's duration
+  is that span; its start (`at`, which staggers read) is where the curve
+  first crosses a quarter of its peak, between frame pairs, because the
+  first thresholded pair jitters with an item's size on a slow ease-in.
+  The RFC's cuts hold: on renders ease-in shares sit at 0.19–0.29,
+  power2.inOut CVs at 0.61–0.79 and linear CVs at 0.17–0.37.
+- **Kinds** are `draw-on`, `slide`, `scale` and `fade` (the last when
+  nothing else matches). The first frame read for travel and width is the
+  first with half the final presence (a cell whose mean moved more than 10
+  levels): earlier frames hold a few bright cells whose centroid wanders.
+  A slide must also travel a quarter of its own extent on that axis, not
+  only 2% of the frame: a blurred shrink-in drifts up to 7% of its size,
+  a slide about 100%. Only draw-ons join into one draw-on: staggered items
+  whose interval equals their duration would otherwise join.
+- **Stagger.** Entrances like the first (kind, size, duration) are taken in
+  order while each gap stays within 40% of the first gap, so a shot with
+  several runs of items gives several sequences; the interval is the mean
+  gap between starts.
+- **Profile fields** land in each reference's `energy` (they describe
+  motion, not cuts) and, combined across references (medians, mean mixes),
+  in `reference_stats.energy`. `grammarFromEntrances` in
+  `src/style_reference.js` writes `motion.grammar` as `{base, ...overrides}`:
+  `duration.enter` from `entrance_seconds`, `stagger` as
+  `stagger_interval_seconds ÷ MODULE_STAGGER_SECONDS` (0.28 s, the median
+  element-level module default), and `ease.enter` from the ease at least
+  half the entrances share (in-out → power2.inOut, linear → none; ease-out
+  keeps the preset's own ease, ease-in is never copied). `finish`'s style
+  gate skips the pass.
+- **The RFC test** (`test/entrance_classifier.test.js`, a media test):
+  kinetic-words beats (`stack`, the `scale` entrance: opacity, scale and
+  blur on one ease) at staggers of 0.3, 0.45 and 0.6 s, with the grammar's
+  enter ease set to power3.out, power2.in, power2.inOut and none, rendered
+  at 360×640 by both renderers. Ease role right for 48/48 beats in
+  HyperFrames and 47/48 in Remotion (one linear beat read as in-out); every
+  interval within 0.011 s. Each scene ends one stagger after its last beat,
+  so every beat enters for the same time: a longer last entrance starts
+  later on a slow ease and pulled the 0.3 s interval a frame off. The
+  `rise` entrance is not a fixture: its mask hides the start of the motion,
+  so its pixels show less ease-in than the ops plan (a linear rise reads as
+  in-out). Synthetic unit tests cover the four eases, intervals, the four
+  kinds, exits and the continuous layer. Analysis takes about 1.5 s for 9 s
+  of video.
+- **Not yet built:** planned-vs-measured eases on our renders and the
+  `entrance-ease` rule from pixels (phase 7).
+
 ### 4.3 Tempo, beats, SFX and sync
 
 STFT at 22,050 Hz, n_fft 1024, hop 256 (11.6 ms). Harmonic/percussive split by
@@ -486,6 +611,39 @@ For trimming footage, Shorts from a long form, and `finish`'s cut snap
 
 On our renders: the score of each planned cut against the motion curve. A cut
 scoring > 1.2 (mid-move, off the beat) warns as `cut-mid-motion`.
+
+#### Built so far (phase 6, calm cuts)
+
+- **Scorer.** `kit/core/calm-cut.mjs`: `CALM_CUT` (the constants above,
+  one reason each), `energyAccumulator` / `motionEnergy` (the curve from grey
+  frames, mask boxes left out, 3-tap smoothed), `calmCut` (the §4.4 search and
+  score; `null` when nothing in range is known, so the caller keeps its own
+  cut) and `cutMotionScore` (motion + beat terms, no target term, for the
+  render-side `cut-mid-motion` check). `src/motion_curve.js` reads a video's
+  curve (`readMotionCurve`, streamed, so an hour of footage stays out of
+  memory) and builds a story-time curve from the footage scenes a story plays
+  (`storyMotionCurve`: track-0 scenes whose `params.media` is a video, from
+  their `sourceStart`; unknown elsewhere).
+- **Tags.** `beat` means within a quarter beat of one (the raw beat offset
+  below 0.25, not the weighted term). The p90 is the whole curve's.
+- **`finish` snap.** `snapStory` takes `motion`. Where the curve is known, a
+  cut searches ±0.25 s (the snap tolerance, not ±30% of the scene: snap only
+  nudges) inside each scene's minimum length, scored with the scene length as
+  the step; `qa/beat-sync.json` records the grid as `downbeat`, `beat` or
+  `calm`. Where it is unknown (no footage), cuts snap to the grid as before,
+  so motion-only stories are unchanged. Snap runs only on un-narrated
+  stories, so this reaches motion stories that play clips.
+- **Shorts from a long form.** `launchclip cutdown` reads the long form's
+  render (`renders/final.mp4`, else `draft.mp4`) and `BEATS.json` when they
+  exist. Each edge of the Short moves inside the silence around its first or
+  last word, at most 0.75 s out (a Short opens on its words), with the long
+  form's scene starts and base-edit joins as free seams. `CUTDOWN.json`
+  records `calm_edges`. The beat-map path (`cutShorts`) plans before any
+  render, so it has no curve yet; the roadmap's Shorts-from-a-long-video
+  entry points at `calmCut` for its edges.
+- **Not yet:** overlay masks from the story's caption and logo boxes (the
+  reader takes `mask`, nothing passes one), and trimming footage inside a
+  scene.
 
 ## 5. Phases, effort and tests
 

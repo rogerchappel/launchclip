@@ -63,6 +63,8 @@ import type { CalculateMetadataFunction } from "remotion";
 // @ts-ignore plain ESM from kit/core
 import { placeholderModel, resolveModule } from "../core/modules.mjs";
 // @ts-ignore plain ESM from kit/core
+import { behaviourTransform, sceneBehaviour } from "../core/behaviours.mjs";
+// @ts-ignore plain ESM from kit/core
 import { holdTime, layerStateAt, layerStyle, sceneWindows, smearFilterId, smearFilterSvg } from "../core/transitions.mjs";
 // @ts-ignore plain ESM from kit/core
 import { getEase } from "../core/motion.mjs";
@@ -85,6 +87,7 @@ import { VFX_Z, vfxPlan } from "../core/vfx/plan.mjs";
 // @ts-ignore plain ESM core module
 import { AUDIO_REACT_Z, audioReactPlan, audioReactStyle } from "../core/audio-react.mjs";
 import { VfxCanvas } from "./catalog/VfxCanvas";
+import { GlCanvas } from "./catalog/GlCanvas";
 // @ts-ignore plain ESM from kit/core
 import { worldBackdrops } from "../core/world-backdrops.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -237,6 +240,8 @@ export const PlateLayer: React.FC<{ layer: any; t: number; from?: number }> = ({
   const style = backgroundLayerStyle(layer, t) as React.CSSProperties;
   // a weather loop: the VFX painter's canvas pair in the layer's box
   if (layer.vfx) return <div style={style}><VfxCanvas plan={layer.vfx} t={t} zIndex={0} /></div>;
+  // a GL generator: one canvas the GL painter draws in the layer's box
+  if (layer.gl) return <div style={style}><GlCanvas plan={layer.gl} t={t} /></div>;
   if (!layer.video) return <div style={style} dangerouslySetInnerHTML={layer.svg ? { __html: layerSvg(layer, assetUrl) } : undefined} />;
   return (
     <div style={{ ...style, overflow: "hidden" }}>
@@ -296,7 +301,7 @@ export const WorldField: React.FC<{ blobs: any[]; tiles: any[]; t: number }> = (
 // background blobs (plates only, not in world mode); drift = the hold-drift
 // wrapper.
 type CameraProps = { placement?: any; transparent?: boolean; parallax?: any[] };
-const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean | number; field?: any[] | null; backdrop?: any; light?: any[] | null; drift?: any; zoom?: any[]; children: React.ReactNode } & CameraProps> = ({ startFrame, tweens, plate, background, freeze, field, backdrop, light, drift, zoom, placement, transparent, parallax, children }) => {
+const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean | number; field?: any[] | null; backdrop?: any; light?: any[] | null; drift?: any; behave?: any; zoom?: any[]; children: React.ReactNode } & CameraProps> = ({ startFrame, tweens, plate, background, freeze, field, backdrop, light, drift, behave, zoom, placement, transparent, parallax, children }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = (startFrame + frame) / fps;
@@ -307,7 +312,10 @@ const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; 
   const smearId = smearFilterId(`r${React.useId()}`);
   const smearing = state.smearX > 0 || state.smearY > 0;
   // freeze: true holds the first frame (the loop clone), a number holds that frame (an overview hold).
-  const content = freeze === true ? <Freeze frame={0}>{children}</Freeze> : typeof freeze === "number" ? <Freeze frame={freeze}>{children}</Freeze> : children;
+  const held = freeze === true ? <Freeze frame={0}>{children}</Freeze> : typeof freeze === "number" ? <Freeze frame={freeze}>{children}</Freeze> : children;
+  // An opt-in behaviour (kit/core/behaviours.mjs) inside the drift, as the HyperFrames #lc-behave.
+  const behaving = behave ? opsStateAt(behave.ops, "behave", t) : null;
+  const content = behaving ? <AbsoluteFill style={{ transformOrigin: `${behave.pivot.x}px ${behave.pivot.y}px`, transform: behaviourTransform(behaving), opacity: behaving.opacity ?? 1 }}>{held}</AbsoluteFill> : held;
   const own = (
     <AbsoluteFill style={{ ...style, transformOrigin: "50% 50%", ...(plate && !transparent ? { backgroundColor: background } : {}) }}>
       {field ? <AmbientField blobs={field} t={t} /> : null}
@@ -657,7 +665,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
   // Story lighting: the under group on every plate that draws a background, as the HyperFrames compiler.
   const light = React.useMemo(() => lightPlan(story), [story]);
   // The VFX layer (kit/core/vfx): effect cues over every scene and the light, under the wipes and captions.
-  const vfx = React.useMemo(() => vfxPlan(story), [story]);
+  const vfx = React.useMemo(() => vfxPlan(story, { resolve: (scene: any) => resolveModule(scene, story) }), [story]);
   const audioReact = React.useMemo(() => audioReactPlan(story), [story]);
   const lightFor = (scene: any) => (light?.under.length && (scenePlatePlan(story, scene) || sceneBackground(story, scene)) ? light.under : null);
   const plan = React.useMemo(() => cameraPlan(story, { windows, objects: sceneObjectLookup(story, (scene: any, value: any) => resolveModule(scene, value)) }), [story, windows]);
@@ -711,7 +719,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
     const sceneLayer = ({ entry, render, model }: any) => (
       <Sequence key={entry.id} name={`${entry.id} · ${entry.scene.module}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps}>
         <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background}
-          field={entry.plate && !world ? fieldFor(entry.scene) : null} backdrop={entry.plate && !world ? backdropFor(entry.scene) : null} light={entry.plate && !world ? lightFor(entry.scene) : null} drift={sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} zoom={zoomFor(entry, model)}
+          field={entry.plate && !world ? fieldFor(entry.scene) : null} backdrop={entry.plate && !world ? backdropFor(entry.scene) : null} light={entry.plate && !world ? lightFor(entry.scene) : null} drift={sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} behave={sceneBehaviour(story, entry.scene, model, { start: entry.start, end: entry.renderEnd })} zoom={zoomFor(entry, model)}
           placement={entry.plate || entry.rides ? plan.placements[entry.rides ?? entry.id] : undefined} transparent={world && (entry.plate || Boolean(entry.rides))}
           parallax={entry.plate || entry.rides ? undefined : overlayOps(plan, { start: entry.start, end: entry.renderEnd })}>
           <SceneStartFrame.Provider value={frames(entry.start)}>{render()}</SceneStartFrame.Provider>
@@ -773,7 +781,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
   // no hold drift, as in the HyperFrames compiler.
   const sceneElement = ({ entry, render, model }: any, part?: "behind" | "front") => (
     <Sequence key={part === "behind" ? `${entry.id}-behind` : entry.id} name={`${entry.id} · ${entry.scene.module}${part === "behind" ? " (behind)" : ""}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps} style={lookPlaneStyle(look, entry.scene.id) as React.CSSProperties}>
-      <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background} field={entry.plate ? fieldFor(entry.scene) : null} backdrop={entry.plate ? backdropFor(entry.scene) : null} light={entry.plate ? lightFor(entry.scene) : null} drift={part === "behind" ? undefined : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} zoom={part === "behind" ? undefined : zoomFor(entry, model)}>
+      <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background} field={entry.plate ? fieldFor(entry.scene) : null} backdrop={entry.plate ? backdropFor(entry.scene) : null} light={entry.plate ? lightFor(entry.scene) : null} drift={part === "behind" ? undefined : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} behave={part === "behind" ? undefined : sceneBehaviour(story, entry.scene, model, { start: entry.start, end: entry.renderEnd })} zoom={part === "behind" ? undefined : zoomFor(entry, model)}>
         <SceneStartFrame.Provider value={frames(entry.start)}>{render(part)}</SceneStartFrame.Provider>
       </SceneLayer>
     </Sequence>
@@ -844,7 +852,7 @@ export const calculateStoryMetadata: CalculateMetadataFunction<StoryProps> = asy
 export type ModuleReviewProps = { scene: any; story: any; customModules?: StoryProps["customModules"] };
 
 export const ModuleReview: React.FC<ModuleReviewProps> = ({ scene, story, customModules }) => {
-  ensureFonts(story.brand);
+  const fonts = ensureFonts(story.brand);
   const element = React.useMemo(() => resolveSceneElement(scene, story, { customModules }), [scene, story, customModules]);
   // Footage-led stories review the module over the (muted) base, moved by the
   // module's own camera, like the HyperFrames sceneFilter compile.
@@ -856,7 +864,8 @@ export const ModuleReview: React.FC<ModuleReviewProps> = ({ scene, story, custom
   const depth = subject.needed ? subject.depth({ entry: { scene }, model: element.model }) : "front";
   const offset = Number(scene.start);
   return (
-    <AbsoluteFill style={{ backgroundColor: story.brand?.colors?.bg ?? "#000000" }}>
+    // The brand stacks modules read (var(--lc-font-body, …)), as StoryComposition sets them.
+    <AbsoluteFill style={{ backgroundColor: story.brand?.colors?.bg ?? "#000000", fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
       {base ? <BaseLayer base={base} cameraOps={cameraOps} offset={offset} muted rooms={subject.rooms} /> : null}
       {depth !== "front" ? element.render(depth === "split" ? "behind" : undefined) : null}
       {subject.clips.length ? <SubjectLayer base={base} clips={subject.clips} ops={subject.ops} offset={offset} styles={subject.styles} /> : null}

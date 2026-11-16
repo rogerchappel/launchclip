@@ -14,11 +14,15 @@
 // pass but the grade mixes back to its input pixel, feathered
 // FINISH_PROTECT_FEATHER px.
 //
+// A look may add passes (kit/core/looks lookFinish); the story's own entries
+// win, pass by pass.
+//
 // Pure ESM that imports only kit/core siblings. Canonical copy:
 // kit/core/finish.mjs.
 
 import { STORY_FINISH_PASSES } from './story.mjs';
 import { brandFrameLayout, frameWindows } from './brand-frame.mjs';
+import { lookFinish } from './looks/index.mjs';
 
 export const FINISH_PASS_NAMES = Object.freeze(Object.keys(STORY_FINISH_PASSES));
 export const FINISH_PROTECT_FEATHER = 12;
@@ -53,7 +57,9 @@ export function finishTimes(story, at) {
  * → [{pass, params}] in chain order; grade's params are its grade value.
  */
 export function resolveFinish(story) {
-  const listed = Array.isArray(story?.finish) ? story.finish.filter((entry) => FINISH_PASS_NAMES.includes(entry?.pass)) : [];
+  const own = Array.isArray(story?.finish) ? story.finish.filter((entry) => FINISH_PASS_NAMES.includes(entry?.pass)) : [];
+  // A finish look (stained-glass, silkscreen) adds its passes; the story's own entries win, pass by pass.
+  const listed = [...own, ...lookFinish(story?.look).filter((entry) => !own.some((mine) => mine.pass === entry.pass))];
   if (!listed.some((entry) => entry.pass !== 'grade')) return null;
   const byName = new Map(listed.map(({ pass, ...params }) => [pass, params]));
   if (!byName.has('grade') && story?.grade !== undefined) byName.set('grade', story.grade);

@@ -1,0 +1,16 @@
+{
+  "describe": "GL background cells (hex) on the minimal story (dark palette)",
+  "project": "examples/story/minimal",
+  "times": [
+    1.2,
+    5.5
+  ],
+  "patch": {
+    "background": {
+      "kind": "cells",
+      "params": {
+        "type": "hex"
+      }
+    }
+  }
+}

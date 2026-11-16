@@ -114,6 +114,8 @@ export function familySource(family, libraries = [], kit = null) {
         scope: library.scope,
         dir: library.dir,
         source: entry.source ?? variants[0].source ?? "unknown",
+        // A generated family's model and licence, e.g. "Stable Audio Open 1.0 (stability-ai-community)".
+        generated: entry.licence ? `${entry.model_id ?? "unknown model"} (${entry.licence})` : null,
         files: variants.map((variant) => path.resolve(library.dir, variant.file)),
         measurements: variants.map((variant) => variant.measurements ?? null)
       };
@@ -166,7 +168,7 @@ export function resolveCueFile(cue, { libraries = [], kit = null, key, turn } = 
   if (!family) return null;
   const count = family.files.length;
   const index = Number.isInteger(turn) ? (pickVariant(count, key ?? cue.cue) + turn) % count : pickVariant(count, key ?? `${cue.cue}:${cue.at}`);
-  return { file: family.files[index], scope: family.scope, source: family.source, variant: index + 1, measurements: family.measurements[index] };
+  return { file: family.files[index], scope: family.scope, source: family.source, generated: family.generated ?? null, variant: index + 1, measurements: family.measurements[index] };
 }
 
 /** Stable event key for variant picking. */

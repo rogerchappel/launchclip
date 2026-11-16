@@ -4,7 +4,8 @@
 // medium), grade?(plan, variant) → primitives
 // ending in "out", stage?(plan) → {planes, under} (a transform per scene
 // layer and markup under them), furniture?(plan) → {html, css}, vars?(plan, frame),
-// cast?: options for the cast's drawing (toon.mjs drawToon: pins)}.
+// cast?: options for the cast's drawing (toon.mjs drawToon: pins), finish?: finish
+// passes [{pass, ...params}] the look adds to story.finish (kit/core/finish.mjs)}.
 //
 // Imports only the look files, which import only parts.mjs, so the modules
 // that draw (catalog-characters.mjs) can read a look's cast options.
@@ -20,6 +21,12 @@ import { LOOK as asciiTerminal } from './ascii-terminal.mjs';
 import { LOOK as clay2d } from './clay-2d.mjs';
 import { LOOK as isometricLayers } from './isometric-layers.mjs';
 import { LOOK as pixelArcade } from './pixel-arcade.mjs';
+import { LOOK as risograph } from './risograph.mjs';
+import { LOOK as oneBit } from './one-bit.mjs';
+import { LOOK as penPlotter } from './pen-plotter.mjs';
+import { LOOK as lidar } from './lidar.mjs';
+import { LOOK as stainedGlass } from './stained-glass.mjs';
+import { LOOK as silkscreen } from './silkscreen.mjs';
 
 export const LOOKS = Object.freeze({
   blueprint,
@@ -32,11 +39,23 @@ export const LOOKS = Object.freeze({
   'ascii-terminal': asciiTerminal,
   'clay-2d': clay2d,
   'isometric-layers': isometricLayers,
-  'pixel-arcade': pixelArcade
+  'pixel-arcade': pixelArcade,
+  risograph,
+  'one-bit': oneBit,
+  'pen-plotter': penPlotter,
+  lidar,
+  'stained-glass': stainedGlass,
+  silkscreen
 });
 
 /** What a look (story.look: a name or {name}) asks of the cast's drawing, or null: {pins: true} for paper cutout, {face: "cute"} for anime cel. */
 export function lookCastOptions(value) {
   const name = typeof value === 'string' ? value : value?.name;
   return (typeof name === 'string' && Object.hasOwn(LOOKS, name) && LOOKS[name].cast) || null;
+}
+
+/** The finish passes a look (story.look: a name or {name}) adds to story.finish, or []. */
+export function lookFinish(value) {
+  const name = typeof value === 'string' ? value : value?.name;
+  return (typeof name === 'string' && Object.hasOwn(LOOKS, name) && LOOKS[name].finish) || [];
 }

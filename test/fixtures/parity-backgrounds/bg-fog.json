@@ -1,0 +1,16 @@
+{
+  "describe": "GL background fog (fog) on the minimal story (dark palette)",
+  "project": "examples/story/minimal",
+  "times": [
+    1.2,
+    5.5
+  ],
+  "patch": {
+    "background": {
+      "kind": "fog",
+      "params": {
+        "type": "fog"
+      }
+    }
+  }
+}

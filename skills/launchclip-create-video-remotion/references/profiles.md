@@ -45,6 +45,9 @@ The profile follows the story's lane, aspect, duration and platform (`launchclip
 | change_energy_p50 | median frame-change energy | p10 (a floor) |
 | first_motion_seconds | when the first meaningful motion arrives | p90 (a ceiling) |
 | hook_events | distinct cuts or motion bursts inside the hook window | p10 (a floor) |
+| hook_rate_ratio | events per second in the opening 4 s over the rest of the video's | p10 (a floor) |
+| max_event_gap_seconds | longest stretch after the opening 4 s with no cut, motion burst or flow onset | p90 (a ceiling) |
+| cuts_on_beat_ratio | share of cuts within 70 ms of a music beat (only when the beat is strong, 0.3 and up) | p10 (a floor) |
 | still_share | share of frame pairs that barely change (mean change under 0.4 grey levels on a 72×128 grey grid at 30 fps) | p90 (a ceiling) |
 | longest_still_seconds | longest near-still run inside the video (a closing hold does not count) | p90 (a ceiling) |
 | camera_moves_per_min | whole-frame camera moves (shifts, pans, zooms) per minute | p10 (a floor) |
@@ -105,6 +108,9 @@ A motion or voiceover-motion explainer of 30 s to 3 minutes, any aspect.
 | change_energy_p50 | 0.35 | — | — |
 | first_motion_seconds | — | — | 0.35 |
 | hook_events | 3 | — | — |
+| hook_rate_ratio | 1.2 | — | — |
+| max_event_gap_seconds | — | — | 3.5 |
+| cuts_on_beat_ratio | 50% | — | — |
 
 ## paper-diorama
 
@@ -149,6 +155,9 @@ A video led by recorded product flows (product-demo scenes), 30 s to 2 minutes, 
 | change_energy_p50 | 0.35 | — | — |
 | first_motion_seconds | — | — | 0.35 |
 | hook_events | 3 | — | — |
+| hook_rate_ratio | 1.2 | — | — |
+| max_event_gap_seconds | — | — | 3.5 |
+| cuts_on_beat_ratio | 50% | — | — |
 
 ## short-motion
 
@@ -169,6 +178,9 @@ Motion graphics (with or without a voiceover) for Shorts, Reels and TikTok.
 | change_energy_p50 | 0.35 | — | — |
 | first_motion_seconds | — | — | 0.35 |
 | hook_events | 3 | — | — |
+| hook_rate_ratio | 1.3 | — | — |
+| max_event_gap_seconds | — | — | 2.5 |
+| cuts_on_beat_ratio | 60% | — | — |
 
 ## short-talking-head
 
@@ -192,6 +204,9 @@ A presenter on camera, dressed with graphics, for Shorts, Reels and TikTok.
 | change_energy_p50 | 0 | — | — |
 | first_motion_seconds | — | — | 2 |
 | hook_events | 1 | — | — |
+| hook_rate_ratio | 1.2 | — | — |
+| max_event_gap_seconds | — | — | 6 |
+| cuts_on_beat_ratio | 40% | — | — |
 
 ## story-characters
 
@@ -218,6 +233,8 @@ A fully animated story told by a cast (setup, problem, attempt, turn, resolution
 | change_energy_p50 | 0.35 | — | — |
 | first_motion_seconds | — | — | 0.35 |
 | hook_events | 3 | — | — |
+| hook_rate_ratio | 1.2 | — | — |
+| max_event_gap_seconds | — | — | 6.5 |
 
 ## ui-explainer-reel
 
@@ -292,6 +309,9 @@ A presenter-led video of 5–30 minutes in 16:9, structured in chapters.
 | change_energy_p50 | 0 | — | — |
 | first_motion_seconds | — | — | 3 |
 | hook_events | 1 | — | — |
+| hook_rate_ratio | 1 | — | — |
+| max_event_gap_seconds | — | — | 10.5 |
+| cuts_on_beat_ratio | 30% | — | — |
 
 ## youtube-talking-head-launch
 
@@ -315,3 +335,6 @@ A founder or presenter launch video, 1–5 minutes in 16:9, for YouTube and land
 | change_energy_p50 | 0 | — | — |
 | first_motion_seconds | — | — | 2 |
 | hook_events | 1 | — | — |
+| hook_rate_ratio | 1.2 | — | — |
+| max_event_gap_seconds | — | — | 6 |
+| cuts_on_beat_ratio | 40% | — | — |

@@ -8,7 +8,7 @@
 // and Remotion evaluates the same cosines per frame, so both renderers draw
 // the same pixels at any seek. Plain ESM; imports only ./ambient.mjs,
 // ./panels.mjs, ./icons.mjs, ./lighting.mjs (a lit dot grid's mask) and the
-// VFX catalogue and ramps (weather).
+// VFX catalogue and ramps (weather) and the GL generator list.
 // Contract: docs/KIT_CONTRACTS.md, "Backgrounds and panels".
 //
 // Kinds:
@@ -34,6 +34,15 @@
 //   weather         a pixel weather loop (kit/core/vfx VFX_WEATHER: rain, snow,
 //                   fog, fireflies, aurora, god-rays …) on two canvases the VFX
 //                   painter draws per frame, in a ramp of one palette role
+//   flow-field      streamlines through a seeded noise field, integrated once
+//                   at plan time; dashes travel along them (an SVG
+//                   stroke-dashoffset loop, no GL). Same seed, same art.
+//   aurora, fog, plasma, cells, caustics
+//                   GL generators (kit/core/gl-backgrounds.mjs): one WebGL2
+//                   canvas at half size, painted per frame from the time
+//                   alone in two palette roles (params.color, then accent);
+//                   type picks a variant (fog/cloud/smoke/ember, plasma/silk,
+//                   cells/facets/hex)
 //
 // Every kind but blobs takes params.fade, a mask that keeps one area calm
 // (the centre or a side), and story.panel.fill draws any of them inside a
@@ -55,8 +64,9 @@ import { ICONS, ICON_BOX, isIcon } from './icons.mjs';
 import { litMask } from './lighting.mjs';
 import { VFX_WEATHER } from './vfx/catalog.mjs';
 import { rampOf } from './vfx/plan.mjs';
+import { GL_BACKGROUND_KINDS, GL_BACKGROUND_VARIANTS } from './gl-backgrounds.mjs';
 
-export const BACKGROUND_KINDS = Object.freeze(['flat', 'gradient', 'grain-gradient', 'paper', 'geometric', 'blobs', 'dot-grid', 'mesh', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'logo-pattern', 'motif', 'texture', 'weather']);
+export const BACKGROUND_KINDS = Object.freeze(['flat', 'gradient', 'grain-gradient', 'paper', 'geometric', 'blobs', 'dot-grid', 'mesh', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'logo-pattern', 'motif', 'texture', 'weather', 'rings', 'bokeh', 'flow-field', ...GL_BACKGROUND_KINDS]);
 export const DEFAULT_BACKGROUND_KIND = 'blobs';
 
 // Tested parameter ranges, per kind: {min, max, default}. angle in degrees;
@@ -79,21 +89,25 @@ export const BACKGROUND_PARAMS = Object.freeze({
   stripes: Object.freeze({ angle: range(0, 180, 45), scale: SCALE, density: range(0.15, 0.6, 0.35), intensity: range(0, 1, 0.35), speed: SPEED }),
   topographic: Object.freeze({ density: DENSITY, scale: SCALE, intensity: INTENSITY, speed: SPEED }),
   halftone: Object.freeze({ angle: range(0, 360, 135), scale: SCALE, intensity: INTENSITY, speed: SPEED }),
-  'light-rays': Object.freeze({ angle: range(-60, 60, 0), density: DENSITY, intensity: INTENSITY, speed: SPEED }),
+  'light-rays': Object.freeze({ angle: range(-60, 60, 0), density: DENSITY, intensity: INTENSITY, speed: SPEED, sweep: range(0, 1, 0) }),
   'icon-pattern': Object.freeze({ scale: SCALE, spacing: SCALE, rotation: range(-45, 45, 0), offset: range(0, 1, 0.5), opacity: OPACITY, stroke: STROKE, speed: SPEED }),
   'icon-scatter': Object.freeze({ scale: SCALE, density: DENSITY, jitter: DENSITY, opacity: OPACITY, stroke: STROKE, speed: SPEED }),
   'logo-pattern': Object.freeze({ scale: SCALE, spacing: SCALE, offset: range(0, 1, 0.5), opacity: OPACITY, speed: SPEED }),
   motif: Object.freeze({ scale: SCALE, weight: range(0.5, 3, 1.5), opacity: range(0.04, 0.3, 0.14), angle: range(0, 180, 45), speed: SPEED }),
   texture: Object.freeze({ amount: DENSITY, scale: SCALE }),
-  weather: Object.freeze({ intensity: range(0, 1, 0.6), speed: SPEED })
+  weather: Object.freeze({ intensity: range(0, 1, 0.6), speed: SPEED }),
+  rings: Object.freeze({ density: DENSITY, intensity: INTENSITY, weight: range(0.5, 3, 1.5), bpm: range(40, 200, 100), speed: SPEED }),
+  bokeh: Object.freeze({ density: DENSITY, intensity: INTENSITY, scale: SCALE, speed: SPEED }),
+  'flow-field': Object.freeze({ seed: range(0, 99999, 0), lines: range(80, 400, 160), scale: SCALE, octaves: range(1, 4, 2), intensity: INTENSITY, speed: SPEED }),
+  ...Object.fromEntries(GL_BACKGROUND_KINDS.map((kind) => [kind, Object.freeze({ intensity: range(0, 1, 0.6), scale: SCALE, speed: SPEED })]))
 });
 // Kinds whose pattern takes a palette role (params.color).
-const COLORED = new Set(['gradient', 'grain-gradient', 'geometric', 'dot-grid', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'motif', 'weather']);
-const DEFAULT_COLOR = Object.freeze({ weather: 'primary', gradient: 'primary', 'grain-gradient': 'primary', geometric: 'primary', 'dot-grid': 'paper', stripes: 'paper', topographic: 'primary', halftone: 'primary', 'light-rays': 'paper', 'icon-pattern': 'paper', 'icon-scatter': 'paper', motif: 'paper' });
+const COLORED = new Set(['gradient', 'grain-gradient', 'geometric', 'dot-grid', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'motif', 'weather', 'rings', 'bokeh', 'flow-field', ...GL_BACKGROUND_KINDS]);
+const DEFAULT_COLOR = Object.freeze({ ...Object.fromEntries(GL_BACKGROUND_KINDS.map((kind) => [kind, 'primary'])), 'flow-field': 'primary', weather: 'primary', rings: 'primary', bokeh: 'accent', gradient: 'primary', 'grain-gradient': 'primary', geometric: 'primary', 'dot-grid': 'paper', stripes: 'paper', topographic: 'primary', halftone: 'primary', 'light-rays': 'paper', 'icon-pattern': 'paper', 'icon-scatter': 'paper', motif: 'paper' });
 // Fades keep an area calm: the pattern fades out toward it (center: a radial
 // mask; a side: a linear one). Every kind but blobs takes one.
 export const BACKGROUND_FADES = Object.freeze(['none', 'center', 'top', 'bottom', 'left', 'right']);
-export const BACKGROUND_MOTIFS = Object.freeze(['plus', 'circle', 'chevron', 'wave', 'hatch', 'crosshatch']);
+export const BACKGROUND_MOTIFS = Object.freeze(['plus', 'circle', 'chevron', 'wave', 'hatch', 'crosshatch', 'checker', 'grid']);
 export const BACKGROUND_TEXTURES = Object.freeze(['noise', 'fibre', 'canvas', 'linen']);
 export const BACKGROUND_WEATHER = Object.freeze(Object.keys(VFX_WEATHER));
 // Option params (one of a list) per kind: {key: {values, default}}.
@@ -103,7 +117,8 @@ export const BACKGROUND_OPTIONS = Object.freeze(Object.fromEntries(BACKGROUND_KI
   ...(kind === 'blobs' ? {} : { fade: option(BACKGROUND_FADES, 'none') }),
   ...(kind === 'motif' ? { shape: option(BACKGROUND_MOTIFS, 'plus') } : {}),
   ...(kind === 'texture' ? { type: option(BACKGROUND_TEXTURES, 'noise') } : {}),
-  ...(kind === 'weather' ? { type: option(BACKGROUND_WEATHER, 'rain') } : {})
+  ...(kind === 'weather' ? { type: option(BACKGROUND_WEATHER, 'rain') } : {}),
+  ...(GL_BACKGROUND_VARIANTS[kind] ? { type: option(GL_BACKGROUND_VARIANTS[kind], GL_BACKGROUND_VARIANTS[kind][0]) } : {})
 })])));
 // Kinds that draw icons take params.icons: 1–8 icon names (kit/core/icons.mjs) or "auto".
 const ICON_KINDS = new Set(['icon-pattern', 'icon-scatter']);
@@ -459,7 +474,43 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
       layers.push({ id: 'rays', box: box(cx - size / 2, cy - size / 2, size, size), svg: null,
         style: { backgroundImage: `repeating-conic-gradient(from ${round(180 + params.angle, 2)}deg at 50% 50%, ${rgba(tint, alpha)} 0deg, ${rgba(tint, 0)} ${lit}deg, ${rgba(tint, 0)} ${slice}deg)`,
           maskImage: `radial-gradient(closest-side, #000000 0%, #000000b3 30%, #00000033 62%, #00000000 92%)`, WebkitMaskImage: `radial-gradient(closest-side, #000000 0%, #000000b3 30%, #00000033 62%, #00000000 92%)` },
-        axes: { rotation: wave(3, period(30), 0) } });
+        // sweep: the fan swings wider and quicker, a beam sweeping the frame.
+        axes: { rotation: wave(3 + 22 * (params.sweep ?? 0), period(30 - 14 * (params.sweep ?? 0)), 0) } });
+      break;
+    }
+    case 'rings': {
+      // Pulse rings: one ring leaves the centre on each beat and grows past
+      // the frame's corners before it wraps, so the wrap is never seen. Each
+      // ring is a scale glide offset by a beat; still (speed 0) they rest as
+      // concentric rings.
+      const count = Math.round(4 + 4 * params.density);
+      const alpha = lay(tint, 0.12 + 0.4 * params.intensity);
+      const size = round(diag * 1.08, 2), sw = round(params.weight * 2 * u, 2);
+      const beat = speed > 0 ? 60 / params.bpm : Infinity;
+      for (let i = 0; i < count; i += 1) {
+        const moving = Number.isFinite(beat), d = moving ? size : round(size * (0.08 + (0.92 * (i + 1)) / count), 2);
+        layers.push({ id: `ring-${i}`, box: box((W - d) / 2, (H - d) / 2, d, d), svg: null,
+          style: { borderRadius: '50%', background: `radial-gradient(circle closest-side, ${rgba(tint, 0)} calc(100% - ${round(sw * 4, 2)}px), ${rgba(tint, alpha)} calc(100% - ${sw}px), ${rgba(tint, 0)} 100%)` },
+          axes: moving ? { scale: { kind: 'glide', from: 0.04, to: 1, period: round(beat * count, 4), offset: round(beat * i, 4) } } : {} });
+      }
+      break;
+    }
+    case 'bokeh': {
+      // Out-of-focus lights: soft discs with a white-hot core and a soft rim
+      // (light-sweep.mjs's bokeh falloff), drifting slowly, a few white.
+      const count = Math.round(7 + 14 * params.density);
+      const alpha = lay(tint, 0.2 + 0.45 * params.intensity);
+      const white = lay('#ffffff', 0.12 + 0.3 * params.intensity);
+      const short = Math.min(W, H);
+      for (let i = 0; i < count; i += 1) {
+        const d = round(short * params.scale * (0.06 + 0.22 * random() * random()), 2);
+        const x = W * random(), y = H * random();
+        const c = i % 4 === 1 ? '#ffffff' : tint, a = i % 4 === 1 ? white : alpha;
+        const drift = short * 0.04;
+        layers.push({ id: `bokeh-${i}`, box: box(x - d / 2, y - d / 2, d, d), svg: null,
+          style: { borderRadius: '50%', background: `radial-gradient(circle closest-side, ${rgba(c, a)} 0%, ${rgba(c, round(a * 0.9, 4))} 34%, ${rgba(c, round(a * 0.4, 4))} 66%, ${rgba(c, 0)} 100%)` },
+          axes: { x: wave(drift * (0.5 + random()), period(20 + 14 * random()), random() < 0.5 ? 0 : 1), y: wave(drift * (0.5 + random()), period(24 + 12 * random()), random() < 0.5 ? 0 : 1) } });
+      }
       break;
     }
     case 'icon-pattern': {
@@ -542,7 +593,13 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
         wave: `<path d="M0 ${h}C${round(c * 0.25, 2)} ${round(c * 0.3, 2)} ${round(c * 0.25, 2)} ${round(c * 0.3, 2)} ${h} ${h}S${round(c * 0.75, 2)} ${round(c * 0.7, 2)} ${c} ${h}" ${stroke}/>`
       };
       const style = {};
-      if (params.shape === 'hatch' || params.shape === 'crosshatch') {
+      if (params.shape === 'checker') {
+        style.backgroundImage = `repeating-conic-gradient(${rgba(tint, alpha)} 0deg 90deg, ${rgba(tint, 0)} 90deg 180deg)`;
+        style.backgroundSize = `${round(c * 2, 2)}px ${round(c * 2, 2)}px`;
+      } else if (params.shape === 'grid') {
+        const line = (angle) => `repeating-linear-gradient(${angle}deg, ${rgba(tint, alpha)} 0px, ${rgba(tint, alpha)} ${sw}px, ${rgba(tint, 0)} ${sw}px, ${rgba(tint, 0)} ${cell}px)`;
+        style.backgroundImage = `${line(0)}, ${line(90)}`;
+      } else if (params.shape === 'hatch' || params.shape === 'crosshatch') {
         const line = (angle) => `repeating-linear-gradient(${round(angle, 2)}deg, ${rgba(tint, alpha)} 0px, ${rgba(tint, alpha)} ${sw}px, ${rgba(tint, 0)} ${sw}px, ${rgba(tint, 0)} ${cell}px)`;
         style.backgroundImage = params.shape === 'hatch' ? line(params.angle) : `${line(params.angle)}, ${line(params.angle + 90)}`;
       } else {
@@ -581,6 +638,52 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
         vfx: { aw: 320, ah: 180, grid, cues: [{ effect: params.type, start: 0, end: 1e6, speed: round(speed, 4), x: ox, y: oy, seed: 1 + Math.floor(random() * 999983), palette: rampOf(tint, colors.bg) }], words: [] } });
       break;
     }
+    case 'flow-field': {
+      // Streamlines follow fbm value noise (seed 0: the story's own seed).
+      // Each dash pattern moves a whole number of its periods per loop, so the
+      // --flow glide (0 → -1) wraps seamlessly.
+      const seed = params.seed > 0 ? Math.round(params.seed) : ambientSeed(story);
+      const rand = seededRandom(seed);
+      const cornerOf = (ix, iy, o) => seededRandom((Math.imul(ix, 73856093) ^ Math.imul(iy, 19349663) ^ Math.imul(o + 1, 83492791) ^ seed) >>> 0)();
+      const smooth = (f) => f * f * (3 - 2 * f);
+      const noise = (x, y, o) => {
+        const ix = Math.floor(x), iy = Math.floor(y), fx = smooth(x - ix), fy = smooth(y - iy);
+        const a = cornerOf(ix, iy, o), b = cornerOf(ix + 1, iy, o), c = cornerOf(ix, iy + 1, o), d = cornerOf(ix + 1, iy + 1, o);
+        return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+      };
+      const octaves = Math.round(params.octaves), cell = 420 * u * params.scale;
+      const angle = (x, y) => { let sum = 0, amp = 1, norm = 0; for (let o = 0; o < octaves; o += 1) { sum += amp * noise((x / cell) * 2 ** o, (y / cell) * 2 ** o, o); norm += amp; amp /= 2; } return (sum / norm) * Math.PI * 4; };
+      const alpha = lay(tint, 0.2 + 0.5 * params.intensity);
+      const margin = 40 * u, b = over(margin), step = 7 * u, width = round(1.6 * u, 2);
+      const paths = [];
+      for (let i = 0; i < Math.round(params.lines); i += 1) {
+        let x = rand() * b.width, y = rand() * b.height;
+        const points = [`${round(x, 1)} ${round(y, 1)}`];
+        for (let k = 0; k < 60; k += 1) {
+          const a = angle(x, y);
+          x += Math.cos(a) * step; y += Math.sin(a) * step;
+          if (x < 0 || y < 0 || x > b.width || y > b.height) break;
+          if (k % 2) points.push(`${round(x, 1)} ${round(y, 1)}`);
+        }
+        if (points.length < 4) continue;
+        const dash = round((40 + rand() * 80) * u, 1), gap = round(dash * (1.5 + rand() * 2), 1), cycle = round(dash + gap, 1);
+        paths.push(`<path d="M${points.join('L')}" style="stroke-dasharray:${dash}px ${gap}px;stroke-dashoffset:calc(var(--flow) * ${round(cycle * (1 + Math.floor(rand() * 2)), 1)}px + ${round(rand() * cycle, 1)}px)"/>`);
+      }
+      layers.push({ id: 'flow', box: b, style: { '--flow': 0 },
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${b.width}" height="${b.height}" viewBox="0 0 ${b.width} ${b.height}"><g fill="none" stroke="${tint}" stroke-opacity="${alpha}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round">${paths.join('')}</g></svg>`,
+        axes: { '--flow': speed > 0 ? { kind: 'glide', from: 0, to: -1, period: round(period(14), 4), offset: 0 } : undefined } });
+      break;
+    }
+    case 'aurora': case 'fog': case 'plasma': case 'cells': case 'caustics': {
+      // One canvas over the frame at half size (the fields are soft), painted by the GL painter at absolute time × speed.
+      const second = tint === colors.accent ? colors.primary : colors.accent;
+      const want = 0.25 + 0.6 * params.intensity;
+      const alpha = Math.min(lay(tint, want), lay(second, want));
+      const rgb = (hex) => [1, 3, 5].map((i) => round(parseInt(hex.slice(i, i + 2), 16) / 255, 4));
+      layers.push({ id: 'gl', box: box(0, 0, W, H), svg: null, axes: {}, style: { opacity: alpha },
+        gl: { kind, variant: params.type ?? null, seed: Math.floor(random() * 65536), speed: round(speed, 4), scale: params.scale, w: Math.ceil(W / 2), h: Math.ceil(H / 2), colors: [rgb(tint), rgb(second)] } });
+      break;
+    }
     default:
       return null;
   }
@@ -613,7 +716,9 @@ export function layerStateAt(layer, t) {
     x: axes.x ? axisValue(axes.x, t) : 0,
     y: axes.y ? axisValue(axes.y, t) : 0,
     rotation: axes.rotation ? axisValue(axes.rotation, t) : 0,
-    scale: axes.scale ? axisValue(axes.scale, t) : 1
+    scale: axes.scale ? axisValue(axes.scale, t) : 1,
+    // flow-field: the dash glide, a CSS variable the layer's SVG reads
+    ...(axes['--flow'] ? { '--flow': round(axisValue(axes['--flow'], t), 5) } : {})
   };
 }
 
@@ -625,15 +730,16 @@ export function layerTransform(state) {
 /** A layer's full inline CSS (camelCase) at absolute time t, for the Remotion kit. */
 export function layerStyle(layer, t) {
   const b = layer.box;
-  return { position: 'absolute', left: b.x, top: b.y, width: b.width, height: b.height, transformOrigin: '50% 50%', pointerEvents: 'none', ...layer.style, transform: layerTransform(layerStateAt(layer, t)) };
+  const state = layerStateAt(layer, t);
+  return { position: 'absolute', left: b.x, top: b.y, width: b.width, height: b.height, transformOrigin: '50% 50%', pointerEvents: 'none', ...layer.style, transform: layerTransform(state), ...(state['--flow'] === undefined ? {} : { '--flow': state['--flow'] }) };
 }
 
 const kebab = (key) => key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`); // WebkitMaskImage → -webkit-mask-image
 const cssValue = (value) => (typeof value === 'number' ? `${value}px` : String(value));
 
-/** layerStyle() as an inline style string, for the HyperFrames compiler. Numbers are px except opacity. */
+/** layerStyle() as an inline style string, for the HyperFrames compiler. Numbers are px except opacity and CSS variables. */
 export function layerCss(layer, t) {
-  return Object.entries(layerStyle(layer, t)).map(([key, value]) => `${kebab(key)}:${key === 'opacity' ? value : cssValue(value)}`).join(';');
+  return Object.entries(layerStyle(layer, t)).map(([key, value]) => `${kebab(key)}:${key === 'opacity' || key.startsWith('--') ? value : cssValue(value)}`).join(';');
 }
 
 /**
@@ -653,7 +759,7 @@ export function panelFillErrors(value, path = 'panel.fill') {
   if (value === undefined || value === null) return [];
   const errors = backgroundErrors(value, path);
   if (!errors.length && value.kind === DEFAULT_BACKGROUND_KIND) errors.push(`${path}.kind cannot be blobs (the ambient field draws only on plates)`);
-  if (!errors.length && value.kind === 'weather') errors.push(`${path}.kind cannot be weather (it draws only on plates)`);
+  if (!errors.length && (value.kind === 'weather' || GL_BACKGROUND_KINDS.includes(value.kind))) errors.push(`${path}.kind cannot be ${value.kind} (it draws only on plates)`);
   return errors;
 }
 

@@ -207,7 +207,7 @@ function context({ genre, bpm, key, progression, seed }) {
  * one cycle, measures it and sets the gain, so every voicing, progression
  * and seed comes out balanced the same way.
  */
-const stem = (name, inst, notes, { role = 'always', level = -24, filter = 'anull', send = 0, stereo } = {}) => ({ name, role, level, filter, send, expr: trackPair(notes, inst, { stereo: stereo ?? (inst.includes('kick') || inst.includes('bass') ? 0 : 0.0025) }) });
+const stem = (name, inst, notes, { role = 'always', level = -24, filter = 'anull', send = 0, stereo } = {}) => ({ name, inst, notes, role, level, filter, send, expr: trackPair(notes, inst, { stereo: stereo ?? (inst.includes('kick') || inst.includes('bass') ? 0 : 0.0025) }) });
 
 // ---------------------------------------------------------------------------
 // The genres. barsPerChord(bpm), progressions [[root, quality]...] relative
@@ -457,7 +457,7 @@ export function musicChoice({ genre, bpm, key, progression } = {}, seed = 'launc
 
 /**
  * A genre bed's render plan: {genre, bpm, key, progression, beat, cycle,
- * stems: [{name, role, level, filter, send, expr: [L, R]}], master, room,
+ * stems: [{name, inst, notes, role, level, filter, send, expr: [L, R]}], master, room,
  * pump, crackle}.
  */
 export function genreBed(choice, seed = 'launchclip') {

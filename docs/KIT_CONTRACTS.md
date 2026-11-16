@@ -1074,7 +1074,7 @@ A style pack is `.launchclip/styles/<name>/style.json`:
 
 ```
 {schema: "launchclip.style.v3", name, description?,
- brand?: {colors: {bg, paper, ink, primary, accent, ...}, fonts: {display, body, meta}},
+ brand?: {colors: {bg, paper, ink, primary, accent, ...}, fonts: {display, body, meta}, palette?: auto|as-given},
  motion?: {grammar: name | {base, ...overrides}, ...},   // pass-through data
  camera?: {mode, ...}, ambient?: {level: off|subtle|standard|lively, ...},
  captions?: {preset, ...caption options,
@@ -1483,6 +1483,12 @@ underline).
   `brand_frame.sources` is ignored (a warning), like its labels.
   `validateStory` warns when a `unit-grid` or `number-line` scene has neither
   `params.source` nor a note on screen ("no source, no study claim").
+- Figure chrome (`figure: true | {label ≤ 12}`, off unless set): every
+  track-0 scene gets a section label top left ("FIG. 03", or the label as
+  prefix) and a counter step top right ("03 / 12"). `storyFrame` turns it
+  into plain `labels` and `counter`, so it is drawn by the same plan; the
+  kicker is off unless set, and a story's own labels and counter are
+  replaced (a warning). Parity: `f-frame-figure.json`.
 - `launchclip layout-check` warns (`brand-frame`) when key text or a hero
   overlaps the kicker or section label (`brandFrameFindings`).
 - Parity: `test/fixtures/parity-footage/f-frame-footage.json` (9:16 footage,
@@ -2090,13 +2096,16 @@ imports only `./ambient.mjs`, `./panels.mjs` and `./icons.mjs`, and
 | `stripes` | angle 0–180 (45), scale, density 0.15–0.6 (0.35), intensity (0.35), speed, color | the bands sway across |
 | `topographic` | density, scale, intensity, speed, color | contours drift and turn ±1° |
 | `halftone` | angle 0–360 (135), scale, intensity, speed, color | the screen sways |
-| `light-rays` | angle −60–60 (0), density, intensity, speed, color | the rays swing ±3° |
+| `light-rays` | angle −60–60 (0), density, intensity, speed, sweep 0–1 (0), color | the rays swing ±3°; sweep widens the swing to ±25° and quickens it, a beam sweeping the frame |
 | `icon-pattern` | icons, scale, spacing 0.5–2 (1), rotation −45–45 (0), offset 0–1 (0.5), opacity 0.02–0.12 (0.06), stroke 1–3 (1.75), speed, color | the tile sways |
 | `icon-scatter` | icons, scale, density, jitter 0–1 (0.5), opacity, stroke, speed, color | the scatter drifts |
 | `logo-pattern` | scale, spacing, offset, opacity, speed | the tile sways |
 | `motif` | shape, scale, weight 0.5–3 (1.5), opacity 0.02–0.2 (0.08), angle 0–180 (45, hatch only), speed, color | the motif sways |
 | `texture` | type, amount 0–1 (0.5), scale | still |
 | `weather` | type, intensity 0–1 (0.6), speed, color (primary) | a pixel weather loop plays (rain, snow, fog …); still at level off |
+| `rings` | density, intensity, weight 0.5–3 (1.5), bpm 40–200 (100), speed, color (primary) | a ring leaves the centre on every beat and grows past the corners (a scale glide per ring, a beat apart); speed 0 rests them concentric |
+| `bokeh` | density, intensity, scale, speed, color (accent) | soft discs with a hot core (light-sweep's falloff), a few white, drift slowly |
+| `flow-field` | seed 0–99999 (0: the story's seed), lines 80–400 (160), scale, octaves 1–4 (2), intensity, speed, color (primary) | dashes travel along seeded streamlines (one SVG, a `--flow` CSS variable glides 0 → −1 every 14 s ÷ speed); still at level off |
 
 `color` is `primary`, `accent` or `paper` (each kind has its own default).
 Density, intensity and grain default to 0.5 unless the table says otherwise.
@@ -2107,8 +2116,9 @@ Option params:
   field container takes a mask that is transparent there and opaque away from
   it (`fieldStyle(plan)`), so the content area stays quiet. A fade never
   raises a tone, so the gate checks the pattern's peak.
-- **`shape`** (`motif`): `plus`, `circle`, `chevron`, `wave`, `hatch` or
-  `crosshatch`.
+- **`shape`** (`motif`): `plus`, `circle`, `chevron`, `wave`, `hatch`,
+  `crosshatch`, `checker` (a conic-gradient checkerboard of two cells) or
+  `grid` (lines at 0° and 90°).
 - **`type`** (`texture`): `noise`, `fibre`, `canvas` or `linen`.
 - **`type`** (`weather`): `aurora`, `blizzard`, `cherry-blossoms`, `clouds`,
   `falling-leaves`, `fireflies`, `fog`, `god-rays`, `rain` (the default),
@@ -3065,6 +3075,32 @@ a pure function of time, in both renderers.
 `params.stage.rig` {keys [{at, rx, ry, rz, scale, x, y, ease: back|smooth}], explode {at, dur}, steps, float} turns the scene into real 3D: one camera over planes at their own heights. An element takes `lift` (px off the base; the exploded view spreads it to 3×) and `screen: true` keeps it flat on the screen. The camera is smooth at the frame rate; `steps` (15) holds the paper for two frames, like stop motion. `float` (deg, 1.6) is a hand-held drift so the diorama never rests. On a rig only `screen` elements have a box for the layout checks; the world counts as one part that fills the stage.
 
 Kinds: `cutout` (an object drawn from shapes, die-cut, with halftone or engraved `shade`, a part's `at` pops it on its word), `limb` (grows from its first point, outline until `fillAt`), `paper-fold` (hinged panels opening like a map), `paper-sheet` (a page with `flaps` folding up), `torn-strip` (`typeAt` types it like a prompt), `tape`, `callout-pin` (a leader line to `target`, projected through the rig). A cut-out's `d` takes only SVG path commands and numbers, and its text is escaped. The `paper-collage` style has no frame-blended motion blur, which would ghost the stepped paper, and is gated by the `paper-diorama` profile.
+
+## Working palette (`kit/core/palette.mjs`)
+
+Brand colours are inputs, not surfaces. `resolveStory` hands both renderers
+`brand.colors` through `workingBrand`, so Remotion and HyperFrames draw the
+same palette by construction.
+
+- `brand.palette`: `"auto"` (default) or `"as-given"`. A style pack's
+  `brand.palette` fills a story's when the story sets none.
+- `tonalRamp(colors)` → `{deep, mid, light}` from the brand hue (primary,
+  else accent, else any given colour, chroma capped at 0.06). The deep step
+  is the brand's own darkest colour when it has one at OKLCH L ≤ 0.3, else
+  L 0.22; mid is L 0.36; light is L 0.95. Deep to light spans at least 0.6.
+- `"auto"`: a pale `bg` (OKLCH L ≥ 0.85, chroma < 0.1: a tint, paper or
+  white) is never the full-frame ground. The deep step becomes `bg` and the
+  pale colour becomes `paper` (type and cards) when it has 4.5:1 on it, else
+  the old paper or the light step. `ink` that loses 4.5:1 on the new paper
+  becomes `bg`. `primary` and `accent` are lifted to 4.5:1 on the new `bg` (highlight words are type). The
+  ramp is added as `colors.deep`, `colors.mid` and `colors.light` (roles a
+  panel or background can name). A story with no `bg` (a one-colour brand)
+  gets the same. Dark, mid and saturated grounds (a yellow) stay as given.
+- `"as-given"`: the colours as written. A light look on purpose sets it
+  (`kit/styles/minimal-tech.json` does).
+- Plan check (`paleSurfaceFindings`, in the layout gate): a `pale-surface`
+  warning when 60 % or more of the frame area over the runtime sits bare on a
+  pale `bg` (footage elements cover their share of the canvas).
 
 ## Colour grade (`kit/core/grade.mjs`, `src/grade.js`)
 
