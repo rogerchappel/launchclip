@@ -13,6 +13,7 @@ import {grammarStagger} from './grammar.mjs';
 import {VARIANT_PARAM, createHBase, inkOn, mixColor, textWidth, titleBlock, toneColor} from './catalog-h-base.mjs';
 import {abs, chromeNodes, chromeOps, el, label, popOps, set, tw} from './catalog-h-view.mjs';
 import {iconNode, isIcon} from './icons.mjs';
+import {GRAPHIC_PARAM, graphicNodes, graphicSpec, graphicWidth} from './graphic.mjs';
 import {AT, RECT, r2, revealId, rt} from './catalog-i-base.mjs';
 import {beatGrid, flockOps, hashUnit, idleAmplitude, idleOps, shakeOps, waveOps} from './fluid-motion.mjs';
 
@@ -52,9 +53,13 @@ function graphResolve(params, ctx) {
   const palette = b.series(p.nodes.length);
   const nodes = p.nodes.map((raw, i) => {
     const path = `params.nodes[${i}]`;
-    const node = typeof raw === 'string' ? {label: raw} : check.obj(raw, path, ['id', 'label', 'icon'], ['label']);
+    const node = typeof raw === 'string' ? {label: raw} : check.obj(raw, path, ['id', 'label', 'icon', 'graphic']);
+    if (node.graphic !== undefined && (node.label !== undefined || node.icon !== undefined)) check.fail(`${path}.graphic`, 'replaces label and icon; give the graphic or label and icon');
+    if (node.graphic === undefined && node.label === undefined) check.fail(`${path}.label`, 'is required');
     if (node.icon !== undefined && !isIcon(node.icon)) check.fail(`${path}.icon`, `must be an icon name from kit/core/icons.mjs (got ${JSON.stringify(node.icon)})`);
-    return {id: revealId(check, node.id, `${path}.id`, `n${i}`, seen), label: check.str(node.label, `${path}.label`, 14), icon: node.icon ?? 'bot', color: palette[i], index: i};
+    // The default member is a card graphic; a planner-drawn one (RFC §10) takes its place.
+    const graphic = node.graphic === undefined ? graphicSpec(check, {kind: 'card', icon: node.icon ?? 'bot', label: node.label}, path) : graphicSpec(check, node.graphic, `${path}.graphic`);
+    return {id: revealId(check, node.id, `${path}.id`, `n${i}`, seen), label: graphic.label ?? graphic.text ?? graphic.prop ?? graphic.icon, icon: graphic.icon, graphic, color: palette[i], ink: inkOn(b.colors, palette[i]), index: i};
   });
   const hubRaw = typeof p.hub === 'string' ? {label: p.hub} : check.obj(p.hub, 'params.hub', ['label', 'icon'], ['label']);
   if (hubRaw.icon !== undefined && !isIcon(hubRaw.icon)) check.fail('params.hub.icon', `must be an icon name from kit/core/icons.mjs (got ${JSON.stringify(hubRaw.icon)})`);
@@ -69,7 +74,7 @@ function graphResolve(params, ctx) {
   if (hubPillW > W) check.fail('params.hub.label', 'is too wide for the rect; shorten it');
   const measure = s => {
     const labelSize = r2(Math.max(u(32) * s, 0)), icon = r2(u(66) * s);
-    const cardW = r2(Math.max(u(160) * s, Math.max(...nodes.map(n => textWidth(n.label, labelSize, 'body'))) + u(40) * s));
+    const cardW = r2(Math.max(u(160) * s, Math.max(...nodes.map(n => graphicWidth(n.graphic, labelSize)))));
     const cardH = r2(u(30) * s + icon + u(16) * s + labelSize * 1.25 + u(26) * s);
     const hubR = r2(u(100) * s);
     const fan = fanLayout(nodes.length, {cardW, cardH, hubR, unit: b.unit * s});
@@ -179,15 +184,18 @@ function graphView(model) {
   const pill = el('div', `${id}-hub-label`, {...abs(r2(h.x - h.pillW / 2), r2(h.y + R + 22 * u), h.pillW, h.pillH), boxSizing: 'border-box', borderRadius: 999, background: h.color, boxShadow: `0 0 ${r2(30 * u)}px ${hex2(h.color, 0.6)}`, opacity: 0}, [
     label(null, 0, r2((h.pillH - h.size * 1.2) / 2), h.pillW, h.label.toUpperCase(), {size: h.size, family: fonts.body, color: h.ink, align: 'center', weight: 800, spacing: '0.02em'})
   ]);
-  const cards = c.nodes.map(n => el('div', `${id}-node-${n.id}`, {...abs(r2(n.cx - C.width / 2), r2(n.cy - C.height / 2), C.width, C.height), opacity: 0, transformOrigin: '50% 50%'}, [
-    el('div', `${id}-node-${n.id}-idle`, {...abs(0, 0, C.width, C.height), transformOrigin: '50% 80%'}, [
-      el('div', null, {...abs(0, 0, C.width, C.height), boxSizing: 'border-box', borderRadius: r2(24 * u), background: `linear-gradient(165deg, ${mixColor(n.color, model.theme.panel, 0.16)}, ${model.theme.panel} 70%)`,
-        border: `${r2(2.5 * u)}px solid ${hex2(n.color, 0.7)}`, boxShadow: `0 ${r2(14 * u)}px ${r2(34 * u)}px ${hex2('#000000', 0.45)}, 0 0 ${r2(22 * u)}px ${hex2(n.color, 0.25)}`}),
-      el('div', `${id}-node-${n.id}-lit`, {...abs(0, 0, C.width, C.height), boxSizing: 'border-box', borderRadius: r2(24 * u), border: `${r2(4 * u)}px solid ${mixColor(n.color, '#ffffff', 0.4)}`, boxShadow: `0 0 ${r2(36 * u)}px ${n.color}, inset 0 0 ${r2(24 * u)}px ${hex2(n.color, 0.5)}`, opacity: 0}),
-      iconNode(n.icon, {x: r2((C.width - C.icon) / 2), y: r2(30 * u * C.icon / (66 * u)), size: C.icon, color: n.color, mode: 'duotone'}),
-      label(null, 0, r2(C.height - C.labelSize * 1.25 - 24 * u * C.icon / (66 * u)), C.width, n.label, {size: C.labelSize, family: fonts.body, color: c.fg, align: 'center', weight: 700, lineHeight: 1.25})
-    ])
-  ]));
+  const cards = c.nodes.map(n => {
+    // The lit rim: a card's border lights; any other graphic glows from behind.
+    const card = n.graphic.kind === 'card';
+    const lit = card
+      ? el('div', `${id}-node-${n.id}-lit`, {...abs(0, 0, C.width, C.height), boxSizing: 'border-box', borderRadius: r2(24 * u), border: `${r2(4 * u)}px solid ${mixColor(n.color, '#ffffff', 0.4)}`, boxShadow: `0 0 ${r2(36 * u)}px ${n.color}, inset 0 0 ${r2(24 * u)}px ${hex2(n.color, 0.5)}`, opacity: 0})
+      : el('div', `${id}-node-${n.id}-lit`, {...abs(0, 0, C.width, C.height), borderRadius: '50%', background: `radial-gradient(closest-side, ${hex2(n.color, 0.7)}, ${hex2(n.color, 0)})`, opacity: 0});
+    const face = graphicNodes(n.graphic, C.width, C.height, {color: n.color, ink: n.ink, fg: c.fg, panel: model.theme.panel, fonts, unit: u, icon: C.icon, labelSize: C.labelSize,
+      colors: model.theme, canvas: model.canvas, key: `${id}-g-${n.id}`, over: card ? [lit] : []});
+    return el('div', `${id}-node-${n.id}`, {...abs(r2(n.cx - C.width / 2), r2(n.cy - C.height / 2), C.width, C.height), opacity: 0, transformOrigin: '50% 50%'}, [
+      el('div', `${id}-node-${n.id}-idle`, {...abs(0, 0, C.width, C.height), transformOrigin: '50% 80%'}, card ? face : [lit, ...face])
+    ]);
+  });
   return [...chromeNodes(model), el('div', `${id}-cam`, {...abs(0, 0, W, H), transformOrigin: `${h.x}px ${h.y}px`}, [wires, hubNode, pill, ...cards])];
 }
 
@@ -245,10 +253,13 @@ function graphTimeline(model, ops) {
 export const nodeGraph = {
   id: 'node-graph',
   describe: 'A team at work: 3–8 nodes (agents, tools, steps) with icons and short labels flock out of a hub ("director", "the model") and fan above it, glowing wires draw into the hub and pulses of light run down them on the beat, lighting the hub as they land; at converge every wire fires at once and the hub takes the hit. Every element keeps moving.',
-  params: {nodes: '[label ≤ 14 | {label ≤ 14, icon? (kit/core/icons.mjs, default bot), id? (a reveal id; default n<i>)}] 3–8 (events node-<id>)', hub: 'the lead node: a label ≤ 16, or {label ≤ 16, icon? (default sparkles)}',
+  params: {nodes: `[label ≤ 14 | {label ≤ 14, icon? (kit/core/icons.mjs, default bot), id? (a reveal id; default n<i>)} | {graphic: ${GRAPHIC_PARAM}, id?}] 3–8 (events node-<id>)`, hub: 'the lead node: a label ≤ 16, or {label ≤ 16, icon? (default sparkles)}',
     tone: 'the hub and its pill: primary | accent (default) | paper | #rrggbb', title: 'string ≤ 60 (optional)', at: `build start: ${AT}`, converge: `every wire fires at once: ${AT}`,
     bpm: 'beats per minute for default timing, 60–200 (default 120): landings and pulses land on beats, converge on a bar line', variant: VARIANT_PARAM, rect: RECT},
   events: ['build', 'node-<id>', 'converge'], timing: timingRules({rules: ['the hub pops on the first beat after 0.5 s; nodes flock out from the middle of the fan outwards a quarter beat apart', 'a pulse lands on every beat once the wires are drawn; converge falls on the first bar line two beats after the last wire, or the last beat before the exit']}), variants: GRAPH_VARIANTS,
+  // Anchors (RFC §7, kit/core/anchors.mjs): the hub as it pops and at converge, each card as it lands.
+  anchors: model => [{name: 'hub', element: `${model.id}-hub`, event: 'build'}, {name: 'converge', element: `${model.id}-hub`, event: 'converge'},
+    ...model.content.nodes.map(n => ({name: `node-${n.id}`, element: `${model.id}-node-${n.id}`, event: `node-${n.id}`}))],
   resolve: graphResolve, view: graphView, timeline: graphTimeline
 };
 

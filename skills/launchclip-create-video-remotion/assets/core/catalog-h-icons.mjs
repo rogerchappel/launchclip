@@ -4,9 +4,10 @@
 // duotone) or on tinted tiles. Registered in kit/core/catalog-h.mjs.
 
 import {timingRules} from './catalog-b-base.mjs';
-import {VARIANT_PARAM, createHBase, fitText, mixColor, r2, rt, toneColor} from './catalog-h-base.mjs';
+import {VARIANT_PARAM, createHBase, fitText, inkOn, mixColor, r2, rt, toneColor} from './catalog-h-base.mjs';
 import {chromeNodes, chromeOps, el, label} from './catalog-h-view.mjs';
 import {iconNode, isIcon} from './icons.mjs';
+import {GRAPHIC_PARAM, cardHeight, fitGraphic, graphicNodes, graphicSpec, graphicWidth} from './graphic.mjs';
 import {flockOps, idleAmplitude, idleFor, idleOps} from './fluid-motion.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
@@ -20,7 +21,12 @@ function gridResolve(params, ctx) {
   const p = b.params;
   check.arr(p.items, 'params.items', 2, 12);
   const items = p.items.map((item, i) => {
-    const raw = typeof item === 'string' ? {icon: item} : check.obj(item, `params.items[${i}]`, ['icon', 'label'], ['icon']);
+    const raw = typeof item === 'string' ? {icon: item} : check.obj(item, `params.items[${i}]`, ['icon', 'label', 'graphic']);
+    // A planner-drawn graphic (RFC §10) in place of the icon and label.
+    if (raw.graphic !== undefined) {
+      if (raw.icon !== undefined || raw.label !== undefined) check.fail(`params.items[${i}].graphic`, 'replaces icon and label; give the graphic or icon and label');
+      return {icon: null, label: null, graphic: graphicSpec(check, raw.graphic, `params.items[${i}].graphic`, {labelMax: 22})};
+    }
     if (!isIcon(raw.icon)) check.fail(`params.items[${i}].icon`, `must be an icon name from kit/core/icons.mjs (got ${JSON.stringify(raw.icon)})`);
     return {icon: raw.icon, label: raw.label === undefined ? null : check.str(raw.label, `params.items[${i}].label`, 22)};
   });
@@ -40,6 +46,15 @@ function gridResolve(params, ctx) {
   const box = b.variant === 'tiles' ? 1.5 : 1;
   const iconSize = r2(Math.min(cellW * 0.5, cellH - (labels ? labelSize * 2.5 + u(20) : u(20)), u(200)) / box);
   if (iconSize < u(48)) check.fail('params.items', 'has too many icons for the rect; use fewer or set columns');
+  // Graphic cells: as wide as the cell, as tall as a card with this grid's icon (smaller if the cell is short).
+  const ink = inkOn(b.colors, color);
+  for (const [i, item] of items.entries()) {
+    if (!item.graphic) continue;
+    const gL = fitGraphic(check, `params.items[${i}].graphic`, item.graphic, cellW - u(16), {preferred: u(32), min: b.min.meta});
+    const gI = r2(Math.min(iconSize, (cellH - u(16) - gL * 1.25) * 66 / 138));
+    if (gI < u(40)) check.fail(`params.items[${i}].graphic`, 'does not fit its cell; use fewer items or set columns');
+    Object.assign(item, {gw: r2(Math.min(cellW - u(16), Math.max(graphicWidth(item.graphic, gL), gI * 2))), gh: cardHeight(gI, gL), gI, gL});
+  }
   const gridH = cellH * rows;
   const y0 = r2(top + (rect.height - top - gridH) / 2);
   const t0 = b.timeOf('build', p.at, 'params.at', 0.5);
@@ -54,7 +69,7 @@ function gridResolve(params, ctx) {
   // The flock leaves from the middle of the grid.
   const origin = {x: r2(W / 2), y: r2(y0 + gridH / 2)};
   const content = {variant: b.variant, title: titleFit ? {text: title, size: titleFit.size, lines: titleFit.lines} : null, source: null, align: 'center', cells, cellW: r2(cellW), cellH: r2(cellH), iconSize, labelSize, color,
-    tile: mixColor(color, b.colors.bg, 0.16), ink: b.theme.foreground, buildAt: t0, origin, idle: idleFor(idleAmplitude(ctx?.grammar ?? null, b.unit), iconSize * box)};
+    tile: mixColor(color, b.colors.bg, 0.16), ink: b.theme.foreground, onColor: ink, buildAt: t0, origin, idle: idleFor(idleAmplitude(ctx?.grammar ?? null, b.unit), iconSize * box)};
   return b.finish(content, {minTextPx: titleFit ? titleFit.size : b.min.key});
 }
 
@@ -63,6 +78,14 @@ function gridView(model) {
   const c = model.content;
   const kids = chromeNodes(model);
   c.cells.forEach((cell, i) => {
+    if (cell.graphic) {
+      const origin = `50% ${r2(cell.gh / 2)}px`;
+      const face = graphicNodes(cell.graphic, cell.gw, cell.gh, {color: c.color, ink: c.onColor, fg: c.ink, panel: model.theme.panel, fonts, unit: u, icon: cell.gI, labelSize: cell.gL, colors: model.theme, canvas: model.canvas, key: `${id}-g-${i}`});
+      kids.push(el('div', `${id}-cell-${i}`, {position: 'absolute', left: cell.x, top: cell.y, width: c.cellW, height: c.cellH, opacity: 0, transformOrigin: origin}, [
+        el('div', `${id}-cell-${i}-idle`, {position: 'absolute', left: 0, top: 0, width: c.cellW, height: c.cellH, transformOrigin: origin}, [
+          el('div', null, {position: 'absolute', left: r2((c.cellW - cell.gw) / 2), top: 0, width: cell.gw, height: cell.gh}, face)])]));
+      return;
+    }
     const tile = c.variant === 'tiles';
     const box = tile ? r2(c.iconSize * 1.5) : c.iconSize;
     const bx = r2((c.cellW - box) / 2);
@@ -89,7 +112,7 @@ function gridTimeline(model, ops) {
 export const iconGrid = {
   id: 'icon-grid',
   describe: 'A grid of 2–12 icons from the icon set (1,935: LaunchClip\'s own and Lucide\'s) that flock out of the middle of the grid on a stagger and breathe once they land, with optional labels: stroke icons, duotone icons, or icons on tinted tiles.',
-  params: {items: '[icon name | {icon, label? ≤ 22}] 2–12', title: 'string ≤ 60 (optional)', columns: 'integer 1–6 (default by count and aspect)', tone: 'primary | accent | paper | #rrggbb', at: `build start: ${at}`, variant: VARIANT_PARAM, rect},
+  params: {items: `[icon name | {icon, label? ≤ 22} | {graphic: ${GRAPHIC_PARAM}}] 2–12`, title: 'string ≤ 60 (optional)', columns: 'integer 1–6 (default by count and aspect)', tone: 'primary | accent | paper | #rrggbb', at: `build start: ${at}`, variant: VARIANT_PARAM, rect},
   events: ['build'], timing: timingRules({rules: ['icons launch 0.12 s apart (closer for many) from at and land 0.5 s later']}), variants: GRID_VARIANTS,
   resolve: gridResolve, view: gridView, timeline: gridTimeline
 };
