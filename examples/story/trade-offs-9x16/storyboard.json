@@ -7,7 +7,7 @@
     "width": 1080,
     "height": 1920,
     "fps": 30,
-    "duration": 21,
+    "duration": 27.0,
     "platform": "youtube-shorts"
   },
   "brand": {
@@ -24,6 +24,95 @@
       "meta": "jetbrains-mono"
     }
   },
+  "motion": {
+    "feel": {
+      "preset": "kinetic",
+      "ambient": {
+        "shift": 0.014,
+        "period": [
+          2.5,
+          4
+        ]
+      }
+    }
+  },
+  "camera": {
+    "mode": "cuts",
+    "kicks": [
+      {
+        "at": 0.4
+      },
+      {
+        "at": 1.4
+      },
+      {
+        "at": 2.6
+      },
+      {
+        "at": 3.7
+      },
+      {
+        "at": 4.9
+      },
+      {
+        "at": 5.9
+      },
+      {
+        "at": 7.1
+      },
+      {
+        "at": 8.2
+      },
+      {
+        "at": 9.4
+      },
+      {
+        "at": 10.4
+      },
+      {
+        "at": 11.6
+      },
+      {
+        "at": 12.7
+      },
+      {
+        "at": 13.9
+      },
+      {
+        "at": 14.9
+      },
+      {
+        "at": 16.1
+      },
+      {
+        "at": 17.2
+      },
+      {
+        "at": 18.4
+      },
+      {
+        "at": 19.4
+      },
+      {
+        "at": 20.6
+      },
+      {
+        "at": 21.7
+      },
+      {
+        "at": 22.9
+      },
+      {
+        "at": 23.9
+      },
+      {
+        "at": 25.1
+      },
+      {
+        "at": 26.2
+      }
+    ]
+  },
   "plate": {
     "kind": "silk"
   },
@@ -31,12 +120,12 @@
     {
       "id": "halves",
       "module": "compare",
-      "start": 0,
-      "end": 3.5,
+      "start": 0.0,
+      "end": 4.5,
       "backdrop": {
         "kind": "image",
         "params": {
-          "src": "assets/shots/boards.jpg",
+          "src": "assets/shots/ridge.jpg",
           "blur": 0,
           "dim": 0.35
         }
@@ -62,8 +151,8 @@
     {
       "id": "versus",
       "module": "compare",
-      "start": 3.5,
-      "end": 7,
+      "start": 4.5,
+      "end": 9.0,
       "in": {
         "type": "push",
         "dur": 0.5
@@ -98,8 +187,8 @@
     {
       "id": "verdict",
       "module": "compare",
-      "start": 7,
-      "end": 10.5,
+      "start": 9.0,
+      "end": 13.5,
       "in": {
         "type": "push",
         "dur": 0.5
@@ -107,7 +196,7 @@
       "backdrop": {
         "kind": "image",
         "params": {
-          "src": "assets/shots/boards.jpg",
+          "src": "assets/shots/ridge.jpg",
           "blur": 6,
           "dim": 0.55
         }
@@ -133,8 +222,8 @@
     {
       "id": "scorecard",
       "module": "comparison-table",
-      "start": 10.5,
-      "end": 14,
+      "start": 13.5,
+      "end": 18.0,
       "in": {
         "type": "push",
         "dur": 0.5
@@ -190,8 +279,8 @@
     {
       "id": "pills",
       "module": "comparison-table",
-      "start": 14,
-      "end": 17.5,
+      "start": 18.0,
+      "end": 22.5,
       "in": {
         "type": "push",
         "dur": 0.5
@@ -239,8 +328,8 @@
     {
       "id": "pick",
       "module": "comparison-table",
-      "start": 17.5,
-      "end": 21,
+      "start": 22.5,
+      "end": 27.0,
       "in": {
         "type": "push",
         "dur": 0.5
@@ -248,7 +337,7 @@
       "backdrop": {
         "kind": "image",
         "params": {
-          "src": "assets/shots/boards.jpg",
+          "src": "assets/shots/ridge.jpg",
           "blur": 8,
           "dim": 0.55
         }
