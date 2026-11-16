@@ -35,6 +35,8 @@ import { clipLedLines } from './clip-led.mjs';
 import { explainerDirectionLines, explainerStoryboardLines } from './explainer.mjs';
 import { DEFAULT_BRAND } from './default-brand.mjs';
 import { CYCLE_KINDS, DARK_PLATE_KINDS, PLATE_KINDS, PLATE_NOTES } from './plates.mjs';
+import { VFX_EFFECTS, VFX_MASKED, VFX_MODULES, VFX_TRANSITIONS, VFX_WORDS } from './vfx/catalog.mjs';
+import { VFX_CUE_RULES } from './vfx/plan.mjs';
 
 export const PLANNER_TIERS = Object.freeze(['structured', 'guided', 'bespoke']);
 
@@ -653,6 +655,32 @@ function worldLines() {
  * The script was planned first (kit/core/script-formats.mjs): its beats are
  * the video's structure, so the storyboard follows them.
  */
+// The VFX layer is opt-in (docs/VFX_LAYER_RFC.md §5 phase 9): the planner
+// sees its catalogue only when the direction or the style pack asks for effects.
+const VFX_WORDS_IN_DIRECTION = ['\\bvfx\\b', '\\beffects?\\b', '\\bsparks?\\b', '\\bexplosions?\\b', '\\bgame(y| feel)?\\b', '\\barcade\\b', '\\bretro\\b', '\\bpixel', '\\bconfetti\\b', '\\bfireworks?\\b'];
+
+/** Whether a story may carry VFX cues: the art direction asks for effects, or the style pack sets vfx. */
+export function vfxWanted({ artDirection = '', style = null } = {}) {
+  return Boolean(style?.vfx) || VFX_WORDS_IN_DIRECTION.some((source) => new RegExp(source, 'i').test(String(artDirection ?? '')));
+}
+
+/** The VFX catalogue and cue rules for the planner (kit/core/vfx/catalog.mjs, plan.mjs vfxCueFindings). */
+export function vfxLines() {
+  const words = (name) => (VFX_WORDS[name] ? ` (${Object.keys(VFX_WORDS[name].fields).join(', ')})` : '');
+  const loop = (name) => (VFX_MODULES[name].meta.loop ? ', loops to the scene end' : '');
+  const masked = (name) => (VFX_MASKED.includes(name) ? ', on a mask' : '');
+  return [
+    'Effects are opt-in: add scene.vfx only where the brief or art direction asks for game feel, sparks or celebration, and only on the moments that earn one. Most scenes have none.',
+    'scene.vfx: [{effect, at, align?: "peak" (default) | "start", x?, y? (fractions of the frame, default the centre), color? (a brand colour name or #rrggbb), seed?, flip?, angle? (degrees), light? (0–2), sfx?: "auto" (default) | "none" | a sound family, text? / label? / title? (a hit with words, 1–24 characters)}].',
+    'Land each effect on a beat: at is "beat:<n>" (on the music) or "word:<text>" (the spoken word it belongs to). With align "peak" the effect starts early so its brightest frame lands there, and its paired sound plays on that frame by itself: do not add a hit or a cue for it.',
+    `Rules: at most ${VFX_CUE_RULES.crowd} effects peak within any ${VFX_CUE_RULES.window} s and keep an effect's centre out of the caption band (y above it), or the motion check warns; one hit with words a scene (${Object.keys(VFX_WORDS).join(', ')}). Put the effect on the thing it hits (the number, the card landing, the floor under a slam), not over body text.`,
+    `Cover transitions (scene.in.type, track-0 scenes, once or twice a video): ${Object.entries(VFX_TRANSITIONS).map(([type, info]) => `${type} (${info.sfx}${type === 'pixel-dissolve' ? ', retro only' : ''})`).join(', ')}.`,
+    `Effects marked "on a mask" (${VFX_MASKED.join(', ')}) draw round the scene's card (mask: "module") or a cast member of a cast-scene (mask: "cast:<id>") and take no x or y.`,
+    'Effects (effect: when, sound):',
+    ...Object.entries(VFX_EFFECTS).map(([name, info]) => `${name}: ${info.use}${words(name)}${masked(name)}${loop(name)}; ${info.sfx}`)
+  ];
+}
+
 export function scriptBeatLines() {
   return [
     'The script was written against a beat skeleton (hook, problem, proof, CTA and so on). When the brief lists "Script beats", follow them in order: each beat gets its own scene or group of scenes, and no scene spans two beats.',
@@ -1057,6 +1085,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...(explainer?.cast ? section('Characters carry the explainer', explainerStoryboardLines(explainer).map((line) => `- ${line}`)) : []),
     ...section('Script beats', scriptBeatLines().map((line) => `- ${line}`)),
     ...section('Motion grammar and camera', motionLines({ lane, artDirection, style }).map((line) => `- ${line}`)),
+    ...(vfxWanted({ artDirection, style }) ? section('Effects (VFX layer)', vfxLines().map((line) => `- ${line}`)) : []),
     ...section('Direction guardrails (finish gates fail these)', guardrailLines().map((line) => `- ${line}`)),
     ...section(`Tier rules (${tier})`, tierRules(tier).map((line) => `- ${line}`)),
     ...section('Time anchors', anchorLines().map((line) => `- ${line}`)),
@@ -1174,6 +1203,7 @@ export function storyboardModulesReference() {
     ...section('3D data objects', objectLines().map((line) => `- ${line}`)),
     ...section('Satisfying motion (weight, piles and live numbers)', satisfyingLines().map((line) => `- ${line}`)),
     ...section('Interface scenes (ui-scene)', interfaceLines().map((line) => `- ${line}`)),
+    ...section('Effects (VFX layer, opt-in)', vfxLines().map((line) => `- ${line}`)),
     ...section('Footage layouts (sections)', layoutLines()),
     ...section('Phrase → module', ['| The script… | Module |', '| --- | --- |', ...phraseLines()]),
     ...section('Modules', moduleLines('guided')),

@@ -97,42 +97,43 @@ export const VFX_EFFECT_NAMES = Object.freeze(Object.keys(VFX_MODULES));
 export const VFX_MASKED = Object.freeze(VFX_EFFECT_NAMES.filter(name => VFX_MODULES[name].meta.actor));
 
 /**
- * Per effect: the SFX family a cue with sfx "auto" plays (kit/core/sound),
+ * Per effect: what it is for (the planner's catalogue, kit/core/planning-prompt.mjs
+ * vfxLines), the SFX family a cue with sfx "auto" plays (kit/core/sound),
  * and its peak, seconds from its start to its brightest frame, measured by
  * scripts/vfx-peaks.mjs (test/vfx_layer.test.js keeps them current). A cue
  * aligned on its peak starts that much early, and its sound lands there.
  */
 export const VFX_EFFECTS = Object.freeze({
-  'hit-spark': Object.freeze({sfx: 'impact', peak: 0}),
-  'crit-hit': Object.freeze({sfx: 'impact', peak: 0}),
-  'impact-frame': Object.freeze({sfx: 'impact', peak: 0.033}),
-  'ground-slam': Object.freeze({sfx: 'thud', peak: 0}),
-  'small-explosion': Object.freeze({sfx: 'impact', peak: 0}),
-  'smoke-bomb': Object.freeze({sfx: 'thud', peak: 0.967}),
-  'firework-burst': Object.freeze({sfx: 'sparkle', peak: 0.433}),
-  poof: Object.freeze({sfx: 'pop', peak: 0}),
-  sunburst: Object.freeze({sfx: 'sparkle', peak: 0.533}),
-  'collect-burst': Object.freeze({sfx: 'pop', peak: 0}),
-  'combo-counter': Object.freeze({sfx: 'tally', peak: 0.117}),
-  'crit-number': Object.freeze({sfx: 'impact', peak: 0.017}),
-  'level-up': Object.freeze({sfx: 'success', peak: 0.283}),
-  achievement: Object.freeze({sfx: 'chime', peak: 0.333}),
-  confetti: Object.freeze({sfx: 'pop', peak: 0.267}),
-  'firework-rocket': Object.freeze({sfx: 'sparkle', peak: 1.067}),
-  electrified: Object.freeze({sfx: 'glitch', peak: 0.133}),
-  glitch: Object.freeze({sfx: 'glitch', peak: 1.7}),
-  scanner: Object.freeze({sfx: 'shimmer', peak: 1.217}),
-  halo: Object.freeze({sfx: 'chime', peak: 0.2}),
-  'hit-flash': Object.freeze({sfx: 'impact', peak: 0}),
-  confused: Object.freeze({sfx: 'boing', peak: 0.817}),
-  sleep: Object.freeze({sfx: 'pop', peak: 0.25}),
-  stunned: Object.freeze({sfx: 'boing', peak: 1.45}),
-  charmed: Object.freeze({sfx: 'sparkle', peak: 1.25}),
-  rage: Object.freeze({sfx: 'thud', peak: 0.05}),
-  haste: Object.freeze({sfx: 'whoosh', peak: 0.483}),
-  slowed: Object.freeze({sfx: 'tape-stop', peak: 1.633}),
-  frozen: Object.freeze({sfx: 'shimmer', peak: 0}),
-  burning: Object.freeze({sfx: 'riser', peak: 0.6})
+  'hit-spark': Object.freeze({use: 'the everyday hit: a number or word landing', sfx: 'impact', peak: 0}),
+  'crit-hit': Object.freeze({use: 'the biggest hit of a scene: a record, a win', sfx: 'impact', peak: 0}),
+  'impact-frame': Object.freeze({use: 'a freeze-frame flash on a hard turn', sfx: 'impact', peak: 0.033}),
+  'ground-slam': Object.freeze({use: 'something heavy landing at the foot of the frame', sfx: 'thud', peak: 0}),
+  'small-explosion': Object.freeze({use: 'a thing breaking or a launch going off, smoke after', sfx: 'impact', peak: 0}),
+  'smoke-bomb': Object.freeze({use: 'something vanishing in smoke', sfx: 'thud', peak: 0.967}),
+  'firework-burst': Object.freeze({use: 'a celebration in the air', sfx: 'sparkle', peak: 0.433}),
+  poof: Object.freeze({use: 'a thing appearing or disappearing', sfx: 'pop', peak: 0}),
+  sunburst: Object.freeze({use: 'a reveal: light opening behind the hero', sfx: 'sparkle', peak: 0.533}),
+  'collect-burst': Object.freeze({use: 'a tick, a gain, an item collected', sfx: 'pop', peak: 0}),
+  'combo-counter': Object.freeze({use: 'a streak counting up', sfx: 'tally', peak: 0.117}),
+  'crit-number': Object.freeze({use: 'a headline number slammed in', sfx: 'impact', peak: 0.017}),
+  'level-up': Object.freeze({use: 'a milestone', sfx: 'success', peak: 0.283}),
+  achievement: Object.freeze({use: 'an unlock toast', sfx: 'chime', peak: 0.333}),
+  confetti: Object.freeze({use: 'party poppers on a win or the ending', sfx: 'pop', peak: 0.267}),
+  'firework-rocket': Object.freeze({use: 'a launch: a rocket climbing and bursting', sfx: 'sparkle', peak: 1.067}),
+  electrified: Object.freeze({use: 'a card or character jolted by current: a shock, a live wire', sfx: 'glitch', peak: 0.133}),
+  glitch: Object.freeze({use: 'a card or character breaking up: a bug, a bad signal', sfx: 'glitch', peak: 1.7}),
+  scanner: Object.freeze({use: 'a card or character being scanned and checked', sfx: 'shimmer', peak: 1.217}),
+  halo: Object.freeze({use: 'a halo over a character: the good choice, the hero', sfx: 'chime', peak: 0.2}),
+  'hit-flash': Object.freeze({use: 'a card or character taking a hit: a loss, a blow', sfx: 'impact', peak: 0}),
+  confused: Object.freeze({use: 'a character puzzled', sfx: 'boing', peak: 0.817}),
+  sleep: Object.freeze({use: 'a character asleep: boredom, idle, waiting', sfx: 'pop', peak: 0.25}),
+  stunned: Object.freeze({use: 'a character seeing stars after a shock', sfx: 'boing', peak: 1.45}),
+  charmed: Object.freeze({use: 'a character smitten: the one they love', sfx: 'sparkle', peak: 1.25}),
+  rage: Object.freeze({use: 'a character seething', sfx: 'thud', peak: 0.05}),
+  haste: Object.freeze({use: 'a card or character sped up', sfx: 'whoosh', peak: 0.483}),
+  slowed: Object.freeze({use: 'a card or character dragging: slow, stuck', sfx: 'tape-stop', peak: 1.633}),
+  frozen: Object.freeze({use: 'a card or character frozen: stalled, on ice', sfx: 'shimmer', peak: 0}),
+  burning: Object.freeze({use: 'a card or character on fire: burning money, burnout', sfx: 'riser', peak: 0.6})
 });
 
 /**
