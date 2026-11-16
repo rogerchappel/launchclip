@@ -257,3 +257,21 @@ test("a pack's finish is checked as a story's is", () => {
   assert.match(validateStory(story({ finish: "film-ish" })).errors.join("\n"), /finish must be a finish preset/);
   assert.match(validateStylePack({ ...v2(), finish: "subtle-film" }).warnings.join("\n"), /finish is a style v3 field/);
 });
+
+test("a pack's sound.react fills audio.react when the story sets none, and the story's own wins", () => {
+  const pack = { ...upgradeV2Pack(v2()).pack, sound: { react: { glow: { bus: "music", strength: 0.4 }, pulse: true } } };
+  assert.deepEqual(validateStylePack(pack).errors, []);
+  const filled = applyStyle(story(), pack);
+  assert.deepEqual(filled.story.audio.react, { glow: { bus: "music", strength: 0.4 }, pulse: true });
+  assert.ok(filled.applied.includes("audio.react"));
+  assert.deepEqual(validateStory(filled.story).errors, []);
+  const own = applyStyle(story({ audio: { react: { bar: true } } }), pack);
+  assert.deepEqual(own.story.audio.react, { bar: true });
+  assert.ok(!own.applied.includes("audio.react"));
+  assert.deepEqual(applyStyle(story({ audio: { react: {} } }), pack).story.audio.react, {}, "an empty react turns the pack's off");
+  const errors = (react) => validateStylePack({ ...pack, sound: { react } }).errors.join("\n");
+  assert.match(errors({ sparkle: true }), /sound\.react\.sparkle is not a reactive layer/);
+  assert.match(errors({ glow: { bus: "drums" } }), /sound\.react\.glow\.bus must be one of mix, music, voice/);
+  assert.match(errors({ pulse: { strength: 2 } }), /sound\.react\.pulse\.strength must be a number from 0 to 1/);
+  assert.match(errors(true), /sound\.react must be an object/);
+});

@@ -32,6 +32,7 @@ import { LOOK_NAMES, applyLook, lookErrors, lookPresets, normalizeLook } from '.
 import { plateErrors } from './plates.mjs';
 import { PANEL_RADIUS, PANEL_TREATMENTS } from './panels.mjs';
 import { soundProblems } from './sound/options.mjs';
+import { audioReactErrors } from './audio-react.mjs';
 import { WORLD_TIMES, storyWorldErrors } from './worlds/index.mjs';
 
 export const STYLE_SCHEMA = 'launchclip.style.v3';
@@ -327,6 +328,8 @@ export function validateStylePack(pack, { modules } = {}) {
       // sfx_density: low | normal | high or 0-1; palette, ambience and the music
       // genre, key, bpm and progression: the sound kit's own check.
       for (const message of soundProblems(sound)) err(message);
+      // react: the audio-reactive layers (kit/core/audio-react.mjs), story.audio.react's own check.
+      for (const message of audioReactErrors(sound.react, 'sound.react')) err(message);
       if (sound.sfx_library !== undefined && !nonEmpty(sound.sfx_library)) err('sound.sfx_library must be a path');
       if (sound.music !== undefined) {
         if (!isObject(sound.music)) err('sound.music must be an object');
@@ -779,6 +782,7 @@ export function applyStyle(story, pack, options = {}) {
     if (pack.sound.sfx_density !== undefined && out.audio.sfx_density === undefined) { out.audio.sfx_density = pack.sound.sfx_density; applied.push('audio.sfx_density'); }
     if (pack.sound.sfx_library !== undefined && out.audio.sfx_library === undefined) { out.audio.sfx_library = pack.sound.sfx_library; applied.push('audio.sfx_library'); }
     if (isObject(pack.sound.music) && out.audio.music_hints === undefined) { out.audio.music_hints = clone(pack.sound.music); applied.push('audio.music_hints'); }
+    if (isObject(pack.sound.react) && out.audio.react === undefined) { out.audio.react = clone(pack.sound.react); applied.push('audio.react'); }
   }
 
   // Brand frame (v3): the story's frame, filled per key; a story with

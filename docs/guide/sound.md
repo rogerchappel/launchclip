@@ -101,6 +101,12 @@ Add `audio.react` to a story and parts of the picture follow the finished mix:
 
 Each takes `true` or `{bus, series, strength}`: `bus` is `mix`, `music` or `voice`; `series` is `loud`, `sub`, `low`, `mid`, `high`, `air` or `onset`; `strength` runs from 0 to 1. The sound stage measures the mix once into `AUDIO_FEATURES.json`, and both renderers read those numbers, so they draw the same frames. The camera never reacts.
 
+To give every video of a brand the same reactive layers, put them in the style pack as `sound.react` (same shape). A video's own `audio.react` replaces the pack's whole, and `"react": {}` in a video turns them off:
+
+```json
+"sound": { "react": { "glow": { "bus": "music", "strength": 0.4 }, "pulse": true } }
+```
+
 For a scene that is the sound itself, use the `audio-visualizer` module: a spectrum of `bars` (the default), a mirrored `line` or a `ring`, bass to air, following the mix every frame.
 
 ```json
