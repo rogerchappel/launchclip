@@ -100,7 +100,7 @@ export const V1_MODULE_VARIANTS = freeze({
 });
 
 // launchclip.style-seed.v2: v1 plus the lower-third variants, the
-// tactile modules and line-diagram (each variant is drawn by its own key,
+// tactile modules, line-diagram and item-list (each variant is drawn by its own key,
 // so the other picks of a saved seed do not move).
 export const V2_MODULE_VARIANTS = freeze({
   ...V1_MODULE_VARIANTS,
@@ -108,5 +108,7 @@ export const V2_MODULE_VARIANTS = freeze({
   'drop-grid': ['cards', 'coins', 'tiles'],
   'live-counter': ['plain', 'panel', 'ticket'],
   'live-bars': ['slabs', 'flat'],
-  'line-diagram': ['blueprint', 'plain']
+  'line-diagram': ['blueprint', 'plain'],
+  // orbit needs a subject in params, so a seed never picks it.
+  'item-list': ['stack', 'fan', 'scatter']
 });
