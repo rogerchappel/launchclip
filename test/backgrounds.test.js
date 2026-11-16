@@ -207,6 +207,9 @@ test("the gate flags captions and panels that lose contrast on the background", 
   // An outlined preset is backed, so it passes.
   const outlined = captionOptions({ type: "captions", preset: "outline-heavy", colors: { idle: "#bbbbbb" } }, { brand: s.brand, format: s.format, story: s });
   assert.deepEqual(backgroundContrastFindings(s, { captions: outlined }), []);
+  // Legibility plates on every line back them too.
+  const plated = captionOptions({ ...s.overlays[0], plates: "all" }, { brand: s.brand, format: s.format, story: s });
+  assert.deepEqual(backgroundContrastFindings(s, { captions: plated }), []);
   // Brand-colour captions in paper pass on every kind.
   for (const kind of BACKGROUND_KINDS) {
     const t = story({ background: { kind } }, LIGHT);
