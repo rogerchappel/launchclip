@@ -357,6 +357,44 @@ and rejection of expressions and external images; **ComfyUI** against a
 recorded fake server (no model in CI), refusing non-loopback hosts and
 failing health on a missing node class; the **skill length** test.
 
+### Phase 5 notes
+
+Built (first PR):
+
+- **Glyph scramble** is a `motion-title` variant (`scramble`, a character
+  effect) with `params.charset` (`latin`, `hex`, `binary`). The glyph sits
+  absolutely over the letter's own box, so the line never reflows, and each
+  letter cycles only through glyphs no wider than about 1.15× itself (a wide
+  `M` over an `i` spilled onto its neighbours). A glyph changes every 3
+  frames, chosen by `hashUnit(id|i|floor(t / cycle))`, as `text` set ops.
+- **Persistent chrome**: `frame.figure` (`true` or `{label}`) only. It is
+  turned into plain `labels` and `counter` by `storyFrame`, so it adds no
+  drawing code. The `player-bar` overlay is not built (below).
+- **Flow-field** is background kind `flow-field {seed, lines, scale,
+  octaves, intensity, speed, color, fade}`. Streamlines run through fbm value
+  noise at plan time; the dashes move by a `--flow` CSS variable on the
+  layer (a `glide` axis, 0 → −1), which each path's `stroke-dashoffset`
+  multiplies by a whole number of its own dash periods, so the loop has no
+  seam. GSAP tweens the variable; Remotion sets it per frame.
+
+Not built yet, each its own follow-up:
+
+- `player-bar` overlay `{thumb, title, sub, controls, progress: 'story'}`
+  kept across scenes by `carry` (S–M).
+- **Lottie import** (M): needs lottie-web's light build vendored (MIT, with
+  its notice) or added as a dependency, one painter shared by both
+  renderers, and the frame 0 / mid / last stills plus the rejection tests
+  for expressions and external images.
+- **Through-line morph** (M): one object kept across scenes, which needs a
+  cross-scene layer like `carry`. Note §E.6 asks for a "tiny overshoot";
+  the motion rule (slow → fast → slow, no overshoot) wins, so use a
+  critically damped ease.
+- **Three inks** (M): `story.inks` touches every module's palette lookup;
+  start with the `ink-promote` transition and the per-scene ink index.
+- **`word-architecture`** and **`proof-mechanism`** (L): new catalogue H
+  modules; proof-mechanism computes its values in `resolve` so the frame
+  cannot disagree with the maths.
+
 ## E.10 Provenance
 
 | Item | Source path | Licence | Use |
