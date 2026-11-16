@@ -37,7 +37,7 @@ import { useProjectTemp } from "./render_temp.js";
 import { checkStorage, interruptedByStorage } from "./storage_check.js";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
-import { actingGate, densityGate, ghostingGate, physicsGate, tellsGate, varietyGate } from "./direction_guardrails.js";
+import { actingGate, boxedOnFlatBackdrops, densityGate, ghostingGate, physicsGate, tellsGate, varietyGate } from "./direction_guardrails.js";
 import { visualDensityGate } from "./visual_density.js";
 import { choreographyGate, holdGate, stateGate } from "./movement_guardrails.js";
 import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, lipSyncGate, paceGate, prototypeCut, renderPaceGate, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
@@ -1271,6 +1271,14 @@ const STAGES = [
       const { checkLayoutProject, subjectInfos } = await import("./layout_check.js");
       const layoutOptions = () => ({ story: ctx.copy, words: ctx.words ?? [], beats: ctx.beats ?? undefined });
       const resolveOptions = () => ({ words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject, track: ctx.track });
+      // A boxed card on the flat plate while the story has footage (tells: boxed-on-flat) goes on that footage, before the layout check measures it.
+      const backed = boxedOnFlatBackdrops(ctx.copy, ctx.resolved, { words: ctx.words ?? [] });
+      if (backed.changes.length) {
+        ctx.copy = backed.storyboard;
+        ctx.resolved = resolveStory(ctx.copy, resolveOptions());
+        ctx.boundaries = deriveBoundaries(ctx.resolved);
+        ctx.warnings.push(...backed.changes);
+      }
       let layout = await checkLayoutProject(ctx.project, layoutOptions());
       // Layout errors that only show once the real narration has settled the
       // timings are repaired here instead of failing the render after the

@@ -28,6 +28,7 @@ import { ACTION_INFO, LOOK_ACTIONS, TARGET_REQUIRED, targetError } from "@launch
 import { narrationWords } from "@launchclip/core/direction.mjs";
 import { abstractFindings } from "@launchclip/core/explainer.mjs";
 import { planTells } from "@launchclip/core/tells.mjs";
+import { footagePlates } from "@launchclip/core/plates.mjs";
 import { catalogBView, MODULES as B } from "@launchclip/core/catalog-b.mjs";
 import { catalogCView, MODULES as C } from "@launchclip/core/catalog-c.mjs";
 import { catalogEView, MODULES as E } from "@launchclip/core/catalog-e.mjs";
@@ -485,6 +486,34 @@ const VIEWS = new Map([[B, catalogBView], [C, catalogCView], [E, catalogEView], 
  * tree and op list. Needs no render, so it runs under --plan-only and in the
  * storyboard check, whose repair pass gets its errors.
  */
+/**
+ * The boxed-on-flat repair tooling can make: each flagged card whose repair
+ * takes a backdrop goes on the story's own footage (plates.mjs footagePlates:
+ * blurred, dimmed to the contrast floor), never the shot of the scene before
+ * or after it. storyboard: the plan to change; resolved: it resolved.
+ * → {storyboard (a copy when changed), changes: [warning lines]}
+ */
+export function boxedOnFlatBackdrops(storyboard, resolved, { words = [] } = {}) {
+  const ids = tellsGate(resolved, { words }).findings.filter((finding) => finding.rule === "boxed-on-flat" && finding.repair?.backdrop).flatMap((finding) => finding.ids);
+  const plates = footagePlates(storyboard);
+  if (!ids.length || !plates.length) return { storyboard, changes: [] };
+  const scenes = Array.isArray(storyboard?.scenes) ? storyboard.scenes : [];
+  const shown = (scene) => { const media = scene?.params?.media; return typeof media === "string" ? media : media?.src; };
+  const story = structuredClone(storyboard);
+  const changes = [];
+  ids.forEach((id, n) => {
+    const i = scenes.findIndex((scene) => scene?.id === id);
+    if (i < 0) return;
+    const beside = new Set([shown(scenes[i - 1]), shown(scenes[i + 1])]);
+    const options = plates.filter((plate) => !beside.has(plate.params.src));
+    const plate = (options.length ? options : plates)[n % (options.length || plates.length)];
+    const { plate: _plate, ...rest } = story.scenes[i];
+    story.scenes[i] = { ...rest, backdrop: structuredClone(plate) };
+    changes.push(`tells: tooling put ${id} (${scenes[i].module}) on a footage backdrop (${plate.params.src}) instead of the flat plate`);
+  });
+  return { storyboard: story, changes };
+}
+
 export function tellsGate(story, { words = [] } = {}) {
   const { entries } = renderedModels(story);
   const scenes = [...entries.values()].map(({ entry, model }) => {
