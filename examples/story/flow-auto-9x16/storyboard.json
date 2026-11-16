@@ -1,0 +1,175 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Flow switched on by the feel (golden, 9:16 automatic carry and pins)",
+  "notes": "Golden story for the motion.flow switch (docs/FLUID_MOTION_RFC.md \u00a76.1): the same scenes as flow-carry-9x16 with no carry maps at all. The steady feel turns flow on, so the engine pins the identical title and carries the cards and hub that share a label, across the cut and back from the host cutaway. No narration and no paid calls.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 13.5,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0b0d1a",
+      "primary": "#ffb547",
+      "accent": "#46d4ff",
+      "ink": "#0b0d1a",
+      "paper": "#f6f3ee"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "feel": "steady"
+  },
+  "camera": {
+    "mode": "cuts"
+  },
+  "cast": {
+    "style": "chibi",
+    "characters": [
+      {
+        "id": "bot",
+        "name": "Bot",
+        "kind": "robot",
+        "position": "center"
+      }
+    ]
+  },
+  "world": {
+    "kind": "cafe",
+    "time": "night"
+  },
+  "scenes": [
+    {
+      "id": "plan",
+      "module": "node-graph",
+      "start": 0,
+      "end": 4,
+      "params": {
+        "title": "One brief, a whole team",
+        "hub": {
+          "label": "Director",
+          "icon": "clapperboard"
+        },
+        "nodes": [
+          {
+            "id": "research",
+            "label": "Research",
+            "icon": "search"
+          },
+          {
+            "id": "script",
+            "label": "Script",
+            "icon": "pen-line"
+          },
+          {
+            "id": "voice",
+            "label": "Voice",
+            "icon": "mic"
+          },
+          {
+            "id": "camera",
+            "label": "Camera",
+            "icon": "camera"
+          }
+        ],
+        "bpm": 120
+      }
+    },
+    {
+      "id": "ship",
+      "module": "node-graph",
+      "start": 4,
+      "end": 8,
+      "params": {
+        "title": "One brief, a whole team",
+        "hub": {
+          "label": "Director",
+          "icon": "clapperboard"
+        },
+        "nodes": [
+          {
+            "id": "research",
+            "label": "Research",
+            "icon": "search"
+          },
+          {
+            "id": "script",
+            "label": "Script",
+            "icon": "pen-line"
+          },
+          {
+            "id": "voice",
+            "label": "Voice",
+            "icon": "mic"
+          },
+          {
+            "id": "camera",
+            "label": "Camera",
+            "icon": "camera"
+          },
+          {
+            "id": "edit",
+            "label": "Edit",
+            "icon": "scissors"
+          }
+        ],
+        "bpm": 120
+      }
+    },
+    {
+      "id": "talk",
+      "module": "cast-scene",
+      "start": 8,
+      "end": 10,
+      "params": {
+        "set": "standing",
+        "shot": "medium",
+        "cast": [
+          {
+            "id": "bot",
+            "pose": "point",
+            "expression": "happy"
+          }
+        ]
+      }
+    },
+    {
+      "id": "wrap",
+      "module": "node-graph",
+      "start": 10,
+      "end": 13.5,
+      "params": {
+        "title": "One brief, a whole team",
+        "hub": {
+          "label": "Director",
+          "icon": "clapperboard"
+        },
+        "nodes": [
+          {
+            "id": "research",
+            "label": "Research",
+            "icon": "search"
+          },
+          {
+            "id": "edit",
+            "label": "Edit",
+            "icon": "scissors"
+          },
+          {
+            "id": "publish",
+            "label": "Publish",
+            "icon": "megaphone"
+          }
+        ],
+        "bpm": 120
+      }
+    }
+  ]
+}
