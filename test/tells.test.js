@@ -218,7 +218,9 @@ test('boxed-on-flat: with footage in the story one filled box is a plan error wi
   const found = flat(tellsGate(triage(cards, [CLIP])));
   assert.deepEqual(found.map(f => f.ids[0]), ['cc', 'cmp', 'tab', 'ir', 'sp']);
   assert.ok(found.every(f => f.severity === 'error' && f.repair));
-  assert.deepEqual(found.find(f => f.ids[0] === 'ir').repair, {backdrop: true, modules: ['item-list', 'media-grid']});
+  // The variant is whatever unboxed look the module offers today (icon-row: ticks); the modules are fixed.
+  assert.deepEqual(found.find(f => f.ids[0] === 'ir').repair, boxRepair('icon-row'));
+  assert.deepEqual(boxRepair('icon-row').modules, ['item-list', 'media-grid']);
   assert.deepEqual(found.find(f => f.ids[0] === 'cmp').repair.modules, ['media-compare', 'before-after']);
   assert.equal(found.find(f => f.ids[0] === 'sp').repair.backdrop, false);
   assert.match(found[0].detail, /footage backdrop/);
