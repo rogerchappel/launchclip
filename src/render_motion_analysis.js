@@ -1195,15 +1195,16 @@ export const TRANSITION_KINDS = Object.freeze(['cut', 'dip', 'flash', 'iris', 'w
 // world turns push into a dolly, which measures as zoom). Between two
 // footage plates morph, rack-focus and card-to-card play as a fade. The
 // VFX covers, dot-wipe and light-sweep cover the whole frame at their
-// midpoint, so they read as dips, as does card-flip (both cards edge-on at
-// its midpoint). overview needs a chapter: null.
+// midpoint, so they read as dips. A clock wipe's sweep is no straight edge
+// (other); a card-flip measures as a dissolve, as both renderers draw it.
+// overview needs a chapter: null.
 export const TRANSITION_TYPE_KINDS = Object.freeze({
   cut: 'cut', fade: 'dissolve', push: 'push', whip: 'whip', zoom: 'zoom', iris: 'iris', morph: 'dissolve',
   pan: 'push', pull: 'zoom', orbit: 'push', 'whip-pan': 'whip', 'rack-focus': 'dissolve', 'glow-wipe': 'wipe',
   'card-to-card': 'dissolve', overview: null, 'dot-wipe': 'dip', 'light-sweep': 'dip', 'push-blur': 'whip',
   'light-leak': 'flash', 'before-after': 'wipe', 'burn-away': 'dip', 'slash-wipe': 'dip', shatter: 'dip',
   'crt-off': 'dip', 'glitch-wipe': 'dip', blinds: 'dip', 'diamond-wipe': 'dip', 'star-iris': 'dip', 'pixel-dissolve': 'dip',
-  wipe: 'wipe', 'clock-wipe': 'wipe', 'card-flip': 'dip'
+  wipe: 'wipe', 'clock-wipe': 'other', 'card-flip': 'dissolve'
 });
 
 // Measured kind → our types to prefer, first first (the RFC's map, plus the
@@ -1647,7 +1648,7 @@ export const ENTRANCE_CLASSIFY = Object.freeze({
   minArea: 0.002,
   maxArea: 0.6, // not in the RFC: change over more of the frame is a transition or a camera move, not an element
   role: 1.25, // not in the RFC: detail (luma gradient) after ÷ before ≥ this is an entrance, before ÷ after an exit, else a change
-  ease: Object.freeze({ out: 0.68, in: 0.32, linearCv: 0.45, floorPairs: 6, tail: 0.05, onset: 0.25 }), // not in the RFC (onset: an entrance starts where its activity first crosses this share of its peak): the noise floor taken off the activity is read over floorPairs each side, and the span runs out from the peak (up to floorPairs past the thresholded one) while activity is above tail × the peak
+  ease: Object.freeze({ out: 0.68, in: 0.32, linearCv: 0.45, floorPairs: 6, tail: 0.05, onset: 0.25, minPairs: 3 }), // not in the RFC (onset: an entrance starts where its activity first crosses this share of its peak): the noise floor taken off the activity is read over floorPairs each side, and the span runs out from the peak (up to floorPairs past the thresholded one) while activity is above tail × the peak
   kind: Object.freeze({ tip: 0.35, correlation: 0.6, travel: 0.02, ownTravel: 0.25, scale: 0.6, presence: 10, firstShare: 0.5 }), // not in the RFC: presence is a cell's mean moved this far from before the event; the first frame read is the first with firstShare of the final presence; a slide also travels ownTravel of its own extent (a blurred shrink-in drifts ≤ 0.07, a slide ~1)
   stagger: Object.freeze({ min: 3, size: 0.4, duration: 0.5, regularity: 0.4 })
 });
@@ -1769,19 +1770,20 @@ function classifyCells({ means, details, shares, mags, cw, ch, fps }, options) {
       if (start >= 0) runs.push({ c, a: start, b: end });
     }
     runs.forEach((run, i) => { if (!byCell.has(run.c)) byCell.set(run.c, []); byCell.get(run.c).push(i); });
-    // Connected cells whose runs overlap in time are one piece.
+    // Connected cells whose runs overlap in time and start together are one piece: touching items that
+    // enter in turn (a stagger of stacked words) stay apart even while one is still animating as the next starts.
+    const split = E.splitSeconds * fps;
     const parent = runs.map((_, i) => i);
     const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
     runs.forEach((run, i) => {
       const x = run.c % cw, y = Math.floor(run.c / cw);
       for (const [nx, ny] of [[x + 1, y], [x, y + 1]]) {
         if (nx >= cw || ny >= ch) continue;
-        for (const j of byCell.get(ny * cw + nx) ?? []) if (runs[j].a <= run.b + 1 && run.a <= runs[j].b + 1) parent[find(i)] = find(j);
+        for (const j of byCell.get(ny * cw + nx) ?? []) if (runs[j].a <= run.b + 1 && run.a <= runs[j].b + 1 && Math.abs(runs[j].a - run.a) <= split) parent[find(i)] = find(j);
       }
     });
     const groups = new Map();
     runs.forEach((run, i) => { const root = find(i); if (!groups.has(root)) groups.set(root, []); groups.get(root).push(run); });
-    const split = E.splitSeconds * fps;
     for (const group of groups.values()) {
       group.sort((left, right) => left.a - right.a);
       let piece = [group[0]];
@@ -1864,6 +1866,8 @@ function describeEvent(runs, { means, details, mags, cw, ch, cells, fps, E }) {
   const curve = [];
   for (let p = from; p <= to; p += 1) curve.push(Math.max(0, level(p) - floor));
   const total = curve.reduce((sum, v) => sum + v, 0) || 1, n = curve.length;
+  // A swap in fewer than minPairs frame pairs (a hard cut of one element) has no curve to read an ease from: it is a change, not an entrance.
+  if (n < E.ease.minPairs) return { ...event, role: 'change' };
   let done = 0;
   for (let i = 0; i < Math.floor(n / 2); i += 1) done += curve[i];
   if (n % 2) done += curve[(n - 1) / 2] / 2;

@@ -129,6 +129,8 @@ test("entrance stats and the grammar drafted from them", () => {
 // in a scene enters for the same min(0.42, stagger − 0.12) s. The
 // measured ease's role must match the planned one for at least 85% of the
 // beats, and each scene's stagger interval must come back within a frame.
+const round3 = (value) => Math.round(value * 1000) / 1000;
+
 test("both renderers: entrance eases and stagger intervals from our own ops", { skip: mediaSkip(), timeout: 1_800_000 }, async (t) => {
   const work = await mkdtemp(path.join(os.tmpdir(), "launchclip-entrances-"));
   const staggers = [0.3, 0.45, 0.6], words = ["ONE", "TWO", "SIX", "TEN"];
@@ -155,13 +157,15 @@ test("both renderers: entrance eases and stagger intervals from our own ops", { 
         await compileStoryCommand(project, { renderer: name, ...(name === "hyperframes" ? { out: path.join(project, "hyperframes") } : {}) });
         const video = path.join(work, `${name}-${ease}.mp4`);
         await getRenderer(name).render(name === "hyperframes" ? path.join(project, "hyperframes") : project, video, { quality: "draft" });
-        const { entrances, sequences } = await analyzeEntrancesFile(video);
+        const { entrances, sequences, events } = await analyzeEntrancesFile(video);
         await rm(video, { force: true });
         const roles = planned.map((time) => { const found = entrances.find((entry) => entry.at >= time - 0.1 && entry.at <= time + 0.25); return found ? ENTRANCE_EASE_ROLES[found.ease] : "missed"; });
         right += roles.filter((role) => role === easeRole(ease)).length;
         total += planned.length;
         const intervals = scenes.map((scene, i) => sequences.find((entry) => entry.at >= scene.start + 0.4 && entry.at <= scene.start + 0.75)?.interval ?? null);
         t.diagnostic(`${name} ${ease}: roles ${roles.map((role) => role ?? "linear").join(" ")}; intervals ${intervals.join(", ")} (planned ${staggers.join(", ")})`);
+        // What the analyzer saw around a missed entrance (renderers rasterize differently per platform).
+        planned.forEach((time, k) => { if (roles[k] === "missed") t.diagnostic(`${name} ${ease}: missed at ${round3(time)}; events near it ${JSON.stringify(events.filter((entry) => entry.at >= time - 0.4 && entry.at <= time + 0.6).map(({ at, seconds, role, area, box, ease: e }) => ({ at, seconds, role, area, box, ease: e })))}`); });
         intervals.forEach((interval, i) => { if (!(interval !== null && Math.abs(interval - staggers[i]) <= 1 / 30 + 1e-9)) misses.push(`${name} ${ease}: scene ${i} interval ${interval} vs ${staggers[i]}`); });
       }
       t.diagnostic(`${name}: ease role right for ${right}/${total}`);
