@@ -834,6 +834,8 @@ export function validateStory(story, { modules, moduleParams } = {}) {
     // Footage-led: track 0 is the base and its full-frame inserts; overlays
     // (and punch-in cameras) sit on track 1 or higher.
     if (scene.insert !== undefined && typeof scene.insert !== "boolean") err(`${path}.insert must be true or false`);
+    // A loop (docs/FLUID_MOTION_RFC.md §8): the scene's last frame equals its first (kit/core/loop.mjs).
+    if (scene.loop !== undefined && typeof scene.loop !== "boolean") err(`${path}.loop must be true or false`);
     else if (scene.insert === true && story.lane !== "footage-led") err(`${path}.insert is only for the footage-led lane`);
     else if (story.lane === "footage-led" && Number.isInteger(track)) {
       if (scene.insert === true && track !== 0) err(`${path}.insert scenes cover the base on track 0; remove track or set it to 0`);

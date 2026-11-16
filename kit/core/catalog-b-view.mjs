@@ -63,7 +63,8 @@ export function rootOps(model, ops) {
   const from = {opacity: f.opacity, x: f.x, y: f.y, scaleX: f.scale, scaleY: f.scale};
   ops.push({type: 'set', target: model.id, time: model.start, props: from});
   ops.push({type: 'tween', target: model.id, start: m.enterStart, duration: m.enterDuration, ease: m.enterEase, from, to: {...IDENTITY}});
-  ops.push({type: 'tween', target: model.id, start: m.exitStart, duration: m.exitDuration, ease: m.exitEase, from: {...IDENTITY}, to: {opacity: e.opacity, x: e.x, y: e.y, scaleX: e.scale, scaleY: e.scale}});
+  // A loop (kit/core/loop.mjs) lands its exit one frame early: the first frame follows the last.
+  ops.push({type: 'tween', target: model.id, start: m.exitStart, duration: model.loop ? Math.round((m.exitDuration - 1 / model.fps) * 10000) / 10000 : m.exitDuration, ease: m.exitEase, from: {...IDENTITY}, to: {opacity: e.opacity, x: e.x, y: e.y, scaleX: e.scale, scaleY: e.scale}});
   ops.push({type: 'set', target: model.id, time: model.end, props: {opacity: 0}});
 }
 export const set = (ops, target, time, props) => ops.push({type: 'set', target, time, props});
