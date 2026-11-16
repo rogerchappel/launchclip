@@ -544,7 +544,6 @@ export function directChunk(chunk, options) {
     if (opener && chunk.chapter.title) draft.headline = chunk.chapter.title;
     draft.headline ??= headlineOf(beat.text);
     draft.chapterTitle = chunk.chapter.title ?? null;
-    if (opener) draft.kicker = `Chapter ${chunk.chapter.index + 1}`;
     // A figure's label is what the narration says it measures, else who it belongs to ("Terra scores 50.3%"), never key words.
     const n = facts.numbers[0];
     const label = n ? n.label || figureSubject(beat.text, n) : null;
