@@ -64,7 +64,8 @@ export const STORY_BACKGROUND_PARAMS = Object.freeze({
   "logo-pattern": { scale: BG_SCALE, spacing: BG_SCALE, offset: BG_UNIT, opacity: [0.04, 0.2], speed: BG_SPEED },
   motif: { scale: BG_SCALE, weight: [0.5, 3], opacity: [0.04, 0.3], angle: [0, 180], speed: BG_SPEED },
   texture: { amount: BG_UNIT, scale: BG_SCALE },
-  weather: { intensity: BG_UNIT, speed: BG_SPEED }
+  weather: { intensity: BG_UNIT, speed: BG_SPEED },
+  "flow-field": { seed: [0, 99999], lines: [80, 400], scale: BG_SCALE, octaves: [1, 4], intensity: BG_UNIT, speed: BG_SPEED }
 });
 export const STORY_BACKGROUND_KINDS = Object.keys(STORY_BACKGROUND_PARAMS);
 export const STORY_BACKGROUND_COLORS = ["primary", "accent", "paper"];
