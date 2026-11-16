@@ -1,0 +1,168 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "A bakery's morning in numbers (9:16 value-card members)",
+  "notes": "Sample for docs/FLUID_MOTION_RFC.md §10 (member modules): the bakery robot's pre-dawn numbers flock out of a head-chef hub, every node a value-card member with a value too long for a badge ($7.15, ×3.2, 1,250, 04:30, 98%), wired into the hub with pulses on a 120 bpm grid, converging at 3 s. No narration and no paid calls.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 10,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0b0d1a",
+      "primary": "#ffb547",
+      "accent": "#46d4ff",
+      "ink": "#0b0d1a",
+      "paper": "#f6f3ee"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "feel": {
+      "preset": "kinetic",
+      "ambient": {
+        "shift": 0.014,
+        "period": [
+          2.5,
+          4
+        ]
+      }
+    }
+  },
+  "camera": {
+    "mode": "cuts",
+    "kicks": [
+      {
+        "at": 0.25
+      },
+      {
+        "at": 1.5
+      },
+      {
+        "at": 3
+      },
+      {
+        "at": 6
+      },
+      {
+        "at": 8
+      }
+    ]
+  },
+  "cast": {
+    "style": "chibi",
+    "characters": [
+      {
+        "id": "bot",
+        "name": "Bot",
+        "kind": "robot",
+        "position": "center"
+      }
+    ]
+  },
+  "world": {
+    "kind": "kitchen",
+    "time": "night"
+  },
+  "scenes": [
+    {
+      "id": "room",
+      "module": "cast-scene",
+      "start": 0,
+      "end": 10,
+      "params": {
+        "set": "standing",
+        "shot": "wide",
+        "cast": [
+          {
+            "id": "bot",
+            "pose": "look",
+            "expression": "happy",
+            "cues": [
+              {
+                "at": 3,
+                "pose": "cheer",
+                "expression": "delighted"
+              },
+              {
+                "at": 4.7,
+                "pose": "look",
+                "expression": "happy"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "team",
+      "module": "node-graph",
+      "track": 1,
+      "start": 0,
+      "end": 10,
+      "params": {
+        "hub": {
+          "label": "Head chef",
+          "icon": "chef-hat"
+        },
+        "nodes": [
+          {
+            "id": "price",
+            "member": {
+              "module": "value-card",
+              "value": "$7.15",
+              "label": "Per loaf"
+            }
+          },
+          {
+            "id": "speed",
+            "member": {
+              "module": "value-card",
+              "value": "×3.2",
+              "label": "Faster"
+            }
+          },
+          {
+            "id": "loaves",
+            "member": {
+              "module": "value-card",
+              "value": "1,250",
+              "label": "Loaves"
+            }
+          },
+          {
+            "id": "open",
+            "member": {
+              "module": "value-card",
+              "value": "04:30",
+              "label": "Doors open"
+            }
+          },
+          {
+            "id": "sold",
+            "member": {
+              "module": "value-card",
+              "value": "98%",
+              "label": "Sold out"
+            }
+          }
+        ],
+        "bpm": 120,
+        "converge": 3,
+        "rect": {
+          "x": 80,
+          "y": 280,
+          "width": 860,
+          "height": 880
+        }
+      }
+    }
+  ]
+}
