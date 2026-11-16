@@ -101,7 +101,8 @@ export function pickEndCard(options = {}) {
 // ---------------------------------------------------------------------------
 // Model
 
-function image(check, value, path, fallbackRatio) {
+/** A logo image: "assets/…" or {src, ratio?, tone?, clear?, box?} (tone, clear and box are measured at import). */
+export function image(check, value, path, fallbackRatio) {
   if (typeof value === 'string') return {src: check.asset(value, path), ratio: fallbackRatio};
   check.obj(value, path, ['src', 'ratio', 'tone', 'clear', 'box'], ['src']);
   const out = {src: check.asset(value.src, `${path}.src`), ratio: value.ratio === undefined ? fallbackRatio : check.num(value.ratio, `${path}.ratio`, 0.2, 12)};
@@ -115,7 +116,7 @@ function image(check, value, path, fallbackRatio) {
 }
 
 // feColorMatrix values that paint every pixel `hex`, keeping its alpha.
-function tintMatrix(hex) {
+export function tintMatrix(hex) {
   const [r, g, b] = [1, 3, 5].map(i => Math.round((parseInt(hex.slice(i, i + 2), 16) / 255) * 1e4) / 1e4);
   return `0 0 0 0 ${r} 0 0 0 0 ${g} 0 0 0 0 ${b} 0 0 0 1 0`;
 }

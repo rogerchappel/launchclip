@@ -175,9 +175,33 @@ async function endCardLogo(value, projectDir, measure) {
 }
 
 /**
+ * `value` (scene params, or anything inside them) with every brand-mark
+ * member (`{module: "brand-mark", src, …}`, kit/core/member-mark.mjs)
+ * measured like an end-card logo. → the same value when nothing changes.
+ */
+async function withMemberMarks(value, projectDir, measure) {
+  if (!value || typeof value !== "object") return value;
+  if (value.module === "brand-mark" && typeof value.src === "string") {
+    const { module, ...given } = value;
+    const logo = await endCardLogo(given, projectDir, measure);
+    return logo ? { module, ...logo } : value;
+  }
+  let changed = false;
+  const entries = await Promise.all(Object.entries(value).map(async ([key, item]) => {
+    const next = await withMemberMarks(item, projectDir, measure);
+    if (next !== item) changed = true;
+    return [key, next];
+  }));
+  if (!changed) return value;
+  return Array.isArray(value) ? entries.map(([, item]) => item) : Object.fromEntries(entries);
+}
+
+/**
  * The story with every brand-lockup scene's untinted mark and wordmark tinted
  * to read on its backdrop (lockupTint), measured from the files. A stated
- * tint or markTint (even "none") wins. → the same story when nothing changes.
+ * tint or markTint (even "none") wins. Brand-mark members in any other
+ * scene are measured like an end-card logo (withMemberMarks). → the same
+ * story when nothing changes.
  */
 export async function withLockupTints(story, projectDir = process.cwd(), measure = measureLogoMark) {
   const scenes = Array.isArray(story?.scenes) ? story.scenes : [];
@@ -189,7 +213,13 @@ export async function withLockupTints(story, projectDir = process.cwd(), measure
       changed = true;
       return { ...scene, params: { ...scene.params, logo } };
     }
-    if (scene?.module !== "brand-lockup" || !scene.params || typeof scene.params !== "object") return scene;
+    if (scene?.module !== "brand-lockup") {
+      const params = await withMemberMarks(scene?.params, projectDir, measure);
+      if (params === scene?.params) return scene;
+      changed = true;
+      return { ...scene, params };
+    }
+    if (!scene.params || typeof scene.params !== "object") return scene;
     const params = { ...scene.params };
     let tinted = false;
     const src = (value) => (typeof value === "string" ? value : value?.src);

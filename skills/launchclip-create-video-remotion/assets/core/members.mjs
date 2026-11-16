@@ -23,6 +23,7 @@
 
 import {GRAPHIC_PARAM, cardHeight, fitGraphic, graphicNodes, graphicSpec, graphicWidth} from './graphic.mjs';
 import {r2} from './catalog-h-base.mjs';
+import {markMember} from './member-mark.mjs';
 import {personMember} from './member-person.mjs';
 import {statusMember} from './member-status.mjs';
 import {subCard} from './member-sub-card.mjs';
@@ -35,7 +36,8 @@ const LIST = [
   toneMember,
   statusMember,
   valueCard,
-  personMember
+  personMember,
+  markMember
 ];
 
 // Not frozen: a test may register a stand-in member.

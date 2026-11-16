@@ -47,7 +47,8 @@ export const BEYOND = Object.freeze({
 export const BEYOND_MEMBER = Object.freeze({
   sub: 'sub-card', detail: 'sub-card', subtitle: 'sub-card', description: 'sub-card', caption: 'sub-card',
   value: 'value-card', figure: 'value-card', multiplier: 'value-card', price: 'value-card', amount: 'value-card',
-  avatar: 'person', person: 'person', face: 'person', portrait: 'person', initials: 'person'
+  avatar: 'person', person: 'person', face: 'person', portrait: 'person', initials: 'person',
+  logo: 'brand-mark', brand: 'brand-mark', integration: 'brand-mark', partner: 'brand-mark'
 });
 const NESTED = new Set(['graphic', 'children', 'item', 'member', 'group', 'node']);
 const LAYOUT = new Set(['x', 'y', 'left', 'top', 'width', 'height', 'size', 'position', 'layout', 'align', 'rotate', 'scale', 'offset']);
