@@ -2744,7 +2744,8 @@ One setting turns on the habits of a top faceless animated reel together:
   is 0, so that is `power3.out`: entrances settle with no overshoot (bounce
   reads as a template tell). An explicit `motion.feel.spring` (0–0.6) still
   springs: `springEase(o)` is `elastic.out(1, P)` with the period solved so
-  the first overshoot is `o` of the travel. Entrances get 0.42 s to settle, the
+  the first overshoot is `o` of the travel. The camera ease is `expo.inOut`
+  with no anticipation (the snappy base's `back.inOut` overshoots). Entrances get 0.42 s to settle, the
   whip-pan ease is `expo.inOut` with 0.8 move blur, `defaultTransition` is a
   0.26 s whip-pan, and the hold level is `lively` (ambient field and hold
   drift, `ambient.mjs`).

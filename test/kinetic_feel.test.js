@@ -53,6 +53,8 @@ test('settles: springEase hits the overshoot it is asked for, and the kinetic gr
   assert.equal(grammar.ease.enter, 'power3.out');
   assert.equal(grammar.ease.emphasis, 'power3.out');
   assert.equal(grammar.overshoot, 0);
+  assert.equal(grammar.ease.camera, 'expo.inOut');
+  assert.equal(grammar.camera.anticipation, false);
   for (const name of ['kinetic', 'snap', 'steady']) assert.equal(easeOvershoot(resolveGrammar(story({motion: {feel: name}})).ease.enter), 0, name);
   // An explicit spring still springs.
   const springy = resolveGrammar(story({motion: {feel: {preset: 'kinetic', spring: 0.27}}}));

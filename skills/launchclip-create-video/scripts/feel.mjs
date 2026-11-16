@@ -202,11 +202,12 @@ export function feelGrammar(story) {
   const spring = springEase(num(own.spring) ? own.spring : preset.spring);
   return {
     base: preset.base,
-    ease: { enter: spring, emphasis: spring },
+    // camera: snappy's back.inOut winds up and overshoots; the feel's camera eases slow → fast → slow.
+    ease: { enter: spring, emphasis: spring, camera: 'expo.inOut' },
     duration: { enter: 0.42, transition: preset.whip },
     overshoot: num(own.spring) ? own.spring : preset.spring,
     defaultTransition: { cuts: { type: 'whip-pan', dur: preset.whip, direction: 'left' }, world: { type: 'whip-pan', dur: 0.36 } },
-    camera: { whip: 'expo.inOut', moveBlur: 0.8 },
+    camera: { whip: 'expo.inOut', anticipation: false, moveBlur: 0.8 },
     // Settled shots never rest (kinetic): the lively hold (ambient.mjs) and a
     // slow push on recorded media. A feel that holds (snap) keeps holds still.
     ambient: preset.hold ?? 'lively',
