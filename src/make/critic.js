@@ -22,6 +22,7 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { FLAW_WORDS } from "@launchclip/core/characters/kinds.mjs";
 import { RULES_HEADING } from "./script.js";
 import { estimateModelUsageCost } from "../cost_tracker.js";
 import { ANIMATIC_REVIEW_FILE, recordAnimaticReview } from "../animatic.js";
@@ -165,7 +166,7 @@ export async function runHeadlessCritic({ project, client, model = null, provide
   if (references.length) lines.push("", "Reference sheets (how each character must look in every shot; not evidence, never cite them):");
   for (const [index, reference] of references.entries()) {
     images.push({ url: referenceUrls[index], detail: "high" });
-    lines.push(`  Image ${images.length}: ${reference.name} (${reference.character})${reference.must_keep.length ? `; must keep: ${reference.must_keep.join(", ")}` : ""}`);
+    lines.push(`  Image ${images.length}: ${reference.name} (${reference.character})${reference.must_keep.length ? `; must keep: ${reference.must_keep.join(", ")}` : ""}${reference.flaw ? `; its fixed flaw, ${reference.flaw}, is in every shot it is in, on the same side: a shot that loses or moves it has drifted` : ""}`);
   }
   const shotLines = shotListLines(shots);
   if (shotLines.length) lines.push("", "The shot list (who is in each shot, what is said, the poses planned):", ...shotLines);
@@ -239,7 +240,7 @@ export async function reviewAnimatic({ critic = runHeadlessCritic, ...options } 
 
 /**
  * The reference sheets of the project's show bible that are on disk:
- * [{character, name, file (project-relative), must_keep}]. Empty with no bible.
+ * [{character, name, file (project-relative), must_keep, flaw}]. Empty with no bible.
  */
 export async function bibleReferenceSheets(project) {
   let bible = null;
@@ -247,7 +248,7 @@ export async function bibleReferenceSheets(project) {
   const cast = Array.isArray(bible?.cast) ? bible.cast : Array.isArray(bible?.cast?.characters) ? bible.cast.characters : [];
   return cast
     .filter((entry) => entry && typeof entry.id === "string" && typeof entry.sheet === "string" && !path.isAbsolute(entry.sheet) && !entry.sheet.split(/[\\/]/).includes("..") && existsSync(path.join(project, entry.sheet)))
-    .map((entry) => ({ character: entry.id, name: String(entry.name ?? entry.id), file: entry.sheet, must_keep: Array.isArray(entry.must_keep) ? entry.must_keep.map(String) : [] }));
+    .map((entry) => ({ character: entry.id, name: String(entry.name ?? entry.id), file: entry.sheet, must_keep: Array.isArray(entry.must_keep) ? entry.must_keep.map(String) : [], flaw: FLAW_WORDS[entry.flaw] ?? null }));
 }
 
 // The shot list as the critic reads it: one line per shot, then what is said.

@@ -962,9 +962,13 @@ async function prepareAnimation(ctx) {
   // Where the problem must land: the character-story profile's limit (--profile names another).
   const { profile } = resolveProfile(options.profile ?? ANIMATION_PROFILE, { projectDir: project });
   const problemLandsSeconds = profile?.measures?.problem_lands_seconds?.p90 ?? null;
-  const room = { client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, wpm: estimatedPace(voiceProvider, narrationRequest(narrationVoice(ctx)).speed), skeleton, structure: skeleton ? skeletonPlanLines(skeleton) : null, problemLandsSeconds, say: ctx.say };
+  // One episode of a series: --engine names its engine (checked before anything is written), else the project's bible may record one (checked when it was frozen).
+  const recorded = (await readJson(path.join(project, BIBLE_FILE)))?.engine ?? null;
+  const asked = typeof options.engine === "string" && options.engine.trim() ? options.engine.trim() : null;
+  const engine = asked && asked !== recorded?.problem ? asked : typeof recorded?.problem === "string" ? recorded : null;
+  const room = { client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, engine, wpm: estimatedPace(voiceProvider, narrationRequest(narrationVoice(ctx)).speed), skeleton, structure: skeleton ? skeletonPlanLines(skeleton) : null, problemLandsSeconds, say: ctx.say };
   const spend = (calls) => { for (const call of calls) addCost(report, call.stage, ctx.model, call); };
-  const scriptHash = hashValue({ kind: "animation", prompt: ctx.text, notes, assets: assetLines, target, model: ctx.model.spec, voice: voiceProvider, pace: room.wpm, ...(options.voiceId ? { voice_id: String(options.voiceId) } : {}), skeleton: [skeleton?.id ?? null, skeleton?.version ?? null], profile: [profile?.id ?? null, problemLandsSeconds], ...(rules ? { rules } : {}), v: 1 });
+  const scriptHash = hashValue({ kind: "animation", prompt: ctx.text, notes, assets: assetLines, target, model: ctx.model.spec, voice: voiceProvider, pace: room.wpm, ...(options.voiceId ? { voice_id: String(options.voiceId) } : {}), skeleton: [skeleton?.id ?? null, skeleton?.version ?? null], profile: [profile?.id ?? null, problemLandsSeconds], ...(rules ? { rules } : {}), ...(engine ? { engine } : {}), v: 1 });
   let script = await readJson(path.join(project, MAKE_PATHS.script));
   const reuse = Boolean(script && state.script?.hash === scriptHash && script.schema_version === SCREENPLAY_VERSION && script.narration);
   let repairs = 1;
@@ -1121,7 +1125,7 @@ async function stageBible(ctx) {
   const voices = new Map(standInCast(script.characters, { provider: "kokoro", narratorVoice }).map((member) => [member.id, member.voice]));
   const notes = await notesText(ctx);
   const rules = rulesText(ctx);
-  const inputs = hashValue({ characters: script.characters, places: script.beats.map((beat) => beat.place ?? null), prompt: ctx.text, notes, model: ctx.model.spec, narrator: narratorVoice, style: packStyle, ...(rules ? { rules } : {}), v: 1 });
+  const inputs = hashValue({ characters: script.characters, places: script.beats.map((beat) => beat.place ?? null), prompt: ctx.text, notes, model: ctx.model.spec, narrator: narratorVoice, style: packStyle, ...(rules ? { rules } : {}), ...(script.engine ? { engine: script.engine } : {}), v: 1 });
   const hooks = { ...(adapters.renderSheet ? { render: adapters.renderSheet } : {}), ...(adapters.home ? { home: adapters.home } : {}) };
   const found = await readBible(project, hooks);
   const frozen = found?.bible?.frozen === true;

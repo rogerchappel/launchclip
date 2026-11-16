@@ -183,6 +183,11 @@ test("cast create saves a character from a description and set paths, and cast e
   assert.match(made.character.voice, /^bf_/, "a British woman's voice");
   assert.equal(made.mapped_by, "words");
   assert.ok(made.assumed.some((entry) => entry.startsWith("skin=")) && made.assumed.some((entry) => entry.startsWith("voice=")), "what nobody said is reported");
+  // A character you design gets a flaw and the written description a show bible freezes.
+  assert.ok(made.assumed.includes(`flaw=${made.character.params.flaw}`));
+  assert.match(made.description, /^Nova is an adult with .* Signature item: round glasses\. Gesture: [a-z ]+\. Must keep: .*; (a sticking plaster|a small scar|two short scratches)[a-z ]+\. Flaw: [a-z ]+\.$/);
+  assert.equal((await castCreate("nova", { project, describe: "A tall woman with silver locs, round glasses and a red blazer. British.", personality: "calm under pressure", set: ["accessories+=earrings", "colors.top=teal"], force: true, "no-sheet": true }, hooks)).description, made.description, "the same words every time");
+  assert.equal((await castCreate("bolt", { project, set: ["kind=robot", "flaw=cheek-plaster"], "no-sheet": true }, hooks)).character.params.flaw, "cheek-plaster", "a flaw you set is kept");
   assert.equal(made.sheet, path.join(project, "cast", "nova.sheet.png"));
   for (const expression of EXPRESSIONS) assert.match(sheets[0].html, new RegExp(`<figcaption>${expression}</figcaption>`));
   const again = await castCreate("nova", { project, describe: "A tall woman with silver locs, round glasses and a red blazer. British.", personality: "calm under pressure", set: ["accessories+=earrings", "colors.top=teal"], force: true, "no-sheet": true }, hooks);
@@ -213,7 +218,7 @@ test("cast create saves a character from a description and set paths, and cast e
   assert.equal(rae.file, path.join(hooks.home, "cast", "rae.character.json"));
   assert.deepEqual([rae.character.params.height, rae.character.params.hair.style, rae.character.params.outfit.top, rae.character.voice], ["tall", "short", "cardigan", "am_michael"]);
   assert.deepEqual(rae.character.params.accessories, ["beard", "glasses"]);
-  assert.equal(rae.assumed, undefined);
+  assert.deepEqual(rae.assumed, [`flaw=${rae.character.params.flaw}`], "only the flaw is assumed for a starter-based character");
   const sheet = await castCharacterSheet("rae", { project, poses: "stand,cheer" }, hooks);
   assert.deepEqual(sheet.characters, [{ id: "rae", poses: ["stand", "cheer"], expressions: [...EXPRESSIONS] }]);
   await assert.rejects(castCharacterSheet("rae", { project, poses: "moonwalk" }, hooks), /not a pose/);

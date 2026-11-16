@@ -8,7 +8,7 @@ import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { BIBLE_CHARACTER_FIELDS, BIBLE_FILE, BIBLE_SCHEMA, bibleCast, bibleCastFindings, bibleHash, bibleRefErrors, mustKeep, validateBible, withBible } from "@launchclip/core/bible.mjs";
+import { BIBLE_CHARACTER_FIELDS, BIBLE_FILE, BIBLE_SCHEMA, ENGINE_EPISODES, bibleCast, bibleCastFindings, bibleHash, bibleRefErrors, characterDescription, defaultFlaw, engineFindings, mustKeep, validateBible, withBible } from "@launchclip/core/bible.mjs";
 import { CHARACTER_SCHEMA } from "@launchclip/core/characters/character.mjs";
 import { DRAWING_STYLES, resolveStoryCast, storyCastErrors } from "@launchclip/core/characters/cues.mjs";
 import { EXPRESSIONS, POSES, normalizeRigParams } from "@launchclip/core/characters/rig.mjs";
@@ -80,8 +80,8 @@ test("freezing a bible from two saved characters writes sheets and a hash", asyn
   assert.deepEqual(bible.world, { kind: "office", time: "day", sets: ["desk-laptop", "standing"] });
   const [first, second] = bible.cast.characters;
   assert.deepEqual([first.id, first.voice, first.position, first.character_file, first.sheet], ["nova", "bf_emma", "left", "cast/nova.character.json", "bible/sheets/nova.png"]);
-  assert.deepEqual(first.must_keep, ["silver locs hair", "deep skin", "red blazer", "charcoal trousers", "round glasses"]);
-  assert.deepEqual(second.must_keep, ["plum headscarf", "medium skin", "forest hoodie", "charcoal trousers", "wheelchair"]);
+  assert.deepEqual(first.must_keep, ["silver locs hair", "deep skin", "red blazer", "charcoal trousers", "round glasses", "a small scar through one eyebrow"]);
+  assert.deepEqual(second.must_keep, ["plum headscarf", "medium skin", "forest hoodie", "charcoal trousers", "wheelchair", "two short scratches on one cheek"]);
   assert.match(first.fingerprint, /^[0-9a-f]{16}$/);
   assert.notEqual(first.fingerprint, second.fingerprint);
   // The cast is the story.cast shape: without the four bible fields it is a valid story cast.
@@ -255,7 +255,7 @@ test("a story whose cast differs from its bible fails the gate", async (t) => {
 
   // A saved character edited after the freeze no longer matches a cast that names it by id.
   await saveCharacter({ ...nova(), params: { ...nova().params, skin: "porcelain" } }, { projectDir: project, home });
-  assert.match(details(await gate({ ...pinned, cast: { style: STYLE, characters: [{ id: "nova", position: "left" }, { id: "rae" }] } })), /nova's skin, colors in story\.cast differ from the bible/);
+  assert.match(details(await gate({ ...pinned, cast: { style: STYLE, characters: [{ id: "nova", position: "left" }, { id: "rae" }] } })), /nova's skin, flaw, colors in story\.cast differ from the bible/);
 
   // A missing sheet and a changed bible fail it too.
   await gate(pinned);
@@ -356,4 +356,109 @@ test("the CLI runs bible freeze and show, and lists them in the usage", async (t
   assert.deepEqual(USAGE.filter(([name]) => name.startsWith("bible ")).map(([name]) => name), ["bible freeze", "bible show"]);
   assert.match(commandHelp("bible"), /bible freeze <project>[\s\S]*bible show <project>/);
   assert.equal(JSON.parse(await readFile(path.join(project, BIBLE_FILE), "utf8")).frozen, true);
+});
+
+test("every bible character gets a flaw, kept in must_keep and drawn into its saved file", async (t) => {
+  const { project, hooks } = await workspace(t);
+  await saveCharacter({ ...rae(), params: { ...rae().params, flaw: "cheek-plaster" } }, { projectDir: project, home: hooks.home });
+  await freezeBible(project, { characters: "nova,rae,sam" }, hooks);
+  const bible = json(path.join(project, BIBLE_FILE));
+  const [nova, rae_, sam] = bible.cast.characters;
+  assert.equal(nova.flaw, defaultFlaw("nova"), "a character with no flaw gets one fixed by its id");
+  assert.equal(rae_.flaw, "cheek-plaster", "a designed flaw is kept");
+  assert.equal(sam.flaw, defaultFlaw("sam"), "a starter gets one too");
+  assert.equal(rae_.must_keep.at(-1), "a sticking plaster on one cheek");
+  assert.equal(json(path.join(project, "cast/nova.character.json")).params.flaw, nova.flaw, "the saved file carries it, so a story naming nova by id draws it");
+  // Dropping the flaw from must_keep is refused like any other feature.
+  const dropped = { ...bible, cast: { ...bible.cast, characters: [{ ...nova, must_keep: nova.must_keep.slice(0, -1) }, rae_, sam] } };
+  assert.match(validateBible({ ...dropped, hash: bibleHash(dropped) }).errors.join("\n"), /must_keep leaves out "a small scar through one eyebrow"/);
+  const bad = { ...bible, cast: { ...bible.cast, characters: [{ ...nova, flaw: "eyepatch" }, rae_, sam] } };
+  assert.match(validateBible({ ...bad, hash: bibleHash(bad) }).errors.join("\n"), /flaw must be one of cheek-plaster, brow-scar, cheek-scratch/);
+});
+
+test("freeze writes each character's description from its rig params, the same words every time", async (t) => {
+  const { project, hooks } = await workspace(t);
+  const first = await freezeBible(project, { characters: "nova,rae" }, hooks);
+  const bible = json(path.join(project, BIBLE_FILE));
+  const nova = bible.cast.characters[0];
+  // Silhouette, proportions, colours as hex, signature item, gesture, must_keep, flaw: in that order.
+  assert.match(nova.description, /^Nova is an adult with a slim build and locs hair, in a blazer and trousers\. Proportions: tall, about [\d.]+ heads tall, drawn outlined\. Colours: skin #[0-9a-f]{6}, hair #[0-9a-f]{6}, blazer #[0-9a-f]{6}, trousers #[0-9a-f]{6}, shoes #[0-9a-f]{6}, accent #[0-9a-f]{6}\. Signature item: round glasses\. Gesture: [a-z ]+\. Must keep: silver locs hair; deep skin; red blazer; charcoal trousers; round glasses; a small scar through one eyebrow\. Flaw: a small scar through one eyebrow\.$/);
+  const member = resolveStoryCast({ cast: bibleCast(bible) }).members.get("nova");
+  assert.equal(characterDescription(member), nova.description, "deterministic from the rig params");
+  assert.equal(characterDescription({ ...member }), characterDescription(member));
+  assert.match(bible.cast.characters[1].description, /with a wheelchair/);
+  assert.equal(bibleCast(bible).characters[0].description, undefined, "the description stays in the bible, out of story.cast");
+  // Freezing again writes the same words, so the hash holds.
+  assert.equal((await freezeBible(project, {}, hooks)).hash, first.hash);
+  const blank = { ...bible, cast: { ...bible.cast, characters: [{ ...nova, description: "" }, bible.cast.characters[1]] } };
+  assert.match(validateBible({ ...blank, hash: bibleHash(blank) }).errors.join("\n"), /description must be the character's written description/);
+  // A kind is described by what it is and its slot colours.
+  const robot = resolveStoryCast({ cast: { style: "flat", characters: [{ id: "bolt", name: "Bolt", kind: "robot", flaw: "brow-scar" }] } }).members.get("bolt");
+  assert.match(characterDescription(robot), /^Bolt is a small robot: .* Colours: the shell #[0-9a-f]{6}, .* Flaw: a small scar through one eyebrow\.$/);
+});
+
+test("a bible frozen before flaws keeps its hash until it is frozen again with --force", async (t) => {
+  const { project, hooks } = await workspace(t);
+  await freezeBible(project, { characters: "nova,rae" }, hooks);
+  // Strip what this version adds, as a bible frozen by an older release would be.
+  const fresh = json(path.join(project, BIBLE_FILE));
+  const old = { ...fresh, cast: { ...fresh.cast, characters: fresh.cast.characters.map(({ flaw: _f, description: _d, ...entry }) => ({ ...entry, must_keep: entry.must_keep.slice(0, -1) })) } };
+  for (const id of ["nova", "rae"]) { const file = path.join(project, `cast/${id}.character.json`); const saved = json(file); delete saved.params.flaw; await write(file, saved); }
+  // The fingerprints are of the params without a flaw.
+  const unflawed = resolveStoryCast({ cast: bibleCast(old) });
+  const { bibleFingerprint } = await import("@launchclip/core/bible.mjs");
+  old.cast.characters = old.cast.characters.map((entry) => ({ ...entry, fingerprint: bibleFingerprint(unflawed.members.get(entry.id)) }));
+  const legacy = { ...old, hash: bibleHash(old) };
+  await write(path.join(project, BIBLE_FILE), legacy);
+  const check = validateBible(legacy);
+  assert.equal(check.ok, true, check.errors.join("\n"));
+  assert.match(check.warnings.join("\n"), /\(nova\) has no flaw; freeze again with --force/);
+  const again = await freezeBible(project, {}, hooks);
+  assert.equal(again.hash, legacy.hash, "a refreeze does not unpin it");
+  const forced = await freezeBible(project, { force: true }, hooks);
+  assert.notEqual(forced.hash, legacy.hash);
+  assert.ok(json(path.join(project, BIBLE_FILE)).cast.characters.every((entry) => entry.flaw && entry.description));
+});
+
+const STRONG = {
+  problem: "Every time the café's ancient espresso machine is fixed, something else in the shop breaks because of the fix.",
+  episodes: [
+    "A health inspector arrives on the morning the steam wand floods the counter.",
+    "Pip rewires the grinder and every light on the street goes out during open mic night.",
+    "A food critic orders a flat white while the milk fridge thaws into the basement.",
+    "The new part arrives from Italy with instructions only the grumpy regular can read.",
+    "A wedding party books the whole café for the day the boiler finally explodes."
+  ]
+};
+
+test("the premise check: a series engine needs five distinct episode ideas before episode one", () => {
+  assert.equal(ENGINE_EPISODES, 5);
+  assert.deepEqual(engineFindings(STRONG), [], "a strong engine pitches five different episodes");
+  // A weak engine: the pitches are the same episode reworded, or only restate the problem.
+  const weak = {
+    problem: "Sam forgets his keys.",
+    episodes: ["Sam forgets his keys.", "Sam forgets his keys again at work.", "Sam forgets his keys again at home.", "Sam forgets the keys at the gym again.", "Sam keys forgets."]
+  };
+  const [finding] = engineFindings(weak);
+  assert.match(finding, /^the engine is too weak: it gives [0-2] distinct episode ideas? \(of 5 pitched, \d only restating the engine\); a series engine needs 5 before episode one\. Fix the engine/);
+  assert.match(engineFindings({ ...STRONG, episodes: STRONG.episodes.slice(0, 4) })[0], /gives 4 distinct episode ideas \(of 4 pitched\)/, "four is not enough");
+  assert.match(engineFindings({ problem: "" })[0], /engine must be \{problem, episodes\}/);
+});
+
+test("the bible records a series engine and refuses a weak one", async (t) => {
+  const draft = { schema: BIBLE_SCHEMA, frozen: false, cast: { style: STYLE, characters: [{ id: "maya" }] } };
+  assert.deepEqual(validateBible({ ...draft, engine: STRONG }).errors, []);
+  assert.match(validateBible({ ...draft, engine: { problem: STRONG.problem, episodes: STRONG.episodes.slice(0, 2) } }).errors.join("\n"), /^engine: the engine is too weak: it gives 2 distinct/);
+  assert.match(validateBible({ ...draft, engine: "keys" }).errors.join("\n"), /engine must be \{problem, episodes\}/);
+  assert.match(validateBible({ ...draft, engine: { ...STRONG, seasons: 2 } }).errors.join("\n"), /engine\.seasons is not supported/);
+  assert.match(validateBible({ ...draft, engine: { ...STRONG, episodes: "one" } }).errors.join("\n"), /engine\.episodes must be a list/);
+
+  const { project, hooks } = await workspace(t);
+  await assert.rejects(freezeBible(project, { characters: "nova", engine: STRONG.problem, episode: STRONG.episodes.slice(0, 3) }, hooks), /engine: the engine is too weak: it gives 3 distinct/);
+  assert.equal(existsSync(path.join(project, BIBLE_FILE)), false, "a weak engine writes no bible");
+  await assert.rejects(freezeBible(project, { characters: "nova", episode: "One more." }, hooks), /name the engine with --engine/);
+  const frozen = await freezeBible(project, { characters: "nova", engine: STRONG.problem, episode: STRONG.episodes }, hooks);
+  assert.deepEqual(frozen.engine, STRONG);
+  assert.deepEqual(json(path.join(project, BIBLE_FILE)).engine, STRONG);
+  assert.deepEqual((await showBible(project, hooks)).engine, STRONG);
 });

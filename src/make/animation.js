@@ -12,6 +12,12 @@
 //                      skeleton's structure when one fits)
 //   repair             writeScreenplay again with the check's errors, once
 //
+// For one episode of a series (an `engine`: the problem that goes wrong every
+// episode and can never be solved for good), the room first checks the
+// premise: checkEngine pitches five episodes from the engine, and a weak
+// engine (fewer than five distinct ideas, kit/core/bible.mjs engineFindings)
+// stops the room with a proposed fix before anything is written.
+//
 // writersRoom() runs the three and checks the result (src/script_check.js
 // checkScreenplay); repairScreenplay() is the repair pass. Neither touches
 // disk or the voice: make's prepare stage (src/make/index.js) caches the
@@ -30,6 +36,7 @@ import { checkScreenplay } from "../script_check.js";
 import { RULES_HEADING, cleanNarration } from "./script.js";
 import { STORY_PROP_IDS, WORLD_KINDS } from "@launchclip/core/worlds/index.mjs";
 import { NOT_DRAWN, TOLD, drawableFindings, drawableLines, normalizeShows } from "./drawable.js";
+import { ENGINE_EPISODES, engineFindings } from "@launchclip/core/bible.mjs";
 
 /** The cadence profile whose problem_lands_seconds a screenplay is held to. */
 export const ANIMATION_PROFILE = "story-characters";
@@ -206,6 +213,21 @@ export const SCREENPLAY_SCHEMA = Object.freeze({
   }
 });
 
+export const ENGINE_SCHEMA = Object.freeze({
+  type: "object",
+  additionalProperties: false,
+  required: ["episodes", "holds", "fix"],
+  properties: {
+    episodes: {
+      type: "array",
+      description: `${ENGINE_EPISODES} episode ideas from the engine, each a different way it goes wrong; fewer when you cannot find ${ENGINE_EPISODES} that are really different.`,
+      items: line("One episode in one sentence: where it happens, what goes wrong this time, and how it gets worse.")
+    },
+    holds: { type: "boolean", description: `True when the engine gives ${ENGINE_EPISODES} really different episodes.` },
+    fix: line("When it does not hold: the engine rewritten so it would, in one sentence. Otherwise \"\".")
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Prompts
 
@@ -219,6 +241,10 @@ From the brief, decide:
 Everything is drawn in code from a fixed kit, listed under "What can be shown". Build every logline on a place and on things from those lists: a story whose turn needs an object the kit cannot draw cannot be made.
 
 Keep every fact, number and product claim to what the brief states. Return only the JSON object.`;
+
+const ENGINE_ROLE = `You check the premise of an animated series before episode one is written. The engine is the problem that goes wrong every episode and can never be solved for good; a series lives on it.
+
+Pitch ${ENGINE_EPISODES} episodes from the engine, one sentence each. Each must be a different way it goes wrong (a different place, a different person caught up in it, a different thing at stake), not the same episode reworded, and not the engine restated. Do not force it: when you cannot find ${ENGINE_EPISODES} that are really different, pitch the ones you can, set holds to false, and rewrite the engine in one sentence so it would hold (a want that can never be met for good, two characters whose wants collide, more places for it to go wrong). Return only the JSON object.`;
 
 const JUDGE_ROLE = `You judge loglines for a short animated character story. You did not write them. You see the brief and the loglines, nothing else.
 
@@ -255,6 +281,9 @@ function briefLines({ prompt, notes = [], rules = null }) {
   return lines;
 }
 
+// One episode of a series is one turn of its engine; the pitched episodes are the ones it should not repeat.
+const engineLines = (engine) => (engine?.problem ? ["", "## The series engine (this video is one episode)", "", `Every episode turns on this, and it is never solved for good: ${engine.problem}`, ...(engine.episodes?.length ? ["", "Episodes already pitched from it:", ...engine.episodes.map((idea) => `- ${idea}`)] : [])] : []);
+
 const characterLine = (character) => `- ${character.id}${character.name && character.name.toLowerCase() !== character.id ? ` (${character.name})` : ""}: ${[character.role, character.want ? `wants ${character.want}` : "", character.speech ? `speaks ${character.speech}` : ""].filter(Boolean).join("; ")}`;
 
 // ---------------------------------------------------------------------------
@@ -270,6 +299,24 @@ async function structured(client, request, { provider, model }) {
 }
 
 /**
+ * The premise check for one episode of a series: the engine and the episodes
+ * pitched from it, judged by the call and measured (engineFindings).
+ * options: {client, provider, model, prompt, notes, rules, engine (the problem, a sentence)}
+ * → {ok, engine: {problem, episodes}, findings, fix (a stronger engine when it fails), usage, cost_usd, model}
+ */
+export async function checkEngine(options = {}) {
+  const problem = text(options.engine);
+  if (!problem) throw new Error("checkEngine needs the series engine: the problem that goes wrong every episode");
+  const input = ["## The engine", "", problem, "", ...briefLines(options)].join("\n");
+  const result = await structured(options.client, { instructions: ENGINE_ROLE, input: `${input}\n`, schema: ENGINE_SCHEMA, schemaName: "launchclip_series_engine", maxOutputTokens: 1500 }, options);
+  const value = result.value ?? {};
+  const engine = { problem, episodes: (Array.isArray(value.episodes) ? value.episodes : []).map(text).filter(Boolean) };
+  // The measure decides as well as the call: five pitches that are one episode reworded do not hold.
+  const findings = [...(value.holds === false ? [`the room could not pitch ${ENGINE_EPISODES} different episodes from the engine`] : []), ...engineFindings(engine)];
+  return { ok: findings.length === 0, engine, findings, fix: findings.length ? text(value.fix) || null : null, usage: result.usage, cost_usd: result.cost_usd, model: result.model };
+}
+
+/**
  * Call 1: the premise, the cast and the loglines.
  * options: {client, provider, model, prompt, notes, rules, duration}
  * → {premise: {want, obstacle, change}, characters: [{id, name?, role, want, speech, voice_type}],
@@ -277,7 +324,7 @@ async function structured(client, request, { provider, model }) {
  */
 export async function writePremise(options = {}) {
   const { client, duration } = options;
-  const input = [`Open the room on this brief. The video runs about ${duration} seconds.`, "", ...briefLines(options), "", ...drawableLines()].join("\n");
+  const input = [`Open the room on this brief. The video runs about ${duration} seconds.`, "", ...briefLines(options), ...engineLines(options.engine), "", ...drawableLines()].join("\n");
   const result = await structured(client, { instructions: PREMISE_ROLE, input: `${input}\n`, schema: PREMISE_SCHEMA, schemaName: "launchclip_animation_premise", maxOutputTokens: 3000 }, options);
   const value = result.value ?? {};
   const premise = { want: text(value.premise?.want), obstacle: text(value.premise?.obstacle), change: text(value.premise?.change) };
@@ -465,8 +512,19 @@ export async function writersRoom(options = {}) {
   const say = options.say ?? (() => {});
   const calls = [];
   const paid = (what) => say(`model: PAID call to ${options.provider} ${options.model} (writers' room: ${what})`);
+  // A series engine is checked before episode one: a weak one stops the room with a fix, before any script is written.
+  let engine = options.engine && typeof options.engine === "object" ? options.engine : null;
+  const enginePass = [];
+  if (typeof options.engine === "string" && options.engine.trim()) {
+    paid(`premise check: ${ENGINE_EPISODES} episodes pitched from the series engine`);
+    const checked = await checkEngine(options);
+    calls.push({ stage: "engine", ...usageOf(checked) });
+    if (!checked.ok) throw new Error(weakEngineMessage(checked));
+    engine = checked.engine;
+    enginePass.push({ kind: "engine", episodes: engine.episodes.length, cost_usd: checked.cost_usd });
+  }
   paid("premise and loglines");
-  const room = await writePremise(options);
+  const room = await writePremise({ ...options, engine });
   calls.push({ stage: "premise", ...usageOf(room) });
   paid(`${room.loglines.length} loglines judged in a fresh context`);
   const judged = await judgeLoglines({ ...options, loglines: room.loglines });
@@ -477,7 +535,9 @@ export async function writersRoom(options = {}) {
   const script = {
     ...playOf(written),
     loglines: { chosen: judged.chosen, reason: judged.reason, options: room.loglines.map((entry, index) => ({ ...entry, ...scoreOf(judged.scores[index]) })) },
+    ...(engine ? { engine } : {}),
     passes: [
+      ...enginePass,
       { kind: "premise", cost_usd: room.cost_usd },
       { kind: "loglines", options: room.loglines.length, chosen: judged.chosen, cost_usd: judged.cost_usd },
       { kind: "write", words: written.word_count, cost_usd: written.cost_usd }
@@ -496,8 +556,14 @@ export async function repairScreenplay(options = {}) {
   (options.say ?? (() => {}))(`script: ${errors.length} script check finding(s) (${[...new Set(errors.map((error) => error.id))].join(", ")}); one repair pass (PAID call to ${options.provider} ${options.model})`);
   const wpm = measured?.wpm ?? options.wpm;
   const written = await writeScreenplay({ ...options, wpm, premise: script.premise, characters: script.characters, logline: script.logline, repair: { previous: script, errors, measured } });
-  const repaired = { ...playOf(written), loglines: script.loglines, passes: [...(script.passes ?? []), { kind: "repair", words: written.word_count, errors: errors.map((error) => error.id), ...(measured ? { measured_seconds: measured.seconds } : {}), cost_usd: written.cost_usd }] };
+  const repaired = { ...playOf(written), loglines: script.loglines, ...(script.engine ? { engine: script.engine } : {}), passes: [...(script.passes ?? []), { kind: "repair", words: written.word_count, errors: errors.map((error) => error.id), ...(measured ? { measured_seconds: measured.seconds } : {}), cost_usd: written.cost_usd }] };
   return { script: repaired, check: checkAnimationScript(repaired, checkOptions({ ...options, wpm })), calls: [{ stage: "script-repair", ...usageOf(written) }] };
+}
+
+/** Why a series engine was refused, with the fix the room proposed. */
+export function weakEngineMessage(checked) {
+  const pitched = checked.engine.episodes.length ? `\nIt pitched:\n${checked.engine.episodes.map((idea) => `- ${idea}`).join("\n")}` : "";
+  return `the premise check failed before episode one: ${checked.findings.join("; ")}.${pitched}\n${checked.fix ? `A stronger engine: ${checked.fix}\nRun again with --engine ${JSON.stringify(checked.fix)}, or your own rewrite.` : "Rewrite the engine (--engine \"…\") so it can go wrong in more ways, and run again."}`;
 }
 
 const checkOptions = (options) => ({ duration: options.duration, wpm: options.wpm, problemLandsSeconds: options.problemLandsSeconds, brief: { prompt: options.prompt, notes: options.notes ?? [], assets: options.assets ?? [] } });

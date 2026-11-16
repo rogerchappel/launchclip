@@ -51,7 +51,7 @@ test('a kind takes kind, size and three colours, in a fixed shape, and refuses a
   }
   assert.deepEqual(normalizeRigParams({colors: {accent: 'red'}, size: 'large', kind: 'cat'}), {kind: 'cat', size: 'large', colors: {body: KINDS.cat.colors.body, detail: KINDS.cat.colors.detail, accent: 'red'}});
   assert.equal(rigFingerprint(normalizeRigParams({kind: 'cat', size: 'medium'})), rigFingerprint(normalizeRigParams({kind: 'cat'})));
-  assert.throws(() => normalizeRigParams({kind: 'cup', hair: {style: 'bob'}}), /\.hair does not apply to a cup \(a cup takes kind, size and colors \{body, detail, accent\}\)/);
+  assert.throws(() => normalizeRigParams({kind: 'cup', hair: {style: 'bob'}}), /\.hair does not apply to a cup \(a cup takes kind, size, flaw and colors \{body, detail, accent\}\)/);
   for (const key of ['skin', 'outfit', 'build', 'height', 'age', 'accessories', 'headwear', 'mobility']) assert.throws(() => normalizeRigParams({kind: 'owl', [key]: 'x'}), new RegExp(`\\.${key} does not apply to an owl`));
   assert.throws(() => normalizeRigParams({kind: 'cup', colors: {top: 'red'}}), /colors\.top is not a colour slot of a cup \(allowed: body, detail, accent\)/);
   assert.throws(() => normalizeRigParams({kind: 'cup', colors: {body: 'sparkly'}}), /colors\.body must be a palette colour/);
