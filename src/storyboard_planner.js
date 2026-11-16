@@ -33,6 +33,7 @@ import { validateCastCues } from "@launchclip/core/characters/cues.mjs";
 import { createStructuredClient, parseModelRoute } from "./model_provider.js";
 import { estimateModelUsageCost } from "./cost_tracker.js";
 import { backdropPrompt, cardBackdrops, minShotsError, resolveShots, shotPrompt, shotRequestLimit, shotRequests } from "./asset_provider.js";
+import { varyCards } from "./card_variety.js";
 import { restoreMisses, varyInserts } from "./insert_variety.js";
 import { fitTimings } from "./timing_fit.js";
 import { addTakeMoves } from "./take_moves.js";
@@ -334,6 +335,12 @@ export async function planStoryboard(options = {}) {
       if (varied.changed.length) {
         pinned.storyboard = varied.storyboard;
         pinned.warnings = [...pinned.warnings, `inserts: tooling varied ${varied.changed.join("; ")}`];
+      }
+      // Repeated cards rotate their look (src/card_variety.js).
+      const cards = varyCards(pinned.storyboard, { style });
+      if (cards.changed.length) {
+        pinned.storyboard = cards.storyboard;
+        pinned.warnings = [...pinned.warnings, `cards: tooling varied ${cards.changed.join("; ")}`];
       }
       // The talking-head layout rebuilds the sections over the whole video.
       let laidOut = false;
