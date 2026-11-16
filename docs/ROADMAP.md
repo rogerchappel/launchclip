@@ -119,7 +119,7 @@ Five R&D documents, each built in small steps that work on their own. Every visu
   - A member with a second line under its label (a "sub"), which about 8 modules already take: map pins, grid-race, cell-grid, title-decompose terms, and the results, card-wall and downloads cards.
   - A member in its own colour or tone, which about 5 modules take (map highlights and pins, the results cards, cell-grid, grid-race). Built (the `tone` member module; in the next release): a card in a step of the brand palette (`accent-deep`, `primary-light`), never a hex, kept at 3:1 on bg.
   - A person as a member, shown as a photo, avatar or initials tile. About 5 modules have one: person-id, lineage-graph people, map pin cards, commit authors and the repo-pr-card author.
-  - A value or multiplier longer than three characters ("$7.15", "×3.2"), as on map-highlight and cell-grid.
+  - A value or multiplier longer than three characters ("$7.15", "×3.2"), as on map-highlight and cell-grid. Built: the `value-card` member (`{member: {module: "value-card", value, label?}}` on node-graph and icon-grid).
   - A brand mark instead of an icon. logo-row takes image files and particle-logo takes a path; the vocabulary sample's "Works with" row stands generic icons in for integrations.
   - A member whose status changes over time (pending, pass, fail), which status-rack and the results cards do for the whole module.
   - One-off, not yet a candidate: a progress bar inside a card (only the custom-module test fixture has one; progress-ring and percent-fill are nearby).
