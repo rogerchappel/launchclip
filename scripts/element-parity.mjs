@@ -28,7 +28,7 @@ const fixture = (name, id, variant, shape, params, duration = SAMPLE_DURATIONS[i
   scenes: [{id: 'el', module: id, start: 0, end: duration, params: {...params, variant}}]}, sceneId: 'el', threshold: {ssim: 0.97}}});
 
 /** {name, fixture} for every module variant (portrait), default (landscape) and extra case. */
-export function elementFixtures(ids = Object.keys(MODULES)) {
+export function elementFixtures(ids = Object.keys(MODULES).filter(id => MODULES[id].standalone)) {
   const out = [];
   for (const id of ids) for (const [i, variant] of VARIANTS[id].entries()) for (const shape of i === 0 ? ['portrait', 'landscape'] : ['portrait']) out.push(fixture(fixtureName(id, variant, shape), id, variant, shape, SAMPLES[id]));
   for (const extra of EXTRA_SAMPLES) if (ids.includes(extra.module) && MODULES[extra.module]) out.push(fixture(`h-${extra.name}`, extra.module, extra.variant, extra.shape, extra.params, extra.duration));
@@ -47,7 +47,7 @@ function args(argv) {
 
 async function main(argv) {
   const opts = args(argv);
-  const ids = opts.modules ?? Object.keys(MODULES);
+  const ids = opts.modules ?? Object.keys(MODULES).filter(id => MODULES[id].standalone);
   if (opts.command === 'fixtures') {
     for (const {name, fixture} of elementFixtures(ids)) await writeFile(path.join(FIXTURES, `${name}.json`), `${JSON.stringify(fixture, null, 2)}\n`);
     process.stdout.write(`${elementFixtures(ids).length} fixtures → ${path.relative(ROOT, FIXTURES)}\n`);

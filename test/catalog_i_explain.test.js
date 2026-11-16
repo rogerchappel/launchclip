@@ -15,7 +15,8 @@ import {SAMPLES} from '../scripts/element-samples.mjs';
 const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', ink: '#06070d', paper: '#f2eee6'}, fonts: {display: 'anton', body: 'space-grotesk', meta: 'jetbrains-mono'}};
 const light = {colors: {bg: '#f5f1e8', primary: '#b7791f', accent: '#1f6feb', ink: '#f5f1e8', paper: '#14161c'}, fonts: brand.fonts};
 const FORMATS = {'9:16': {width: 1080, height: 1920, fps: 30}, '16:9': {width: 1920, height: 1080, fps: 30}};
-const IDS = EXPLAIN_MODULES.map(def => def.id);
+// Modules that need another scene (sprout aims at an anchor) are covered by story parity instead.
+const IDS = EXPLAIN_MODULES.filter(def => def.standalone !== false).map(def => def.id);
 
 test('catalogue I modules are registered in the registry, both renderers and the samples', () => {
   assert.ok(IDS.length >= 2);

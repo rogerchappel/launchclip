@@ -319,7 +319,7 @@ aimed at another scene's anchor (§7):
   wire reaches it (fades and scales up from 0.7 and slides out along the wire,
   `power3.out`), then breathes. Once all have landed, a pulse runs from the
   source to one label per beat, and the label's rim lights as it arrives.
-- **Events:** `grow`, `branch-<id>` (each landing). A hit can move them.
+- **Events:** `build` (the first wire leaves), `branch-<id>` (each landing). A hit can move them.
 - **Anchors carry a box.** `publishAnchors` adds the element's `width` and
   `height`, so a sprout leaves from the source's edge, and `concept-card`
   publishes `card` (its rect, at `word`) and `icon` (at `icon`).

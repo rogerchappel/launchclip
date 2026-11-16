@@ -611,11 +611,13 @@ export function sceneAnchors(story, sceneId) {
 // When an element leaves: its scene's end, followed through explicit pins (scene.carry.map) to later scenes.
 // shortcut: explicit maps only; follow the automatic pairing (motion.flow) here once it resolves pairs.
 function heldUntil(story, scene, element) {
-  let until = Number(scene.end), from = scene, id = element;
+  // As the compilers draw it: through a transition overlap and the final hold.
+  const drawnEnd = (s) => endingEnd(s, story, windowEnds(story).get(s.id) ?? Number(s.end)) ?? Number(s.end);
+  let until = drawnEnd(scene), from = scene, id = element;
   for (let hops = 0; hops < story.scenes.length; hops++) {
     const next = story.scenes.find((other) => other !== from && typeof other?.carry?.map?.[id] === 'string' && carrySource(story, other)?.id === from.id);
     if (!next) break;
-    [from, id, until] = [next, next.carry.map[id], Number(next.end)];
+    [from, id, until] = [next, next.carry.map[id], drawnEnd(next)];
   }
   return until;
 }

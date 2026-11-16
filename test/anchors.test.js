@@ -80,6 +80,6 @@ test('concept-card publishes its card (with its box) and icon; an anchor stays u
   assert.deepEqual([card.x, card.y, card.width, card.height, card.element], [540, 680, 800, 520, 'ad-card']);
   assert.equal(card.time, model.events.find(event => event.name === 'word').time);
   assert.equal(icon.time, model.events.find(event => event.name === 'icon').time);
-  assert.equal(card.until, 6, 'pinned into ad2, which ends at 6 s');
+  assert.equal(card.until, 8, 'pinned into ad2, drawn to 8 s with the final hold');
   assert.equal(sceneAnchors(cardStory(false), 'ad').card.until, 3);
 });
