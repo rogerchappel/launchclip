@@ -7,9 +7,10 @@
 //                                                     the boundary, when the scene is
 //                                                     drawn on past it through a camera move)
 //     in?:  {from: scene id, items: [{id, box?}],    elements it receives (box: the
-//            move?: {start, duration, ease}}          source's rect at the boundary, in this
-//                                                     plate's px; move: the camera move it
-//                                                     arrives by)
+//            move?: {start, duration, ease},      source's rect at the boundary, in this
+//            ride?: {x, y, rotation, scale}}       plate's px; move: the camera move it
+//                                                     arrives by; ride: the camera's inverse
+//                                                     on a zoom or roll, see rideOps)
 //     exitTo?, enterFrom?                             the root motion lifted off the root
 //   }
 //
@@ -29,6 +30,10 @@
 //   travels in the world with the move's own timing and ease, all members at
 //   once, so on screen it slides straight from its old place to its slot
 //   (docs/rd/carry-moving-camera.md).
+// - in, ride (a move that zooms or rolls, §6.6): each received element is
+//   wrapped in a `-ride` layer that cancels the camera, so inside it the
+//   plate's px are screen px for the whole move and the FLIP above is a
+//   straight line on screen.
 //
 // Plain ESM; imports only catalog-b-view.mjs, shot-states.mjs, grammar.mjs and fluid-motion.mjs.
 
@@ -108,14 +113,19 @@ function carryPlan(model, children) {
 /** The content children with the carry's lift layers in place (the view hook). */
 export function carryView(model, children) {
   if (!carriedIds(model).length) return children;
-  const {lifts} = carryPlan(model, children);
+  const {lifts, index} = carryPlan(model, children);
   const byNode = new Map(lifts.map(lift => [lift.node, lift]));
+  if (model.carry.in?.ride) for (const item of model.carry.in.items) {
+    const node = index.byId.get(item.id).node, [x, y] = item.frame.origin;
+    byNode.set(node, {id: `${item.id}-ride`, origin: `${x}px ${y}px`});
+  }
   const wrap = node => {
     if (!node || typeof node !== 'object') return node;
     const lift = byNode.get(node);
-    if (lift) return el('div', lift.id, {...abs(0, 0, '100%', '100%'), transformOrigin: lift.origin}, [node]);
-    return node.children?.length ? {...node, children: node.children.map(wrap)} : node;
+    if (lift) return el('div', lift.id, {...abs(0, 0, '100%', '100%'), transformOrigin: lift.origin}, [lift.id.endsWith('-ride') ? wrapKids(node) : node]);
+    return wrapKids(node);
   };
+  const wrapKids = node => (node.children?.length ? {...node, children: node.children.map(wrap)} : node);
   return children.map(wrap);
 }
 
@@ -147,6 +157,7 @@ export function applyCarry(model, ops, children) {
   if (c.in) {
     skipEntrances(model, ops, plan.into.targets, plan.index);
     flipOps(model, ops, children);
+    if (c.in.ride) rideOps(model, ops);
   }
   return ops;
 }
@@ -191,6 +202,44 @@ function flipOps(model, ops, children) {
     ops.push({type: 'tween', target: id, start: t, duration, ease: ease.y, from: {y: from.y}, to: {y: own.y}});
     ops.push({type: 'tween', target: id, start: t, duration, ease: ease.scale, from: {scaleX: from.scaleX, scaleY: from.scaleY, rotation: from.rotation}, to: {scaleX: own.scaleX, scaleY: own.scaleY, rotation: own.rotation}});
   }
+}
+
+/**
+ * The ride layers (§6.6): the camera's inverse in the plate's px (ride: the
+ * translate x, y and rotation it starts at, tweened to 0 on the move's ease,
+ * and the scale as [time, value] samples joined by straight tweens),
+ * conjugated into each element's parent px by its frame (origin: the canvas
+ * centre in the parent's px, inverse: the parent's linear map inverted, a
+ * similarity, so rotation and scale pass through unchanged).
+ */
+function rideOps(model, ops) {
+  const {ride, move, items} = model.carry.in;
+  const r = value => Math.round(value * 1e4) / 1e4;
+  for (const item of items) {
+    const id = `${item.id}-ride`, [x, y] = apply(item.frame.inverse, [ride.x, ride.y]).map(r), s0 = ride.scale[0][1];
+    ops.push({type: 'set', target: id, time: model.start, props: {x, y, rotation: ride.rotation, scaleX: s0, scaleY: s0}});
+    ops.push({type: 'tween', target: id, start: move.start, duration: move.duration, ease: move.ease, from: {x, y, rotation: ride.rotation}, to: {x: 0, y: 0, rotation: 0}});
+    for (let k = 1; k < ride.scale.length; k += 1) {
+      const [t0, a] = ride.scale[k - 1], [t1, b] = ride.scale[k];
+      ops.push({type: 'tween', target: id, start: t0, duration: r(t1 - t0), ease: 'none', from: {scaleX: a, scaleY: a}, to: {scaleX: b, scaleY: b}});
+    }
+  }
+}
+
+/**
+ * An element's parent frame at t: {origin: the canvas point (cx, cy) in the
+ * parent's px, inverse: the parent's linear map to the canvas, inverted}.
+ * Throws when that map is not a similarity (a ride needs rotation and scale to
+ * commute with it).
+ */
+export function parentFrame(model, children, ops, t, id, [cx, cy]) {
+  const entry = indexView(children).byId.get(id), state = frameState(ops, t);
+  const at = point => { const [x, y] = toCanvas(entry.parent, point, state); return [model.rect.x + x, model.rect.y + y]; };
+  const [ox, oy] = at([0, 0]), [ax, ay] = at([1, 0]), [bx, by] = at([0, 1]);
+  const linear = [ax - ox, bx - ox, ay - oy, by - oy];
+  if (Math.abs(linear[0] - linear[3]) > 1e-4 || Math.abs(linear[1] + linear[2]) > 1e-4) throw new Error(`carry: ${id} sits in a layer that stretches unevenly; a zoom or roll needs uniform scale`);
+  const inverse = invert(linear), round = value => Math.round(value * 100) / 100;
+  return {origin: apply(inverse, [cx - ox, cy - oy]).map(round), inverse: inverse.map(value => Math.round(value * 1e6) / 1e6)};
 }
 
 const pick = (props = {}) => Object.fromEntries(['x', 'y', 'scaleX', 'scaleY', 'rotation'].filter(key => typeof props[key] === 'number').map(key => [key, props[key]]));
@@ -288,22 +337,27 @@ export function visualBoxes(model, children, ops, t, ids) {
     const entry = index.byId.get(id);
     if (!entry) continue;
     const w = entry.width ?? 0, h = entry.height ?? 0;
-    let point = [w / 2, h / 2];
-    let linear = [1, 0, 0, 1];
-    for (let at = entry; at && at.parent; at = at.parent) {
-      const p = state.get(at.id) ?? {};
-      const ow = (at.width ?? 0) * at.origin.x, oh = (at.height ?? 0) * at.origin.y;
-      const r = ((p.rotation ?? 0) * Math.PI) / 180, cos = Math.cos(r), sin = Math.sin(r);
-      const local = mul([cos, -sin, sin, cos], [p.scaleX ?? 1, 0, 0, p.scaleY ?? 1]);
-      const [dx, dy] = apply(local, [point[0] - ow, point[1] - oh]);
-      point = [(at.x ?? 0) + ow + (p.x ?? 0) + dx, (at.y ?? 0) + oh + (p.y ?? 0) + dy];
-      linear = mul(local, linear);
-    }
+    const linear = [1, 0, 0, 1];
+    const point = toCanvas(entry, [w / 2, h / 2], state, linear);
     const [ux, uy] = apply(linear, [1, 0]), [vx, vy] = apply(linear, [0, 1]);
     const round = value => Math.round(value * 100) / 100;
     out[id] = {cx: round(model.rect.x + point[0]), cy: round(model.rect.y + point[1]), w: round(w * Math.hypot(ux, uy)), h: round(h * Math.hypot(vx, vy)), rotation: round((Math.atan2(uy, ux) * 180) / Math.PI)};
   }
   return out;
+}
+
+/** A point in an entry's own px → the module's content px, through it and its ancestors at a frame state (linear: multiplied in place by their linear maps). */
+function toCanvas(entry, point, state, linear = [1, 0, 0, 1]) {
+  for (let at = entry; at && at.parent; at = at.parent) {
+    const p = state.get(at.id) ?? {};
+    const ow = at.origin.ox ?? (at.width ?? 0) * at.origin.x, oh = at.origin.oy ?? (at.height ?? 0) * at.origin.y;
+    const r = ((p.rotation ?? 0) * Math.PI) / 180, cos = Math.cos(r), sin = Math.sin(r);
+    const local = mul([cos, -sin, sin, cos], [p.scaleX ?? 1, 0, 0, p.scaleY ?? 1]);
+    const [dx, dy] = apply(local, [point[0] - ow, point[1] - oh]);
+    point = [(at.x ?? 0) + ow + (p.x ?? 0) + dx, (at.y ?? 0) + oh + (p.y ?? 0) + dy];
+    linear.splice(0, 4, ...mul(local, linear));
+  }
+  return point;
 }
 
 /** Whether two visual boxes are the same on screen (half a pixel, a tenth of a degree). */

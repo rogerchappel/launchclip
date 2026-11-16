@@ -248,7 +248,11 @@ function lineHeight(value, size) {
 function origin(value) {
   const parts = String(value ?? '50% 50%').trim().split(/\s+/);
   const pct = part => (/%$/.test(part) ? Number(part.replace('%', '')) / 100 : part === 'left' || part === 'top' ? 0 : part === 'right' || part === 'bottom' ? 1 : 0.5);
-  return {x: pct(parts[0] ?? '50%'), y: pct(parts[1] ?? parts[0] ?? '50%')};
+  const out = {x: pct(parts[0] ?? '50%'), y: pct(parts[1] ?? parts[0] ?? '50%')};
+  // A px origin (carry's lift and ride layers) holds whatever the box's size.
+  const px = parts.map(part => (/^-?\d+(\.\d+)?px$/.test(part) ? Number(part.slice(0, -2)) : undefined));
+  if (px[0] !== undefined && px[1] !== undefined) Object.assign(out, {ox: px[0], oy: px[1]});
+  return out;
 }
 
 const ancestors = entry => { const out = []; for (let at = entry; at; at = at.parent) out.unshift(at); return out; };

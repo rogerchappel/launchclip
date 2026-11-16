@@ -9,17 +9,20 @@
 // The source of a scene is the last earlier scene on its track whose module is
 // an op-list module (catalogue B, G or H), with only footage or a gap between,
 // so a plate that comes back after a footage cutaway resumes where it left
-// off. A carry needs the scene to arrive by a cut (a still plate) or by a
+// off. A carry needs the scene to arrive by a cut (a still plate), by a
 // camera move that keeps zoom and roll (a pan or whip-pan, world or cuts
 // mode): then A's rect is mapped through the two plates' world placements and
-// the element travels with the move (docs/rd/carry-moving-camera.md).
+// the element travels with the move (docs/rd/carry-moving-camera.md), or by a
+// push or pull of the camera: then the element rides a layer that cancels the
+// camera (docs/FLUID_MOTION_RFC.md §6.6).
 //
 // Plain ESM; imports kit/core siblings only.
 
 import {MODULES as CATALOG_B, catalogBTimeline, catalogBView} from './catalog-b.mjs';
 import {MODULES as CATALOG_G, catalogGTimeline, catalogGView} from './catalog-g.mjs';
 import {MODULES as CATALOG_H, catalogHTimeline, catalogHView} from './catalog-h.mjs';
-import {ROOT_REST, sameBox, visualBoxes} from './carry.mjs';
+import {ROOT_REST, parentFrame, sameBox, visualBoxes} from './carry.mjs';
+import {scaleStepAt} from './motion.mjs';
 import {indexView} from './shot-states.mjs';
 import {FEELS} from './feel.mjs';
 import {cameraActive, cameraPlan, resolveCamera, sceneObjectLookup, worldPoint} from './camera-world.mjs';
@@ -54,6 +57,8 @@ export function carrySource(story, scene) {
 
 /** Camera moves a carry rides: they keep zoom and roll, so the element's world travel is a straight line on screen. */
 export const CARRY_MOVES = Object.freeze(['pan', 'whip-pan']);
+/** Camera moves that change zoom a carry rides on a layer that cancels the camera (§6.6). */
+export const CARRY_RIDES = Object.freeze(['push', 'pull']);
 /** Typed transitions a carry rides: B's layer slides in on one axis (and may blur), which is a camera move in all but name. */
 export const CARRY_SLIDES = Object.freeze(['push', 'whip']);
 
@@ -61,7 +66,7 @@ export const CARRY_SLIDES = Object.freeze(['push', 'whip']);
 export function stillPlateProblem(story, scene) {
   const transition = scene?.in, type = transition?.type;
   if (!transition || type === 'cut') return null;
-  if (isCameraTransition(transition, resolveCamera(story).mode)) return CARRY_MOVES.includes(type) ? null : `it arrives by a ${type} camera move, which changes zoom or roll; carry rides cuts, pans, whip-pans, pushes and whips`;
+  if (isCameraTransition(transition, resolveCamera(story).mode)) return CARRY_MOVES.includes(type) || CARRY_RIDES.includes(type) ? null : `it arrives by a ${type} camera move; carry rides cuts, pans, whip-pans, pushes, pulls and whips`;
   if (CARRY_SLIDES.includes(type)) return null;
   return `it arrives by a ${type ?? 'typed'} transition; carry needs a cut (no in), a pan, a whip-pan, a push or a whip`;
 }
@@ -88,8 +93,29 @@ function arrivalMove(story, A, B, resolveBare) {
   if (!move) return null;
   const order = plan.order, at = order.indexOf(B.id);
   if (order[at - 1] !== A.id) throw new Error(`it arrives by a camera move from ${order[at - 1]}, not from ${A.id}`);
+  if (CARRY_RIDES.includes(move.type)) return {move: {start: move.start, duration: move.duration, ease: move.ease}, ride: rideOf(move, plan.placements[B.id], plan)};
   if (Math.abs(Math.log(move.to.zoom / move.from.zoom)) > 1e-4 || Math.abs(move.to.rotation - move.from.rotation) > 1e-3) throw new Error(`its ${move.type} changes the camera's zoom or roll; carry rides moves between plates of one scale`);
   return {move: {start: move.start, duration: move.duration, ease: move.ease}, from: plan.placements[A.id], to: plan.placements[B.id]};
+}
+
+// Ride samples of the camera's zoom per second (straight tweens between them).
+const RIDE_RATE = 60;
+
+/**
+ * The camera's inverse through a move, in plate B's canvas px (§6.6): B's px
+ * reach the screen as c + k·Rot(θ)·(p − q) with k = zoom · B's scale, θ = roll
+ * + B's rotation and q the camera's centre in B's px. → {x, y, rotation} (the
+ * translate q − c and the rotation −θ at the move's start, both 0 at its end
+ * and tweened on its ease) and scale: [[t, 1/k]] samples.
+ */
+function rideOf(move, placement, {width, height}) {
+  const r = (-placement.rotation * Math.PI) / 180, round = (value, f = 1e4) => Math.round(value * f) / f + 0;
+  const dx = move.from.x - placement.x, dy = move.from.y - placement.y;
+  const qx = (dx * Math.cos(r) - dy * Math.sin(r)) / placement.scale, qy = (dx * Math.sin(r) + dy * Math.cos(r)) / placement.scale;
+  const count = Math.max(1, Math.ceil(move.duration * RIDE_RATE - 1e-6));
+  const scale = Array.from({length: count + 1}, (_, i) => [round(move.start + (move.duration * i) / count, 1e6), round(1 / (scaleStepAt(i / count, {from: move.from.zoom, to: move.to.zoom, duration: move.duration, ease: move.ease}) * placement.scale), 1e6)]);
+  scale[count][1] = 1;
+  return {x: round(qx - width / 2, 100), y: round(qy - height / 2, 100), rotation: round(-(move.from.rotation + placement.rotation)), scale};
 }
 
 /** A visual box on plate `from` (canvas px) → the same box in the world, in plate `to`'s canvas px. */
@@ -231,16 +257,21 @@ function measure(story, A, B, resolveBare, explicitMap, flow) {
   tag(b, {into: {from: A.id, items: Object.values(map).map(id => ({id}))}});
   const lb = opList(b);
   const slots = visualBoxes(b, lb.children, lb.ops, b.start, Object.values(map));
-  const pins = new Set(Object.entries(map).filter(([from, to]) => sameBox(boxes[from], slots[to])).map(([, to]) => to));
+  // On a ride nothing is a pin: a twin in the same place holds still on screen while B's plate zooms under it.
+  const pins = new Set(arrival?.ride ? [] : Object.entries(map).filter(([from, to]) => sameBox(boxes[from], slots[to])).map(([, to]) => to));
+  const centre = [Number(story.format.width) / 2, Number(story.format.height) / 2];
+  const frames = arrival?.ride ? Object.fromEntries(Object.values(map).map(id => [id, parentFrame(b, lb.children, lb.ops, b.start, id, centre)])) : null;
   if (!explicitMap) {
     // A same-shape twin that moved is a carry (flow.carry) or nothing; carry: false keeps only pins.
     for (const [from, to] of Object.entries(map)) if (pins.has(to) ? !flow.pin : !flow.carry) delete map[from];
     if (!Object.keys(map).length) return null;
   }
-  return {map, boxes, pins, at, move: arrival?.move ?? null};
+  if (frames) for (const id of Object.keys(frames)) if (!Object.values(map).includes(id)) delete frames[id];
+  return {map, boxes, pins, at, move: arrival?.move ?? null, ride: arrival?.ride ?? null, frames};
 }
 
-const toB = (boxes, arrival) => (arrival ? Object.fromEntries(Object.entries(boxes).map(([id, box]) => [id, mapBox(box, arrival.from, arrival.to)])) : boxes);
+// A ride needs no mapping: on the boundary the camera rests on A, and inside the ride B's px are screen px.
+const toB = (boxes, arrival) => (arrival?.from ? Object.fromEntries(Object.entries(boxes).map(([id, box]) => [id, mapBox(box, arrival.from, arrival.to)])) : boxes);
 
 /**
  * The elements pinned into scene B from its source (explicit or automatic):
@@ -270,6 +301,6 @@ export function applyFlow(model, scene, story, resolveBare) {
     if (pairs) out = {ids: Object.keys(pairs.map), to: other.id, at: pairs.at};
   }
   if (!into && !out) return model;
-  tag(model, {out, into: into ? {from: source.id, ...(into.move ? {move: into.move} : {}), items: Object.entries(into.map).map(([from, id]) => ({id, box: into.boxes[from], pin: into.pins.has(id)}))} : null});
+  tag(model, {out, into: into ? {from: source.id, ...(into.move ? {move: into.move} : {}), ...(into.ride ? {ride: into.ride} : {}), items: Object.entries(into.map).map(([from, id]) => ({id, box: into.boxes[from], pin: into.pins.has(id), ...(into.frames ? {frame: into.frames[id]} : {})}))} : null});
   return model;
 }
