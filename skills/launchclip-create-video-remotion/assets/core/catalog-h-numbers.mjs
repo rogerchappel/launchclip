@@ -240,6 +240,7 @@ function flipTimeline(model, ops) {
     tw(ops, `${id}-flap-${i}-${s}`, t, FLIP_HALF, 'power2.in', {scaleY: 1}, {scaleY: 0});
     set(ops, `${id}-fall-${i}-${s}`, start, {opacity: 0, x: 0, y: 0, scaleX: 1, scaleY: 0});
     set(ops, `${id}-fall-${i}-${s}`, rt(t + FLIP_HALF), {opacity: 1});
+    // Kept: a split-flap's falling flap bounces on its stop; that physical bounce is the module's point.
     tw(ops, `${id}-fall-${i}-${s}`, rt(t + FLIP_HALF), FLIP_HALF, 'bounce.out', {scaleY: 0}, {scaleY: 1});
   }));
   captionOps(model, ops, rt(c.t0 - 0.2));
@@ -434,9 +435,9 @@ function slotTimeline(model, ops) {
   const {id, start} = model;
   const c = model.content;
   set(ops, `${id}-strip`, start, {x: 0, y: 0, blur: 0});
-  tw(ops, `${id}-strip`, c.t0, c.duration, 'back.out(1.1)', {y: 0}, {y: c.endY});
+  tw(ops, `${id}-strip`, c.t0, c.duration, 'power3.out', {y: 0}, {y: c.endY});
   tw(ops, `${id}-strip`, c.t0, rt(c.duration * 0.85), 'power2.in', {blur: 7 * model.unit}, {blur: 0});
-  tw(ops, `${id}-reel`, rt(c.t0 + c.duration - 0.05), 0.35, 'back.out(3)', {scaleX: 0.94, scaleY: 0.94}, {scaleX: 1, scaleY: 1});
+  tw(ops, `${id}-reel`, rt(c.t0 + c.duration - 0.05), 0.35, 'power3.out', {scaleX: 0.94, scaleY: 0.94}, {scaleX: 1, scaleY: 1});
 }
 
 export const slotRoll = {
@@ -529,7 +530,7 @@ function countdownTimeline(model, ops) {
   }
   if (c.end) {
     tw(ops, `${id}-num`, c.end.time, 0.2, 'power2.in', {opacity: 1}, {opacity: 0});
-    popOps(ops, `${id}-end`, start, rt(c.end.time + 0.1), {from: 0.5, ease: 'back.out(2.2)'});
+    popOps(ops, `${id}-end`, start, rt(c.end.time + 0.1), {from: 0.5, ease: 'power3.out'});
   }
   captionOps(model, ops, rt(c.t0 - 0.2));
 }

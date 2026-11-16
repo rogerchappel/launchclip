@@ -175,7 +175,7 @@ function equationTimeline(model, ops) {
       tw(ops, target, c.diffAt, 0.3, 'power1.out', {opacity: 1}, {opacity: 0});
       set(ops, `${id}-strike-${i}`, start, {x: 0, y: 0, scaleX: 0, scaleY: 1});
       tw(ops, `${id}-strike-${i}`, rt(c.diffAt + 0.15), 0.35, 'power2.out', {scaleX: 0}, {scaleX: 1});
-    } else riseOps(ops, target, start, layer.time, r2(28 * u), {duration: 0.5, ease: 'back.out(1.6)'});
+    } else riseOps(ops, target, start, layer.time, r2(28 * u), {duration: 0.5, ease: 'power3.out'});
   });
   c.boxes.forEach((box, n) => {
     popOps(ops, `${id}-box-${n}`, start, box.time, {from: 1.15, duration: 0.4, ease: 'power3.out', fade: 0.2});
@@ -323,7 +323,7 @@ function decomposeTimeline(model, ops) {
   const c = model.content;
   if (c.citation) riseOps(ops, `${id}-cite`, start, rt(c.buildAt - 0.1), r2(10 * u));
   c.chips.forEach(chip => {
-    popOps(ops, `${id}-w-${chip.k}`, start, chip.time, {from: 0.7, duration: 0.35, ease: 'back.out(2)'});
+    popOps(ops, `${id}-w-${chip.k}`, start, chip.time, {from: 0.7, duration: 0.35, ease: 'power3.out'});
     if (chip.term >= 0) {
       set(ops, `${id}-hl-${chip.k}`, start, {opacity: 0});
       tw(ops, `${id}-hl-${chip.k}`, c.terms[chip.term].time, 0.3, 'power2.out', {opacity: 0}, {opacity: 1});
@@ -510,10 +510,10 @@ function feynmanTimeline(model, ops) {
   c.lines.forEach((line, i) => {
     if (line.type === 'scalar') drawMaskOps(ops, `${id}-line-${i}`, start, line.time, line.duration, 'power1.inOut');
     else drawOps(ops, `${id}-line-${i}`, start, line.time, line.duration, 'power1.inOut');
-    if (line.arrow) popOps(ops, `${id}-arrow-${i}`, start, rt(line.time + line.duration * 0.5), {from: 0.2, duration: 0.3, ease: 'back.out(2.4)'});
+    if (line.arrow) popOps(ops, `${id}-arrow-${i}`, start, rt(line.time + line.duration * 0.5), {from: 0.2, duration: 0.3, ease: 'power3.out'});
     if (line.labelBox) riseOps(ops, `${id}-label-${i}`, start, rt(line.time + line.duration * 0.6), r2(10 * u), {duration: 0.3});
   });
-  c.vertices.forEach(v => popOps(ops, `${id}-v-${v.name}`, start, v.time, {from: 0.2, duration: 0.35, ease: 'back.out(2.6)'}));
+  c.vertices.forEach(v => popOps(ops, `${id}-v-${v.name}`, start, v.time, {from: 0.2, duration: 0.35, ease: 'power3.out'}));
 }
 
 export const feynmanDiagram = {

@@ -84,7 +84,7 @@ export function drawOps(ops, id, start, at, duration, ease, to = 0, from = 1) {
 }
 
 /** A pop: opacity 0 → 1 and scale `from` → 1 at `at`. */
-export function popOps(ops, id, start, at, {from = 0.4, duration = 0.45, ease = 'back.out(1.7)', fade = 0.18} = {}) {
+export function popOps(ops, id, start, at, {from = 0.4, duration = 0.45, ease = 'power3.out', fade = 0.18} = {}) {
   set(ops, id, start, {opacity: 0, x: 0, y: 0, scaleX: from, scaleY: from});
   tw(ops, id, at, fade, 'power1.out', {opacity: 0}, {opacity: 1});
   tw(ops, id, at, duration, ease, {scaleX: from, scaleY: from}, {scaleX: 1, scaleY: 1});

@@ -186,7 +186,7 @@ function tokenTimeline(model, ops) {
   countOps(ops, `${id}-tk`, start, '0', c.tokenSamples);
   countOps(ops, `${id}-ch`, start, '0', c.charSamples);
   c.chips.items.forEach((item, i) => {
-    popOps(ops, `${id}-chip-${i}`, start, item.time, {from: 0.5, duration: 0.4, ease: 'back.out(2.2)'});
+    popOps(ops, `${id}-chip-${i}`, start, item.time, {from: 0.5, duration: 0.4, ease: 'power3.out'});
     c.models.forEach((_m, j) => rise(`${id}-cp-${i}-${j}`, item.time + 0.15 + j * 0.05, 8));
   });
   const race0 = rt(c.raceAt - 0.45);

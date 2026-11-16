@@ -862,10 +862,10 @@ export function mediaLayoutTimeline(model) {
     const lift = t.pop ? {y: 0, scaleX: 0.6, scaleY: 0.6} : {y: c.textRise, scaleX: 1, scaleY: 1};
     set(ops, target, start, {opacity: 0, x: 0, ...lift});
     tw(ops, target, t.at, c.textFade, c.fadeEase, {opacity: 0}, {opacity: 1});
-    tw(ops, target, t.at, c.textFade * (t.pop ? 1.4 : 1.8), t.pop ? 'back.out(1.7)' : c.enterEase, lift, {y: 0, scaleX: 1, scaleY: 1});
+    tw(ops, target, t.at, c.textFade * (t.pop ? 1.4 : 1.8), t.pop ? 'power3.out' : c.enterEase, lift, {y: 0, scaleX: 1, scaleY: 1});
     if (t.bullet) {
       set(ops, `${target}-dot`, start, {opacity: 0, scaleX: 0, scaleY: 0});
-      tw(ops, `${target}-dot`, t.at, c.textFade, 'back.out(1.7)', {opacity: 0, scaleX: 0, scaleY: 0}, {opacity: 1, scaleX: 1, scaleY: 1});
+      tw(ops, `${target}-dot`, t.at, c.textFade, 'power3.out', {opacity: 0, scaleX: 0, scaleY: 0}, {opacity: 1, scaleX: 1, scaleY: 1});
     }
     if (t.count) {
       // The figure counts up from 0, one set a frame (seek-safe), landing on the exact text.

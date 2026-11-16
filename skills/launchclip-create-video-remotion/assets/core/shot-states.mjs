@@ -527,7 +527,7 @@ function statePlan(model, children, view) {
       const x = r2(Math.min(Math.max(0, anchorX), Math.max(0, W - w)));
       const y = r2(above ? Math.max(0, rect.y - h - 14 * u) : Math.min(H - h, rect.y + rect.height + 14 * u));
       overlays.push({node: el('div', nid, abs(x, y, w, h, {boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: r2(h / 2), background: color, color: ink, fontFamily: model.fonts?.body, fontSize: textSize, fontWeight: 700, lineHeight: '1.2', whiteSpace: 'nowrap', opacity: 0, transformOrigin: '50% 50%'}), [state.set.note.text]),
-        ops: ops => { ops.push({type: 'set', target: nid, time: model.start, props: {opacity: 0, scaleX: 0.8, scaleY: 0.8}}); ops.push({type: 'tween', target: nid, start: T, duration: 0.25, ease: 'power1.out', from: {opacity: 0}, to: {opacity: 1}}); ops.push({type: 'tween', target: nid, start: T, duration: 0.45, ease: 'back.out(2)', from: {scaleX: 0.8, scaleY: 0.8}, to: {scaleX: 1, scaleY: 1}}); }});
+        ops: ops => { ops.push({type: 'set', target: nid, time: model.start, props: {opacity: 0, scaleX: 0.8, scaleY: 0.8}}); ops.push({type: 'tween', target: nid, start: T, duration: 0.25, ease: 'power1.out', from: {opacity: 0}, to: {opacity: 1}}); ops.push({type: 'tween', target: nid, start: T, duration: 0.45, ease: 'power3.out', from: {scaleX: 0.8, scaleY: 0.8}, to: {scaleX: 1, scaleY: 1}}); }});
       live.push({ids: [nid]});
     }
   }

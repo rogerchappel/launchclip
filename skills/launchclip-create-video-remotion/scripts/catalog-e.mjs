@@ -339,7 +339,7 @@ function pullBackTimeline(model, ops) {
     tw(ops, `${id}-row-${i}`, time, 0.25, 'power2.out', {opacity: 0.45}, {opacity: 1});
     set(ops, `${id}-tick-${i}`, start, {opacity: 0, scaleX: 0.5, scaleY: 0.5});
     tw(ops, `${id}-tick-${i}`, time, 0.12, 'none', {opacity: 0}, {opacity: 1});
-    tw(ops, `${id}-tick-${i}`, time, 0.35, 'back.out(2)', {scaleX: 0.5, scaleY: 0.5}, {scaleX: 1, scaleY: 1});
+    tw(ops, `${id}-tick-${i}`, time, 0.35, 'power3.out', {scaleX: 0.5, scaleY: 0.5}, {scaleX: 1, scaleY: 1});
   });
   set(ops, `${id}-fill`, start, {scaleX: 0});
   tw(ops, `${id}-fill`, c.settleAt, rt(c.doneAt - c.settleAt), 'power1.inOut', {scaleX: 0}, {scaleX: 1});
@@ -565,7 +565,7 @@ function phoneStageTimeline(model, ops) {
   const c = model.content;
   const target = `${id}-phone`;
   set(ops, target, start, {x: c.enter, y: 0, rotation: c.tilt});
-  tw(ops, target, c.t0, 0.6, 'back.out(1.2)', {x: c.enter, rotation: c.tilt * 2}, {x: 0, rotation: c.tilt});
+  tw(ops, target, c.t0, 0.6, 'power3.out', {x: c.enter, rotation: c.tilt * 2}, {x: 0, rotation: c.tilt});
   // A slow float while it holds.
   let t = c.settleAt, up = true;
   while (t + 1.4 < c.exitStart) {
@@ -689,7 +689,7 @@ function growthLineTimeline(model, ops) {
   if (c.pill) {
     fadeIn(`${id}-guide`, c.pillAt, 0.3);
     set(ops, `${id}-pill`, start, {opacity: 0, scaleX: 0.6, scaleY: 0.6});
-    tw(ops, `${id}-pill`, c.pillAt, 0.4, 'back.out(1.8)', {opacity: 0, scaleX: 0.6, scaleY: 0.6}, {opacity: 1, scaleX: 1, scaleY: 1});
+    tw(ops, `${id}-pill`, c.pillAt, 0.4, 'power3.out', {opacity: 0, scaleX: 0.6, scaleY: 0.6}, {opacity: 1, scaleX: 1, scaleY: 1});
   }
   if (c.source) fadeIn(`${id}-source`, c.endAt, 0.4);
   set(ops, `${id}-chart`, start, {opacity: 1});

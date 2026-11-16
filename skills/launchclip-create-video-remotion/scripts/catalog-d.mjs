@@ -529,7 +529,7 @@ export function productDemoTimeline(model) {
   for (const callout of c.callouts) {
     const target = `${id}-callout-${callout.index}`;
     set(ops, target, start, {opacity: 0, y: model.unit * 18, scaleX: 0.9, scaleY: 0.9});
-    tw(ops, target, callout.at, 0.4, 'back.out(1.7)', {opacity: 0, y: model.unit * 18, scaleX: 0.9, scaleY: 0.9}, {opacity: 1, y: 0, scaleX: 1, scaleY: 1});
+    tw(ops, target, callout.at, 0.4, 'power3.out', {opacity: 0, y: model.unit * 18, scaleX: 0.9, scaleY: 0.9}, {opacity: 1, y: 0, scaleX: 1, scaleY: 1});
     // A short callout (cut at a navigation) fades once it has popped in.
     const fadeAt = rt(Math.max(callout.at + 0.4, callout.until - 0.25));
     tw(ops, target, fadeAt, Math.max(0.1, rt(callout.until - fadeAt)), 'power2.in', {opacity: 1, y: 0, scaleX: 1, scaleY: 1}, {opacity: 0, y: 0, scaleX: 0.96, scaleY: 0.96});
