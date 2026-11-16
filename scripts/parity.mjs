@@ -17,7 +17,7 @@
 // Pass `compileHyperFrames` to runParity() to plug in another compiler.
 import {spawn} from 'node:child_process';
 import {existsSync} from 'node:fs';
-import {copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile} from 'node:fs/promises';
+import {copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -342,6 +342,24 @@ export async function runParity(fixturePath, {out, times, entry, compiler = 'aut
 // fixture's background, panel or brand, say).
 // files: {relative path: text | {from}} written into the copy (a fixture's
 // logo, say); {from} copies a binary file from the repository (a still).
+// The story's finish as (still, frame) => finished in place, or null without one.
+async function stillFinisher(project, story) {
+  const {resolveFinish} = await import('@launchclip/core/finish.mjs');
+  const chain = resolveFinish(story);
+  if (!chain) return null;
+  const {finishChain, runFinishPass} = await import(pathToFileURL(path.join(ROOT, 'src', 'finish_pass.js')).href);
+  const {storyFinishProtect, storyFrames} = await import(pathToFileURL(path.join(ROOT, 'src', 'render_segments.js')).href);
+  const planned = await finishChain(project, story, chain);
+  const rects = await storyFinishProtect(project, story);
+  const {width, height, fps} = storyFrames(story);
+  return async (file, frame) => {
+    const raw = file.replace(/\.png$/, '.raw.png');
+    await rename(file, raw);
+    await runFinishPass({input: raw, output: file, ...planned, width, height, fps, frameStart: frame, rects, kind: 'image'});
+    await rm(raw, {force: true});
+  };
+}
+
 export async function runStoryParity(projectDir, {times = [1, 3.2], out, threshold = DEFAULT_THRESHOLD.ssim, keep = false, patch = null, files = null} = {}) {
   const {getRenderer} = await import(pathToFileURL(path.join(ROOT, 'src', 'renderers', 'index.js')).href);
   const {compileStoryToHyperFrames} = await import(pathToFileURL(STORY_COMPILER).href);
@@ -373,6 +391,7 @@ export async function runStoryParity(projectDir, {times = [1, 3.2], out, thresho
     // Whole frames only: the HyperFrames snapshot floors a time to its frame and
     // Remotion rounds it, so a time between frames would compare two different frames.
     const fps = loaded.resolved?.resolved?.fps ?? loaded.resolved?.format?.fps ?? 30;
+    const finish = await stillFinisher(project, loaded.resolved);
     const samples = [];
     for (const asked of times) {
       const time = Math.round(asked * fps) / fps;
@@ -380,6 +399,8 @@ export async function runStoryParity(projectDir, {times = [1, 3.2], out, thresho
       const hf = path.join(outDir, `${name}.hyperframes.png`), rmFile = path.join(outDir, `${name}.remotion.png`);
       await hyperframes.still(hfDir, time, hf);
       await remotion.still(project, time, rmFile);
+      // story.finish runs after either renderer (src/finish_pass.js): finish both stills, then compare.
+      if (finish) for (const file of [hf, rmFile]) await finish(file, Math.round(time * fps));
       const metrics = await compareStills(hf, rmFile);
       const sideFile = path.join(outDir, `${name}.side-by-side.png`), diffFile = path.join(outDir, `${name}.diff.png`);
       await sideBySide(hf, rmFile, sideFile, diffFile);
