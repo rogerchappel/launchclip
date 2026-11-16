@@ -2485,6 +2485,17 @@ params:
 events: item-<i>, tick-<i>
 variants: pills (default), stack, fan, scatter, orbit
 
+### audio-visualizer (keeps captions)
+The finished sound drawn live: a spectrum of bars, a mirrored line or a ring of bars, bass to air, moving with the mix (or the music or voice bus) frame by frame. Reads AUDIO_FEATURES.json, which `launchclip finish` writes for any story that uses this module.
+params:
+- bus: which sound: mix | music | voice (default mix)
+- tone: the bars: good | bad | neutral | primary | accent | paper | #rrggbb (default accent)
+- bars: how many bars, 8–128 (default 28 portrait, 48 landscape, 72 ring)
+- at: bars grow in: seconds from scene start (optional; else a matching hit, else a default)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+events: build
+variants: bars (default), line, ring
+
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), framed wide, medium or close, acting on cues: named poses and expressions at times or narration words, mouths moving on their lines, cuts in on a character. The screen set plays a real capture.
 params:
@@ -2698,6 +2709,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | live-bars | 2 s | 0.5 s | scene − 0.65 s | the bars climb from at until just before the exit |
 | ui-scene | 2 s | 0 s | scene − 0.65 s | the first element enters by 0.6 s; a scene that opens on a whip-pan or opens the video enters its hero panel with enter "cut" at 0, so it is built when the move lands; every time is seconds from the scene start, inside the scene; a child enters no earlier than its parent |
 | item-list | 2 s | 0.5 s | scene − 0.65 s | items enter in order from at, stagger apart; a tick lands after its item enters |
+| audio-visualizer | 2 s | 0.5 s | scene − 0.65 s | the bars grow in over 0.5 s from at, then follow the sound every frame |
 | cast-scene | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | character-cameo | 2 s | 0 s | scene − 0.45 s | a pose change tweens over 0.45 s; cues may sit anywhere from the scene start to 0.45 s before its end; an action cue (look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch) acts out an idea; a character with a target faces it and turns its head to it; gestures (wave, type, walk, cheer, think) loop while the pose holds |
 | sprite-scene | 2 s | 0 s | scene − 0.4 s | cue, prop and card times sit at least 0.4 s before the scene ends; a pose cue swaps the sprite; a character speaking its says ranges shows its talk sprite (or a jaw bounce) on each word |
