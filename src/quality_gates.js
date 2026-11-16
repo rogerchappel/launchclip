@@ -23,7 +23,8 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { DIRECTION_LANES, directionMeasures, validateDirection } from "@launchclip/core/direction.mjs";
 import { cadenceTarget, storyboardMeasures, unionIntervals } from "@launchclip/core/cadence.mjs";
-import { paceFindings, paceFormat } from "@launchclip/core/pace-check.mjs";
+import { paceFindings, paceFormat, profilePace, renderPaceFindings } from "@launchclip/core/pace-check.mjs";
+import { hookEventSeconds } from "./render_motion_analysis.js";
 import { bannedHold } from "@launchclip/core/treatment.mjs";
 import { frozenSpans, planEvents } from "./movement_guardrails.js";
 import { compareMeasures } from "@launchclip/core/profiles.mjs";
@@ -122,6 +123,35 @@ export function paceGate({ resolved, profile = null, map = null, media = {}, sty
   const errors = findings.filter((entry) => entry.severity === "error").length;
   findings.sort((a, b) => (a.severity === "error" ? 0 : 1) - (b.severity === "error" ? 0 : 1));
   return { status: errors ? "failed" : "passed", format, style, events: events.length, errors, warnings: findings.length - errors, findings: findings.slice(0, 20) };
+}
+
+/**
+ * Pace on the render (docs/PLAN_AND_PACE_RFC.md §2, phase 7): the same rules
+ * as paceGate read from the pixels (slow-hook, flat-hook and frozen-frame
+ * fail here), plus the plan against the render (renderPaceFindings): planned
+ * events that never show, a hook the render lost, cuts mid-move, cuts off the
+ * beat. motion: the render-motion report (src/render_motion_analysis.js);
+ * curve: the render's 12 fps motion curve (src/motion_curve.js) or null;
+ * beats: the music's beat times or null.
+ */
+export function renderPaceGate({ resolved, motion, curve = null, beats = null, profile = null, map = null, style = "default" }) {
+  const duration = Number(motion?.duration_seconds ?? resolved?.resolved?.duration) || 0;
+  if (!(duration > 0) || !motion) return { status: "skipped", reason: "no render motion report" };
+  const format = paceFormat({ duration, footage: Boolean(storyBase(resolved)), profile });
+  const pace = profilePace(cadenceTarget(format, style).pace, profile);
+  const maxStill = bannedHold(map?.treatment);
+  const measured = hookEventSeconds(motion, duration);
+  const frozen = (motion.motion?.still_spans ?? []).filter((span) => !span.closing).map((span) => [Number(span.start), Number(span.end)]);
+  const last = [...(resolved?.scenes ?? [])].filter((scene) => Number.isFinite(Number(scene?.start))).sort((a, b) => Number(a.start) - Number(b.start)).at(-1);
+  const opaque = CLOSING_MODULES.includes(last?.module) ? [[Number(last.start), duration]] : [];
+  const cuts = [...new Set((resolved?.scenes ?? []).filter((scene) => !(Number(scene?.track) > 0)).map((scene) => Number(scene.start)).filter((t) => t > 0.05 && t < duration - 0.05))].sort((a, b) => a - b);
+  const findings = [
+    ...paceFindings({ events: measured, opaque, duration, pace, maxStill, frozen, source: "render" }),
+    ...renderPaceFindings({ planned: planEvents(resolved).events, cuts, measured, measuredCuts: (motion.cuts ?? []).map(Number), curve, beats, pace, duration })
+  ];
+  const errors = findings.filter((entry) => entry.severity === "error").length;
+  findings.sort((a, b) => (a.severity === "error" ? 0 : 1) - (b.severity === "error" ? 0 : 1));
+  return { status: errors ? "failed" : "passed", source: "render", format, style, events: measured.length, errors, warnings: findings.length - errors, findings: findings.slice(0, 20) };
 }
 
 /**

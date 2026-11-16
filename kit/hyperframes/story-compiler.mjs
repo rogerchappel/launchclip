@@ -27,6 +27,7 @@ import { SMEAR_PROPS, gsapVars, holdTime, layerStateAt, sceneWindows, smearFilte
 import { LIGHT_SWEEP, lightSweepCss, lightSweepDipHtml, lightSweepGsap, lightSweepHtml, lightSweeps } from '../core/light-sweep.mjs';
 import { CAMERA_STACK, resolveCamera, rideWorldPlates, backgroundFieldTiles, backgroundLayer, cameraPlan, captionDipWindows, overlayOps, placementTransform, sceneObjectLookup } from '../core/camera-world.mjs';
 import { getEase } from '../core/motion.mjs';
+import { sceneBehaviour } from '../core/behaviours.mjs';
 import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTweens, driftGsap, sceneDrift } from '../core/ambient.mjs';
 import { backgroundPlan, fieldStyle, layerCss, layerSvg, layerTweens, layoutFillClip, panelFillPlan, sceneBackground } from '../core/backgrounds.mjs';
 import { scenePlatePlan, scenePlateSpec, storyPlatePlan } from '../core/plates.mjs';
@@ -369,7 +370,10 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     // field is the camera's depth layer (#lc-world-bg) instead, tiled across the world.
     const ambient = entry.plate && !worldMode && drawsBackground(entry.scene) ? plateField(id, entry.start, entry.renderEnd, entry.scene) : { html: '', motion: [] };
     const drift = isolate ? null : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry });
-    const content = drift ? `<div id="lc-drift-${id}" class="lc-drift" style="transform-origin:${num(drift.origin.x)}px ${num(drift.origin.y)}px">${media.html}</div>` : media.html;
+    // An opt-in behaviour (kit/core/behaviours.mjs) inside the drift, as the Remotion SceneLayer.
+    const behave = isolate ? null : sceneBehaviour(story, entry.scene, model, { start: entry.start, end: entry.renderEnd });
+    const behaved = behave ? `<div id="lc-behave-${id}" class="lc-drift" style="transform-origin:${num(behave.pivot.x)}px ${num(behave.pivot.y)}px">${media.html}</div>` : media.html;
+    const content = drift ? `<div id="lc-drift-${id}" class="lc-drift" style="transform-origin:${num(drift.origin.x)}px ${num(drift.origin.y)}px">${behaved}</div>` : behaved;
     // Overlays slide 1.15× the camera's travel (parallax) inside a wrapper.
     const parallax = plan && !entry.plate && !entry.rides ? overlayOps(plan, { start: entry.start, end: entry.renderEnd }) : [];
     // Zooms inside the shot (kit/core/zooms.mjs): in world mode they are
@@ -400,6 +404,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
       const { from, to, position } = driftGsap(drift);
       motion.push(`tl.fromTo(${js(`#lc-drift-${id}`)}, ${js(from)}, ${js(to)}, ${num(position)});`);
     }
+    if (behave) motion.push(...opsGsap(behave.ops, { behave: `#lc-behave-${id}` }));
     if (out.motion) motion.push(`{\n${out.motion}\n}`);
     if (tail) motion.push(tail.toggle);
     motion.push(...mediaMotion);
@@ -660,7 +665,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   // the scenes and the light, the light canvas added with plus-lighter; the
   // inlined painter draws the timeline's time from a proxy tween, as Remotion's
   // VfxCanvas does from its layout effect.
-  const vfx = isolate ? null : vfxPlan(story);
+  const vfx = isolate ? null : vfxPlan(story, { resolve: (scene) => resolveModule(scene, story) });
   const vfxCanvas = (part) => `<canvas id="lc-vfx-${part}" data-launchclip-vfx="${part}" width="${vfx.aw}" height="${vfx.ah}" aria-hidden="true" style="position:absolute;left:0;top:0;width:${vfx.aw * vfx.grid}px;height:${vfx.ah * vfx.grid}px;image-rendering:pixelated;pointer-events:none;z-index:${VFX_Z.hyperframes}${part === 'light' ? ';mix-blend-mode:plus-lighter' : ''}"></canvas>`;
   // A hit's words (kit/core/vfx/paint.mjs vfxWordAt): brand-font text over the canvases.
   const vfxWords = (vfx?.words ?? []).map((word, i) => `<div id="lc-vfx-word-${i}" data-launchclip-vfx="word" aria-hidden="true" style="${Object.entries({ ...vfxWordBox(word, vfx.grid), zIndex: String(VFX_Z.hyperframes) }).map(([key, value]) => `${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}:${attr(value)}`).join(';')}">${text(word.text)}</div>`).join('');
@@ -1011,7 +1016,7 @@ function smearLayer(tweens, id, outer) {
 }
 
 function tweenCode(selector, tw) {
-  const from = gsapVars(tw.prop, tw.from), to = gsapVars(tw.prop, tw.to);
+  const from = gsapVars(tw.prop, tw.from, tw.args), to = gsapVars(tw.prop, tw.to, tw.args);
   return `tl.fromTo(${js(selector)}, ${js(from)}, ${js({ ...to, duration: round(tw.duration, 4), ease: tw.ease, immediateRender: false })}, ${num(tw.at)});`;
 }
 

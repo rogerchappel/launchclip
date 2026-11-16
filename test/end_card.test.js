@@ -74,6 +74,21 @@ test('end-card: a stated layout with missing content says what it needs; picks w
   assert.ok(END_CARD_LAYOUTS.find(layout => layout.id === model.content.layout).actions.some(a => a === 'url' || a === 'any'));
 });
 
+test('end-card on a footage backdrop of its own picks a layout drawn on footage, so the shot shows', async () => {
+  const {resolveStory} = await import('@launchclip/core/story.mjs');
+  const {resolveModule} = await import('@launchclip/core/modules.mjs');
+  const story = (backdrop) => resolveStory({schema: 'launchclip.story.v1', title: 'End', lane: 'motion', format: FORMATS['9:16'], brand: BRANDS.charcoal,
+    scenes: [{id: 'cta', module: 'end-card', start: 0, end: 4, params: {action: 'save', headline: FIELDS.headline}, ...(backdrop ? {backdrop} : {})}]}, {words: []});
+  for (const seed of ['a', 'b', 'c', 'd']) {
+    const on = story({kind: 'video', params: {src: 'assets/shots/dusk.mp4'}});
+    on.scenes[0].params.seed = seed;
+    const layout = END_CARD_LAYOUTS.find(entry => entry.id === resolveModule(on.scenes[0], on).content.layout);
+    assert.deepEqual([...new Set(layout.grounds)], ['footage'], `${seed}: ${layout.id}`);
+  }
+  // With no footage under it, a solid ground is still allowed.
+  assert.ok(endCardCandidates({action: 'save', fields: {headline: FIELDS.headline}}).some(entry => !END_CARD_LAYOUTS.find(layout => layout.id === entry.id).grounds.includes('footage')));
+});
+
 test('end-card: a URL is never broken mid-word: the fit counts its tracking and it shrinks, else breaks after a "/"', async () => {
   const {fitText, textLines, textWidth} = await import('@launchclip/core/catalog-b-base.mjs');
   const brand = BRANDS.charcoal;

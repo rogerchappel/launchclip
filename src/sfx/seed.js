@@ -1,7 +1,7 @@
 // launchclip sfx seed | list | audition: build the SFX library once, then
 // leave it alone.
 //
-//   launchclip sfx seed [--provider elevenlabs|synth] [--variants 3]
+//   launchclip sfx seed [--provider elevenlabs|comfy|synth] [--variants 3]
 //     [--only whoosh,impact] [--reroll typing] [--dir .launchclip/sfx] [--force]
 //   launchclip sfx list [--dir .launchclip/sfx]
 //   launchclip sfx audition <family> [--dir .launchclip/sfx] [--out file.wav] [--gap 0.35]
@@ -14,6 +14,13 @@
 // ELEVENLABS_API_KEY in the process environment and is never logged, written
 // or included in an error. (Loading a project .env into the environment is
 // handled by the CLI separately.)
+//
+// --provider comfy asks a local ComfyUI (src/comfy) for COMFY_CANDIDATES
+// takes per family from the same prompts, processes them like any download,
+// and keeps the takes the SFX classifier (src/sfx/classify.js) puts in the
+// family's row. Takes are cached by their bound workflow (prompt, model,
+// seed) and logged in <dir>/generation-log.jsonl with the model's licence.
+// With no ComfyUI reachable, the family falls back to the procedural kit.
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
@@ -22,6 +29,10 @@ import { writeFileAtomic } from "../atomic_write.js";
 import { promisify } from "node:util";
 import { decodeAudio, processFile, writeWavFile, SAMPLE_RATE } from "./process.js";
 import { measureTimbre, timbreProblem } from "./timbre.js";
+import { FAMILY_TYPE, classifySfxFile } from "./classify.js";
+import { createComfyClient } from "../comfy/client.js";
+import { generateWithComfy } from "../comfy/generate.js";
+import { assertLicence, loadTemplate } from "../comfy/templates.js";
 import { PROJECT_LIBRARY_DIR, emptyManifest, expandFamilies, familySource, hashOf, libraryVariants, missingFamilies, readLibrary, resolveLibraries, summarizeLibrary, userLibraryDir, writeLibrary } from "./library.js";
 
 const execFileAsync = promisify(execFile);
@@ -30,6 +41,12 @@ export const SYNTH_SCRIPT = path.join(ROOT, "src", "scripts", "synth-audio-kit.m
 export const PROMPTS_FILE = path.join(import.meta.dirname, "prompts.json");
 export const ELEVENLABS_API = "https://api.elevenlabs.io";
 export const SOUND_GENERATION_PATH = "/v1/sound-generation";
+export const COMFY_SFX_TEMPLATE = "sfx-stable-audio";
+export const COMFY_CANDIDATES = 4;
+export const SFX_PROVIDERS = Object.freeze(["elevenlabs", "comfy", "synth"]);
+
+/** The seed of one ComfyUI take: fixed per family, roll and take, so a reroll draws new sounds. */
+export const comfySeed = (family, roll, take) => parseInt(hashOf(`${family}|${roll}|${take}`).slice(0, 8), 16);
 
 /**
  * Families of `known` whose every variant on disk fails the timbre guard
@@ -125,7 +142,15 @@ export async function seedLibrary(options = {}) {
   const dir = path.resolve(options.dir ?? PROJECT_LIBRARY_DIR);
   const prompts = options.prompts ?? await loadPrompts();
   const requested = options.provider ? String(options.provider).toLowerCase() : (apiKey ? "elevenlabs" : "synth");
-  if (!["elevenlabs", "synth"].includes(requested)) throw new Error(`--provider must be elevenlabs or synth; got ${options.provider}`);
+  if (!SFX_PROVIDERS.includes(requested)) throw new Error(`--provider must be ${SFX_PROVIDERS.join(", ")}; got ${options.provider}`);
+  const allowLicences = String(options.allowModelLicence ?? "").split(",").map((id) => id.trim()).filter(Boolean);
+  const comfyTemplate = requested === "comfy" ? await loadTemplate(COMFY_SFX_TEMPLATE) : null;
+  // Refused before anything is sent: the user must accept a licence that is off the open allowlist.
+  if (comfyTemplate) assertLicence(comfyTemplate, allowLicences);
+  let comfyClient = options.comfyClient ?? null;
+  const comfy = () => (comfyClient ??= createComfyClient({ url: options.comfyUrl, env, allowRemote: Boolean(options.comfyAllowRemote), fetch: options.fetch }));
+  let comfyDown = null;
+  const classify = options.classify ?? (async (file) => (await classifySfxFile(file))?.type ?? null);
   // Without a key, --provider elevenlabs still works from the download cache;
   // the first uncached request fails before anything is sent.
   const now = options.now ?? (() => new Date().toISOString());
@@ -214,6 +239,38 @@ export async function seedLibrary(options = {}) {
         source = "procedural";
       }
     }
+    if (requested === "comfy") {
+      source = "comfy";
+      const takes = variantsOverride ?? COMFY_CANDIDATES;
+      const expected = FAMILY_TYPE[family] ?? null;
+      for (let take = 0; take < takes && !comfyDown; take++) {
+        const seed = comfySeed(family, roll, take);
+        let generated;
+        try {
+          generated = await generateWithComfy({ client: comfy(), template: comfyTemplate, values: { prompt: spec.prompt, seconds: Math.max(0.5, Number(spec.duration_seconds) || 1), seed }, cacheDir: path.join(dir, "cache", "comfy"), allowLicences, ledger: path.join(dir, "generation-log.jsonl"), extra: { family, take, roll } });
+        } catch (error) {
+          comfyDown = error.message;
+          break;
+        }
+        log(`sfx seed: ${family} take ${take + 1}/${takes} (${generated.cached ? "cached" : "generated"} with ComfyUI)`);
+        if (generated.cached) result.cached++;
+        else { result.generations++; manifest.generations = (manifest.generations ?? 0) + 1; }
+        const output = path.join(stagingDir, `${family}-${kept.length + 1}.wav`);
+        const processed = await process_(generated.file, output, family, {});
+        if (!processed.ok) { rejected.push({ take, hash: generated.key, reason: processed.reason }); continue; }
+        const type = expected ? await classify(processed.file) : null;
+        if (expected && type !== expected) {
+          rejected.push({ take, hash: generated.key, reason: `classified as ${type ?? "silence"}, not ${expected}` });
+          await rm(processed.file, { force: true });
+          continue;
+        }
+        kept.push({ file: finalPath(processed.file), source: "comfy", hash: generated.key, take, seed, prompt: spec.prompt, model: generated.model, licence: generated.licence, raw: path.relative(dir, generated.file), measurements: processed.measurements, stats: processed.stats });
+      }
+      if (!kept.length) {
+        result.warnings.push(`${family}: ${comfyDown ? `ComfyUI is not available (${comfyDown})` : `every ComfyUI take was rejected (${rejected.map((entry) => entry.reason).join("; ")})`}; using the procedural kit for this family`);
+        source = "procedural";
+      }
+    }
     if (source === "procedural") {
       const kit = await proceduralKit();
       const names = kit.families[family] ?? [`${family}.wav`];
@@ -233,8 +290,9 @@ export async function seedLibrary(options = {}) {
     await rm(path.join(dir, ".staging"), { recursive: true, force: true }).catch(() => {});
     manifest.families[family] = {
       source,
-      prompt: source === "elevenlabs" ? spec.prompt : null,
-      model_id: source === "elevenlabs" ? (spec.model_id ?? prompts.model_id) : null,
+      prompt: source === "elevenlabs" || source === "comfy" ? spec.prompt : null,
+      model_id: source === "elevenlabs" ? (spec.model_id ?? prompts.model_id) : source === "comfy" ? kept[0].model : null,
+      ...(source === "comfy" ? { licence: kept[0].licence } : {}),
       duration_seconds: source === "elevenlabs" ? spec.duration_seconds : null,
       prompt_influence: source === "elevenlabs" ? spec.prompt_influence : null,
       roll,
@@ -315,15 +373,17 @@ export async function auditionFamily(family, { dir, project = process.cwd(), out
   return { stage: "sfx", action: "audition", status: "ready", family: name, scope: source.scope, source: source.source, variants: source.files.length, gap_seconds: gap, out: target };
 }
 
+const comfyFlags = (flags) => ({ allowModelLicence: flags["allow-model-licence"], comfyUrl: flags["comfy-url"], comfyAllowRemote: Boolean(flags["comfy-allow-remote"]) });
+
 /** Dispatch for `launchclip sfx <action>`. */
 export async function runSfxCommand(action, name, flags = {}, io = {}) {
   const log = io.log ?? ((line) => process.stderr.write(`${line}\n`));
   if (action === "seed") {
-    const result = await seedLibrary({ dir: flags.dir, provider: flags.provider, variants: flags.variants, only: flags.only, reroll: flags.reroll, force: Boolean(flags.force), missing: Boolean(flags.missing), env: io.env, fetch: io.fetch, log });
+    const result = await seedLibrary({ dir: flags.dir, provider: flags.provider, variants: flags.variants, only: flags.only, reroll: flags.reroll, force: Boolean(flags.force), missing: Boolean(flags.missing), ...comfyFlags(flags), env: io.env, fetch: io.fetch, log });
     return { stage: "sfx", action: "seed", status: "ready", ...result };
   }
   if (action === "reroll") {
-    const result = await seedLibrary({ dir: flags.dir, provider: flags.provider, variants: flags.variants, reroll: name ?? flags.reroll, env: io.env, fetch: io.fetch, log });
+    const result = await seedLibrary({ dir: flags.dir, provider: flags.provider, variants: flags.variants, reroll: name ?? flags.reroll, ...comfyFlags(flags), env: io.env, fetch: io.fetch, log });
     return { stage: "sfx", action: "reroll", status: "ready", ...result };
   }
   if (action === "list") return listLibraries({ dir: flags.dir, env: io.env });

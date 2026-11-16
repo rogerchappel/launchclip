@@ -11,6 +11,9 @@ export const PROMPT = "A 6-second launch video for a fictional SaaS called Ledge
 // Within the 6-second clock (16 words at 2.75 a second), so the script checks pass.
 export const NARRATION = "Payouts never match your books. Ledgerly matches each payout to its invoice. Try Ledgerly free.";
 
+// The product video, blurred behind every scene: the frame stays full to the end (src/visual_density.js).
+const PLATE = { kind: "video", params: { src: "assets/ui.mp4", treatment: "blur", dim: 0.4 } };
+
 // The storyboard a model would return for NARRATION over the test voice.
 export function storyboard({ duration, media = "assets/ui.mp4", width = 1920, height = 1080 }) {
   return {
@@ -22,9 +25,9 @@ export function storyboard({ duration, media = "assets/ui.mp4", width = 1920, he
     audio: { words: "NARRATION.json" },
     scenes: [
       // A short video opens on an image of the hook's subject, never a title card (the structure gate).
-      { id: "s1", module: "media-window", start: 0, end: "word:ledgerly", energy: 1, params: { title: "Payouts never match your books", media: { kind: "video", src: media } } },
-      { id: "s2", module: "hook-title", start: "word:ledgerly", end: "word:try", energy: 2, in: { type: "fade", dur: 0.3 }, params: { headline: "Ledgerly matches every payout", emphasis: "every" } },
-      { id: "s3", module: "cta", start: "word:try", end: duration, energy: 1, in: { type: "fade", dur: 0.3 }, params: { action: "Try Ledgerly free" } }
+      { id: "s1", module: "media-window", start: 0, end: "word:ledgerly", energy: 1, backdrop: PLATE, params: { title: "Payouts never match your books", media: { kind: "video", src: media } } },
+      { id: "s2", module: "hook-title", start: "word:ledgerly", end: "word:try", energy: 2, in: { type: "fade", dur: 0.3 }, backdrop: PLATE, params: { headline: "Ledgerly matches every payout", emphasis: "every" } },
+      { id: "s3", module: "cta", start: "word:try", end: duration, energy: 1, in: { type: "fade", dur: 0.3 }, backdrop: PLATE, params: { action: "Try Ledgerly free" } }
     ],
     overlays: [{ type: "captions", style: "word-highlight" }],
     grammar: "editorial",

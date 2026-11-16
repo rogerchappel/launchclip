@@ -1,0 +1,36 @@
+{
+  "schema_version": "launchclip.comfy-template.v1",
+  "id": "sfx-stable-audio",
+  "kind": "sfx",
+  "description": "A short sound effect from a text prompt: Stable Audio Open 1.0 with its T5 encoder, core ComfyUI nodes only.",
+  "model": {
+    "name": "Stable Audio Open 1.0",
+    "licence": "stability-ai-community",
+    "source": "https://huggingface.co/stabilityai/stable-audio-open-1.0",
+    "files": [
+      { "node": "CheckpointLoaderSimple", "input": "ckpt_name", "file": "stable-audio-open-1.0.safetensors" },
+      { "node": "CLIPLoader", "input": "clip_name", "file": "t5_base.safetensors" }
+    ]
+  },
+  "inputs": {
+    "prompt": "a short wooden knock, dry room",
+    "negative": "music, speech, voice, reverb tail, noise, hiss",
+    "seconds": 2,
+    "seed": 0,
+    "steps": 50,
+    "cfg": 5,
+    "prefix": "launchclip/sfx"
+  },
+  "output_nodes": ["9"],
+  "workflow": {
+    "1": { "class_type": "CheckpointLoaderSimple", "inputs": { "ckpt_name": "stable-audio-open-1.0.safetensors" } },
+    "2": { "class_type": "CLIPLoader", "inputs": { "clip_name": "t5_base.safetensors", "type": "stable_audio" } },
+    "3": { "class_type": "CLIPTextEncode", "inputs": { "text": "{{prompt}}", "clip": ["2", 0] } },
+    "4": { "class_type": "CLIPTextEncode", "inputs": { "text": "{{negative}}", "clip": ["2", 0] } },
+    "5": { "class_type": "ConditioningStableAudio", "inputs": { "positive": ["3", 0], "negative": ["4", 0], "seconds_start": 0, "seconds_total": "{{seconds}}" } },
+    "6": { "class_type": "EmptyLatentAudio", "inputs": { "seconds": "{{seconds}}", "batch_size": 1 } },
+    "7": { "class_type": "KSampler", "inputs": { "model": ["1", 0], "positive": ["5", 0], "negative": ["5", 1], "latent_image": ["6", 0], "seed": "{{seed}}", "steps": "{{steps}}", "cfg": "{{cfg}}", "sampler_name": "dpmpp_3m_sde", "scheduler": "exponential", "denoise": 1 } },
+    "8": { "class_type": "VAEDecodeAudio", "inputs": { "samples": ["7", 0], "vae": ["1", 2] } },
+    "9": { "class_type": "SaveAudio", "inputs": { "audio": ["8", 0], "filename_prefix": "{{prefix}}" } }
+  }
+}

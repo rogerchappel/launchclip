@@ -1,8 +1,11 @@
 // story.json v1: validate, resolve time anchors, derive boundaries.
 //
-// Plain ESM with no imports, so it can be bundled into Remotion and copied
-// into skills unchanged. The canonical copy lives in kit/core/; see
-// docs/KIT_CONTRACTS.md ("story.json v1") for the binding contract.
+// Plain ESM that imports only import-free siblings (palette.mjs, oklch.mjs),
+// so it can be bundled into Remotion and copied into skills unchanged. The
+// canonical copy lives in kit/core/; see docs/KIT_CONTRACTS.md
+// ("story.json v1") for the binding contract.
+
+import { BRAND_PALETTE_MODES, workingBrand } from "./palette.mjs";
 
 export const STORY_SCHEMA = "launchclip.story.v1";
 // Non-additive changes made inside STORY_SCHEMA so far: a story's
@@ -12,7 +15,7 @@ export const STORY_SCHEMA = "launchclip.story.v1";
 export const STORY_REVISION = 0;
 
 export const STORY_LANES = ["motion", "voiceover-motion", "footage-led"];
-export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe", "light-sweep", "push-blur", "light-leak", "before-after", "burn-away", "slash-wipe", "shatter", "crt-off", "glitch-wipe", "blinds", "diamond-wipe", "star-iris", "pixel-dissolve"];
+export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe", "light-sweep", "push-blur", "light-leak", "before-after", "burn-away", "slash-wipe", "shatter", "crt-off", "glitch-wipe", "blinds", "diamond-wipe", "star-iris", "pixel-dissolve", "wipe", "clock-wipe", "card-flip"];
 /** Transitions the VFX layer draws as a pixel cover (kit/core/transitions.mjs VFX_COVER_TRANSITIONS); color names the cover's colour. */
 export const STORY_VFX_TRANSITIONS = ["burn-away", "slash-wipe", "shatter", "crt-off", "glitch-wipe", "blinds", "diamond-wipe", "star-iris", "pixel-dissolve"];
 export const STORY_ENDING_KEYS = Object.freeze(["loop_to", "in", "loop", "final"]);
@@ -26,8 +29,60 @@ export const STORY_CAMERA_LAYOUTS = ["row", "column", "grid", "path", "auto"];
 // story.motion.grammar presets (kit/core/grammar.mjs GRAMMAR_NAMES).
 // What a scene hit's moment asks the sound score for (kit/core/sound/options.mjs SCORE_MOMENTS; kept in step by test/sound_score.test.js).
 /** Effects a scene's vfx cues may name (kit/core/vfx/catalog.mjs VFX_EFFECT_NAMES, kept here so this file stays import-free). */
-export const STORY_VFX_EFFECTS = ["hit-spark", "crit-hit", "impact-frame", "ground-slam", "small-explosion", "smoke-bomb", "firework-burst", "poof", "sunburst", "collect-burst", "combo-counter", "crit-number", "level-up", "achievement", "confetti", "firework-rocket"];
+export const STORY_VFX_EFFECTS = ["hit-spark", "crit-hit", "impact-frame", "ground-slam", "small-explosion", "smoke-bomb", "firework-burst", "poof", "sunburst", "collect-burst", "combo-counter", "crit-number", "level-up", "achievement", "confetti", "firework-rocket", "electrified", "glitch", "scanner", "halo", "hit-flash", "confused", "sleep", "stunned", "charmed", "rage", "haste", "slowed", "frozen", "burning", "blunt-hit", "plasma-explosion", "implosion", "spark-arc", "zap-hit", "ball-lightning", "holy-pillar", "feather-burst", "heal-aoe", "mana-burst", "star-fall", "chest-open", "power-star", "key-glint", "gem-spin", "quake", "earth-spike", "spawn-portal", "coin-drop", "splash"];
+/** The silhouette effects among them (kit/core/vfx/catalog.mjs VFX_MASKED): each draws round a cue's mask, "module" or "cast:<id>". */
+export const STORY_VFX_MASKED = ["electrified", "glitch", "scanner", "halo", "hit-flash", "confused", "sleep", "stunned", "charmed", "rage", "haste", "slowed", "frozen", "burning"];
 export const STORY_MOMENTS = ["letdown", "promise", "reveal", "impact", "crystallise", "wonder", "miss", "resolve"];
+
+// A scene's sound block (docs/IMMERSIVE_SOUND_RFC.md §2): kit/core/sound/directing.mjs carries it out.
+export const SCENE_SOUND_FIELDS = ["hush", "prelap", "tail", "into", "space", "focus"];
+export const SOUND_INTO = ["riser", "swell", "tape-stop", "hit", "silence"];
+export const SOUND_SPACES = ["dry", "room", "hall"];
+export const SOUND_FOCUSES = ["voice", "music", "fx"];
+export const SOUND_HUSH_FOR = [0.2, 0.8];
+export const SOUND_LEAD = [0.15, 1];
+const soundRange = (value, [lo, hi]) => typeof value === "number" && Number.isFinite(value) && value >= lo - 1e-9 && value <= hi + 1e-9;
+
+/**
+ * Problems with one scene's sound block: {errors, warnings}. hushAt: hush.at
+ * resolved to story seconds (null when it could not be). first, last: the
+ * scene's place among the track-0 scenes; prevTail: the scene before's tail.
+ */
+export function sceneSoundProblems(sound, { path = "sound", first = false, last = false, start = null, end = null, hushAt = null, prevTail = undefined } = {}) {
+  const errors = [], warnings = [];
+  const err = (message) => errors.push(`${path}${message}`);
+  if (sound === undefined) return { errors, warnings };
+  if (!isObject(sound)) return { errors: [`${path} must be an object`], warnings };
+  for (const key of Object.keys(sound)) if (!SCENE_SOUND_FIELDS.includes(key)) err(`.${key} is not a sound field (${SCENE_SOUND_FIELDS.join(", ")})`);
+  if (sound.hush !== undefined) {
+    const hush = sound.hush;
+    if (!isObject(hush)) err(".hush must be {at, for}: the moment it sets up and how long the quiet before it lasts");
+    else {
+      if (hush.at === undefined) err(".hush.at is required (the line or hit the hush leads into)");
+      if (!soundRange(hush.for, SOUND_HUSH_FOR)) err(`.hush.for must be ${SOUND_HUSH_FOR[0]}–${SOUND_HUSH_FOR[1]} s`);
+      if (hushAt !== null && start !== null && end !== null && (hushAt < start - 1e-9 || hushAt > end + 1e-9)) err(`.hush.at (${hushAt}) falls outside the scene [${start}, ${end}]`);
+      else if (hushAt !== null && typeof hush.for === "number" && hushAt - hush.for < 0) err(".hush starts before the video does");
+    }
+  }
+  for (const field of ["prelap", "tail"]) {
+    if (sound[field] === undefined) continue;
+    if (!soundRange(sound[field], SOUND_LEAD)) err(`.${field} must be ${SOUND_LEAD[0]}–${SOUND_LEAD[1]} s`);
+    else if (start !== null && end !== null && sound[field] >= end - start) err(`.${field} (${sound[field]}) must be shorter than the scene`);
+  }
+  if (sound.prelap !== undefined && first) err(".prelap: the first scene has no cut to arrive before");
+  if (sound.tail !== undefined && last) err(".tail: the last scene has no cut to ring past");
+  if (sound.prelap !== undefined && prevTail !== undefined) err(".prelap: the scene before has a tail on the same cut; a cut is a J or an L, not both");
+  if (sound.into !== undefined) {
+    if (!SOUND_INTO.includes(sound.into)) err(`.into must be one of ${SOUND_INTO.join(", ")}`);
+    else if (first) err(".into: the first scene has no cut into it");
+    else if (sound.into === "silence" && prevTail !== undefined) err(".into \"silence\" drops to nothing on the cut, so the scene before cannot ring over it (tail)");
+    else if (sound.into === "silence" && sound.prelap !== undefined) err(".into \"silence\" drops to nothing on the cut, so the scene cannot also arrive early (prelap)");
+  }
+  if (sound.space !== undefined && !SOUND_SPACES.includes(sound.space)) err(`.space must be one of ${SOUND_SPACES.join(", ")}`);
+  if (sound.focus !== undefined && !SOUND_FOCUSES.includes(sound.focus)) err(`.focus must be one of ${SOUND_FOCUSES.join(", ")}`);
+  return { errors, warnings };
+}
+
 export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "documentary", "cinematic"];
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
 export const STORY_CAPTION_STYLES = ["word-highlight", "line", "none"];
@@ -58,13 +113,16 @@ export const STORY_BACKGROUND_PARAMS = Object.freeze({
   stripes: { angle: [0, 180], scale: BG_SCALE, density: [0.15, 0.6], intensity: BG_UNIT, speed: BG_SPEED },
   topographic: { density: BG_UNIT, scale: BG_SCALE, intensity: BG_UNIT, speed: BG_SPEED },
   halftone: { angle: BG_ANGLE, scale: BG_SCALE, intensity: BG_UNIT, speed: BG_SPEED },
-  "light-rays": { angle: [-60, 60], density: BG_UNIT, intensity: BG_UNIT, speed: BG_SPEED },
+  "light-rays": { angle: [-60, 60], density: BG_UNIT, intensity: BG_UNIT, speed: BG_SPEED, sweep: BG_UNIT },
   "icon-pattern": { scale: BG_SCALE, spacing: BG_SCALE, rotation: [-45, 45], offset: BG_UNIT, opacity: [0.04, 0.2], stroke: [1, 3], speed: BG_SPEED },
   "icon-scatter": { scale: BG_SCALE, density: BG_UNIT, jitter: BG_UNIT, opacity: [0.04, 0.2], stroke: [1, 3], speed: BG_SPEED },
   "logo-pattern": { scale: BG_SCALE, spacing: BG_SCALE, offset: BG_UNIT, opacity: [0.04, 0.2], speed: BG_SPEED },
   motif: { scale: BG_SCALE, weight: [0.5, 3], opacity: [0.04, 0.3], angle: [0, 180], speed: BG_SPEED },
   texture: { amount: BG_UNIT, scale: BG_SCALE },
   weather: { intensity: BG_UNIT, speed: BG_SPEED },
+  rings: { density: BG_UNIT, intensity: BG_UNIT, weight: [0.5, 3], bpm: [40, 200], speed: BG_SPEED },
+  bokeh: { density: BG_UNIT, intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED },
+  "flow-field": { seed: [0, 99999], lines: [80, 400], scale: BG_SCALE, octaves: [1, 4], intensity: BG_UNIT, speed: BG_SPEED },
   // GL generators (kit/core/gl-backgrounds.mjs).
   aurora: { intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED },
   fog: { intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED },
@@ -81,7 +139,7 @@ const BG_PLAIN = ["flat", "paper", "mesh", "blobs", "logo-pattern", "texture"];
 export const STORY_BACKGROUND_OPTIONS = Object.freeze(Object.fromEntries(STORY_BACKGROUND_KINDS.map((kind) => [kind, {
   ...(BG_PLAIN.includes(kind) ? {} : { color: STORY_BACKGROUND_COLORS }),
   ...(kind === "blobs" ? {} : { fade: ["none", "center", "top", "bottom", "left", "right"] }),
-  ...(kind === "motif" ? { shape: ["plus", "circle", "chevron", "wave", "hatch", "crosshatch"] } : {}),
+  ...(kind === "motif" ? { shape: ["plus", "circle", "chevron", "wave", "hatch", "crosshatch", "checker", "grid"] } : {}),
   ...(kind === "texture" ? { type: ["noise", "fibre", "canvas", "linen"] } : {}),
   ...(kind === "weather" ? { type: ["aurora", "blizzard", "cherry-blossoms", "clouds", "falling-leaves", "fireflies", "fog", "god-rays", "rain", "shooting-stars", "snow", "storm"] } : {}),
   ...({ fog: { type: ["fog", "cloud", "smoke", "ember"] }, plasma: { type: ["plasma", "silk"] }, cells: { type: ["cells", "facets", "hex"] } })[kind] ?? {}
@@ -320,7 +378,9 @@ export function samePlaceCuts(story) {
 // CARD_TRANSITIONS, kept here so this file stays import-free (kept in step by
 // test/transition_frames.test.js).
 export const STORY_FOOTAGE_PLATES = ["clip", "photo-scene"];
-export const STORY_CARD_TRANSITIONS = ["card-to-card", "rack-focus", "morph"];
+// Behaviour kinds (kit/core/behaviours.mjs BEHAVIOUR_KINDS), kept here so this file stays import-free.
+export const STORY_BEHAVIOURS = ["wiggle", "jitter", "orbit", "lissajous", "drift", "pendulum", "wobble", "spin", "pulse", "heartbeat", "breathe", "squash", "flicker", "fade-pulse"];
+export const STORY_CARD_TRANSITIONS = ["card-to-card", "rack-focus", "morph", "card-flip"];
 
 /**
  * Track-0 footage plates (a clip, a photo plate) that arrive from another
@@ -386,7 +446,7 @@ const LIGHT_SWEEP_ANGLE = [20, 80];
 function lightSweepOptionErrors(transition, path) {
   const errors = [];
   if (transition.type !== "light-sweep") {
-    for (const key of ["streaks", "angle"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a light-sweep option; ${JSON.stringify(transition.type)} does not take it`);
+    for (const key of transition.type === "wipe" ? ["streaks"] : ["streaks", "angle"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a light-sweep option; ${JSON.stringify(transition.type)} does not take it`);
     return errors;
   }
   const { color, streaks, angle } = transition;
@@ -395,6 +455,19 @@ function lightSweepOptionErrors(transition, path) {
   if (streaks !== undefined && !(Number.isInteger(streaks) && streaks >= slo && streaks <= shi)) errors.push(`${path}.streaks must be a whole number of light streaks from ${slo} to ${shi}; got ${JSON.stringify(streaks)}`);
   if (angle !== undefined && !(typeof angle === "number" && angle >= alo && angle <= ahi)) errors.push(`${path}.angle must be the streaks' tilt from the horizontal, ${alo} to ${ahi} degrees; got ${JSON.stringify(angle)}`);
   for (const key of ["cover", "hold"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a dot-wipe option; "light-sweep" does not take it`);
+  return errors;
+}
+
+/** Validation messages for the CSS transitions' options (wipe: angle, feather; clock-wipe: start, segments, feather). */
+function cssTransitionOptionErrors(transition, path) {
+  const errors = [];
+  const own = { wipe: ["angle", "feather"], "clock-wipe": ["start", "segments", "feather"] }[transition.type] ?? [];
+  for (const key of ["feather", "start", "segments"]) if (transition[key] !== undefined && !own.includes(key)) errors.push(`${path}.${key} is a ${key === "feather" ? "wipe or clock-wipe" : "clock-wipe"} option; ${JSON.stringify(transition.type)} does not take it`);
+  const { angle, feather, start, segments } = transition;
+  if (own.includes("angle") && angle !== undefined && !(typeof angle === "number" && Number.isFinite(angle))) errors.push(`${path}.angle must be the way the edge travels in degrees (0 up, 90 right); got ${JSON.stringify(angle)}`);
+  if (own.includes("start") && start !== undefined && !(typeof start === "number" && Number.isFinite(start))) errors.push(`${path}.start must be where the hand starts in degrees (0 at 12 o'clock); got ${JSON.stringify(start)}`);
+  if (own.includes("segments") && segments !== undefined && !(Number.isInteger(segments) && segments >= 1 && segments <= 8)) errors.push(`${path}.segments must be a whole number of hands from 1 to 8 (more than 1 opens like a fan); got ${JSON.stringify(segments)}`);
+  if (own.includes("feather") && feather !== undefined && !(typeof feather === "number" && feather >= 0 && feather <= 40)) errors.push(`${path}.feather must be the soft edge, 0 to 40 (% of the frame for a wipe, degrees for a clock); got ${JSON.stringify(feather)}`);
   return errors;
 }
 
@@ -540,6 +613,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
   else {
     if (!isObject(story.brand.colors) || !Object.keys(story.brand.colors).length) err("brand.colors must be an object of named six-digit hex colors");
     else for (const [name, value] of Object.entries(story.brand.colors)) if (typeof value !== "string" || !HEX.test(value)) err(`brand.colors.${name} must be a six-digit hex color like #1a2b3c`);
+    if (story.brand.palette !== undefined && !BRAND_PALETTE_MODES.includes(story.brand.palette)) err(`brand.palette must be one of ${BRAND_PALETTE_MODES.join(", ")}`);
     if (!isObject(story.brand.fonts) || !Object.keys(story.brand.fonts).length) err("brand.fonts must be an object of named font families");
     else for (const [name, value] of Object.entries(story.brand.fonts)) if (!nonEmpty(value)) err(`brand.fonts.${name} must be a non-empty font family name`);
   }
@@ -773,6 +847,31 @@ export function validateStory(story, { modules, moduleParams } = {}) {
 
     validateAmbient(scene.ambient, `${path}.ambient`, err);
 
+    // Sound directing (kit/core/sound/directing.mjs): first, last and the tail before count among track-0 scenes, in order.
+    if (scene.sound !== undefined) {
+      const cutting = (scenes ?? []).filter((other) => isObject(other) && (other.track ?? 0) === 0);
+      const place = cutting.indexOf(scene);
+      const hushAt = isObject(scene.sound) && isObject(scene.sound.hush) && scene.sound.hush.at !== undefined ? anchorField(scene.sound.hush.at, `${path}.sound.hush.at`) : null;
+      const prevTail = place > 0 && isObject(cutting[place - 1].sound) ? cutting[place - 1].sound.tail : undefined;
+      const problems = sceneSoundProblems(scene.sound, { path: `${path}.sound`, first: place === 0, last: place === cutting.length - 1, start, end, hushAt, prevTail });
+      problems.errors.forEach(err);
+      problems.warnings.forEach(warn);
+    }
+
+    // An opt-in idle motion on the scene's content (kit/core/behaviours.mjs).
+    if (scene.behaviour !== undefined) {
+      const b = scene.behaviour;
+      if (!isObject(b) || !STORY_BEHAVIOURS.includes(b.kind)) err(`${path}.behaviour must be {kind, amount?, period?, angle?, bpm?, direction?} with kind one of ${STORY_BEHAVIOURS.join(", ")}`);
+      else {
+        for (const key of Object.keys(b)) if (!["kind", "amount", "period", "angle", "bpm", "direction"].includes(key)) err(`${path}.behaviour.${key} is not supported (allowed: kind, amount, period, angle, bpm, direction)`);
+        if (b.amount !== undefined && !(typeof b.amount === "number" && b.amount >= 0 && b.amount <= 2)) err(`${path}.behaviour.amount must be 0 to 2 (1 is the grammar's idle size)`);
+        if (b.period !== undefined && !(typeof b.period === "number" && b.period >= 0.1 && b.period <= 20)) err(`${path}.behaviour.period must be 0.1 to 20 seconds`);
+        if (b.angle !== undefined && (b.kind !== "drift" || !(typeof b.angle === "number" && Number.isFinite(b.angle)))) err(`${path}.behaviour.angle is the drift's direction in degrees (0 up, 90 right); only drift takes it`);
+        if (b.bpm !== undefined && (!["pulse", "heartbeat"].includes(b.kind) || !(typeof b.bpm === "number" && b.bpm >= 30 && b.bpm <= 240))) err(`${path}.behaviour.bpm is the beat of a pulse or heartbeat, 30 to 240`);
+        if (b.direction !== undefined && (b.kind !== "spin" || !["left", "right"].includes(b.direction))) err(`${path}.behaviour.direction is a spin's way round, left or right; only spin takes it`);
+      }
+    }
+
     if (scene.in !== undefined && scene.in !== null) {
       const transition = scene.in;
       if (!isObject(transition)) err(`${path}.in must be an object`);
@@ -789,6 +888,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (transition.type === "pixel-dissolve" && !retroStory(story)) err(`${path}.in.type "pixel-dissolve" is retro only: set look "pixel-arcade" or vfx.words "pixel" (the retro-pixel style family sets both)`);
         for (const message of lightSweepOptionErrors(transition, `${path}.in`)) err(message);
         for (const message of beforeAfterOptionErrors(transition, `${path}.in`)) err(message);
+        for (const message of cssTransitionOptionErrors(transition, `${path}.in`)) err(message);
         if (transition.type === "overview") overviews.push({ index, path: `${path}.in`, label, transition, start, track });
       }
     }
@@ -828,6 +928,12 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (cue.angle !== undefined && !(typeof cue.angle === "number" && cue.angle >= -180 && cue.angle <= 180)) err(`${cuePath}.angle must be degrees between -180 and 180`);
         if (cue.light !== undefined && !(typeof cue.light === "number" && cue.light >= 0 && cue.light <= 2)) err(`${cuePath}.light must be a number between 0 and 2`);
         if (cue.sfx !== undefined && !nonEmpty(cue.sfx)) err(`${cuePath}.sfx must be "auto" (the effect's paired sound, the default), "none" or a sound family`);
+        // A silhouette effect (kit/core/vfx/mask.mjs) sits on its mask: the scene's card or a cast member.
+        if (STORY_VFX_MASKED.includes(cue.effect)) {
+          if (cue.mask !== undefined && !(cue.mask === "module" || (typeof cue.mask === "string" && /^cast:\S+$/.test(cue.mask)))) err(`${cuePath}.mask must be "module" (the scene's card) or "cast:<id>" (a cast member of this scene)`);
+          else if (typeof cue.mask === "string" && cue.mask.startsWith("cast:") && scene.module !== "cast-scene") err(`${cuePath}.mask "${cue.mask}" needs a cast-scene; ${scene.module} has no cast`);
+          for (const axis of ["x", "y"]) if (cue[axis] !== undefined) err(`${cuePath}.${axis} does not apply: ${cue.effect} sits on its mask`);
+        } else if (cue.mask !== undefined) err(`${cuePath}.mask applies only to the silhouette effects (${STORY_VFX_MASKED.join(", ")})`);
         // A hit's words (kit/core/vfx/catalog.mjs VFX_WORDS): short, so they read in one glance.
         for (const key of ["text", "label", "title"]) if (cue[key] !== undefined && !(nonEmpty(cue[key]) && cue[key].length <= 24)) err(`${cuePath}.${key} must be a word or two (1–24 characters)`);
       }
@@ -975,6 +1081,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
           for (const message of dotWipeOptionErrors(transition, "ending.in", storyFps(story))) err(message);
           for (const message of lightSweepOptionErrors(transition, "ending.in")) err(message);
           for (const message of beforeAfterOptionErrors(transition, "ending.in")) err(message);
+          for (const message of cssTransitionOptionErrors(transition, "ending.in")) err(message);
           if (transition.from_object !== undefined) {
             const sceneId = typeof transition.from_object === "string" ? transition.from_object.split(".")[0] : null;
             if (!sceneId || !ids.has(sceneId)) err(`ending.in.from_object references unknown scene "${sceneId ?? transition.from_object}"`);
@@ -1108,6 +1215,7 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
     if (Array.isArray(scene.vfx)) scene.vfx.forEach((cue, v) => {
       if (isObject(cue) && cue.at !== undefined) cue.at = resolve(cue.at, `${path}.vfx[${v}].at`);
     });
+    if (isObject(scene.sound) && isObject(scene.sound.hush) && scene.sound.hush.at !== undefined) scene.sound = { ...scene.sound, hush: { ...scene.sound.hush, at: resolve(scene.sound.hush.at, `${path}.sound.hush.at`) } };
     if (Array.isArray(scene.states)) scene.states.forEach((state, s) => {
       if (isObject(state) && state.at !== undefined) state.at = resolve(state.at, `${path}.states[${s}].at`);
     });
@@ -1141,6 +1249,8 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
     .map((scene, index) => ({ scene, index }))
     .sort((a, b) => (Number(a.scene?.start) - Number(b.scene?.start)) || ((a.scene?.track ?? 0) - (b.scene?.track ?? 0)) || a.index - b.index)
     .map((entry) => entry.scene);
+  // Brand colours → the working palette (kit/core/palette.mjs): a pale ground moves to paper over a deep one.
+  if (isObject(copy.brand)) copy.brand = workingBrand(copy.brand);
   const format = storyFormat(copy);
   copy.resolved = { duration: format.duration, fps: format.fps, frames: Math.round(format.duration * format.fps) };
   // The whole-video head track (the loader's readStoryTrack): {source, fps,
@@ -1523,7 +1633,7 @@ function validateKicks(kicks, { err, lane, anchorField }) {
 // brandFrameErrors (story.mjs has no imports); here only what a story adds:
 // it is an object or false, and its section labels and source notes point
 // at real scenes.
-const FRAME_KEYS = ["enabled", "logo", "logo_mark", "kicker", "sections", "progress", "show", "labels", "color", "sources", "counter"];
+const FRAME_KEYS = ["enabled", "logo", "logo_mark", "kicker", "sections", "progress", "show", "labels", "color", "sources", "counter", "figure"];
 const FRAME_COUNTER_KEYS = ["label", "steps", "format", "position", "color"];
 const FRAME_COUNTER_FORMAT_KEYS = ["prefix", "suffix", "pad", "decimals", "separator"];
 // Modules that show study, survey or benchmark data; each needs a source on screen.
@@ -1550,6 +1660,9 @@ function validateFrame(frame, { err, warn, scenes }) {
   }
   if (isObject(frame.progress) && frame.progress.style !== undefined && !["line", "scrubber"].includes(frame.progress.style)) err('frame.progress.style must be "line" or "scrubber" (a knob that travels with the fill)');
   if (frame.counter !== undefined) validateFrameCounter(frame.counter, { err, warn, ids });
+  // figure: a "FIG. 03" label top left and a "03 / 12" count top right per track-0 scene (kit/core/brand-frame.mjs).
+  if (frame.figure !== undefined && frame.figure !== false && frame.figure !== true && !(isObject(frame.figure) && Object.keys(frame.figure).every((key) => key === "label") && (frame.figure.label === undefined || (nonEmpty(frame.figure.label) && frame.figure.label.length <= 12)))) err('frame.figure must be true, false or {label?} (the prefix, 1-12 characters, default "FIG.")');
+  if (frame.figure && (frame.labels !== undefined || frame.counter !== undefined)) warn("frame.figure draws the section labels and the counter itself; frame.labels and frame.counter are ignored");
   if (frame.labels === undefined) return;
   if (!Array.isArray(frame.labels)) { err("frame.labels must be a list of {start | scene, label}"); return; }
   frame.labels.forEach((entry, i) => {

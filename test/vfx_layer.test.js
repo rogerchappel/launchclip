@@ -209,3 +209,31 @@ test('pixel-dissolve is retro only; the retro-pixel family keeps pixel words and
   assert.equal(generateStyle({seed: '1a2b3c4d'}).vfx, undefined, 'no family, nothing added');
   assert.throws(() => generateStyle({seed: '1a2b3c4d', constraints: {family: 'vaporwave'}}), /family must be one of retro-pixel/);
 });
+
+test('the planner sees the effects catalogue only when the direction or style asks for effects', async () => {
+  const {planningPrompt, vfxLines, vfxWanted} = await import('@launchclip/core/planning-prompt.mjs');
+  const lines = vfxLines().join('\n');
+  for (const [name, info] of Object.entries(VFX_EFFECTS)) {
+    assert.ok(info.use, `${name} has a use line`);
+    assert.match(lines, new RegExp(`^${name}: `, 'm'), name);
+  }
+  assert.equal(vfxWanted({artDirection: 'arcade game feel, sparks on every win'}), true);
+  assert.equal(vfxWanted({style: {vfx: {words: 'pixel'}}}), true);
+  assert.equal(vfxWanted({artDirection: 'calm editorial, warm light'}), false);
+  assert.match(planningPrompt({lane: 'motion', artDirection: 'confetti on the win'}), /## Effects \(VFX layer\)/);
+  assert.doesNotMatch(planningPrompt({lane: 'motion', artDirection: 'calm editorial'}), /Effects \(VFX layer\)/);
+});
+
+test('the cue rules warn on a crowd of effects and an effect over the captions, not on two hits with words', async () => {
+  const {vfxCueFindings} = await import('@launchclip/core/vfx/plan.mjs');
+  const story = (vfx, overlays = []) => ({format: {width: 1080, height: 1920}, overlays, scenes: [{id: 's1', start: 0, end: 4, vfx}]});
+  const rulesOf = s => vfxCueFindings(s).map(f => f.rule);
+  assert.deepEqual(rulesOf(story([1, 1.3, 1.6].map(at => ({effect: 'hit-spark', at})))), []);
+  const crowd = vfxCueFindings(story([1, 1.3, 1.6, 1.9].map(at => ({effect: 'hit-spark', at}))));
+  assert.deepEqual(crowd.map(f => [f.rule, f.severity, f.at]), [['vfx-crowd', 'warning', 1]]);
+  assert.deepEqual(rulesOf(story([{effect: 'crit-number', at: 1}, {effect: 'level-up', at: 3}])), [], 'one word hit a scene is a planner rule');
+  const low = [{effect: 'poof', at: 2, y: 0.68}];
+  assert.deepEqual(rulesOf(story(low)), [], 'no captions, no caption rule');
+  assert.deepEqual(rulesOf(story(low, [{type: 'captions'}])), ['vfx-over-caption']);
+  assert.deepEqual(rulesOf(story([{effect: 'poof', at: 2, y: 0.4}], [{type: 'captions'}])), []);
+});

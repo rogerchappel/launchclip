@@ -89,13 +89,30 @@ const logoTrimOf = (trim) => (isObject(trim) && ['x', 'y', 'width', 'height'].ev
 const part = (value, defaults) => (value === false ? null : { ...defaults, ...(isObject(value) ? value : {}) });
 
 /**
+ * frame.figure as plain frame parts: each track-0 scene gets a section label
+ * ("FIG. 03", top left) and a counter step ("03 / 12", top right), and the
+ * kicker is off unless set. So the figure chrome is drawn by the same plan as
+ * labels and counters, in both renderers.
+ */
+function figureFrame(story) {
+  const frame = story?.frame;
+  if (!isObject(frame) || !frame.figure) return frame;
+  const scenes = (story.scenes ?? []).filter((scene) => isObject(scene) && !(Number(scene.track) > 0) && nonEmpty(scene.id)).sort((a, b) => Number(a.start) - Number(b.start));
+  const prefix = nonEmpty(frame.figure?.label) ? frame.figure.label.trim() : 'FIG.';
+  const pad = (i) => String(i).padStart(2, '0');
+  return { ...frame, kicker: frame.kicker ?? false, sections: { ...(isObject(frame.sections) ? frame.sections : {}), position: 'top-left' },
+    labels: scenes.map((scene, i) => ({ scene: scene.id, label: `${prefix} ${pad(i + 1)}` })),
+    counter: { position: 'top-right', steps: scenes.map((scene, i) => ({ scene: scene.id, text: `${pad(i + 1)} / ${pad(scenes.length)}` })) } };
+}
+
+/**
  * The frame in force for a story: null when it has none (no frame, frame:
  * false or enabled: false), else {kicker, sections, progress, show, logo,
  * color} with defaults filled and the kicker label falling back to a short
  * story title.
  */
 export function storyFrame(story) {
-  const frame = story?.frame;
+  const frame = figureFrame(story);
   if (!isObject(frame) || frame.enabled === false) return null;
   const kicker = part(frame.kicker ?? true, { underline: true, position: 'top-left', logo: true });
   const showsLogo = Boolean(kicker && kicker.logo !== false && nonEmpty(frame.logo));

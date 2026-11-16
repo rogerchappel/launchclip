@@ -1,0 +1,13 @@
+{
+  "describe": "pulse rings on the beat (dark palette)",
+  "project": "examples/story/minimal",
+  "times": [
+    1.2,
+    5.5
+  ],
+  "patch": {
+    "background": {
+      "kind": "rings"
+    }
+  }
+}

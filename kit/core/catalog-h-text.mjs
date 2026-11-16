@@ -1,7 +1,8 @@
 // Catalogue H motion titles: `motion-title`, a caption-independent title
 // whose variants are the 24 named text-animation effects of the HyperFrames
 // vocabulary (hyperframes-animation, adapters/animate-text.md): 7 per
-// character, 8 per word, 2 per line and 7 on the whole element. The effects
+// character, 8 per word, 2 per line and 7 on the whole element, plus the
+// character effect `scramble` (docs/FINISHING_AND_ELEMENTS_RFC.md §E.6). The effects
 // are implemented here from their names and descriptions (no upstream
 // specs are vendored), as seek-safe ops on per-character, per-word and
 // per-line spans. Before this module only kinetic-words' "scale" and "rise"
@@ -14,13 +15,15 @@
 import {brandTextScale, timingRules} from './catalog-b-base.mjs';
 import {VARIANT_PARAM, clip, createHBase, fitText, inkOn, mixColor, r2, rt, textWidth, toneColor} from './catalog-h-base.mjs';
 import {abs, drawOps, el, riseOps, set, strokePath, tw} from './catalog-h-view.mjs';
+import {sampleTime} from './catalog-b-view.mjs';
+import {hashUnit} from './fluid-motion.mjs';
 import {MARK_KINDS, roughMark} from './rough-mark.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
 const rect = '{x, y, width, height} canvas px inside the safe zone (optional)';
 
 export const TEXT_EFFECTS = Object.freeze({
-  character: ['soft-blur-in', 'per-character-rise', 'typewriter', 'bottom-up-letters', 'top-down-letters', 'stagger-from-center', 'stagger-from-edges'],
+  character: ['soft-blur-in', 'per-character-rise', 'typewriter', 'bottom-up-letters', 'top-down-letters', 'stagger-from-center', 'stagger-from-edges', 'scramble'],
   word: ['per-word-crossfade', 'spring-scale-in', 'shared-axis-y', 'blur-out-up', 'kinetic-center-build', 'short-slide-right', 'short-slide-down', 'depth-parallax-words'],
   line: ['mask-reveal-up', 'line-by-line-slide'],
   element: ['micro-scale-fade', 'shimmer-sweep', 'fade-through', 'shared-axis-z', 'scale-down-fade', 'focus-blur-resolve', 'shared-axis-x']
@@ -30,6 +33,10 @@ const TITLE_VARIANTS = Object.freeze(['per-character-rise', ...Object.values(TEX
 const UNIT_OF = Object.fromEntries(Object.entries(TEXT_EFFECTS).flatMap(([unit, names]) => names.map(name => [name, unit])));
 // Effects whose letters or lines rise through a mask: their rows clip.
 const MASKED = new Set(['bottom-up-letters', 'top-down-letters', 'mask-reveal-up']);
+// scramble's glyph sets: only glyphs every bundled display face covers.
+export const SCRAMBLE_CHARSETS = Object.freeze({latin: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', hex: '0123456789ABCDEF', binary: '01'});
+// A scrambling glyph changes every SCRAMBLE_CYCLE frames.
+const SCRAMBLE_CYCLE = 3;
 
 /** Greedy wrap with the conservative advance model → lines of words. */
 function wrap(words, size, width) {
@@ -45,7 +52,7 @@ function wrap(words, size, width) {
 }
 
 function titleResolve(params, ctx) {
-  const b = createHBase('motion-title', params, ctx, {allowed: ['text', 'kicker', 'sub', 'highlight', 'mark', 'align', 'plate', 'tone', 'at', 'speed'], required: ['text'], variants: TITLE_VARIANTS, hidesCaptions: true});
+  const b = createHBase('motion-title', params, ctx, {allowed: ['text', 'kicker', 'sub', 'highlight', 'mark', 'align', 'plate', 'tone', 'at', 'speed', 'charset'], required: ['text'], variants: TITLE_VARIANTS, hidesCaptions: true});
   const {check, u, rect} = b;
   const p = b.params;
   const text = check.str(p.text, 'params.text', 90);
@@ -55,6 +62,8 @@ function titleResolve(params, ctx) {
   const plate = p.plate === undefined ? false : check.bool(p.plate, 'params.plate');
   const speed = p.speed === undefined ? 1 : check.num(p.speed, 'params.speed', 0.5, 2);
   const accent = toneColor(b, p.tone, 'params.tone');
+  if (p.charset !== undefined && b.variant !== 'scramble') check.fail('params.charset', 'is only for the scramble variant');
+  const charset = p.charset === undefined ? 'latin' : check.oneOf(p.charset, 'params.charset', Object.keys(SCRAMBLE_CHARSETS));
   const markKind = p.mark === undefined ? null : check.oneOf(p.mark, 'params.mark', MARK_KINDS);
   if (markKind && p.highlight === undefined) check.fail('params.mark', 'needs params.highlight: the words the mark is drawn over');
   const words = text.split(/\s+/).filter(Boolean);
@@ -135,7 +144,8 @@ function titleResolve(params, ctx) {
   const plateFill = plate ? b.colors.primary : null;
   const content = {variant: b.variant, unit, rows, counts, size, lineH, top, align, pad, plate: plateFill, ink: plate ? inkOn(b.colors, plateFill) : ink, accent: plate ? inkOn(b.colors, plateFill) : accent,
     ...(marks.length ? {marks} : {}), kicker: kicker ? {text: kicker, size: kickerSize} : null, sub: subFit ? {text: sub, size: subFit.size, lines: subFit.lines} : null, t0, stride: rt(stride), each: rt(each), buildEnd, speed,
-    muted: plate ? mixColor(inkOn(b.colors, plateFill), plateFill, 0.7) : b.theme.muted, shimmer: mixColor('#ffffff', accent, 0.5), blockH};
+    muted: plate ? mixColor(inkOn(b.colors, plateFill), plateFill, 0.7) : b.theme.muted, shimmer: mixColor('#ffffff', accent, 0.5), blockH,
+    ...(b.variant === 'scramble' ? {glyphs: SCRAMBLE_CHARSETS[charset]} : {})};
   return b.finish(content, {minTextPx: Math.min(size, subFit ? subFit.size : Infinity)});
 }
 
@@ -159,7 +169,11 @@ function titleView(model) {
   }
   const wordNode = word => {
     const style = {display: 'inline-block', whiteSpace: 'pre', color: word.highlight && word.mark === undefined ? c.accent : c.ink, ...(c.unit === 'word' ? {opacity: 0} : {})};
-    const children = perChar ? word.chars.map(ch => el('span', I.char(ch.index), {display: 'inline-block', whiteSpace: 'pre', opacity: 0}, [ch.ch])) : [word.text];
+    // scramble: the letter keeps its box while a glyph over it changes, clipped to that box, so the line never reflows and no glyph spills onto a neighbour.
+    const charNode = ch => (c.glyphs
+      ? el('span', I.char(ch.index), {display: 'inline-block', position: 'relative', whiteSpace: 'pre', opacity: 0}, [el('span', `${I.char(ch.index)}-r`, {opacity: 0}, [ch.ch]), el('span', `${I.char(ch.index)}-g`, {position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, overflow: 'hidden', textAlign: 'center', whiteSpace: 'pre'}, [ch.ch])])
+      : el('span', I.char(ch.index), {display: 'inline-block', whiteSpace: 'pre', opacity: 0}, [ch.ch]));
+    const children = perChar ? word.chars.map(charNode) : [word.text];
     return el('span', I.word(word.index), style, children);
   };
   const rowsNodes = c.rows.map(row => {
@@ -221,6 +235,21 @@ function titleTimeline(model, ops) {
         from(i, {opacity: 0, blur: r2(10 * u)}); go(i, each, 'power2.out', {opacity: 0, blur: r2(10 * u)}, {opacity: 1, blur: 0}); break;
       case 'per-character-rise':
         from(i, {opacity: 0, x: 0, y: r2(em * 0.5)}); go(i, each, 'power3.out', {opacity: 0, y: r2(em * 0.5)}, {opacity: 1, y: 0}); break;
+      case 'scramble': {
+        // hash(id, i, floor(frame / cycle)) picks each glyph; the letter locks after `each`.
+        const lock = rt(at(i) + each);
+        const cycle = SCRAMBLE_CYCLE / model.fps;
+        from(i, {opacity: 0}); set(ops, target(i), at(i), {opacity: 1});
+        set(ops, `${target(i)}-r`, start, {opacity: 0});
+        const pool = c.glyphs;
+        set(ops, `${target(i)}-g`, start, {opacity: 1, text: pool[0]});
+        for (let k = Math.floor(at(i) / cycle + 1e-9); k * cycle < lock - 1e-9; k++) {
+          set(ops, `${target(i)}-g`, sampleTime(Math.max(at(i), k * cycle)), {text: pool[Math.floor(hashUnit(`${id}|${i}|${k}`) * pool.length)]});
+        }
+        set(ops, `${target(i)}-g`, lock, {opacity: 0});
+        set(ops, `${target(i)}-r`, lock, {opacity: 1});
+        break;
+      }
       case 'typewriter':
         // Stepped: each letter appears whole on its beat, no interpolation.
         from(i, {opacity: 0}); set(ops, target(i), at(i), {opacity: 1}); break;
@@ -287,9 +316,9 @@ function titleTimeline(model, ops) {
 
 export const motionTitle = {
   id: 'motion-title',
-  describe: 'A title that animates in with one of the 24 named text effects (its variants: per character, per word, per line or the whole element), with an optional kicker, sub-line, highlighted words (with a hand-drawn mark over them) and brand plate. Hides captions.',
+  describe: 'A title that animates in with one of the 24 named text effects or a glyph scramble (its variants: per character, per word, per line or the whole element), with an optional kicker, sub-line, highlighted words (with a hand-drawn mark over them) and brand plate. Hides captions.',
   params: {text: 'string ≤ 90 (≤ 16 words), required', kicker: 'string ≤ 32 above (optional)', sub: 'string ≤ 90 below (optional)', highlight: 'whole word or [words] 1–3 to colour with tone', mark: `a hand-drawn mark in the tone colour that draws on over the highlighted words (which then keep the text colour) once the title has built: ${MARK_KINDS.join(' | ')} (optional; needs highlight)`, align: '"center" | "left"',
-    plate: 'boolean: set the title on a brand-colour plate', tone: 'primary | accent | paper | #rrggbb (highlight colour)', speed: 'stagger speed 0.5–2 (default 1)', at: `build start: ${at}`,
+    plate: 'boolean: set the title on a brand-colour plate', tone: 'primary | accent | paper | #rrggbb (highlight colour)', speed: 'stagger speed 0.5–2 (default 1)', charset: `scramble only: the glyphs a letter cycles through before it locks, ${Object.keys(SCRAMBLE_CHARSETS).join(' | ')} (default latin)`, at: `build start: ${at}`,
     variant: `${VARIANT_PARAM}; one of the effects: ${Object.values(TEXT_EFFECTS).flat().join(', ')}`, rect},
   events: ['title'], timing: timingRules({rules: ['the build ends before the exit; long text with a character effect compresses its stagger to 1.4 s']}), variants: TITLE_VARIANTS,
   resolve: titleResolve, view: titleView, timeline: titleTimeline

@@ -12,7 +12,7 @@
     "kind": "measured",
     "tool": "launchclip profile measure",
     "measured_at": "2026-11-08T20:02:35.348Z",
-    "note": "Bands from ui-explainer-reel, with frame-change energy and camera moves re-centred (\u00b115%) on one of our own renders with the steady camera, approved by eye: a target, not a survey. Moving sharpness and soft-frame share are left out: a steady camera has few held frames to compare, and they swung widely between renders.",
+    "note": "Bands from ui-explainer-reel, with frame-change energy and camera moves re-centred (±15%) on one of our own renders with the steady camera, approved by eye: a target, not a survey. Moving sharpness and soft-frame share are left out: a steady camera has few held frames to compare, and they swung widely between renders. The pace fields (hook_rate_ratio, max_event_gap_seconds, cuts_on_beat_ratio) are not measured yet: the references were not at hand when they were added, so the format's pace band holds until launchclip profile measure runs on them again.",
     "sources": [
       {
         "id": "ref-01",

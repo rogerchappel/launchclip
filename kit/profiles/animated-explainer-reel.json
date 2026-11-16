@@ -27,7 +27,7 @@
     "kind": "measured",
     "tool": "launchclip profile measure",
     "measured_at": "2026-11-07T09:59:19.607Z",
-    "note": "Measured from 2 reference videos (public-statistics). Only statistics are stored; coverage is estimated from pixels. With fewer than 10 references, p10 and p90 are the smallest and largest reference values. Left out: face_time, text_hold_seconds. Two public faceless animated explainer reels (9:16, 62–70 s). face_time is left out because the face probe reads the drawn host as a presenter; text_hold_seconds because the designed-region estimate sees the whole illustrated frame as one graphic.",
+    "note": "Measured from 2 reference videos (public-statistics). Only statistics are stored; coverage is estimated from pixels. With fewer than 10 references, p10 and p90 are the smallest and largest reference values. Left out: face_time, text_hold_seconds. Two public faceless animated explainer reels (9:16, 62–70 s). face_time is left out because the face probe reads the drawn host as a presenter; text_hold_seconds because the designed-region estimate sees the whole illustrated frame as one graphic. The pace fields (hook_rate_ratio, max_event_gap_seconds, cuts_on_beat_ratio) are not measured yet: the references were not at hand when they were added, so the format's pace band holds until launchclip profile measure runs on them again.",
     "sources": [
       {
         "id": "ref-01",

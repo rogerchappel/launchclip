@@ -85,6 +85,8 @@ Useful flags:
 | `--replan` | off | Plan a new storyboard on a rerun. The script, the voice and every other finished step are reused unless your own inputs changed (the prompt, your notes, the files you handed in, the flags). Clips your asset provider wrote into `--assets` during an earlier run do not count as a change: see [Clips your asset provider fetched](#clips-your-asset-provider-fetched). |
 | `--explainer` | `visual` | What a video with nothing to show is made of. `visual` draws every scene for the topic; `characters` has a small cast carry it. See [A visual explainer](#a-visual-explainer-when-there-is-nothing-to-show). |
 | `--candidates` | `on` | `off` skips the rendered candidates for the opening and one transition. They need a model that can see. |
+| `--comps` | off | Three structural comps of the hook (the planner's, a sparse one, a dense one), each a storyboard and a still in `comps/`, before anything else renders. A terminal run stops for the pick (exit 3); a headless run lets the vision judge pick, recorded as delegated in `MAKE.json` `comps.picked`. |
+| `--comp` | none | The comp to keep, 1 to 3, on the run after `--comps` stopped. The comps are reused, not designed again. |
 | `--concepts` | `on` | `off` skips the five concepts and the story, and writes the script from the brief in one pass. |
 | `--no-critic` | critic on when the model takes images | Skip the automatic visual review. OpenAI, Anthropic and OpenRouter models take images; a local Ollama model does not. |
 | `--critic-repairs <n>` | `3` | Rounds of repair the critic may ask for (0–3; `0` ships its verdict as is). |

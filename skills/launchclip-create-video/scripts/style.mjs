@@ -23,6 +23,8 @@ import { DRAWING_STYLES, storyCastErrors } from './characters/cues.mjs';
 import { CHARACTER_SET_NAMES, castFromStyle } from './characters/generate.mjs';
 import { BACKGROUND_FADES, BACKGROUND_KINDS, backgroundErrors, panelFillErrors } from './backgrounds.mjs';
 import { gradeErrors } from './grade.mjs';
+import { contrastRatio, luminance } from './oklch.mjs';
+import { BRAND_PALETTE_MODES } from './palette.mjs';
 import { lightErrors } from './lighting.mjs';
 import { MEDIUM_KINDS, mediumErrors } from './medium.mjs';
 import { LOOK_NAMES, applyLook, lookErrors, lookPresets, normalizeLook } from './look.mjs';
@@ -93,7 +95,9 @@ const nonEmpty = (value) => typeof value === 'string' && value.trim().length > 0
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 // ---------------------------------------------------------------------------
-// Colour maths
+// Colour maths (WCAG luminance and contrast live in oklch.mjs, import-free)
+
+export { contrastRatio, luminance };
 
 export function hexToRgb(hex) {
   const value = String(hex).replace('#', '');
@@ -102,21 +106,6 @@ export function hexToRgb(hex) {
 
 export function rgbToHex([r, g, b]) {
   return `#${[r, g, b].map((c) => Math.round(Math.max(0, Math.min(255, c))).toString(16).padStart(2, '0')).join('')}`;
-}
-
-/** WCAG relative luminance of a hex colour. */
-export function luminance(hex) {
-  const [r, g, b] = hexToRgb(hex).map((c) => {
-    const s = c / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-/** WCAG contrast ratio between two hex colours (1–21). */
-export function contrastRatio(a, b) {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
 }
 
 /** {h: 0–360, s: 0–1, l: 0–1} of a hex colour. */
@@ -283,6 +272,7 @@ export function validateStylePack(pack, { modules } = {}) {
         if (!isObject(pack.brand.colors)) err('brand.colors must be an object of hex colours');
         else for (const [role, value] of Object.entries(pack.brand.colors)) if (!HEX.test(value)) err(`brand.colors.${role} must be a six-digit hex colour`);
       }
+      if (pack.brand.palette !== undefined && !BRAND_PALETTE_MODES.includes(pack.brand.palette)) err(`brand.palette must be one of ${BRAND_PALETTE_MODES.join(', ')}`);
       if (pack.brand.fonts !== undefined) {
         if (!isObject(pack.brand.fonts)) err('brand.fonts must be an object of font families');
         else for (const [role, value] of Object.entries(pack.brand.fonts)) {
@@ -699,6 +689,7 @@ export function applyStyle(story, pack, options = {}) {
       if (!isObject(out.brand[part])) out.brand[part] = {};
       fill(out.brand[part], pack.brand[part], `brand.${part}`);
     }
+    if (pack.brand.palette !== undefined && out.brand.palette === undefined) { out.brand.palette = pack.brand.palette; applied.push('brand.palette'); }
   }
 
   // Motion grammar, camera, ambient, layout: pass-through data filled per key.

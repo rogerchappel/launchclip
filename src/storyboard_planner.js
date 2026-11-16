@@ -57,6 +57,8 @@ import { cardErrors, fitShotCallouts, hookErrors, hookTimingErrors, storyboardSe
 import { layoutSpec, talkingHeadLayout } from "./talking_head_layout.js";
 import { abstractErrors, castFromDirection, characterErrors, characterShare, defaultExplainerCast, openingErrors } from "@launchclip/core/explainer.mjs";
 import { readingFindings } from "./direction_guardrails.js";
+import { storyboardOrderErrors } from "./list_order.js";
+import { visualDensityErrors } from "./visual_density.js";
 import { fitCastCuts } from "./cast_cut_fit.js";
 import { normalisePlan } from "./plan_normalise.js";
 import { keepUnnamed, repairScope } from "./repair_scope.js";
@@ -507,7 +509,9 @@ export async function planStoryboard(options = {}) {
         const seconds = storyboardSeconds(checked.storyboard, wordList);
         const footage = Boolean(assets) && lane !== "footage-led";
         const opensOnBase = lane === "footage-led" || Boolean(fixed.base);
-        const short = [...hookErrors(checked.storyboard, { seconds, base: opensOnBase }), ...hookTimingErrors(checked.storyboard, { seconds, words: wordList, times: sceneTimes(checked.storyboard, wordList, beats), profile, base: opensOnBase }), ...cardErrors(checked.storyboard, { seconds, footage })];
+        const short = [...hookErrors(checked.storyboard, { seconds, base: opensOnBase }), ...hookTimingErrors(checked.storyboard, { seconds, words: wordList, times: sceneTimes(checked.storyboard, wordList, beats), profile, base: opensOnBase }), ...cardErrors(checked.storyboard, { seconds, footage }),
+          // The frame full to the last second, and a list in order or its teaser labelled (src/visual_density.js, src/list_order.js).
+          ...(checked.layout?.density ?? []), ...storyboardOrderErrors(checked.storyboard)];
         if (short.length) { checked.errors = [...checked.errors, ...short]; checked.ok = false; }
         // A handed-in file the user clearly meant to feature that no scene shows (src/asset_understanding.js).
         const left = unusedFeatured(checked.storyboard, featured ?? []);
@@ -531,8 +535,8 @@ export async function planStoryboard(options = {}) {
       checked.shotCounts = shotCounts;
       // Fewer shot requests than minShots: a repair note, counted against the
       // same budget; a storyboard that fails only this is kept as a fallback.
-      if (!checked.ok && checked.storyboard && checked.errors.length && checked.errors.every((entry) => NEAR_MISS.some((prefix) => entry.startsWith(prefix))) && (!paced || checked.errors.length < paced.cadence.length)) {
-        paced = { ...checked, ok: true, errors: [], warnings: [...checked.warnings], cadence: [...checked.errors], direction };
+      if (!checked.ok && checked.storyboard && checked.errors.length && checked.errors.every((entry) => NEAR_MISS.some((prefix) => entry.startsWith(prefix))) && (!paced || checked.errors.length < paced.nearMiss.length)) {
+        paced = { ...checked, ok: true, errors: [], warnings: [...checked.warnings], nearMiss: [...checked.errors], direction };
       }
       const shortfall = shotCounts ? minShotsError(shotCounts.requested, minShots) : "";
       if (shortfall) {
@@ -574,8 +578,9 @@ export async function planStoryboard(options = {}) {
   }
   if (!last?.ok && !best && paced) {
     direction = paced.direction;
-    const { cadence, ...kept } = paced;
-    last = { ...kept, warnings: [...kept.warnings, ...cadence, `${cadence.every((entry) => entry.startsWith("cadence: ")) ? "cadence" : "plan"}: kept the storyboard closest to the profile after ${repairs} repair${repairs === 1 ? "" : "s"}`] };
+    // nearMiss, not cadence: the plan's cadence measures (coverage, face time) stay on the kept plan.
+    const { nearMiss, ...kept } = paced;
+    last = { ...kept, warnings: [...kept.warnings, ...nearMiss, `${nearMiss.every((entry) => entry.startsWith("cadence: ")) ? "cadence" : "plan"}: kept the storyboard closest to the profile after ${repairs} repair${repairs === 1 ? "" : "s"}`] };
     delete last.direction;
   }
   if (!last?.ok && best) {
@@ -922,6 +927,8 @@ export function checkStoryboard(raw, { words = [], beats = null, track = null, t
       captionZones: layoutCaptionZones(resolved)
     });
     const report = checkLayout({ canvas, elements, duration: Number(resolved.resolved?.duration) || undefined });
+    // Footage or full-bleed type to the last second (src/visual_density.js), as finish gates it: repair notes the planner loop adds.
+    layout.density = visualDensityErrors(resolved, elements);
     layout.findings = report.findings;
     layout.errors = report.findings.filter((finding) => finding.severity === "error").length;
     layout.warnings = report.findings.filter((finding) => finding.severity !== "error").length;
@@ -984,7 +991,7 @@ export function resolveChecked(raw, { words = [], beats = null, style = null } =
 // Errors a storyboard may still ship with when the repairs run out.
 // A storyboard that fails only these still ships when the repairs run out: a
 // weak hook or one card too many beats no video.
-const NEAR_MISS = ["cadence: ", "placeholder: ", "hook: ", "cards: ", "featured: ", "reading: ", "opening: ", "variety: ", "characters: "];
+const NEAR_MISS = ["cadence: ", "density: ", "order: ", "placeholder: ", "hook: ", "cards: ", "featured: ", "reading: ", "opening: ", "variety: ", "characters: "];
 
 /** Cards that hold more words than their time on screen allows (src/direction_guardrails.js readingFindings), as repair notes. */
 export function planReadingErrors(resolved) {

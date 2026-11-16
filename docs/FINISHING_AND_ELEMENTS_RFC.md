@@ -184,6 +184,48 @@ is Fan Open); `blinds {count, axis}` (Blinds, Slats); `pixel-dissolve
 Their text animator list also has **Scramble**, which our 24 text effects
 lack (E.6).
 
+**Built (phase 3).** Everything is opt-in; nothing is added to the style
+seed or a planner default.
+
+- *Transitions:* `wipe {angle, feather}`, `clock-wipe {start, segments,
+  feather}` and `card-flip {direction}` in `TRANSITION_TYPES` (32 now). The
+  two masks are one layer prop, `mask` (progress 0 → 1), with the shape in
+  the tween's `args`: a `linear-gradient` or `conic-gradient` `mask-image`
+  whose every number is linear in the progress, so HyperFrames' GSAP string
+  interpolation draws what Remotion's `layerStyle` draws (`maskCss`). A
+  zero-length `mask` tween to kind `none` takes the mask off when it lands.
+  `card-flip` is `rotateY` under `perspective` (GSAP `rotationY` and
+  `transformPerspective`): the outgoing card turns edge-on on `power2.in`,
+  the incoming one turns in on `power2.out` (slow, fast, slow, no
+  overshoot), blurred and fallen back a little at the edge-on middle. It is a
+  card transition, so between two footage plates it plays as a fade.
+  `blinds` and `pixel-dissolve` were already built as VFX covers (#644), so
+  they are not added again as clip-paths. The transition check reads the
+  masks (`maskCover`) and the flip (a squeeze across).
+- *Behaviours:* `scene.behaviour {kind, amount, period, angle, bpm,
+  direction}` with `wiggle`, `jitter`, `orbit`, `lissajous`, `drift`,
+  `pendulum`, `wobble`, `spin`, `pulse`, `heartbeat`, `breathe`, `squash`,
+  `flicker` and `fade-pulse` (`kit/core/behaviours.mjs`). They are
+  camera-world ops on one wrapper inside the drift (`#lc-behave-<id>`),
+  played by `opsGsap` in HyperFrames and `opsStateAt` in Remotion, so no new
+  runtime. They live on a scene wrapper, not on each module's `-idle` node:
+  only the node graph has those, and a scene wrapper works for every module.
+  Periodic kinds are `sine.inOut` half-cycles between extremes (an exact
+  sinusoid), entered and left on quarter cycles, so each starts and ends at
+  rest. Idle kinds wait `BEHAVIOUR_SETTLE` (0.6 s); `squash` and `wobble`
+  play on arrival; `pulse` and `heartbeat` land on the music's beat. The
+  pivot is the content rect's centre (top for `pendulum`, base for
+  `squash`). `flicker` dims at most 40 % (no strobe).
+- *Backgrounds:* `rings` (one ring leaves the centre on each beat: a scale
+  glide per ring, a beat apart, wrapping past the corners), `bokeh` (discs
+  with light-sweep's falloff, drifting), `motif` shapes `checker` and
+  `grid`, and `sweep` on `light-rays`. 20 `BACKGROUND_KINDS` with the weather kind.
+- *Tests and parity:* `test/css_transitions.test.js`,
+  `test/behaviours.test.js` (GSAP seeking the compiled lines equals the ops
+  state on every frame), the transition-frame check over every new type, the
+  story fixture `examples/story/css-transitions-9x16` and five background
+  fixtures.
+
 ## E.4 New looks
 
 Our looks are blueprint, hologram, thermal, neon-night, paper-cutout,
@@ -353,6 +395,30 @@ it did not template (custom nodes run arbitrary Python), pins model files by
 hash, takes output filenames only from `/history`, caps download size and
 job time, and sends nothing but the brief's text and the frames it renders.
 
+**Shipped (phase 8).** `launchclip make --asset-provider comfy`
+(`src/comfy/asset_provider.js`) answers the planner's shot requests on the
+base shared with the SFX adapter (`src/comfy/`: loopback client and health,
+templates with a licence allowlist, a cache keyed by the bound workflow, a
+ledger line per generation in `qa/generation-log.jsonl`). Setup is in
+`docs/guide/comfyui.md`. Stills come from `plate-flux-schnell` (default) or
+`plate-sdxl` (`--comfy-plate`), video from `draft-wan-5b` (text to video,
+about 480p, 4n + 1 frames at 24 fps, at most 121). Any failure is "no shot",
+so the scene is drawn in code. Templates live in `src/comfy/templates/`.
+Differences from the plan above, all open:
+
+- **The asset-provider hook, not the generation adapter.** There is no
+  `quote`/`submit`/`poll`/`fetch` adapter yet (the generation RFC's phase 2
+  is not built), so ComfyUI answers `findShot` directly. Its cost is 0 and
+  its time is in the ledger; the seconds-per-step quote table needs runs on
+  real machines first.
+- **Text only.** Nothing is uploaded: no start frame, no references, so no
+  `/upload/image`. `draft-wan-i2v`, `draft-ltx` (its licence is off the
+  allowlist) and `upscale` are not shipped.
+- **Polling, not the socket.** `/history` is polled; `/ws` progress is open.
+- **No hash pin.** The API exposes model file names, not hashes; health
+  checks that each file a template needs is listed by its loader.
+- **Not yet run on a real server**: tests use a fake ComfyUI API.
+
 ## E.8 Skill quality
 
 - **The description is over the limit.** The built
@@ -385,12 +451,12 @@ job time, and sends nothing but the brief's text and the frames it renders.
 | 0 | Description fix, length test, trigger eval sets | S |
 | 1 | `finish_pass.js`, protect mask, `grade` + generated presets, `grain`, `aberration` | M |
 | 2 | `bloom`, `zoom-blur`, `burn`, `crt`, `halftone` | M |
-| 3 | CSS transitions, behaviours, CSS backgrounds (E.3) | M |
+| 3 | CSS transitions, behaviours, CSS backgrounds (E.3): built | M |
 | 4 | Maps that travel | M |
 | 5 | Scramble, chrome, flow-field (S–M); Lottie, morph, three inks (M); word-architecture, proof-mechanism (L) | L |
 | 6 | Looks: risograph, one-bit, pen-plotter (SVG); lidar; stained-glass and silkscreen after phase 2 | M |
 | 7 | GL generators (aurora, fog, plasma, cells, caustics) | M |
-| 8 | ComfyUI adapter and templates | L |
+| 8 | ComfyUI adapter and templates (shipped: plates and Wan drafts) | L |
 
 Tests: **seek purity** (frame N alone equals frame N in sequence) for every
 new pass, kind, effect and module; **parity** (`parity.test.js`, SSIM ≥
@@ -402,6 +468,45 @@ the camera never overshoots; **Lottie** stills at frames 0, mid and last,
 and rejection of expressions and external images; **ComfyUI** against a
 recorded fake server (no model in CI), refusing non-loopback hosts and
 failing health on a missing node class; the **skill length** test.
+
+### Phase 5 notes
+
+Built (first PR):
+
+- **Glyph scramble** is a `motion-title` variant (`scramble`, a character
+  effect) with `params.charset` (`latin`, `hex`, `binary`). The glyph sits
+  absolutely over the letter's own box and is clipped to it, so the line
+  never reflows and a wide `M` over an `i` never spills onto its neighbours
+  (the advance model gives every display glyph one width, so glyphs cannot
+  be picked by width). A glyph changes every 3
+  frames, chosen by `hashUnit(id|i|floor(t / cycle))`, as `text` set ops.
+- **Persistent chrome**: `frame.figure` (`true` or `{label}`) only. It is
+  turned into plain `labels` and `counter` by `storyFrame`, so it adds no
+  drawing code. The `player-bar` overlay is not built (below).
+- **Flow-field** is background kind `flow-field {seed, lines, scale,
+  octaves, intensity, speed, color, fade}`. Streamlines run through fbm value
+  noise at plan time; the dashes move by a `--flow` CSS variable on the
+  layer (a `glide` axis, 0 → −1), which each path's `stroke-dashoffset`
+  multiplies by a whole number of its own dash periods, so the loop has no
+  seam. GSAP tweens the variable; Remotion sets it per frame.
+
+Not built yet, each its own follow-up:
+
+- `player-bar` overlay `{thumb, title, sub, controls, progress: 'story'}`
+  kept across scenes by `carry` (S–M).
+- **Lottie import** (M): needs lottie-web's light build vendored (MIT, with
+  its notice) or added as a dependency, one painter shared by both
+  renderers, and the frame 0 / mid / last stills plus the rejection tests
+  for expressions and external images.
+- **Through-line morph** (M): one object kept across scenes, which needs a
+  cross-scene layer like `carry`. Note §E.6 asks for a "tiny overshoot";
+  the motion rule (slow → fast → slow, no overshoot) wins, so use a
+  critically damped ease.
+- **Three inks** (M): `story.inks` touches every module's palette lookup;
+  start with the `ink-promote` transition and the per-scene ink index.
+- **`word-architecture`** and **`proof-mechanism`** (L): new catalogue H
+  modules; proof-mechanism computes its values in `resolve` so the frame
+  cannot disagree with the maths.
 
 ## E.10 Provenance
 

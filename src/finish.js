@@ -23,7 +23,7 @@ import { resolveFinish } from "@launchclip/core/finish.mjs";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -38,8 +38,9 @@ import { checkStorage, interruptedByStorage } from "./storage_check.js";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
 import { actingGate, densityGate, ghostingGate, physicsGate, tellsGate, varietyGate } from "./direction_guardrails.js";
+import { visualDensityGate } from "./visual_density.js";
 import { choreographyGate, holdGate, stateGate } from "./movement_guardrails.js";
-import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, lipSyncGate, paceGate, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
+import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, lipSyncGate, paceGate, prototypeCut, renderPaceGate, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
 import { worstStillSpans, writeMotionReport } from "./render_motion_analysis.js";
@@ -52,7 +53,11 @@ import { storyChapters } from "@launchclip/core/story.mjs";
 import { vfxSounds } from "@launchclip/core/vfx/plan.mjs";
 import { VFX_EFFECTS } from "@launchclip/core/vfx/catalog.mjs";
 import { pairsCheck, storyVisuals } from "@launchclip/core/sound/pairs.mjs";
+import { directCues, directSound, measureDirecting, storySoundWarnings } from "@launchclip/core/sound/directing.mjs";
+import { decodeAudio } from "./music/beats.js";
 import { ffmetadataChapters, youtubeChapterProblems, youtubeChapters } from "@launchclip/core/long-form.mjs";
+import { creditsText } from "@launchclip/core/sound/sampler.mjs";
+import { instrumentsDir, readSampleIndex } from "./music/samples.js";
 import { directionFileFor, moduleParamErrors, readScriptBeside, validateStory } from "./story_cli.js";
 import { ANIMATIC_FILE, ANIMATIC_VIDEO, writeAnimatic } from "./animatic.js";
 import { hasExactFile, readStoryEdl } from "./story_loader.js";
@@ -99,6 +104,7 @@ import { fitSceneTimings } from "./timing_fit.js";
 // face; a card moved off the face lands in the caption band).
 const LAYOUT_REPAIR_PASSES = 6;
 import { analyzeBeatsFile, beatsDocument, gridFromBpm, transformGrid } from "./music/beats.js";
+import { readMotionCurve, storyMotionCurve } from "./motion_curve.js";
 import { BEAT_SYNC_SCHEMA, chooseAlignment, keyMoments, momentReport, snapStory, summarizeMoments, syncStrategy } from "./music/beat_sync.js";
 
 const execFileAsync = promisify(execFile);
@@ -163,6 +169,7 @@ export const PATHS = Object.freeze({
   audio: "qa/finish/audio.json",
   style: "qa/style-check.json",
   chapters: "renders/chapters.txt",
+  credits: "renders/credits.txt",
   chaptersMeta: ".launchclip/finish/chapters.ffmetadata",
   report: "finish.json"
 });
@@ -362,6 +369,33 @@ export function cuePairNotes(story, cues, modelFor = () => null) {
   return [...errors.map((error) => `pairs: ${error}`), ...(warnings.length ? [`pairs: ${warnings.length} warning${warnings.length === 1 ? "" : "s"}, first: ${warnings[0]}`] : [])];
 }
 
+/**
+ * A scene's `into` (kit/core/sound/directing.mjs) as cues on its cut: a riser
+ * or a softer swell ending on it, a tape stop running out on it, an impact on
+ * it. A silence is a gap in the mix, not a cue.
+ */
+export function intoCues(direct) {
+  const make = { riser: ["riser", 1], swell: ["riser", 0.6], "tape-stop": ["tape-stop", 1], hit: ["impact", 1] };
+  return (direct?.into ?? []).filter((entry) => make[entry.type]).map(({ type, cut, shot }) => {
+    const [cue, gain] = make[type];
+    const at = round3(Math.max(0, cue === "riser" ? cut - CUE_DURATIONS.riser * 0.95 : cue === "tape-stop" ? cut - CUE_DURATIONS["tape-stop"] : cut));
+    return { cue, at, volume: round3(CUE_LEVELS[cue] * gain), shot, intent: `into ${type}`, source: "directing", event: `into-${type}`, ...(cue === "riser" ? { lands_at: cut } : {}) };
+  });
+}
+
+const storyFpsOf = (story) => Number(story?.resolved?.fps ?? story?.format?.fps ?? 30);
+
+/** measureDirecting on the mix file; null when it cannot be read (a stubbed mix). */
+async function checkDirecting(file, direct) {
+  if (!existsSync(file)) return null;
+  try {
+    const { samples, sampleRate } = await decodeAudio(file);
+    return measureDirecting(samples, sampleRate, direct);
+  } catch {
+    return null;
+  }
+}
+
 // Cue pacing. Most catalogue modules tag their title and emphasis events
 // "whoosh", so a busy edit binds a bright sweep to nearly every moment. The
 // pace pass keeps the sound design sparse: at most `per10` cues in any 10 s
@@ -467,7 +501,7 @@ export function resolveCueFiles(cues, { libraries = [], kit = null, storyId = ""
   return cues.map((cue) => {
     const resolved = resolveCueFile(cue, { libraries, kit, key: `${storyId}|${cue.cue}`, turn: turnOf.get(cue) });
     if (!resolved) return cue;
-    const placed = { ...cue, file: resolved.file, sfx_source: resolved.scope, sfx_origin: resolved.source, variant: resolved.variant };
+    const placed = { ...cue, file: resolved.file, sfx_source: resolved.scope, sfx_origin: resolved.source, ...(resolved.generated ? { sfx_generated: resolved.generated } : {}), variant: resolved.variant };
     const peak = Number(resolved.measurements?.peak_at_ms);
     if (cue.cue === "riser" && Number.isFinite(cue.lands_at) && Number.isFinite(peak)) placed.at = round3(Math.max(0, cue.lands_at - peak / 1000));
     return placed;
@@ -502,7 +536,7 @@ async function sonifyCues(ctx, { key, seed }) {
 export function typingBanks(libraries, kit) {
   const bank = (family) => {
     const source = familySource(family, libraries, kit);
-    return source ? source.files.map((file, index) => ({ file, measurements: source.measurements[index], scope: source.scope, source: source.source })) : [];
+    return source ? source.files.map((file, index) => ({ file, measurements: source.measurements[index], scope: source.scope, source: source.source, generated: source.generated ?? null })) : [];
   };
   return { key: bank("keystroke"), space: bank("keystroke-space"), enter: bank("keystroke-enter"), word: bank("click") };
 }
@@ -512,13 +546,14 @@ function firstKeyPerShot(keystrokes) {
   return keystrokes.filter((key) => key.kind !== "word" && !seen.has(key.shot) && seen.add(key.shot));
 }
 
-/** The licence line for the SFX actually used. origins: Set of "procedural" | "elevenlabs" | ... */
-export function sfxLicense(origins) {
+/** The licence line for the SFX actually used. origins: Set of "procedural" | "elevenlabs" | "comfy" | ...; generated: Set of "model (licence id)" for locally generated SFX. */
+export function sfxLicense(origins, generated = new Set()) {
   const parts = ["Original procedural synthesis (synth-audio-kit.mjs); no third-party samples."];
   if (origins.has("elevenlabs")) parts.push("Some SFX were generated with ElevenLabs sound effects (launchclip sfx seed); their use is governed by the ElevenLabs terms of service.");
   if (origins.has("earshot") || origins.has("earshot-fit")) parts.push("Some SFX were rendered from the Earshot sound bank (https://github.com/Leonxlnx/earshot, MIT) by its own code recipes.");
   if (origins.has("earshot-fit")) parts.push("Some of those are Earshot fits: recipes measured from CC0 1.0 Freesound recordings, credited in sfx_credits.");
-  const other = [...origins].filter((origin) => !["procedural", "elevenlabs", "earshot", "earshot-fit"].includes(origin));
+  if (origins.has("comfy")) parts.push(`Some SFX were generated on this machine with ComfyUI (launchclip sfx seed --provider comfy) using ${[...generated].join(", ") || "a user-supplied model"}; their use is governed by that model licence.`);
+  const other = [...origins].filter((origin) => !["procedural", "elevenlabs", "comfy", "earshot", "earshot-fit"].includes(origin));
   if (other.length) parts.push(`Other SFX library sources: ${other.join(", ")}.`);
   return parts.join(" ");
 }
@@ -771,7 +806,7 @@ export function defaultAdapters() {
     async synthKit(outDir, bed, kit = null) {
       const args = [SCRIPT.synth, outDir];
       if (bed) args.push("--bed", String(bed.seconds), "--bpm", String(bed.bpm), "--key", String(bed.key), "--kick-from", String(bed.kick_from), "--kick-to", String(bed.kick_to));
-      if (bed?.genre) args.push("--genre", bed.genre, "--progression", String(bed.progression));
+      if (bed?.genre) args.push("--genre", bed.genre, "--progression", String(bed.progression), "--instruments", instrumentsDir(this.env ?? process.env));
       args.push(...kitArgs(kit));
       await execFileAsync(process.execPath, args, { maxBuffer: 1 << 26 });
       return JSON.parse(await readFile(path.join(outDir, "AUDIO-KIT.json"), "utf8"));
@@ -780,7 +815,7 @@ export function defaultAdapters() {
     async buildMix(options) {
       const { buildMix, normalizeCues } = await import("./scripts/build-mix.mjs");
       const cues = normalizeCues(options.cues, options.sfxDir).map((cue, i) => (options.score ? { ...cue, pan: options.cues[i].pan, sweep: options.cues[i].sweep, ...(options.cues[i].take?.dur ? { sweep_seconds: options.cues[i].take.dur } : {}) } : cue));
-      buildMix({ score: options.score ?? null, voice: options.voice, music: options.music, ambience: options.ambience, cues, duration: options.duration, out: options.out, musicVolume: options.musicVolume, musicDuck: options.musicDuck ?? null, ambienceVolume: options.ambienceVolume, key: options.key, keySegments: options.keySegments });
+      buildMix({ score: options.score ?? null, voice: options.voice, music: options.music, ambience: options.ambience, cues, duration: options.duration, out: options.out, musicVolume: options.musicVolume, musicDuck: options.musicDuck ?? null, ambienceVolume: options.ambienceVolume, key: options.key, keySegments: options.keySegments, direct: options.direct ?? null });
       return { cues };
     },
     async audioFeatures(out, buses, options) {
@@ -1319,11 +1354,14 @@ const STAGES = [
       const bound = score ? { cues: score.cues, warnings: [] } : sfxOn ? bindCues(ctx.resolved, { models, palette: Boolean(sound.palette), sonify: Boolean(sound.sonify) }) : { cues: [], warnings: [] };
       if (!score) bound.cues = paceCues(applyDensity(bound.cues, density, storyId), density, storyId);
       if (sfxOn && !score) ctx.warnings.push(...cuePairNotes(ctx.resolved, bound.cues, models));
+      // Sound directing (scenes[i].sound): the story's planned silences, early sound and held breath.
+      const direct = directSound(ctx.resolved, { fps: storyFpsOf(ctx.resolved) });
+      if (direct) ctx.warnings.push(...storySoundWarnings(ctx.resolved, { words: ctx.words ?? [] }));
       const typing = sfxOn ? typingSchedule(collectTyping(ctx.resolved, { models }), { seed: storyId, ...densityTyping(density) }) : [];
       const libraries = sfxOn ? await resolveLibraries({ project: ctx.project, library: ctx.options.sfxLibrary ?? (audio.sfx_library ? path.resolve(ctx.project, audio.sfx_library) : undefined), home: ctx.options.sfxHome }) : [];
       // One line when a cue family is missing from every SFX library and falls
       // back to the procedural kit (it would sound unlike the library's set).
-      const used = [...(score ? SCORE_FAMILIES : []), ...bound.cues.map((cue) => cue.cue), ...(typing.length ? ["keystroke", "keystroke-space", "keystroke-enter", "click"] : [])];
+      const used = [...(score ? SCORE_FAMILIES : []), ...bound.cues.map((cue) => cue.cue), ...(sfxOn ? intoCues(direct).map((cue) => cue.cue) : []), ...(typing.length ? ["keystroke", "keystroke-space", "keystroke-enter", "click"] : [])];
       const fallbacks = libraryFallbacks(used, libraries);
       if (fallbacks.length) ctx.warnings.push(`sfx: ${fallbacks.join(", ")} ${fallbacks.length === 1 ? "is" : "are"} not in the SFX library (${libraries.map((library) => library.dir === userLibraryDir({ home: ctx.options.sfxHome }) ? "~/.launchclip/sfx" : library.dir).join(", ")}), so ${fallbacks.length === 1 ? "it uses" : "they use"} the procedural kit; fill only the missing families with: launchclip sfx seed --missing`);
       const voice = audio.voice && existsSync(path.join(ctx.project, audio.voice)) ? audio.voice : null;
@@ -1387,6 +1425,7 @@ const STAGES = [
         scripts: [await fileHash(SCRIPT.synth), await treeFingerprint(SOUND_DIR), await fileHash(SCRIPT.mix), await fileHash(SCRIPT.features), await fileHash(path.join(ROOT, "src", "music", "beats.js")), await fileHash(path.join(ROOT, "src", "music", "beat_sync.js"))],
         ...(score ? { score: { room: score.room, earshot: Boolean(findEarshot(ctx.adapters.env ?? process.env)), sounds: [await fileHash(path.join(ROOT, "src", "sfx", "score.js")), await fileHash(path.join(ROOT, "src", "sfx", "score_sounds.js"))] } } : {}),
         kit: kit ?? undefined,
+        ...(direct ? { direct, directing: await fileHash(path.join(ROOT, "kit", "core", "sound", "directing.mjs")) } : {}),
         ...(sound.sonify ? { sonify: true } : {}),
         sfx: { mode: sfxMode, ...(sfxMode === "earshot" ? { earshot: await fileHash(path.join(ROOT, "src", "sfx", "earshot.js")) } : {}), density, typing, libraries: libraries.map((library) => ({ scope: library.scope, dir: library.dir, families: hashValue(library.manifest.families) })) }
       });
@@ -1398,7 +1437,9 @@ const STAGES = [
       ctx.warnings.push(...plan.cueWarnings);
       const kitDir = path.join(ctx.project, PATHS.kit);
       const synthBed = plan.music.kind === "synth" ? plan.bed : null;
-      const kitKey = hashValue({ bed: synthBed, script: await fileHash(SCRIPT.synth), sound: await treeFingerprint(SOUND_DIR), ...(plan.kit ? { kit: plan.kit } : {}) });
+      // The sample index too: fetching instruments re-renders a sampled genre's bed.
+      const samples = synthBed?.genre ? readSampleIndex(instrumentsDir(ctx.adapters.env ?? process.env))?.instruments ?? null : null;
+      const kitKey = hashValue({ bed: synthBed, script: await fileHash(SCRIPT.synth), sound: await treeFingerprint(SOUND_DIR), ...(plan.kit ? { kit: plan.kit } : {}), ...(samples ? { samples: Object.keys(samples) } : {}) });
       const previousKit = ctx.state.stages?.sound?.details?.kit_key;
       const ambienceFile = plan.sound.ambience ? path.join(kitDir, "ambience", `${plan.sound.ambience}.wav`) : null;
       let kitReused = previousKit === kitKey && existsSync(path.join(kitDir, "AUDIO-KIT.json")) && (!synthBed || existsSync(path.join(kitDir, "music", "bed.wav"))) && (!ambienceFile || existsSync(ambienceFile));
@@ -1425,6 +1466,17 @@ const STAGES = [
       }
       const synced = track ? await beatSync(ctx, plan, track, { duration }) : null;
       const musicFile = synced?.file ?? null;
+      // Sampled instruments the synth bed played (AUDIO-KIT.json music.credits):
+      // renders/credits.txt and sound.credits; a sampled genre without its
+      // instruments plays synth with one warning line.
+      const kitMusic = plan.music.kind === "synth" && musicFile ? (await readOptionalJson(path.join(kitDir, "AUDIO-KIT.json")))?.music ?? null : null;
+      const credits = kitMusic?.credits ?? [];
+      if (kitMusic?.fallback) ctx.warnings.push(kitMusic.fallback);
+      const creditsFile = path.join(ctx.project, PATHS.credits);
+      if (credits.length) {
+        await mkdir(path.dirname(creditsFile), { recursive: true });
+        await writeFile(creditsFile, creditsText(credits));
+      } else await rm(creditsFile, { force: true });
       // Snapping moved scenes and hits: bind the SFX cues and the typing track
       // to the moved times.
       let boundCues = plan.cues;
@@ -1437,6 +1489,9 @@ const STAGES = [
         typingPlan = typingSchedule(collectTyping(ctx.resolved, { models }), { seed: plan.storyId, ...densityTyping(plan.density) });
       }
       const mixFile = path.join(ctx.project, PATHS.mix);
+      // Scene times may have moved with the beat: direct the sound on the story as it now stands.
+      const direct = directSound(ctx.resolved, { fps: storyFpsOf(ctx.resolved) });
+      if (direct && plan.sfxOn) boundCues = [...boundCues, ...intoCues(direct)];
       // SFX cue → file: library first (explicit, project, user), then the kit.
       const kit = kitLibrary(path.join(kitDir, "sfx"), await readOptionalJson(path.join(kitDir, "AUDIO-KIT.json")));
       // No hiss or noise wash under the voice: a failing file gives way to a variant that passes, or its cue is dropped.
@@ -1479,8 +1534,12 @@ const STAGES = [
         typing = { file: path.join(ctx.project, PATHS.typing), keystrokes: rendered.keystrokes, counts: rendered.counts };
         cues.push({ cue: "typing", at: 0, volume: 1, shot: null, intent: `typing track (${rendered.keystrokes.length} keys)`, source: "typing", file: typing.file });
       }
+      cues = directCues(cues, direct);
       await writeJson(path.join(ctx.project, PATHS.cues), cues);
-      const mixed = await ctx.adapters.buildMix({ voice: voiceFile, music: musicFile, ambience: ambienceFile, cues, sfxDir: path.join(kitDir, "sfx"), duration, out: mixFile, musicVolume: plan.bed?.volume ?? 0.42, ...(plan.music.duck != null ? { musicDuck: plan.music.duck } : {}), ...(ambienceFile ? { ambienceVolume: AMBIENCE_VOLUME } : {}), ...(speechKey ? { key: speechKey.file, keySegments: speechKey.segments } : {}), ...(scorePlan ? { score: { room: scorePlan.room } } : {}) });
+      const mixed = await ctx.adapters.buildMix({ voice: voiceFile, music: musicFile, ambience: ambienceFile, cues, sfxDir: path.join(kitDir, "sfx"), duration, out: mixFile, musicVolume: plan.bed?.volume ?? 0.42, ...(plan.music.duck != null ? { musicDuck: plan.music.duck } : {}), ...(ambienceFile ? { ambienceVolume: AMBIENCE_VOLUME } : {}), ...(speechKey ? { key: speechKey.file, keySegments: speechKey.segments } : {}), ...(scorePlan ? { score: { room: scorePlan.room } } : {}), ...(direct ? { direct } : {}) });
+      // The mix check: each hush quiet with its hit on the end, each prelap or tail where it was planned.
+      const directing = direct ? await checkDirecting(mixFile, direct) : null;
+      if (directing) ctx.warnings.push(...directing.errors.map((error) => `sound: ${error}`));
       // Only for a story with audio.react: the final mix and its buses, measured once per video frame for the
       // audio-reactive layers (kit/core/audio-react.mjs); both renderers read it.
       if (audioFeatureNeeds(ctx.copy).length) await ctx.adapters.audioFeatures?.(path.join(ctx.project, PATHS.audioFeatures), { mix: mixFile, music: musicFile, voice: voiceFile }, { fps: Number(ctx.resolved.resolved?.fps ?? ctx.resolved.format?.fps ?? 30), duration });
@@ -1499,11 +1558,14 @@ const STAGES = [
         typing: typing ? { file: typing.file, counts: typing.counts, keystrokes: typing.keystrokes } : null,
         density: plan.density,
         ...(scorePlan ? { score: { key: scorePlan.key, source: scoreSounds.source, room: scorePlan.room, silences: scorePlan.silences } } : {}),
+        ...(direct ? { directing: { into: direct.into, hushes: direct.hushes, cuts: direct.cuts, measured: directing } } : {}),
         timbre_refused: guarded.findings,
         libraries: plan.libraries.map((library) => ({ scope: library.scope, manifest: library.file }))
       });
       const origins = new Set(cues.map((cue) => cue.sfx_origin).filter(Boolean));
-      if (typing) for (const kind of Object.values(typingBanks(plan.libraries, kit))) for (const entry of kind) origins.add(entry.source);
+      const generated = new Set(cues.map((cue) => cue.sfx_generated).filter(Boolean));
+      if (typing) for (const kind of Object.values(typingBanks(plan.libraries, kit))) for (const entry of kind) { origins.add(entry.source); if (entry.generated) generated.add(entry.generated); }
+      if (generated.size) ctx.warnings.push(`sfx licence: some SFX were generated with ComfyUI under ${[...generated].join(", ")}; check your use is within those terms`);
       const ducking = voiceFile ? "sidechain under voice" : speechKey ? "sidechain under footage speech" : null;
       await writeJson(path.join(ctx.project, PATHS.audioManifest), {
         schema_version: "launchclip.audio-manifest.v1",
@@ -1526,7 +1588,8 @@ const STAGES = [
           beat_sync: PATHS.beatSync,
           alignment: synced.alignment ? { offset: synced.alignment.offset, tempo: synced.alignment.tempo } : null,
           generation: track.generation ?? null,
-          ...(plan.bed.genre ? { genre: plan.bed.genre, progression: plan.bed.progression } : {})
+          ...(plan.bed.genre ? { genre: plan.bed.genre, progression: plan.bed.progression } : {}),
+          ...(credits.length ? { instruments: kitMusic.instruments, credits, credits_file: PATHS.credits } : {})
         } : null,
         ...(ambienceFile ? { ambience: { path: ambienceFile, bed: plan.sound.ambience, world: plan.sound.world, volume: AMBIENCE_VOLUME, ducking } } : {}),
         ...(plan.sound.active ? { sound: { palette: plan.sound.palette, seed: plan.sound.seed, genre: plan.bed?.genre ?? null, ambience: plan.sound.ambience } } : {}),
@@ -1534,7 +1597,7 @@ const STAGES = [
         sfx_kit: path.join(kitDir, "AUDIO-KIT.json"),
         sfx_libraries: plan.libraries.map((library) => ({ scope: library.scope, manifest: library.file })),
         ...(earshot.credits.length ? { sfx_credits: earshot.credits } : {}),
-        license: [sfxLicense(origins), musicLicense(plan.music.kind)].filter(Boolean).join(" ")
+        license: [sfxLicense(origins, generated), musicLicense(plan.music.kind), credits.length ? `Music: some stems are played on sample libraries (${credits.map((credit) => `${credit.title}, ${credit.licence}`).join("; ")}); see ${PATHS.credits}.` : null].filter(Boolean).join(" ")
       });
       const details = {
         mix_file: PATHS.mix,
@@ -1555,6 +1618,7 @@ const STAGES = [
         sfx_generated: { count: eventSounds.generated.length, new: eventSounds.generated.filter((item) => !item.cached).length, cost_usd: eventSounds.cost_usd },
         sfx_sources: countBy(cues.map((cue) => ({ scope: cue.sfx_source ?? (cue.source === "typing" ? "typing" : "kit") })), "scope"),
         typing_keys: typing ? typing.keystrokes.length : 0,
+        ...(credits.length ? { credits } : {}),
         ...(plan.sound.active ? { sound: { palette: plan.sound.palette, seed: plan.sound.seed, genre: plan.bed?.genre ?? null, ambience: plan.sound.ambience } } : {})
       };
       STAGES[3].restore(ctx, details);
@@ -2039,6 +2103,7 @@ async function defaultSideBySide(left, right, output) {
 // story names a style) style adherence (src/style_adherence.js).
 // pixels: false (--plan-only) leaves out every gate that reads the rendered video (RENDER_ONLY_GATES).
 async function runGates(ctx, { pixels = true } = {}) {
+  let renderMotion = null;
   const format = storyFormat(ctx.resolved);
   const duration = Number(ctx.resolved.resolved?.duration ?? format.duration);
   const gates = {};
@@ -2077,6 +2142,9 @@ async function runGates(ctx, { pixels = true } = {}) {
   try {
     const density = densityGate(ctx.resolved, { rects: ctx.layout?.rects ?? [], profile: ctx.layout?.profile });
     if (density.status !== "skipped") gates.density = density;
+    // Filled frame and footage share over the whole timeline, to the last second (src/visual_density.js).
+    const visual = visualDensityGate(ctx.resolved, { rects: ctx.layout?.rects ?? [] });
+    if (visual.status !== "skipped") gates.visual_density = visual;
     gates.variety = varietyGate(ctx.resolved);
   } catch (error) {
     gates.density ??= { status: "failed", error: error.message };
@@ -2130,6 +2198,7 @@ async function runGates(ctx, { pixels = true } = {}) {
     // head barely moves; a motion explainer must).
     const { profile } = gateProfile(ctx.resolved, { direction: (await readProjectDirection(ctx.project)).map, style: await stylePack(ctx), project: ctx.project });
     const motion = await ctx.adapters.motion(ctx.out, path.join(ctx.project, PATHS.motion), { expected: cinematicMotionExpectations({ duration, width: format.width, height: format.height, profile }).expected });
+    renderMotion = motion;
     // The absolute stillness measures, and the worst still spans with a
     // suggested fix each, so a director can act without opening the report.
     const stillness = motion?.motion?.still_share == null ? null : {
@@ -2219,6 +2288,12 @@ async function runGates(ctx, { pixels = true } = {}) {
     // Pace (docs/PLAN_AND_PACE_RFC.md §2): a dense hook, no long gap, no frozen frame.
     const pace = paceGate({ resolved: ctx.resolved, profile, map: direction.map, media: ctx.layout?.media ?? {} });
     if (pace.status !== "skipped") gates.pace = pace;
+    // On a render the pace is read from the pixels and checked against the plan (phase 7).
+    if (pixels && renderMotion && !prototype) {
+      const curve = await (ctx.adapters.motionCurve ?? readMotionCurve)(ctx.out).catch(() => null);
+      const rendered = renderPaceGate({ resolved: ctx.resolved, motion: renderMotion, curve, beats: Array.isArray(ctx.beats?.beats) ? ctx.beats.beats.map(Number) : null, profile, map: direction.map });
+      if (rendered.status !== "skipped") gates.pace = { ...rendered, plan: pace.status === "skipped" ? null : { status: pace.status, errors: pace.errors, warnings: pace.warnings } };
+    }
   } catch (error) {
     gates.direction ??= { status: "failed", error: error.message };
   }
@@ -2533,7 +2608,9 @@ async function beatSync(ctx, plan, track, { duration }) {
   let changed = false;
   if (storyGrid && strategy === "snap" && mode !== "off") {
     const before = ctx.copy;
-    const result = snapStory(ctx.copy, storyGrid, { mode, words: ctx.words ?? [], beats: beatsForAnchors });
+    // Footage the story plays gives its cuts a motion curve: they snap to calm moments (§4.4).
+    const motion = mode === "hits" ? null : await (ctx.adapters.storyMotion ?? storyMotionCurve)(ctx.resolved, ctx.project).catch((error) => { ctx.warnings.push(`beat sync: the footage's motion could not be read (${firstLine(error.message)}); cuts snap to the grid only`); return null; });
+    const result = snapStory(ctx.copy, storyGrid, { mode, words: ctx.words ?? [], beats: beatsForAnchors, motion });
     ({ changes, reverted, skipped } = result);
     if (changes.length) {
       // Re-validate and re-run layout-check on the snapped copy; fall back
@@ -2584,7 +2661,7 @@ async function beatSync(ctx, plan, track, { duration }) {
     changes,
     reverted,
     skipped,
-    notes: strategy === "align" ? ["Narration timing is fixed: the music moved (offset/tempo); no story time changed."] : strategy === "snap" ? ["Second-timed cuts snap to downbeats and hits to beats within 0.25 s; word and beat anchors never move."] : ["Beat sync is off."]
+    notes: strategy === "align" ? ["Narration timing is fixed: the music moved (offset/tempo); no story time changed."] : strategy === "snap" ? ["Second-timed cuts snap to downbeats and hits to beats within 0.25 s (over footage, to the calmest moment there, weighed against the beat); word and beat anchors never move."] : ["Beat sync is off."]
   };
   await writeJson(path.join(ctx.project, PATHS.beatSync), report);
   return {
