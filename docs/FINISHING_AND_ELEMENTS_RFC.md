@@ -145,6 +145,22 @@ Grid and Scrolling Stripes (`blueprint` look, `motif`, `stripes`).
 | Cell Drift, Crystal Facets, Hex Mosaic | `cells`: Worley, variants `cells`/`facets`/`hex` (GL) |
 | Water Caustics | `caustics` (GL) |
 
+Built (phase 7): `aurora`, `fog` (`type`: fog, cloud, smoke, ember),
+`plasma` (plasma, silk), `cells` (cells, facets, hex) and `caustics` are
+background kinds with `intensity`, `scale`, `speed`, `color` and `fade`.
+Each is one layer carrying a `gl` plan beside weather's `vfx`, so the plate,
+fade, ambient level and plate tween paths are the weather's, not a second
+pipeline. One painter, `kit/core/gl-backgrounds.mjs`, holds the five
+fragment shaders (written fresh; pcg3d hash as in the finish shaders):
+Remotion's `PlateLayer` paints it in a layout effect (`GlCanvas`), and the
+HyperFrames compiler inlines `installGl` once and paints from a proxy tween.
+The canvas is half the frame size (the fields are soft) and draws two palette
+roles at a contrast-clamped opacity, so `backgroundContrastFindings` still
+holds. Not done: `WEBGL_MODULES` and a CSS fallback kind; without WebGL2 the
+layer draws nothing and the brand background shows. Opt-in only: the style
+seed's background list does not include them. Parity:
+`test/fixtures/parity-backgrounds/bg-{aurora,fog,plasma,cells,caustics}*.json`.
+
 **Behaviours (idle motions).** Ours: idle bob and tilt
 (`fluid-motion.mjs`), impact shake, kinetic drift; these cover Float, Sway
 and Shake. Add, each a closed-form `loop` op on the `-idle` wrapper scaled
