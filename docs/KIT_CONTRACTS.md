@@ -878,6 +878,35 @@ the module set. `focusRingStyle(rect, {color, unit})` is the look alone.
 
   ![A light leak over 0.8 s, HyperFrames above and Remotion below](images/light-leak.jpg)
 
+- `before-after` (`kit/core/before-after.mjs`, track-0 scenes only, 1.2–2 s;
+  `{type: "before-after", dur, direction?, pause?, labels?: {before?,
+  after?}}`): the before-and-after wipe. A handle (a white line on the seam
+  with a round knob carrying two chevrons) drags across the frame and the
+  incoming scene, the other version (a redesign, a grade, the edited take),
+  opens behind it while the outgoing one stays whole under it. `direction`
+  is where the handle travels, as `glow-wipe`'s (`"left"` by default: the
+  after side opens from the right edge, before keeps the left); `pause`
+  (seconds, at most half the wipe) rests it half-way, so the move is two
+  legs (0 → 0.5, rest, 0.5 → 1) instead of one; `labels` puts a word on each
+  side (≤ 24 characters, upper case, free type with a soft shadow), each
+  clipped to its own side so the handle passes over it. Every leg is
+  `power2.inOut`: slow → fast → slow, symmetric, no overshoot, and the
+  grammar does not swap it, because the plate's clip and the handle must
+  stay on one edge. `beforeAfterSteps(dur, pause)` is the single source:
+  `transitions.mjs` turns its legs into the incoming plate's wipe insets
+  (`wipeL`/`wipeR`/`wipeT`/`wipeB`, 100 → 0; a wipe resting part-way keeps
+  its clip), and `beforeAfterWipes` lists each wipe for the overlay, drawn
+  over every scene (z as the dot-wipe) by the same markup in both renderers
+  (`beforeAfterHtml`) from one custom property, `--lc-ba` (the revealed
+  share): HyperFrames tweens it along the same legs (`beforeAfterGsap`),
+  Remotion sets it per frame (`beforeAfterAt`). The handle fades in off the
+  first edge and out onto the last over 6 % of the travel. In world mode the
+  outgoing plate fades over the first half, as the other layered reveals.
+  For two versions of one shot inside a scene, with a handle that can rest
+  and reverse, use the `before-after` media layout ("Media layouts").
+
+  ![The before-after transition mid-leg, resting half-way and mid-leg again, then the in-scene compare (mono before side) resting and reversed; HyperFrames above and Remotion below](images/before-after.jpg)
+
 - `push-blur` (`{type: "push-blur", dur, direction?}`, about 0.5 s; direction
   is where the content travels, `"up"` by default): the camera pushes into the
   outgoing plate (scale 1 → 1.15, travel 12 % of the frame along the
@@ -6243,7 +6272,7 @@ callouts.
 
 ## Media layouts (catalogue D, `kit/core/catalog-d-media-layouts.mjs`)
 
-Seven modules that put library footage inside the motion design, so showing
+Eight modules that put library footage inside the motion design, so showing
 a photo or clip is not always a full-frame cut (`clip`, `photo-scene`) or a
 small tilted `polaroid`. All keep captions.
 
@@ -6256,6 +6285,7 @@ small tilted `polaroid`. All keep captions.
 | `media-stat` | a window beside the figure (`variant: "beside"`), or the whole frame under a dim scrim (`"behind"`) | `value` (a figure like `1,200 kg` counts up), `label`, `kicker`, `source` |
 | `media-list` | a small thumbnail per row (a still; a row without one shows its number) | 2–5 rows of text, revealed one by one (`at` or hits on `item-<i>`) |
 | `media-grid` | 2–4 tiles (`grid`, or `mosaic`: one large and the rest beside it; the default for three on 9:16 and 1:1), each with an optional label pill | an optional `title` |
+| `before-after` | one shot in two versions, full frame: `before` and `after`, or `before` alone with a `grade` (`flat`, `mono`, `warm`, `cool`, `vivid`; CSS filters, `BEFORE_AFTER_GRADES`) on `gradeSide` (`after` by default; `before` with `flat` for raw vs graded) | the handle of the before-after transition, travelling along `direction` through `stops` (1–4 shares of the after side, default `[0.5, 1]`; `[0.6, 0.3, 1]` rests and reverses), and an optional label on each side (`labels {before?, after?}`) |
 
 ```json
 { "module": "split-screen", "start": "word:corrugations", "end": "word:weight", "params": {
@@ -6296,7 +6326,21 @@ small tilted `polaroid`. All keep captions.
   layout-check allows that overlap and checks the rest. `layout.drift` is
   false and `layout.live` true (the hold gate counts the scene as moving).
 - **Events:** `item-<i>` (split-screen and picture-in-picture items,
-  media-list rows, media-grid tiles), `right` and `pick` (media-compare).
+  media-list rows, media-grid tiles), `right` and `pick` (media-compare),
+  `stop-<i>` (before-after: the handle arrives at a stop).
+- **before-after:** both windows fill the frame; the after window is clipped
+  at the handle with the op list's clip props (`clipT`/`clipR`/`clipB`/`clipL`,
+  % of the element; `propsToStyle` and the HyperFrames emitter write them as
+  one `inset()` clip-path, which GSAP tweens number by number), and so is
+  each label's full-frame side, so they agree with the handle frame for
+  frame. The handle starts 0.4 s in, each leg is `power2.inOut` (at most
+  1.3 s; the legs share 65 % of the room), rests up to 0.9 s between legs and
+  0.5 s after the last, fades in off the edge and out onto it when the last
+  stop is 0 or 1. One source without a `grade` fails (it would compare a shot
+  with itself), as does a stop that repeats the one before it. Labels sit in
+  the module safe area: the top corners, or for a vertical wipe the top and
+  just under the middle. Both sources play at once; a video is hoisted with
+  its clip and filter, as every window.
 - **Variety:** `src/insert_variety.js` treats each as framed footage: two in a
   row with the same `variant` rotate it (split-screen, picture-in-picture,
   media-stat), and a polaroid over the cap may become a split-screen with its
