@@ -535,8 +535,8 @@ export async function planStoryboard(options = {}) {
       checked.shotCounts = shotCounts;
       // Fewer shot requests than minShots: a repair note, counted against the
       // same budget; a storyboard that fails only this is kept as a fallback.
-      if (!checked.ok && checked.storyboard && checked.errors.length && checked.errors.every((entry) => NEAR_MISS.some((prefix) => entry.startsWith(prefix))) && (!paced || checked.errors.length < paced.cadence.length)) {
-        paced = { ...checked, ok: true, errors: [], warnings: [...checked.warnings], cadence: [...checked.errors], direction };
+      if (!checked.ok && checked.storyboard && checked.errors.length && checked.errors.every((entry) => NEAR_MISS.some((prefix) => entry.startsWith(prefix))) && (!paced || checked.errors.length < paced.nearMiss.length)) {
+        paced = { ...checked, ok: true, errors: [], warnings: [...checked.warnings], nearMiss: [...checked.errors], direction };
       }
       const shortfall = shotCounts ? minShotsError(shotCounts.requested, minShots) : "";
       if (shortfall) {
@@ -578,8 +578,9 @@ export async function planStoryboard(options = {}) {
   }
   if (!last?.ok && !best && paced) {
     direction = paced.direction;
-    const { cadence, ...kept } = paced;
-    last = { ...kept, warnings: [...kept.warnings, ...cadence, `${cadence.every((entry) => entry.startsWith("cadence: ")) ? "cadence" : "plan"}: kept the storyboard closest to the profile after ${repairs} repair${repairs === 1 ? "" : "s"}`] };
+    // nearMiss, not cadence: the plan's cadence measures (coverage, face time) stay on the kept plan.
+    const { nearMiss, ...kept } = paced;
+    last = { ...kept, warnings: [...kept.warnings, ...nearMiss, `${nearMiss.every((entry) => entry.startsWith("cadence: ")) ? "cadence" : "plan"}: kept the storyboard closest to the profile after ${repairs} repair${repairs === 1 ? "" : "s"}`] };
     delete last.direction;
   }
   if (!last?.ok && best) {
