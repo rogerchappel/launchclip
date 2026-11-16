@@ -187,6 +187,11 @@ test('every plan detector has a hit and a near miss', () => {
   }
 });
 
+test('icon-tile: a tile whose fill is its first layer (catalog-g-base iconTile) fires; a bare glyph does not', () => {
+  assert.ok(rules({scenes: [scene('s', 'icon-row', 0, 3, {view: box([box([box([], {background: '#ff6b3d24', borderRadius: 28}), svg]), txt('Label')])})]}).includes('icon-tile'));
+  assert.ok(!rules({scenes: [scene('s', 'icon-row', 0, 3, {view: box([box([box([], {}), svg]), txt('Label')])})]}).includes('icon-tile'));
+});
+
 test('a finding ends in its fix and carries the date the tell was added', () => {
   const finding = planTells({story: story(), scenes: CASES.find(([id]) => id === 'bounce')[1].scenes}).find(f => f.rule === 'bounce');
   assert.equal(finding.rule, 'bounce');

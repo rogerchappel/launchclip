@@ -196,7 +196,7 @@ const isFill = (v) => typeof v === 'string' && v.trim() && !/^(transparent|none)
 const isBox = (node) => Boolean(parseFloat(node.style?.borderRadius) || /%/.test(String(node.style?.borderRadius ?? ''))) && (isFill(node.style?.background) || isFill(node.style?.backgroundColor) || /\b(solid|dashed)\b/.test(String(node.style?.border ?? '')));
 // Icons that stand for any topic: on a hero card they read as a placeholder.
 const STOCK_ICONS = new Set(['layers', 'box', 'boxes', 'sparkle', 'sparkles', 'star', 'lightbulb', 'rocket', 'bolt', 'zap', 'check', 'check-circle', 'info', 'grid', 'layout', 'target', 'diamond', 'gear', 'puzzle', 'trophy', 'flag', 'help']);
-const HERO_ICON = new Set(['concept-card', 'section-card', 'stat-card', 'object-card', 'badge', 'sticker']);
+const HERO_ICON = new Set(['concept-card', 'section-card', 'stat-card', 'object-card']);
 const ECHO_STOP = new Set(['with', 'your', 'that', 'this', 'from', 'what', 'when', 'they', 'them', 'have', 'more', 'than', 'into', 'about', 'just', 'only', 'also', 'every', 'each', 'here', 'there', 'their', 'will', 'were', 'been']);
 const echoToken = (w) => String(w ?? '').toLowerCase().replace(/[‘’]/g, "'").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
 // The scene's headline: the largest text of two or more words in its view, else its longest title-like param.
@@ -405,7 +405,9 @@ const DETECTORS = {
     if (!s.view) return null;
     for (const { node } of viewNodes(s.view)) {
       const kids = (node.children ?? []).filter((k) => k && typeof k === 'object');
-      const i = kids.findIndex((k) => (k.style?.background || k.style?.backgroundColor) && k.style?.borderRadius && viewNodes(k).some(({ node: n }) => n.tag === 'svg') && !viewTexts(k).length);
+      // The fill sits on the tile itself or on its first layer (catalog-g-base iconTile).
+      const filled = (k) => [k, ...(k.children ?? []).filter((c) => c && typeof c === 'object')].some((n) => (isFill(n.style?.background) || isFill(n.style?.backgroundColor)) && n.style?.borderRadius);
+      const i = kids.findIndex((k) => filled(k) && viewNodes(k).some(({ node: n }) => n.tag === 'svg') && !viewTexts(k).length);
       if (i >= 0 && kids[i + 1] && viewTexts(kids[i + 1]).length) return 'an icon in a filled tile sits above the headline';
     }
     return null;
