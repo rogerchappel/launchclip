@@ -1,12 +1,14 @@
 // A brand mark as a member (docs/FLUID_MOTION_RFC.md §10, past the closed
 // graphic list): an integration's or partner's logo in place of an icon, with
-// an optional label under it. Shaped like kit/core/graphic.mjs: markSpec
-// validates, markWidth measures, markNodes paints into a width × height box
-// at (0, 0), and the set module keeps its own wrappers.
+// an optional label under it. A set module takes it as `{member: {module:
+// "brand-mark", src, label?, …}}` through the member hookup
+// (kit/core/members.mjs): markSpec validates, markWidth measures, markNodes
+// paints into a width × height box at (0, 0), and the set module keeps its
+// own wrappers.
 //
 // It reuses the end card's logo handling (kit/core/catalog-b-end-card.mjs):
 // the file is measured once at import (src/logo_mark.js withLockupTints fills
-// tone, clear and box), a dark mark on a see-through background is recoloured
+// ratio, tone, clear and box), a dark mark on a see-through background is recoloured
 // so it reads on the ground, a light one is kept, and a logo with its own
 // solid background sits whole on a plate of that colour. An unmeasured mark
 // goes on a plate. The file is a bring-your-own project file, never fetched.
@@ -16,13 +18,10 @@ import {image, logoTreatment, tintMatrix} from './catalog-b-end-card.mjs';
 import {r2, textWidth} from './catalog-h-base.mjs';
 import {label} from './catalog-h-view.mjs';
 
-/** One line for a module's params: what a `mark` member may be. */
-export const MARK_PARAM = '"assets/…(.svg|.png|.jpg|.webp)" | {src, label?, ratio? (width / height, default 1), tone? dark|light|mixed, clear?, box? "#rrggbb"} a brand mark member (tone, clear and box are measured at import)';
-
 /** A validated mark spec, or a check.fail naming what to change. → {kind: 'mark', src, label, ratio, tone?, clear?, box?}. */
 export function markSpec(check, raw, path, {labelMax = 18} = {}) {
-  if (typeof raw === 'string') return {kind: 'mark', label: null, ...image(check, raw, path, 1)};
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) check.fail(path, `must be a brand mark: ${MARK_PARAM}`);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) check.fail(path, 'must be a brand mark: {src, label?, ratio?, tone?, clear?, box?}');
+  if (raw.src === undefined) check.fail(`${path}.src`, 'is required (the logo file, assets/…)');
   for (const key of Object.keys(raw)) if (!['src', 'label', 'ratio', 'tone', 'clear', 'box'].includes(key)) check.fail(`${path}.${key}`, 'is not supported (allowed: src, label, ratio, tone, clear, box)');
   const {label: text, ...logo} = raw;
   return {kind: 'mark', label: text === undefined ? null : check.str(text, `${path}.label`, labelMax), ...image(check, logo, path, 1)};
@@ -37,13 +36,14 @@ export const markTreatment = (spec, ground, colors) => logoTreatment(spec, groun
 /**
  * View nodes for a mark in a width × height box at (0, 0): the mark fitted to
  * the box above the label, drawn by its treatment on `ground`.
- * look: {ground (the hex it sits on), colors (brand roles: paper, ink), fg,
+ * look: {ground? (the hex it sits on; default colors.bg), colors (brand roles: bg, paper, ink), fg,
  * panel, fonts, unit, labelSize (px), key (a unique id prefix for its filter)}.
  */
 export function markNodes(spec, width, height, look) {
-  const {ground, colors, fg, panel, fonts, unit: u, labelSize: L, key} = look;
+  const {colors, fg, panel, fonts, unit: u, labelSize: L, key} = look;
   const room = spec.label ? r2(L * 1.45 + L * 0.35) : 0;
-  const treat = markTreatment(spec, ground, colors);
+  // The set draws its members on the scene's background.
+  const treat = markTreatment(spec, look.ground ?? colors.bg, colors);
   const boxW = width, boxH = r2(height - room);
   // A plate adds 18% padding on each side; the mark fits inside what is left.
   const pad = treat.mode === 'plate' ? 0.18 : 0;
@@ -68,3 +68,12 @@ export function markNodes(spec, width, height, look) {
   }
   return kids;
 }
+
+/** The member module (kit/core/members.mjs MEMBERS). A mark has no card face, so its rim glows from behind. */
+export const markMember = Object.freeze({
+  id: 'brand-mark',
+  describe: 'A brand mark in place of an icon (an integration, partner or tool): the logo file, recoloured, kept or plated so it reads, with an optional label.',
+  params: {src: 'assets/… logo (.svg|.png|.jpg|.webp)', label: 'string ≤ 18 (optional)', ratio: 'width / height (measured at import)', tone: 'dark | light | mixed (measured)', clear: 'see-through background? (measured)', box: '"#rrggbb" its own background (measured)'},
+  face: 'glow',
+  spec: markSpec, width: markWidth, nodes: markNodes
+});

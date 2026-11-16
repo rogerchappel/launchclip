@@ -174,24 +174,20 @@ async function endCardLogo(value, projectDir, measure) {
   return { ...measured, ...given };
 }
 
-const IMAGE = /^assets\/.+\.(svg|png|jpe?g|webp)$/i;
-
 /**
  * `value` (scene params, or anything inside them) with every brand-mark
- * member (`{mark: "assets/…"}` or `{mark: {src, …}}` nested in a set, see
- * kit/core/member-mark.mjs) measured like an end-card logo. A module's own
- * top-level `mark` param is not a member and is left alone. → the same value
- * when nothing changes.
+ * member (`{module: "brand-mark", src, …}`, kit/core/member-mark.mjs)
+ * measured like an end-card logo. → the same value when nothing changes.
  */
-async function withMemberMarks(value, projectDir, measure, top = false) {
+async function withMemberMarks(value, projectDir, measure) {
   if (!value || typeof value !== "object") return value;
+  if (value.module === "brand-mark" && typeof value.src === "string") {
+    const { module, ...given } = value;
+    const logo = await endCardLogo(given, projectDir, measure);
+    return logo ? { module, ...logo } : value;
+  }
   let changed = false;
   const entries = await Promise.all(Object.entries(value).map(async ([key, item]) => {
-    if (key === "mark" && !top && (typeof item === "string" ? IMAGE.test(item.trim()) : typeof item?.src === "string")) {
-      const logo = await endCardLogo(item, projectDir, measure);
-      if (logo) { changed = true; return [key, logo]; }
-      return [key, item];
-    }
     const next = await withMemberMarks(item, projectDir, measure);
     if (next !== item) changed = true;
     return [key, next];
@@ -218,7 +214,7 @@ export async function withLockupTints(story, projectDir = process.cwd(), measure
       return { ...scene, params: { ...scene.params, logo } };
     }
     if (scene?.module !== "brand-lockup") {
-      const params = await withMemberMarks(scene?.params, projectDir, measure, true);
+      const params = await withMemberMarks(scene?.params, projectDir, measure);
       if (params === scene?.params) return scene;
       changed = true;
       return { ...scene, params };
