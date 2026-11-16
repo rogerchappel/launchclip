@@ -12,7 +12,9 @@ export const STORY_SCHEMA = "launchclip.story.v1";
 export const STORY_REVISION = 0;
 
 export const STORY_LANES = ["motion", "voiceover-motion", "footage-led"];
-export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe", "light-sweep", "push-blur", "light-leak", "before-after"];
+export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe", "light-sweep", "push-blur", "light-leak", "before-after", "burn-away", "slash-wipe", "shatter", "crt-off", "glitch-wipe", "blinds", "diamond-wipe", "star-iris", "pixel-dissolve"];
+/** Transitions the VFX layer draws as a pixel cover (kit/core/transitions.mjs VFX_COVER_TRANSITIONS); color names the cover's colour. */
+export const STORY_VFX_TRANSITIONS = ["burn-away", "slash-wipe", "shatter", "crt-off", "glitch-wipe", "blinds", "diamond-wipe", "star-iris", "pixel-dissolve"];
 export const STORY_ENDING_KEYS = Object.freeze(["loop_to", "in", "loop", "final"]);
 export const STORY_ENDING_FINALS = Object.freeze(["hold", "fade", "exit"]);
 // Camera transitions (kit/core/camera-world.mjs): the camera travels to the
@@ -387,6 +389,11 @@ function dotWipeOptionErrors(transition, path, fps) {
   const errors = [];
   // hold is also the overview's (seconds); color and cover are the wipe's
   // alone (color also the light-sweep's, checked there).
+  if (STORY_VFX_TRANSITIONS.includes(transition.type)) {
+    for (const key of ["cover", "hold"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a dot-wipe option; ${JSON.stringify(transition.type)} does not take it`);
+    if (transition.color !== undefined && !(DOT_WIPE_COLORS.includes(transition.color) || (typeof transition.color === "string" && /^#[0-9a-fA-F]{6}$/.test(transition.color)))) errors.push(`${path}.color must be one of ${DOT_WIPE_COLORS.join(", ")} or a #rrggbb hex; got ${JSON.stringify(transition.color)}`);
+    return errors;
+  }
   if (transition.type !== "dot-wipe") {
     for (const key of transition.type === "light-sweep" ? [] : ["color", "cover"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a dot-wipe option; ${JSON.stringify(transition.type)} does not take it`);
     return errors;
@@ -718,7 +725,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (transition.from_object !== undefined) fromObjects.push({ index, path: `${path}.in.from_object`, value: transition.from_object });
         if (transition.type === "morph" && transition.from_object === undefined) warn(`${label} morphs without in.from_object; name the object handed across the boundary`);
         cameraTransitionRules(transition, `${path}.in`, { err, lane: story.lane, camera, track });
-        if ((transition.type === "dot-wipe" || transition.type === "light-sweep" || transition.type === "light-leak" || transition.type === "before-after") && track !== 0) err(`${path}.in.type "${transition.type}" covers the whole frame; only a track-0 scene can arrive with it`);
+        if ((transition.type === "dot-wipe" || transition.type === "light-sweep" || transition.type === "light-leak" || transition.type === "before-after" || STORY_VFX_TRANSITIONS.includes(transition.type)) && track !== 0) err(`${path}.in.type "${transition.type}" covers the whole frame; only a track-0 scene can arrive with it`);
         for (const message of dotWipeOptionErrors(transition, `${path}.in`, storyFps(story))) err(message);
         for (const message of lightSweepOptionErrors(transition, `${path}.in`)) err(message);
         for (const message of beforeAfterOptionErrors(transition, `${path}.in`)) err(message);

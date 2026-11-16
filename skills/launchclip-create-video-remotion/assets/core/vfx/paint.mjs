@@ -5,7 +5,7 @@
 // same code as VFX_RUNTIME (kit/core/vfx/runtime.mjs) and calls it from a
 // proxy tween's onUpdate. Frame-pure: time snaps to the driver's 1/120 s grid,
 // so a renderer's float noise never decides whether a cue has started.
-import {VFX_MODULES} from './catalog.mjs';
+import {VFX_DRAWABLE} from './catalog.mjs';
 import {drawVfx} from './driver.mjs';
 import {clearFrame, createFrame, painterFor, resolveOptions} from './vendor/core/fx.js';
 
@@ -17,7 +17,7 @@ function prepare(plan) {
     ready = {
       frame: createFrame(plan.aw, plan.ah),
       cues: plan.cues.map(cue => {
-        const mod = VFX_MODULES[cue.effect];
+        const mod = VFX_DRAWABLE[cue.effect];
         const opts = resolveOptions(mod.meta, {...cue.opts, seed: cue.seed, ...(cue.palette ? {palette: cue.palette} : {})});
         return {cue, mod, opts, key: JSON.stringify(cue)};
       })
@@ -32,9 +32,11 @@ export function drawVfxFrame(plan, t) {
   const {frame, cues} = prepare(plan);
   clearFrame(frame);
   for (const {cue, mod, opts, key} of cues) {
-    const local = Math.round((t - cue.start) * 120), left = Math.round((cue.end - t) * 120);
+    const local = Math.round((t - cue.start) * (cue.speed ?? 1) * 120), left = Math.round((cue.end - t) * 120);
     if (local < 0 || left <= 0) continue;
     const p = painterFor(frame).place(cue.x, cue.y, Boolean(cue.flip), cue.angle ?? 0);
+    // a screen turned a quarter for a portrait frame: exact, so no rounding noise picks a pixel
+    if (cue.quarter) (p.cs = 0), (p.sn = 1);
     p.lightK = cue.light ?? 1;
     p.words = cue.words !== false;
     drawVfx(p, mod, opts, local / 120, key);

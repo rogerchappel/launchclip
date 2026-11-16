@@ -16,6 +16,15 @@ import * as levelUp from './vendor/fx/ui/level-up.js';
 import * as achievement from './vendor/fx/ui/achievement.js';
 import * as confetti from './vendor/fx/ui/confetti.js';
 import * as fireworkRocket from './vendor/fx/explosions/firework-rocket.js';
+import * as burnAway from './vendor/fx/transitions/burn-away.js';
+import * as slashWipe from './vendor/fx/transitions/slash-wipe.js';
+import * as shatterWipe from './vendor/fx/transitions/shatter-wipe.js';
+import * as crtOff from './vendor/fx/transitions/crt-off.js';
+import * as glitchWipe from './vendor/fx/transitions/glitch-wipe.js';
+import * as blinds from './vendor/fx/transitions/blinds.js';
+import * as diamondWipe from './vendor/fx/transitions/diamond-wipe.js';
+import * as starIris from './vendor/fx/transitions/star-iris.js';
+import * as pixelDissolve from './vendor/fx/transitions/pixel-dissolve.js';
 
 /** Effect name → its vendored module ({meta, create?} or {meta, draw}). */
 export const VFX_MODULES = Object.freeze({
@@ -109,3 +118,29 @@ export const VFX_WORDS = Object.freeze({
     ])
   })
 });
+
+/**
+ * The screen transitions (kit/core/transitions.mjs VFX_COVER_TRANSITIONS),
+ * by transition type: the module (a 320 × 180 screen covered in o.color, held,
+ * uncovered), its paired SFX family, and `cover`, the span of its life when
+ * every pixel is covered, measured by scripts/vfx-peaks.mjs. The plan runs
+ * the effect at the speed that fits its whole life into the transition and
+ * puts the middle of `cover` on the transition's midpoint, where the plates
+ * swap. `brand`: its light (rims, glints, tiles) takes a ramp of the brand's
+ * accent; the others keep their own fire, glitch and steel. pixel-dissolve is
+ * retro only (docs/VFX_LAYER_RFC.md §1).
+ */
+export const VFX_TRANSITIONS = Object.freeze({
+  'burn-away': Object.freeze({module: burnAway, sfx: 'whoosh', cover: [1.175, 1.792]}),
+  'slash-wipe': Object.freeze({module: slashWipe, sfx: 'swipe', cover: [0.45, 1.075]}),
+  shatter: Object.freeze({module: shatterWipe, sfx: 'snap', cover: [1.017, 1.617], brand: true}),
+  'crt-off': Object.freeze({module: crtOff, sfx: 'tape-stop', cover: [0.567, 1.058], brand: true}),
+  'glitch-wipe': Object.freeze({module: glitchWipe, sfx: 'glitch', cover: [0.783, 1.108]}),
+  blinds: Object.freeze({module: blinds, sfx: 'slide', cover: [0.583, 1.192], brand: true}),
+  'diamond-wipe': Object.freeze({module: diamondWipe, sfx: 'swipe', cover: [0.708, 1.233], brand: true}),
+  'star-iris': Object.freeze({module: starIris, sfx: 'sparkle', cover: [0.858, 1.308], brand: true}),
+  'pixel-dissolve': Object.freeze({module: pixelDissolve, sfx: 'glitch', cover: [0.842, 1.175], brand: true})
+});
+
+/** Every module the painter may draw, by plan name: the cue effects and the transitions. */
+export const VFX_DRAWABLE = Object.freeze({...VFX_MODULES, ...Object.fromEntries(Object.entries(VFX_TRANSITIONS).map(([type, info]) => [type, info.module]))});

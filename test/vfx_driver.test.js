@@ -8,7 +8,7 @@ import {createHash} from 'node:crypto';
 import {readdirSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {VFX_MODULES} from '@launchclip/core/vfx/catalog.mjs';
+import {VFX_DRAWABLE as VFX_MODULES} from '@launchclip/core/vfx/catalog.mjs';
 import {clearFrame, clearVfxCache, createFrame, drawVfx, painterFor, resolveOptions, vfxAt, vfxLocalTime} from '@launchclip/core/vfx/driver.mjs';
 
 const VENDOR = fileURLToPath(new URL('../kit/core/vfx/vendor/', import.meta.url));

@@ -39,6 +39,11 @@
 // arrives slightly large and defocused, `focus`, and racks sharp in a few
 // frames).
 //
+// VFX covers (VFX_COVER_TRANSITIONS: burn-away, slash-wipe, shatter, crt-off,
+// glitch-wipe, blinds, diamond-wipe, star-iris, pixel-dissolve): the VFX
+// layer (kit/core/vfx/plan.mjs) draws a pixel effect that covers the frame
+// with its full cover on the midpoint; here, as dot-wipe, only the hard swap.
+//
 // light-leak (kit/core/light-leak.mjs adds warm light over the cut, peaking at
 // its middle; here the two plates crossfade under the peak).
 //
@@ -67,7 +72,13 @@ import { grammarEase, resolveGrammar } from './grammar.mjs';
 import { LIGHT_LEAK } from './light-leak.mjs';
 import { BEFORE_AFTER, beforeAfterSteps } from './before-after.mjs';
 
-export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan', 'rack-focus', 'glow-wipe', 'card-to-card', 'overview', 'dot-wipe', 'light-sweep', 'push-blur', 'light-leak', 'before-after']);
+export const TRANSITION_TYPES = Object.freeze(['cut', 'fade', 'push', 'whip', 'zoom', 'iris', 'morph', 'pan', 'pull', 'orbit', 'whip-pan', 'rack-focus', 'glow-wipe', 'card-to-card', 'overview', 'dot-wipe', 'light-sweep', 'push-blur', 'light-leak', 'before-after', 'burn-away', 'slash-wipe', 'shatter', 'crt-off', 'glitch-wipe', 'blinds', 'diamond-wipe', 'star-iris', 'pixel-dissolve']);
+/**
+ * Transitions the VFX layer draws (kit/core/vfx/catalog.mjs VFX_TRANSITIONS):
+ * a pixel effect covers the frame, the plates swap under the full cover at
+ * the midpoint, as a dot-wipe, and it uncovers.
+ */
+export const VFX_COVER_TRANSITIONS = Object.freeze(['burn-away', 'slash-wipe', 'shatter', 'crt-off', 'glitch-wipe', 'blinds', 'diamond-wipe', 'star-iris', 'pixel-dissolve']);
 /** Transitions that carry the card: its module rests (whole) at both ends instead of fading (kit/core/modules.mjs). */
 export const CARRY_TRANSITIONS = Object.freeze(['rack-focus', 'card-to-card']);
 export const CAMERA_TRANSITION_TYPES = Object.freeze(['pan', 'pull', 'orbit', 'whip-pan']);
@@ -246,7 +257,7 @@ export function transitionTweens(transition, options) {
   // transition's first frame: a layer never shows whole before it arrives.
   // A full-frame picture covers the outgoing plate by itself, so that plate
   // stays whole under it (fading it would only let the background through).
-  const covered = Boolean(options?.opaque) && !keepOut && tweens.type !== 'dot-wipe';
+  const covered = Boolean(options?.opaque) && !keepOut && tweens.type !== 'dot-wipe' && !VFX_COVER_TRANSITIONS.includes(tweens.type);
   return { ...tweens, in: held(tweens.in, ['opacity']), out: covered ? tweens.out.filter((tw) => tw.prop !== 'opacity') : tweens.out };
 }
 
@@ -328,6 +339,7 @@ function typedTweens(transition, { width, height, grammar = null, mode: cameraMo
         in: [t(side, 100, 0, 'power2.inOut'), t('glow', GLOW_WIPE, 0, 'power2.out', d * 0.35, d * 0.65)],
         out: [t('glow', 0, GLOW_WIPE, 'power2.in', 0, d * 0.6), ...fadeOut] };
     }
+    case 'burn-away': case 'slash-wipe': case 'shatter': case 'crt-off': case 'glitch-wipe': case 'blinds': case 'diamond-wipe': case 'star-iris': case 'pixel-dissolve':
     case 'dot-wipe': {
       // A halftone grid covers the frame (kit/core/dot-wipe.mjs draws it over
       // every scene); under the full cover, at the midpoint, the incoming

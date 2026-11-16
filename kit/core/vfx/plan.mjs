@@ -8,7 +8,8 @@
 // `smooth` painter is phase 3 of the RFC).
 import {hashUnit} from '../fluid-motion.mjs';
 import {brandFontStacks} from '../fonts.mjs';
-import {VFX_EFFECTS, VFX_MODULES, VFX_WORDS} from './catalog.mjs';
+import {VFX_COVER_TRANSITIONS, sceneWindows} from '../transitions.mjs';
+import {VFX_EFFECTS, VFX_MODULES, VFX_TRANSITIONS, VFX_WORDS} from './catalog.mjs';
 
 /** Stacking: over the scenes and the light's over group, under the dot wipes, light sweeps, frame and captions. */
 export const VFX_Z = Object.freeze({hyperframes: 78500, remotion: 47});
@@ -88,7 +89,50 @@ export function vfxPlan(story) {
       cues.push(entry);
     });
   }
+  cues.push(...transitionCues(story, aw, ah, colors));
   return cues.length ? {aw, ah, grid, cues, words} : null;
+}
+
+/** The VFX covers among a story's transitions: [{type, sceneId, start, dur, color?}] (plates and the loop ending). */
+export function vfxTransitions(story) {
+  const covers = scene => VFX_COVER_TRANSITIONS.includes(scene?.in?.type);
+  if (!(Array.isArray(story?.scenes) && story.scenes.some(covers)) && !covers(story?.ending)) return [];
+  const windows = sceneWindows(story), out = [];
+  for (const entry of [...windows.scenes, ...(windows.loop ? [{...windows.loop, plate: true, id: `${windows.loop.sceneId}-loop`, scene: {in: story.ending.in}}] : [])]) {
+    const type = entry.transitionIn?.type;
+    if (!entry.plate || !VFX_COVER_TRANSITIONS.includes(type) || !(entry.transitionIn.dur > 0)) continue;
+    out.push({type, sceneId: entry.id, start: entry.start, dur: entry.transitionIn.dur, color: entry.scene?.in?.color});
+  }
+  return out.sort((a, b) => a.start - b.start);
+}
+
+/**
+ * Plan cues for the VFX covers: each effect sped up to fit its whole life
+ * into the transition, the middle of its full cover on the midpoint (where
+ * the plates swap). The 320 × 180 screen sits centred on the art canvas,
+ * turned a quarter for a portrait frame (`quarter`).
+ */
+function transitionCues(story, aw, ah, colors) {
+  return vfxTransitions(story).map(transition => {
+    const info = VFX_TRANSITIONS[transition.type], D = info.module.meta.duration, speed = D / transition.dur;
+    const middle = (info.cover[0] + info.cover[1]) / 2, start = r3(transition.start + transition.dur / 2 - middle / speed);
+    const portrait = ah > aw;
+    const entry = {
+      effect: transition.type,
+      start,
+      end: r3(start + D / speed),
+      speed: Math.round(speed * 1e6) / 1e6,
+      x: portrait ? Math.round((aw + 180) / 2) : Math.round((aw - 320) / 2),
+      y: portrait ? Math.round((ah - 320) / 2) : Math.round((ah - 180) / 2),
+      seed: 1 + Math.floor(hashUnit(`${transition.sceneId}:in`) * 999_983),
+      // the cover: a #rrggbb or a brand colour by name, by default the brand's ink (a near-black without one)
+      opts: {color: [transition.color, colors[transition.color], colors[transition.color === undefined ? 'ink' : '']].find(c => HEX6.test(String(c))) ?? '#0b0a10'}
+    };
+    const glow = [colors.accent, colors.primary].find(c => HEX6.test(String(c)));
+    if (info.brand && glow) entry.palette = rampOf(glow, HEX6.test(String(colors.bg)) ? colors.bg : '#000000');
+    if (portrait) entry.quarter = true;
+    return entry;
+  });
 }
 
 /** Sound cues for a resolved story's VFX: [{scene_id, at, cue}] at each effect's peak (sfx "auto": its paired family; "none": silent). */
@@ -100,6 +144,9 @@ export function vfxSounds(story) {
       if (!info || typeof cue.at !== 'number' || cue.sfx === 'none') continue;
       sounds.push({scene_id: scene.id, at: r3(cue.align === 'start' ? cue.at + info.peak : cue.at), cue: cue.sfx === undefined || cue.sfx === 'auto' ? info.sfx : cue.sfx, effect: cue.effect});
     }
+    // a VFX cover transition: its paired sound as it starts to cover
+    const cover = VFX_TRANSITIONS[scene?.in?.type];
+    if (cover && typeof scene.start === 'number') sounds.push({scene_id: scene.id, at: r3(scene.start), cue: cover.sfx, effect: scene.in.type});
   }
   return sounds;
 }

@@ -3,7 +3,8 @@
 // at six times through its life (one row each), drawn by the same painter and
 // fixed-step driver the renderers use, over a dark background, once per
 // palette: the effect's own and ramps from two brand colours. The `pixel`
-// render, scaled up nearest-neighbour. A human looks at it before a batch of
+// render, scaled up nearest-neighbour. A fourth sheet shows the screen
+// transitions. A human looks at it before a batch of
 // effects merges.
 //
 //   node scripts/vfx-sheet.mjs [--out qa/vfx] [--scale 2]
@@ -11,7 +12,7 @@ import {spawnSync} from 'node:child_process';
 import {mkdirSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {VFX_MODULES} from '@launchclip/core/vfx/catalog.mjs';
+import {VFX_MODULES, VFX_TRANSITIONS} from '@launchclip/core/vfx/catalog.mjs';
 import {rampOf} from '@launchclip/core/vfx/plan.mjs';
 import {clearFrame, composite, createFrame, drawVfx, painterFor, resolveOptions} from '@launchclip/core/vfx/driver.mjs';
 
@@ -21,14 +22,16 @@ const BG = 0xff1a0f0b; // #0b0f1a as RGBA bytes
 export const SHEET_TIMES = [0.04, 0.12, 0.25, 0.45, 0.65, 0.85];
 export const SHEET_PALETTES = Object.freeze({own: null, amber: rampOf('#fdb022', '#0b0f1a'), cyan: rampOf('#46d4ff', '#0b0f1a')});
 
-/** One sheet's RGBA bytes: a row per effect, a column per time (fractions of its duration). */
-export function sheetPixels(palette) {
-  const names = Object.keys(VFX_MODULES), [tw, th] = TILE;
+const TRANSITION_MODULES = Object.fromEntries(Object.entries(VFX_TRANSITIONS).map(([type, info]) => [type, info.module]));
+
+/** One sheet's RGBA bytes: a row per effect (the cue effects, or the screen transitions on 320 × 180 tiles), a column per time (fractions of its duration). */
+export function sheetPixels(palette, modules = VFX_MODULES, size = TILE) {
+  const names = Object.keys(modules), [tw, th] = size;
   const width = tw * SHEET_TIMES.length, height = th * names.length;
   const out = new Uint8ClampedArray(width * height * 4), tile = new Uint8ClampedArray(tw * th * 4);
   const frame = createFrame(tw, th);
   names.forEach((name, row) => {
-    const mod = VFX_MODULES[name], [w, h] = mod.meta.size, [ox, oy] = mod.meta.origin;
+    const mod = modules[name], [w, h] = mod.meta.size, [ox, oy] = mod.meta.origin;
     const opts = resolveOptions(mod.meta, palette ? {seed: 7, palette} : {seed: 7});
     SHEET_TIMES.forEach((k, col) => {
       clearFrame(frame);
@@ -54,4 +57,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     writePng(sheetPixels(palette), file, scale);
     console.log(`wrote ${file} (rows: ${Object.keys(VFX_MODULES).join(', ')}; columns at ${SHEET_TIMES.join(', ')} of each duration)`);
   }
+  const file = path.join(out, 'sheet-transitions.png');
+  writePng(sheetPixels(null, TRANSITION_MODULES, [320, 180]), file, scale);
+  console.log(`wrote ${file} (rows: ${Object.keys(TRANSITION_MODULES).join(', ')})`);
 }
