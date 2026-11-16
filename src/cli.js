@@ -21,7 +21,7 @@ import { commandHelp, helpText, USAGE_GROUPS, wantsHelp } from "./cli_usage.js";
 import { parseSubjectInvocation } from "./subject/cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "queue", "library", "skills", "style", "profile", "skeletons", "cast", "bible", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "preview", "publish-manifest", "make", "research", "history", "fx", "voice", "export", "cutdown", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "queue", "library", "skills", "style", "profile", "skeletons", "cast", "bible", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "preview", "publish-manifest", "make", "research", "history", "fx", "voice", "export", "cutdown", "reel", "sfx", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -86,7 +86,9 @@ export async function runCli(argv, io = {}) {
   // launchclip research capture [dir] [flags]
   const researchCaptureTarget = command === "research" && firstArg === "capture" && rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const researchCaptureInvocation = command === "research" && firstArg === "capture" ? { target: researchCaptureTarget ?? "research", flagArgs: researchCaptureTarget ? rest.slice(1) : rest } : null;
-  const flags = parseFlags(researchCaptureInvocation?.flagArgs ?? researchAttachInvocation?.flagArgs ?? evidenceInvocation?.flagArgs ?? libraryInvocation?.flagArgs ?? styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? bibleInvocation?.flagArgs ?? collectionInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? skeletonsInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? historyInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? (command === "doctor" ? rest.filter((arg) => arg !== "--agent") : rest));
+  // launchclip reel <project> | reel check <video>: the positional after "check" is the video.
+  const reelFlagArgs = command === "reel" ? (firstArg === "check" ? rest.slice(1) : rest) : null;
+  const flags = parseFlags(reelFlagArgs ?? researchCaptureInvocation?.flagArgs ?? researchAttachInvocation?.flagArgs ?? evidenceInvocation?.flagArgs ?? libraryInvocation?.flagArgs ?? styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? bibleInvocation?.flagArgs ?? collectionInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? skeletonsInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? historyInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? (command === "doctor" ? rest.filter((arg) => arg !== "--agent") : rest));
   // Model calls in flight together each take their own connection (src/own_connection_fetch.js); a fetch the caller passed is used as it is.
   const tracker = createCostTracker({ fetch: io.fetch ? baseFetch : ownConnectionFetch(baseFetch), limitUsd: parseCostLimit(flags["max-cost-usd"] ?? process.env.LAUNCHCLIP_MAX_COST_USD) });
   const previousFetch = globalThis.fetch;
@@ -377,6 +379,9 @@ export async function runCli(argv, io = {}) {
     } else if (command === "cutdown") {
       const { runCutdown } = await import("./cutdown.js");
       result = await runCutdown(required(firstArg, "story project path"), flags, productionAdapters.cutdown ?? {});
+    } else if (command === "reel") {
+      const { runReelCommand } = await import("./reel.js");
+      result = await runReelCommand(firstArg, rest, flags);
     } else if (command === "init") {
       result = await initWorkspace(required(firstArg, "repo path"), flags);
     } else if (command === "demo" && firstArg === "doctor") {
