@@ -122,6 +122,13 @@ A new catalogue I module, `node-graph`:
   `strokeDashoffset` runs linearly for the rest of the scene), so the graph
   never holds still. The first 9:16 render without it was 76% near-still
   frames by the render motion gate; with it and the idle breath, 17%.
+  That still failed finish's motion gate (at most 10%): the dots and the
+  breath are too small to register on its 72×128 grid, so between beats only
+  the camera does. The golden samples now breathe the kinetic ambient faster
+  (`shift` 0.014, `period` 2.5–4 s) and open with a kick at 0.25 s (an
+  earlier one is dropped), for 3% near-still. `node-graph-9x16` also
+  converges at 3 s, inside the 4 s hook; at 4.5 s its climax counted
+  toward the body and the pace gate failed `flat-hook`.
 - **Lighting on arrival**: when a pulse reaches the hub, the hub's ring flashes
   (scale and opacity out) and the hub core brightens; when a pulse leaves, its
   node's rim lights. These are short flashes, which the motion check already
