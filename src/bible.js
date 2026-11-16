@@ -4,9 +4,12 @@
 //
 //   bible freeze <project> [--characters nova,rae] [--style outlined] …
 //       resolve the cast (saved characters, starters, or the entries of a
-//       draft BIBLE.json or the storyboard), draw a reference sheet per
-//       character to bible/sheets/<id>.png, write BIBLE.json with its hash,
-//       and pin storyboard.json and DIRECTION.json to it when they exist
+//       draft BIBLE.json or the storyboard), give each character a flaw when
+//       it has none, draw a reference sheet per character to
+//       bible/sheets/<id>.png, write each one's description and BIBLE.json
+//       with its hash, and pin storyboard.json and DIRECTION.json to it when
+//       they exist. --engine and --episode record a series engine and the
+//       episode ideas pitched from it; a weak engine is refused.
 //   bible show <project>
 //       the bible, checked: its hash, its sheets on disk, the script's
 //       characters, and whether the storyboard agrees with it
@@ -18,7 +21,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { BIBLE_FILE, BIBLE_SCHEMA, BIBLE_SHEETS, bibleCast, bibleCastFindings, biblePropFindings, bibleCharacter, bibleHash, bibleRefErrors, directionWithBible, validateBible, withBible } from "@launchclip/core/bible.mjs";
+import { BIBLE_FILE, BIBLE_SCHEMA, BIBLE_SHEETS, bibleCast, bibleCastFindings, biblePropFindings, bibleCharacter, bibleHash, bibleRefErrors, defaultFlaw, directionWithBible, validateBible, withBible } from "@launchclip/core/bible.mjs";
 import { savedCharacterRequests, withSavedCharacters } from "@launchclip/core/characters/character.mjs";
 import { starterCharacter } from "@launchclip/core/characters/cast.mjs";
 import { DRAWING_STYLES, resolveStoryCast, storyCastErrors } from "@launchclip/core/characters/cues.mjs";
@@ -63,7 +66,8 @@ function positions(value) {
 
 /**
  * Freeze a project's show bible. options: characters (ids, comma-separated
- * or a list), style, position, world, time, sets, props, rule, pack, seed, force,
+ * or a list), style, position, world, time, sets, props, rule, engine (the
+ * series engine's problem), episode (ideas pitched from it), pack, seed, force,
  * pin (false leaves storyboard.json and DIRECTION.json alone). hooks: home
  * (the character library's root), render(html, png) (stands in for
  * Chromium), chromium (an executable path).
@@ -92,13 +96,17 @@ export async function freezeBible(projectDir, options = {}, hooks = {}) {
   for (const id of side.keys()) if (!entries.some((entry) => entry?.id === id)) throw new Error(`--position: "${id}" is not in the cast (${entries.map((entry) => entry?.id).join(", ")})`);
   entries = entries.map((entry) => (isObj(entry) && side.has(entry.id) ? { ...entry, position: side.get(entry.id) } : entry));
 
+  // A bible frozen before flaws and descriptions stays as it is unless --force: a refreeze must not unpin it.
+  const legacy = existing?.frozen === true && !options.force && entriesOf(existing.cast).every((entry) => !isObj(entry) || entry.flaw === undefined);
   // Saved characters fill their entries; one from the library is copied into
-  // the project, so the bible names a file the project carries.
+  // the project, so the bible names a file the project carries. One with no
+  // flaw is given one in its project file, so a story naming it by id draws it.
   const saved = new Map();
   for (const id of savedCharacterRequests({ cast: { characters: entries } })) {
     let loaded = await loadCharacter(id, store);
     if (!loaded) throw new Error(`"${id}" is not a saved character or a starter (launchclip cast list ${projectDir}); design it first: launchclip cast create ${id} --describe "…" --project ${projectDir}`);
     if (loaded.source === "library") loaded = { ...(await saveCharacter(loaded.character, { ...store, to: "project" })), copied: true };
+    if (!legacy && !loaded.character.params?.flaw) loaded = { ...(await saveCharacter({ ...loaded.character, params: { ...loaded.character.params, flaw: defaultFlaw(id) } }, { ...store, to: "project" })), copied: loaded.copied };
     saved.set(id, loaded);
   }
   const filled = withSavedCharacters({ cast: { characters: entries } }, (id) => saved.get(id)?.character ?? null);
@@ -106,11 +114,12 @@ export async function freezeBible(projectDir, options = {}, hooks = {}) {
   // An entry kept from the bible already there is not read from its saved file again (it is pinned);
   // it keeps the file it names. --characters reads the saved files as they are now.
   const keptFile = new Map(named.length ? [] : entriesOf(existing?.cast).filter((entry) => isObj(entry) && typeof entry.character_file === "string").map((entry) => [entry.id, entry.character_file]));
-  // A starter speaks in its own voice unless the entry names another.
+  // A starter speaks in its own voice unless the entry names another; every rig character gets a flaw.
   const characters = entriesOf(filled.story.cast).map((entry) => {
-    if (!isObj(entry) || entry.voice || entry.art !== undefined) return entry;
-    const starter = starterCharacter(entry.from ?? entry.id);
-    return starter?.voice ? { ...entry, voice: starter.voice } : entry;
+    if (!isObj(entry) || entry.art !== undefined) return entry;
+    const starter = entry.voice ? null : starterCharacter(entry.from ?? entry.id);
+    const flaw = entry.flaw ?? starterCharacter(entry.from ?? entry.id)?.params.flaw;
+    return { ...entry, ...(starter?.voice ? { voice: starter.voice } : {}), ...(!flaw && !legacy ? { flaw: defaultFlaw(entry.id) } : {}) };
   });
 
   // One drawing style for the whole cast: the flag, the bible's, the
@@ -128,7 +137,7 @@ export async function freezeBible(projectDir, options = {}, hooks = {}) {
     characters: [...resolved.members.values()].map((member) => {
       if (member.sprite) throw new Error(`${member.id} is an illustrated character (art); a bible character needs rig params (the rig draws the animatic and is the fallback for handed-in art)`);
       if (!member.voice) throw new Error(`${member.id} has no voice; give it one: launchclip cast edit ${from.get(member.id) ?? member.id} --voice <voice> --project ${projectDir}`);
-      return bibleCharacter(member, { character_file: from.has(member.id) ? projectCharacterRef(from.get(member.id)) : keptFile.get(member.id) ?? null, sheet: sheetOf(member.id) });
+      return bibleCharacter(member, { character_file: from.has(member.id) ? projectCharacterRef(from.get(member.id)) : keptFile.get(member.id) ?? null, sheet: sheetOf(member.id), ...(legacy ? { description: false } : {}) });
     })
   };
 
@@ -149,6 +158,12 @@ export async function freezeBible(projectDir, options = {}, hooks = {}) {
   const seedIn = options.seed ?? existing?.style?.seed;
   const seed = seedIn === undefined || seedIn === null ? null : /^\d+$/.test(String(seedIn)) ? Number(seedIn) : String(seedIn);
   const rules = [...new Set([...(Array.isArray(existing?.rules) ? existing.rules : []), ...list(options.rule).map((rule) => String(rule).trim()).filter(Boolean)])];
+  // The series engine: --engine replaces the problem (and its pitches), --episode adds ideas pitched from it.
+  const was = isObj(existing?.engine) ? existing.engine : null;
+  const problem = text(options.engine) ?? was?.problem ?? null;
+  const episodes = [...new Set([...(text(options.engine) && text(options.engine) !== was?.problem ? [] : was?.episodes ?? []), ...list(options.episode).map((idea) => String(idea).trim()).filter(Boolean)])];
+  if (!problem && episodes.length) throw new Error("--episode pitches an episode from the series engine; name the engine with --engine \"<the problem that goes wrong every episode>\"");
+  const engine = problem ? { problem, episodes } : null;
   const scriptFile = path.join(project, SCRIPT_FILE);
   const script = await readJsonIf(scriptFile);
   let bible = {
@@ -157,7 +172,8 @@ export async function freezeBible(projectDir, options = {}, hooks = {}) {
     ...(Object.keys(world).length ? { world } : {}),
     style: { ...(pack ? { pack } : {}), ...(seed !== null ? { seed } : {}), drawing_style: style },
     ...(rules.length ? { rules } : {}),
-    ...(script ? { inputs: { script_hash: await fileHash(scriptFile) } } : {})
+    ...(script ? { inputs: { script_hash: await fileHash(scriptFile) } } : {}),
+    ...(engine ? { engine } : {})
   };
   const warnings = [];
   // The same bible made from an edited script keeps its hash: a reworded
@@ -176,7 +192,7 @@ export async function freezeBible(projectDir, options = {}, hooks = {}) {
   warnings.push(...check.warnings);
   const changed = !existing || existing.frozen !== true || existing.hash !== bible.hash;
   if (existing?.frozen === true && changed && !options.force) {
-    const parts = ["cast", "world", "style", "rules"].filter((key) => JSON.stringify(existing[key]) !== JSON.stringify(bible[key]));
+    const parts = ["cast", "world", "style", "rules", "engine"].filter((key) => JSON.stringify(existing[key]) !== JSON.stringify(bible[key]));
     throw new Error(`${file} is frozen (${short(existing.hash)}) and this would change its ${parts.join(", ") || "content"}. Frozen means pinned: pass --force to freeze the new bible; a storyboard planned against the old one is pinned again here, and anything drawn from the old one (hand-in art) must be checked against the new sheets`);
   }
 
@@ -212,6 +228,7 @@ export async function freezeBible(projectDir, options = {}, hooks = {}) {
     stage: "bible", action: "freeze", status: "ready", project, file, frozen: true, hash: bible.hash, changed,
     style, characters: summary(bible),
     ...(bible.world ? { world: bible.world } : {}),
+    ...(bible.engine ? { engine: bible.engine } : {}),
     ...([...saved.values()].some((entry) => entry.copied) ? { copied: [...saved.values()].filter((entry) => entry.copied).map((entry) => path.relative(project, entry.file)) } : {}),
     pinned,
     ...(warnings.length ? { warnings } : {}),
@@ -219,7 +236,7 @@ export async function freezeBible(projectDir, options = {}, hooks = {}) {
   };
 }
 
-const summary = (bible) => entriesOf(bible?.cast).filter(isObj).map((entry) => ({ id: entry.id, name: entry.name ?? entry.id, voice: entry.voice ?? null, position: entry.position ?? null, character_file: entry.character_file ?? null, sheet: entry.sheet ?? null, must_keep: entry.must_keep ?? [] }));
+const summary = (bible) => entriesOf(bible?.cast).filter(isObj).map((entry) => ({ id: entry.id, name: entry.name ?? entry.id, voice: entry.voice ?? null, position: entry.position ?? null, character_file: entry.character_file ?? null, sheet: entry.sheet ?? null, flaw: entry.flaw ?? null, must_keep: entry.must_keep ?? [], ...(entry.description ? { description: entry.description } : {}) }));
 
 /** A project's bible, read and checked against the disk and the script. → {bible, file, check} | null when there is none. */
 export async function readBible(projectDir, { file = BIBLE_FILE, home } = {}) {
@@ -263,6 +280,7 @@ export async function showBible(projectDir, hooks = {}) {
     ...(isObj(bible?.style) ? { look: bible.style } : {}),
     ...(Array.isArray(bible?.rules) ? { rules: bible.rules } : {}),
     ...(isObj(bible?.inputs) ? { inputs: bible.inputs } : {}),
+    ...(isObj(bible?.engine) ? { engine: bible.engine } : {}),
     ...(story ? { story } : {})
   };
 }
@@ -271,7 +289,7 @@ export async function runBibleCommand(action, project, flags = {}, hooks = {}) {
   if (action === "freeze") {
     return freezeBible(project ?? flags.project ?? ".", {
       characters: flags.characters, style: flags.style, position: flags.position, world: flags.world, time: flags.time, sets: flags.sets, props: flags.props,
-      rule: flags.rule, pack: flags.pack, seed: flags.seed, chromium: flags.chromium, force: Boolean(flags.force), pin: !flags["no-pin"]
+      rule: flags.rule, engine: flags.engine, episode: flags.episode, pack: flags.pack, seed: flags.seed, chromium: flags.chromium, force: Boolean(flags.force), pin: !flags["no-pin"]
     }, hooks);
   }
   if (action === "show") return showBible(project ?? flags.project ?? ".", hooks);
