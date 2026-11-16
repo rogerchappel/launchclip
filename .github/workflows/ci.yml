@@ -7,6 +7,12 @@ on:
       - main
       - release-candidate/launchclip
 
+# PRs: a new push cancels the older run. main and release-candidate never
+# cancel a running job; GitHub keeps one running and one pending per ref.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     name: Node ${{ matrix.node }} on ${{ matrix.os }}
