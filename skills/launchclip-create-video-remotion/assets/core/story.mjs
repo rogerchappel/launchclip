@@ -64,7 +64,13 @@ export const STORY_BACKGROUND_PARAMS = Object.freeze({
   "logo-pattern": { scale: BG_SCALE, spacing: BG_SCALE, offset: BG_UNIT, opacity: [0.04, 0.2], speed: BG_SPEED },
   motif: { scale: BG_SCALE, weight: [0.5, 3], opacity: [0.04, 0.3], angle: [0, 180], speed: BG_SPEED },
   texture: { amount: BG_UNIT, scale: BG_SCALE },
-  weather: { intensity: BG_UNIT, speed: BG_SPEED }
+  weather: { intensity: BG_UNIT, speed: BG_SPEED },
+  // GL generators (kit/core/gl-backgrounds.mjs).
+  aurora: { intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED },
+  fog: { intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED },
+  plasma: { intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED },
+  cells: { intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED },
+  caustics: { intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED }
 });
 export const STORY_BACKGROUND_KINDS = Object.keys(STORY_BACKGROUND_PARAMS);
 export const STORY_BACKGROUND_COLORS = ["primary", "accent", "paper"];
@@ -77,7 +83,8 @@ export const STORY_BACKGROUND_OPTIONS = Object.freeze(Object.fromEntries(STORY_B
   ...(kind === "blobs" ? {} : { fade: ["none", "center", "top", "bottom", "left", "right"] }),
   ...(kind === "motif" ? { shape: ["plus", "circle", "chevron", "wave", "hatch", "crosshatch"] } : {}),
   ...(kind === "texture" ? { type: ["noise", "fibre", "canvas", "linen"] } : {}),
-  ...(kind === "weather" ? { type: ["aurora", "blizzard", "cherry-blossoms", "clouds", "falling-leaves", "fireflies", "fog", "god-rays", "rain", "shooting-stars", "snow", "storm"] } : {})
+  ...(kind === "weather" ? { type: ["aurora", "blizzard", "cherry-blossoms", "clouds", "falling-leaves", "fireflies", "fog", "god-rays", "rain", "shooting-stars", "snow", "storm"] } : {}),
+  ...({ fog: { type: ["fog", "cloud", "smoke", "ember"] }, plasma: { type: ["plasma", "silk"] }, cells: { type: ["cells", "facets", "hex"] } })[kind] ?? {}
 }])));
 export const STORY_PANEL_TREATMENTS = ["solid", "glass", "paper", "outline", "soft-shadow", "rim-glass"];
 // story.medium kinds and keys (kit/core/medium.mjs MEDIUM_KINDS, MEDIUM_KEYS;

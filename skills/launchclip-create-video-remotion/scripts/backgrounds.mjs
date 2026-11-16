@@ -8,7 +8,7 @@
 // and Remotion evaluates the same cosines per frame, so both renderers draw
 // the same pixels at any seek. Plain ESM; imports only ./ambient.mjs,
 // ./panels.mjs, ./icons.mjs, ./lighting.mjs (a lit dot grid's mask) and the
-// VFX catalogue and ramps (weather).
+// VFX catalogue and ramps (weather) and the GL generator list.
 // Contract: docs/KIT_CONTRACTS.md, "Backgrounds and panels".
 //
 // Kinds:
@@ -34,6 +34,12 @@
 //   weather         a pixel weather loop (kit/core/vfx VFX_WEATHER: rain, snow,
 //                   fog, fireflies, aurora, god-rays …) on two canvases the VFX
 //                   painter draws per frame, in a ramp of one palette role
+//   aurora, fog, plasma, cells, caustics
+//                   GL generators (kit/core/gl-backgrounds.mjs): one WebGL2
+//                   canvas at half size, painted per frame from the time
+//                   alone in two palette roles (params.color, then accent);
+//                   type picks a variant (fog/cloud/smoke/ember, plasma/silk,
+//                   cells/facets/hex)
 //
 // Every kind but blobs takes params.fade, a mask that keeps one area calm
 // (the centre or a side), and story.panel.fill draws any of them inside a
@@ -55,8 +61,9 @@ import { ICONS, ICON_BOX, isIcon } from './icons.mjs';
 import { litMask } from './lighting.mjs';
 import { VFX_WEATHER } from './vfx/catalog.mjs';
 import { rampOf } from './vfx/plan.mjs';
+import { GL_BACKGROUND_KINDS, GL_BACKGROUND_VARIANTS } from './gl-backgrounds.mjs';
 
-export const BACKGROUND_KINDS = Object.freeze(['flat', 'gradient', 'grain-gradient', 'paper', 'geometric', 'blobs', 'dot-grid', 'mesh', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'logo-pattern', 'motif', 'texture', 'weather']);
+export const BACKGROUND_KINDS = Object.freeze(['flat', 'gradient', 'grain-gradient', 'paper', 'geometric', 'blobs', 'dot-grid', 'mesh', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'logo-pattern', 'motif', 'texture', 'weather', ...GL_BACKGROUND_KINDS]);
 export const DEFAULT_BACKGROUND_KIND = 'blobs';
 
 // Tested parameter ranges, per kind: {min, max, default}. angle in degrees;
@@ -85,11 +92,12 @@ export const BACKGROUND_PARAMS = Object.freeze({
   'logo-pattern': Object.freeze({ scale: SCALE, spacing: SCALE, offset: range(0, 1, 0.5), opacity: OPACITY, speed: SPEED }),
   motif: Object.freeze({ scale: SCALE, weight: range(0.5, 3, 1.5), opacity: range(0.04, 0.3, 0.14), angle: range(0, 180, 45), speed: SPEED }),
   texture: Object.freeze({ amount: DENSITY, scale: SCALE }),
-  weather: Object.freeze({ intensity: range(0, 1, 0.6), speed: SPEED })
+  weather: Object.freeze({ intensity: range(0, 1, 0.6), speed: SPEED }),
+  ...Object.fromEntries(GL_BACKGROUND_KINDS.map((kind) => [kind, Object.freeze({ intensity: range(0, 1, 0.6), scale: SCALE, speed: SPEED })]))
 });
 // Kinds whose pattern takes a palette role (params.color).
-const COLORED = new Set(['gradient', 'grain-gradient', 'geometric', 'dot-grid', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'motif', 'weather']);
-const DEFAULT_COLOR = Object.freeze({ weather: 'primary', gradient: 'primary', 'grain-gradient': 'primary', geometric: 'primary', 'dot-grid': 'paper', stripes: 'paper', topographic: 'primary', halftone: 'primary', 'light-rays': 'paper', 'icon-pattern': 'paper', 'icon-scatter': 'paper', motif: 'paper' });
+const COLORED = new Set(['gradient', 'grain-gradient', 'geometric', 'dot-grid', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'motif', 'weather', ...GL_BACKGROUND_KINDS]);
+const DEFAULT_COLOR = Object.freeze({ ...Object.fromEntries(GL_BACKGROUND_KINDS.map((kind) => [kind, 'primary'])), weather: 'primary', gradient: 'primary', 'grain-gradient': 'primary', geometric: 'primary', 'dot-grid': 'paper', stripes: 'paper', topographic: 'primary', halftone: 'primary', 'light-rays': 'paper', 'icon-pattern': 'paper', 'icon-scatter': 'paper', motif: 'paper' });
 // Fades keep an area calm: the pattern fades out toward it (center: a radial
 // mask; a side: a linear one). Every kind but blobs takes one.
 export const BACKGROUND_FADES = Object.freeze(['none', 'center', 'top', 'bottom', 'left', 'right']);
@@ -103,7 +111,8 @@ export const BACKGROUND_OPTIONS = Object.freeze(Object.fromEntries(BACKGROUND_KI
   ...(kind === 'blobs' ? {} : { fade: option(BACKGROUND_FADES, 'none') }),
   ...(kind === 'motif' ? { shape: option(BACKGROUND_MOTIFS, 'plus') } : {}),
   ...(kind === 'texture' ? { type: option(BACKGROUND_TEXTURES, 'noise') } : {}),
-  ...(kind === 'weather' ? { type: option(BACKGROUND_WEATHER, 'rain') } : {})
+  ...(kind === 'weather' ? { type: option(BACKGROUND_WEATHER, 'rain') } : {}),
+  ...(GL_BACKGROUND_VARIANTS[kind] ? { type: option(GL_BACKGROUND_VARIANTS[kind], GL_BACKGROUND_VARIANTS[kind][0]) } : {})
 })])));
 // Kinds that draw icons take params.icons: 1–8 icon names (kit/core/icons.mjs) or "auto".
 const ICON_KINDS = new Set(['icon-pattern', 'icon-scatter']);
@@ -581,6 +590,16 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
         vfx: { aw: 320, ah: 180, grid, cues: [{ effect: params.type, start: 0, end: 1e6, speed: round(speed, 4), x: ox, y: oy, seed: 1 + Math.floor(random() * 999983), palette: rampOf(tint, colors.bg) }], words: [] } });
       break;
     }
+    case 'aurora': case 'fog': case 'plasma': case 'cells': case 'caustics': {
+      // One canvas over the frame at half size (the fields are soft), painted by the GL painter at absolute time × speed.
+      const second = tint === colors.accent ? colors.primary : colors.accent;
+      const want = 0.25 + 0.6 * params.intensity;
+      const alpha = Math.min(lay(tint, want), lay(second, want));
+      const rgb = (hex) => [1, 3, 5].map((i) => round(parseInt(hex.slice(i, i + 2), 16) / 255, 4));
+      layers.push({ id: 'gl', box: box(0, 0, W, H), svg: null, axes: {}, style: { opacity: alpha },
+        gl: { kind, variant: params.type ?? null, seed: Math.floor(random() * 65536), speed: round(speed, 4), scale: params.scale, w: Math.ceil(W / 2), h: Math.ceil(H / 2), colors: [rgb(tint), rgb(second)] } });
+      break;
+    }
     default:
       return null;
   }
@@ -653,7 +672,7 @@ export function panelFillErrors(value, path = 'panel.fill') {
   if (value === undefined || value === null) return [];
   const errors = backgroundErrors(value, path);
   if (!errors.length && value.kind === DEFAULT_BACKGROUND_KIND) errors.push(`${path}.kind cannot be blobs (the ambient field draws only on plates)`);
-  if (!errors.length && value.kind === 'weather') errors.push(`${path}.kind cannot be weather (it draws only on plates)`);
+  if (!errors.length && (value.kind === 'weather' || GL_BACKGROUND_KINDS.includes(value.kind))) errors.push(`${path}.kind cannot be ${value.kind} (it draws only on plates)`);
   return errors;
 }
 
