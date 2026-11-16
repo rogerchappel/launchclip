@@ -119,6 +119,11 @@ test('type over footage sits on a dark local grade, heavy and large, whatever th
     assert.ok(line.size >= FOOTAGE_TEXT.minPx, `${line.text} at ${line.size} px`);
   }
   assert.equal(model.layout.textWeight, FOOTAGE_TEXT.weight);
+  // An emphasis line reads at 4.5:1 on the grade too, lifted from the primary when the primary itself does not.
+  const em = scene({lines: ['Never oil it', {text: 'Hot in full sun', emphasis: true}]});
+  const emphasised = resolveModule(em, story(em, {brand: pale})).content.lines[1].color;
+  assert.notEqual(emphasised, pale.colors.primary);
+  assert.ok(contrast(emphasised, '#14201f') >= 4.5, emphasised);
   const view = photoSceneView(model);
   const lineNode = JSON.stringify(view.overlay);
   assert.match(lineNode, /"fontWeight":700/);
@@ -129,6 +134,10 @@ test('type over footage sits on a dark local grade, heavy and large, whatever th
   assert.ok(contrast(lit.content.lines[0].color, FOOTAGE_TEXT.fallback) >= 4.5);
   // A dark brand keeps its own background as the grade, as before.
   assert.equal(resolve({lines: ['Dawn']}).content.scrimColor, brand.colors.bg);
-  // A line too long to set at the floor fails rather than shrinking into thin, small type.
-  assert.throws(() => resolve({lines: ['W'.repeat(40)]}), /lines\[0\]/);
+  // In portrait, a left block widens before it goes under the floor; a line too long even then fails rather than shrinking.
+  const portrait = {width: 1080, height: 1920, fps: 30, duration: 12};
+  const wide = scene({lines: ['Nobody else for miles']});
+  assert.ok(resolveModule(wide, story(wide, {format: portrait})).content.lines[0].size >= FOOTAGE_TEXT.minPx);
+  const long = scene({lines: ['W'.repeat(40)]});
+  assert.throws(() => resolveModule(long, story(long, {format: portrait})), /lines\[0\]/);
 });

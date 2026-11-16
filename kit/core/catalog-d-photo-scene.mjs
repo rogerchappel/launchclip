@@ -30,7 +30,7 @@ import {abs, el, set, tw} from './catalog-b-view.mjs';
 import {createFootageBase} from './catalog-c.mjs';
 import {grammarDuration, grammarEase, grammarStagger} from './grammar.mjs';
 import {PASSAGE_PARAMS, mediaPassage, passageParams} from './media-passage.mjs';
-import {contrast} from './panels.mjs';
+import {contrast, mix} from './panels.mjs';
 
 // Type over footage: at least this size (px at 1080) and weight, on a local
 // dark grade (never the brand background washed over the shot: a pale brand
@@ -93,7 +93,11 @@ function resolvePhotoScene(params, ctx) {
   // Text lines: a block in the lower safe zone (above the caption band),
   // left-aligned or centred. Earlier lines are set larger.
   const stagger = grammarStagger(ctx.grammar, T.lineStagger, {min: 0.2, max: 1});
-  const width = align === 'center' ? safe.width * 0.9 : safe.width * 0.62;
+  // A left block keeps to 0.62 of the safe width, and widens to 0.9 when a line would not fit there at the floor.
+  const floor = Math.max(b.min.key, u(FOOTAGE_TEXT.minPx));
+  const narrow = safe.width * 0.62, quiet = {fail: () => null};
+  const fitsNarrow = linesIn.every((raw, i) => fitText(quiet, '', typeof raw === 'string' ? raw : String(raw?.text ?? ''), {family: 'display', width: narrow, preferred: u(i === 0 ? 96 : 72), min: floor, maxLines: 1}));
+  const width = align === 'center' || !fitsNarrow ? safe.width * 0.9 : narrow;
   const gap = u(14);
   let previousAt = -Infinity;
   const lines = linesIn.map((raw, i) => {
@@ -105,7 +109,7 @@ function resolvePhotoScene(params, ctx) {
     previousAt = at;
     const emphasis = line.emphasis === undefined ? false : check.bool(line.emphasis, `${path}.emphasis`);
     const preferred = u(i === 0 ? 96 : 72);
-    const fit = fitText(check, `${path}.text`, text, {family: 'display', width, preferred, min: Math.max(b.min.key, u(FOOTAGE_TEXT.minPx)), maxLines: 1});
+    const fit = fitText(check, `${path}.text`, text, {family: 'display', width, preferred, min: floor, maxLines: 1});
     return {index: i, text, at, emphasis, size: fit.size};
   });
   const blockH = lines.reduce((sum, line) => sum + line.size * 1.12, 0) + gap * Math.max(0, lines.length - 1);
@@ -120,9 +124,12 @@ function resolvePhotoScene(params, ctx) {
   const darkest = brand.length ? brand.reduce((best, c) => (contrast(c, '#ffffff') > contrast(best, '#ffffff') ? c : best)) : FOOTAGE_TEXT.fallback;
   const scrimColor = contrast(darkest, '#ffffff') >= FOOTAGE_TEXT.grade ? darkest : FOOTAGE_TEXT.fallback;
   const ink = [theme.paper, colors.ink, colors.bg].filter(hex).find((c) => contrast(c, scrimColor) >= 4.5) ?? '#ffffff';
+  // An emphasis line: the primary or accent that reads at 4.5:1 on the grade, else the primary lifted toward the ink until it does.
+  let accentInk = [colors.primary, colors.accent].filter(hex).find((c) => contrast(c, scrimColor) >= 4.5) ?? null;
+  for (let t = 0.1; !accentInk && t <= 1.0001; t += 0.1) { const c = mix(hex(colors.primary) ? colors.primary : ink, ink, Math.min(1, t)); if (contrast(c, scrimColor) >= 4.5) accentInk = c; }
   for (const line of lines) {
     line.box = {x: r2(x), y: r2(y), width: r2(width), height: r2(line.size * 1.12)};
-    line.color = line.emphasis ? b.resolveColor('primary', `${'params.lines'}[${line.index}].emphasis colour`, 'primary', scrimColor, 'the scrim') : ink;
+    line.color = line.emphasis ? accentInk ?? ink : ink;
     y += line.size * 1.12 + gap;
     b.events.push({id: `${b.id}-line-${line.index}`, name: `line-${line.index}`, time: line.at, endTime: rt(line.at + T.lineLand), role: 'beat'});
   }
