@@ -655,7 +655,7 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   // the scenes and the light, the light canvas added with plus-lighter; the
   // inlined painter draws the timeline's time from a proxy tween, as Remotion's
   // VfxCanvas does from its layout effect.
-  const vfx = isolate ? null : vfxPlan(story);
+  const vfx = isolate ? null : vfxPlan(story, { resolve: (scene) => resolveModule(scene, story) });
   const vfxCanvas = (part) => `<canvas id="lc-vfx-${part}" data-launchclip-vfx="${part}" width="${vfx.aw}" height="${vfx.ah}" aria-hidden="true" style="position:absolute;left:0;top:0;width:${vfx.aw * vfx.grid}px;height:${vfx.ah * vfx.grid}px;image-rendering:pixelated;pointer-events:none;z-index:${VFX_Z.hyperframes}${part === 'light' ? ';mix-blend-mode:plus-lighter' : ''}"></canvas>`;
   // A hit's words (kit/core/vfx/paint.mjs vfxWordAt): brand-font text over the canvases.
   const vfxWords = (vfx?.words ?? []).map((word, i) => `<div id="lc-vfx-word-${i}" data-launchclip-vfx="word" aria-hidden="true" style="${Object.entries({ ...vfxWordBox(word, vfx.grid), zIndex: String(VFX_Z.hyperframes) }).map(([key, value]) => `${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}:${attr(value)}`).join(';')}">${text(word.text)}</div>`).join('');
