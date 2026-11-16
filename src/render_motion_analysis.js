@@ -1647,7 +1647,7 @@ export const ENTRANCE_CLASSIFY = Object.freeze({
   minArea: 0.002,
   maxArea: 0.6, // not in the RFC: change over more of the frame is a transition or a camera move, not an element
   role: 1.25, // not in the RFC: detail (luma gradient) after ÷ before ≥ this is an entrance, before ÷ after an exit, else a change
-  ease: Object.freeze({ out: 0.68, in: 0.32, linearCv: 0.45, floorPairs: 6, tail: 0.05, onset: 0.25 }), // not in the RFC (onset: an entrance starts where its activity first crosses this share of its peak): the noise floor taken off the activity is read over floorPairs each side, and the span runs out from the peak (up to floorPairs past the thresholded one) while activity is above tail × the peak
+  ease: Object.freeze({ out: 0.68, in: 0.32, linearCv: 0.45, floorPairs: 6, tail: 0.05, onset: 0.25, minPairs: 3 }), // not in the RFC (onset: an entrance starts where its activity first crosses this share of its peak): the noise floor taken off the activity is read over floorPairs each side, and the span runs out from the peak (up to floorPairs past the thresholded one) while activity is above tail × the peak
   kind: Object.freeze({ tip: 0.35, correlation: 0.6, travel: 0.02, ownTravel: 0.25, scale: 0.6, presence: 10, firstShare: 0.5 }), // not in the RFC: presence is a cell's mean moved this far from before the event; the first frame read is the first with firstShare of the final presence; a slide also travels ownTravel of its own extent (a blurred shrink-in drifts ≤ 0.07, a slide ~1)
   stagger: Object.freeze({ min: 3, size: 0.4, duration: 0.5, regularity: 0.4 })
 });
@@ -1864,6 +1864,8 @@ function describeEvent(runs, { means, details, mags, cw, ch, cells, fps, E }) {
   const curve = [];
   for (let p = from; p <= to; p += 1) curve.push(Math.max(0, level(p) - floor));
   const total = curve.reduce((sum, v) => sum + v, 0) || 1, n = curve.length;
+  // A swap in fewer than minPairs frame pairs (a hard cut of one element) has no curve to read an ease from: it is a change, not an entrance.
+  if (n < E.ease.minPairs) return { ...event, role: 'change' };
   let done = 0;
   for (let i = 0; i < Math.floor(n / 2); i += 1) done += curve[i];
   if (n % 2) done += curve[(n - 1) / 2] / 2;
