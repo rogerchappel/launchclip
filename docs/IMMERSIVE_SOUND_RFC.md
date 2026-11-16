@@ -138,6 +138,40 @@ Whooshes travel in the camera's direction. Ambience is wide; the bed is
 moderately wide; a `hush` narrows everything towards centre, so the hit after
 it feels wide.
 
+**Shipped (phase 6).** `scenes[i].sound` is validated in `kit/core/story.mjs`
+(`sceneSoundProblems`, so the file stays import-free) and carried out by
+`kit/core/sound/directing.mjs`. Where it departs from the table above:
+
+- **Meanings.** `hush.at` is the line or hit the hush sets up; the quiet runs
+  `for` seconds before it (a word anchor works). `prelap` sits on the scene that
+  arrives early, `tail` on the scene that rings over, `into` on the scene being
+  entered. A cut takes a prelap or a tail, not both; `into: silence` takes no prelap.
+- **One curve, not per-scene segments.** The ambience is still one loop per
+  story, so a prelap or tail moves where the cut's level change happens on one
+  curve multiplied into the bed, ambience and score room (`levels`), and
+  `directCues` moves the arriving scene's first sounds (within 0.5 s before to
+  0.25 s after its cut) early by the prelap. A plain cut crossfades over 0.1 s.
+  Levels are evaluated every 10 ms (`asetnsamples` before `volume`), because
+  `eval=frame` alone steps every 21 ms and blurs a 40 ms hush fade.
+- **focus is a bed gain, not a duck depth.** `sidechaincompress` cannot change
+  over time, so music lifts the bed +7 dB and fx lowers it 3 dB against the
+  default duck (about −13 dB), in speech and pauses alike.
+- **space.** The score mix's reverb send follows the curve (×0, ×1, ×2). The
+  plain mix has no send, so it gains one only where a scene is `hall`; `dry`
+  cannot remove the room a palette bakes into its files.
+- **into.** riser and swell (the riser at 0.6×) end on the cut, tape-stop runs
+  out on it, hit is an impact on it, all `source: "directing"`; silence gates the
+  beds and cues (not the voice) for two frames before the cut.
+- **Checks.** The plan-and-pace counts are story warnings when any scene has a
+  sound block: one hush from 20 s, two from 45 s, one of 0.4 s or more (the held
+  breath), a prelap or tail from 30 s, and no words inside a hush. After the mix,
+  `measureDirecting` re-reads the mix file: each hush ≥ 18 dB under the mix
+  median with a transient within 0.1 s of its end, and each prelap or tail
+  crossing half way on the right side of the cut (measured only where the two
+  scenes' bed levels differ by 3 dB or more). Failures are finish warnings; the
+  results go in `qa/sfx.json` under `directing`. Pairing every sound with
+  something on screen stays the phase 3 pairs check, run before directing moves cues.
+
 ## 3. SFX typed and placed
 
 **Port the type classifier.** A coarse classifier reads the first 120 ms of a
@@ -378,7 +412,7 @@ prints the licence each generated sound came under.
 | 3 | `classify.js`; family-name test; pairs table and check | 3 days |
 | 4 | KS pluck in `music.mjs`; sonification for the seven chart modules | 4 days |
 | 5 | `sampler.mjs`, `sound fetch`, index, credits; orchestral-lite and acoustic-pluck sampled | 6–8 days |
-| 6 | `sound` block in the planner (hush, prelap, tail, into, space, focus) and the mixer | 4 days |
+| 6 | `sound` block in the planner (hush, prelap, tail, into, space, focus) and the mixer (shipped, see §2) | 4 days |
 | 7 | ComfyUI SFX adapter | 3 days |
 
 Tests:
