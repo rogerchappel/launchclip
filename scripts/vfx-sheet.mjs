@@ -8,6 +8,7 @@
 // effects merges.
 //
 //   node scripts/vfx-sheet.mjs [--out qa/vfx] [--scale 2]
+//   node scripts/vfx-sheet.mjs --effects blunt-hit,quake --label batch1   (one batch: its three palette sheets only)
 import {spawnSync} from 'node:child_process';
 import {mkdirSync} from 'node:fs';
 import path from 'node:path';
@@ -52,11 +53,16 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const arg = (name, fallback) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : fallback);
   const out = path.resolve(arg('--out', path.join(ROOT, 'qa', 'vfx'))), scale = Number(arg('--scale', 2));
   mkdirSync(out, {recursive: true});
+  const only = arg('--effects', null)?.split(',');
+  const unknown = only?.filter(name => !VFX_MODULES[name]) ?? [];
+  if (unknown.length) throw new Error(`unknown effects: ${unknown.join(', ')}`);
+  const modules = only ? Object.fromEntries(only.map(name => [name, VFX_MODULES[name]])) : VFX_MODULES, label = arg('--label', null);
   for (const [name, palette] of Object.entries(SHEET_PALETTES)) {
-    const file = path.join(out, `sheet-${name}.png`);
-    writePng(sheetPixels(palette), file, scale);
-    console.log(`wrote ${file} (rows: ${Object.keys(VFX_MODULES).join(', ')}; columns at ${SHEET_TIMES.join(', ')} of each duration)`);
+    const file = path.join(out, `sheet-${label ? `${label}-` : ''}${name}.png`);
+    writePng(sheetPixels(palette, modules), file, scale);
+    console.log(`wrote ${file} (rows: ${Object.keys(modules).join(', ')}; columns at ${SHEET_TIMES.join(', ')} of each duration)`);
   }
+  if (only) process.exit(0);
   const file = path.join(out, 'sheet-transitions.png');
   writePng(sheetPixels(null, TRANSITION_MODULES, [320, 180]), file, scale);
   console.log(`wrote ${file} (rows: ${Object.keys(TRANSITION_MODULES).join(', ')})`);
