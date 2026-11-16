@@ -40,7 +40,7 @@ import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations
 import { actingGate, densityGate, ghostingGate, physicsGate, tellsGate, varietyGate } from "./direction_guardrails.js";
 import { visualDensityGate } from "./visual_density.js";
 import { choreographyGate, holdGate, stateGate } from "./movement_guardrails.js";
-import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, lipSyncGate, paceGate, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
+import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, lipSyncGate, paceGate, prototypeCut, renderPaceGate, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
 import { worstStillSpans, writeMotionReport } from "./render_motion_analysis.js";
@@ -100,7 +100,7 @@ import { fitSceneTimings } from "./timing_fit.js";
 // face; a card moved off the face lands in the caption band).
 const LAYOUT_REPAIR_PASSES = 6;
 import { analyzeBeatsFile, beatsDocument, gridFromBpm, transformGrid } from "./music/beats.js";
-import { storyMotionCurve } from "./motion_curve.js";
+import { readMotionCurve, storyMotionCurve } from "./motion_curve.js";
 import { BEAT_SYNC_SCHEMA, chooseAlignment, keyMoments, momentReport, snapStory, summarizeMoments, syncStrategy } from "./music/beat_sync.js";
 
 const execFileAsync = promisify(execFile);
@@ -2044,6 +2044,7 @@ async function defaultSideBySide(left, right, output) {
 // story names a style) style adherence (src/style_adherence.js).
 // pixels: false (--plan-only) leaves out every gate that reads the rendered video (RENDER_ONLY_GATES).
 async function runGates(ctx, { pixels = true } = {}) {
+  let renderMotion = null;
   const format = storyFormat(ctx.resolved);
   const duration = Number(ctx.resolved.resolved?.duration ?? format.duration);
   const gates = {};
@@ -2138,6 +2139,7 @@ async function runGates(ctx, { pixels = true } = {}) {
     // head barely moves; a motion explainer must).
     const { profile } = gateProfile(ctx.resolved, { direction: (await readProjectDirection(ctx.project)).map, style: await stylePack(ctx), project: ctx.project });
     const motion = await ctx.adapters.motion(ctx.out, path.join(ctx.project, PATHS.motion), { expected: cinematicMotionExpectations({ duration, width: format.width, height: format.height, profile }).expected });
+    renderMotion = motion;
     // The absolute stillness measures, and the worst still spans with a
     // suggested fix each, so a director can act without opening the report.
     const stillness = motion?.motion?.still_share == null ? null : {
@@ -2227,6 +2229,12 @@ async function runGates(ctx, { pixels = true } = {}) {
     // Pace (docs/PLAN_AND_PACE_RFC.md §2): a dense hook, no long gap, no frozen frame.
     const pace = paceGate({ resolved: ctx.resolved, profile, map: direction.map, media: ctx.layout?.media ?? {} });
     if (pace.status !== "skipped") gates.pace = pace;
+    // On a render the pace is read from the pixels and checked against the plan (phase 7).
+    if (pixels && renderMotion && !prototype) {
+      const curve = await (ctx.adapters.motionCurve ?? readMotionCurve)(ctx.out).catch(() => null);
+      const rendered = renderPaceGate({ resolved: ctx.resolved, motion: renderMotion, curve, beats: Array.isArray(ctx.beats?.beats) ? ctx.beats.beats.map(Number) : null, profile, map: direction.map });
+      if (rendered.status !== "skipped") gates.pace = { ...rendered, plan: pace.status === "skipped" ? null : { status: pace.status, errors: pace.errors, warnings: pace.warnings } };
+    }
   } catch (error) {
     gates.direction ??= { status: "failed", error: error.message };
   }
