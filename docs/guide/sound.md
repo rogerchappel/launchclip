@@ -85,6 +85,20 @@ launchclip sfx reroll keystroke   # don't like the typing sounds? regenerate jus
 
 Every clip is trimmed so it starts exactly on its hit, its tail is faded, and it is levelled. From then on, every video uses your library, so your channel sounds consistent. It lives in `.launchclip/sfx/`, or in `~/.launchclip/sfx/` to use it across projects.
 
+## Visuals that move with the sound
+
+Add `audio.react` to a story and parts of the picture follow the finished mix:
+
+```json
+"audio": { "react": { "glow": true, "bar": true, "pulse": { "strength": 0.3 } } }
+```
+
+- `glow` swells the light's key glow on the music's kicks.
+- `bar` draws a thin level bar along the bottom edge that follows the mix loudness.
+- `pulse` blooms a soft ring at the centre on the music's beats and hits.
+
+Each takes `true` or `{bus, series, strength}`: `bus` is `mix`, `music` or `voice`; `series` is `loud`, `sub`, `low`, `mid`, `high`, `air` or `onset`; `strength` runs from 0 to 1. The sound stage measures the mix once into `AUDIO_FEATURES.json`, and both renderers read those numbers, so they draw the same frames. The camera never reacts.
+
 ## Delivery-ready loudness
 
 Every finished video is mastered to −14 LUFS with a −1 dBTP ceiling, the level YouTube, TikTok and Instagram expect. The voice stays clearly above the music.
