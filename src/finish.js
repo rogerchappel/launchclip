@@ -1770,6 +1770,15 @@ export async function repairLayout(ctx, layout, { resolveOptions, infos = async 
       changes.push(...stuck.map((id) => `face: tooling ${id} dropped: it still covered the presenter's face and no move cleared it (plan it beside the presenter)`));
     }
   }
+  // Captions that lose contrast on the background (a fixed caption colour on a
+  // light background) get a legibility plate on every line, in the preset's own
+  // plate style (captionLegiblePlate), instead of failing the plan over one colour.
+  const contrast = errors.find((finding) => finding.rule === "background-contrast" && finding.ids?.includes("captions"));
+  const captions = contrast ? captionsOverlay(storyboard) : null;
+  if (captions && captions.plates !== "all") {
+    storyboard = { ...storyboard, overlays: storyboard.overlays.map((entry) => (entry === captions ? { ...entry, plates: "all" } : entry)) };
+    changes.push(`layout: tooling plated every caption line: ${String(contrast.detail ?? "").split(";")[0]}`);
+  }
   const lines = errors.map((finding) => `layout: ${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail ?? ""}`.trim());
   const resolve = (candidate) => resolveStory(candidate, resolveOptions());
   // A clash the last pass's fix did not clear is settled a step further each pass: the card moves, then the
@@ -2565,8 +2574,9 @@ async function applyCaptionPlates(ctx) {
   const saved = await readOptionalJson(path.join(ctx.project, PATHS.captionLegibility));
   const ids = new Set(captionLines(probe, chunks).lines.map((line) => line.id));
   const measured = (Array.isArray(saved?.measured_plates) ? saved.measured_plates : []).filter((id) => ids.has(id));
-  const plates = mergePlates(predicted, measured);
-  ctx.captionPlates = plates;
+  // "all" (repairLayout's contrast repair, or the author's) plates every line; predictions only add to a list.
+  const plates = overlay.plates === "all" ? "all" : mergePlates(predicted, measured);
+  ctx.captionPlates = plates === "all" ? [...ids].sort() : plates;
   ctx.captionPredicted = predicted;
   ctx.copy = { ...ctx.copy, overlays: ctx.copy.overlays.map((entry) => (entry === overlay ? { ...entry, plates } : entry)) };
 }
