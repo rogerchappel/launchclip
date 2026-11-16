@@ -45,12 +45,10 @@ for (const [name, mod] of Object.entries(VFX_MODULES)) {
   });
 
   test(`${name}: the same seed twice draws the same bytes, another seed differs`, () => {
-    const t = timesFor(mod)[2];
-    const a = frameHash(mod, resolveOptions(mod.meta, {seed: 3}), t, null);
-    const b = frameHash(mod, resolveOptions(mod.meta, {seed: 3}), t, null);
-    const c = frameHash(mod, resolveOptions(mod.meta, {seed: 4}), t, null);
-    assert.equal(a, b);
-    if (mod.create) assert.notEqual(a, c);
+    const hashes = timesFor(mod).map(t => [3, 3, 4].map(seed => frameHash(mod, resolveOptions(mod.meta, {seed}), t, null)));
+    for (const [a, b] of hashes) assert.equal(a, b);
+    // some frames hold still between beats; another seed shows somewhere in its life
+    if (mod.create) assert.ok(hashes.some(([a, , c]) => a !== c), `${name}: seed 4 draws like seed 3`);
   });
 }
 

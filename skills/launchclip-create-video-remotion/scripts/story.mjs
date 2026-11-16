@@ -24,7 +24,7 @@ export const STORY_CAMERA_LAYOUTS = ["row", "column", "grid", "path", "auto"];
 // story.motion.grammar presets (kit/core/grammar.mjs GRAMMAR_NAMES).
 // What a scene hit's moment asks the sound score for (kit/core/sound/options.mjs SCORE_MOMENTS; kept in step by test/sound_score.test.js).
 /** Effects a scene's vfx cues may name (kit/core/vfx/catalog.mjs VFX_EFFECT_NAMES, kept here so this file stays import-free). */
-export const STORY_VFX_EFFECTS = ["hit-spark", "crit-hit", "impact-frame", "ground-slam", "small-explosion", "smoke-bomb", "firework-burst", "poof", "sunburst", "collect-burst"];
+export const STORY_VFX_EFFECTS = ["hit-spark", "crit-hit", "impact-frame", "ground-slam", "small-explosion", "smoke-bomb", "firework-burst", "poof", "sunburst", "collect-burst", "combo-counter", "crit-number", "level-up", "achievement", "confetti", "firework-rocket"];
 export const STORY_MOMENTS = ["letdown", "promise", "reveal", "impact", "crystallise", "wonder", "miss", "resolve"];
 export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "documentary", "cinematic"];
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
@@ -560,6 +560,11 @@ export function validateStory(story, { modules, moduleParams } = {}) {
 
   // motion.grammar and camera (kit/core/grammar.mjs, kit/core/camera-world.mjs).
   validateMotion(story.motion, err);
+  // vfx: the story's VFX layer settings (kit/core/vfx/plan.mjs). words "pixel" keeps a hit's words in its pixel font.
+  if (story.vfx !== undefined) {
+    if (!isObject(story.vfx)) err("vfx must be an object");
+    else if (story.vfx.words !== undefined && story.vfx.words !== "brand" && story.vfx.words !== "pixel") err('vfx.words must be "brand" (a hit\'s words in the brand\'s display face, the default) or "pixel"');
+  }
   const camera = validateCamera(story.camera, { err, warn, lane: story.lane });
   // world: the video-wide world for world scenes, usually from the style. Its
   // shape is checked here; kinds, times and props when a world scene resolves
@@ -756,6 +761,8 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (cue.angle !== undefined && !(typeof cue.angle === "number" && cue.angle >= -180 && cue.angle <= 180)) err(`${cuePath}.angle must be degrees between -180 and 180`);
         if (cue.light !== undefined && !(typeof cue.light === "number" && cue.light >= 0 && cue.light <= 2)) err(`${cuePath}.light must be a number between 0 and 2`);
         if (cue.sfx !== undefined && !nonEmpty(cue.sfx)) err(`${cuePath}.sfx must be "auto" (the effect's paired sound, the default), "none" or a sound family`);
+        // A hit's words (kit/core/vfx/catalog.mjs VFX_WORDS): short, so they read in one glance.
+        for (const key of ["text", "label", "title"]) if (cue[key] !== undefined && !(nonEmpty(cue[key]) && cue[key].length <= 24)) err(`${cuePath}.${key} must be a word or two (1–24 characters)`);
       }
     }
     // Shot states (kit/core/shot-states.mjs checks the set and the module side).

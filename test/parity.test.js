@@ -54,6 +54,8 @@ const STORY_PARITY = Object.freeze([
   {id: 'world-travel-9x16', times: [1.5, 3.5, 5.5]},
   // The VFX layer (kit/core/vfx): crit-hit, hit-spark, ground-slam, collect-burst, poof and firework-burst over real scenes.
   {id: 'vfx-impacts-9x16', times: [0.93, 2.33, 3.3, 3.6, 4.3, 5.4]},
+  // Celebration hits with brand-font words: level-up, firework-rocket, crit-number, combo-counter, confetti, achievement.
+  {id: 'vfx-hits-9x16', times: [1.3, 2.4, 3.25, 4.4, 5.2]},
   // Interface scenes on signal-ui (the CI smoke's times, scripts/parity-ci.mjs).
   {id: 'ui-parity-9x16', times: [...CI_UI_STORY.times]}
 ]);

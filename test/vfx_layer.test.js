@@ -10,7 +10,7 @@ import vm from 'node:vm';
 import {STORY_VFX_EFFECTS, resolveStory, validateStory} from '@launchclip/core/story.mjs';
 import {VFX_EFFECTS, VFX_EFFECT_NAMES, VFX_MODULES} from '@launchclip/core/vfx/catalog.mjs';
 import {rampOf, vfxPlan, vfxSounds} from '@launchclip/core/vfx/plan.mjs';
-import {paintVfx} from '@launchclip/core/vfx/paint.mjs';
+import {paintVfx, vfxWordAt} from '@launchclip/core/vfx/paint.mjs';
 import {VFX_RUNTIME} from '@launchclip/core/vfx/runtime.mjs';
 import {SFX_FAMILY_NAMES} from '@launchclip/core/sound/options.mjs';
 import {compileStoryToHyperFrames} from '../kit/hyperframes/story-compiler.mjs';
@@ -87,7 +87,8 @@ test('the HyperFrames page carries both canvases, the runtime and the proxy twee
   assert.match(html, /<canvas id="lc-vfx-color"[^>]*width="180" height="320"[^>]*z-index:78500/);
   assert.match(html, /<canvas id="lc-vfx-light"[^>]*mix-blend-mode:plus-lighter/);
   assert.ok(html.includes('window.lcVfx = window.lcVfx ||'));
-  assert.match(html, /window\.lcVfx\.paint\(color, light, plan, clock\.t\)/);
+  assert.match(html, /window\.lcVfx\.paint\(color, light, plan, t\); window\.lcVfx\.words\(words, plan, t\)/);
+  assert.match(html, /onUpdate: function \(\) \{ paint\(clock\.t\); \}/);
   const plain = structuredClone(STORY);
   for (const scene of plain.scenes) delete scene.vfx;
   const {html: none} = await compileStoryToHyperFrames(resolveStory(plain, {words: WORDS}), {write: false, sourceDir: new URL('.', EXAMPLE).pathname});
@@ -105,4 +106,37 @@ test('each cue plays its paired sound on its peak; sfx none is silent and a name
   const {cues} = bindCues(story, {models: {}});
   assert.ok(cues.some(cue => cue.cue === 'snap' && cue.at === 2.3 && cue.event === 'vfx hit-spark'));
   assert.ok(cues.some(cue => cue.cue === 'thud' && cue.at === 3.2));
+});
+
+const HITS = new URL('../examples/story/vfx-hits-9x16/', import.meta.url);
+const hitsStory = () => resolveStory(JSON.parse(readFileSync(new URL('storyboard.json', HITS), 'utf8')), {words: JSON.parse(readFileSync(new URL('NARRATION.json', HITS), 'utf8'))});
+
+test('celebration hits draw their words as brand text, moved alike in both renderers; vfx.words "pixel" keeps the pixel font', async () => {
+  const plan = vfxPlan(hitsStory());
+  const crit = plan.cues.find(cue => cue.effect === 'crit-number');
+  assert.deepEqual([crit.words, crit.opts], [false, {text: '4×', label: 'FASTER'}]);
+  assert.deepEqual(plan.cues.find(cue => cue.effect === 'combo-counter').opts, {count: 3, label: 'CHANGES'});
+  assert.deepEqual(plan.words.map(word => word.text), ['SHIP IT', '4×', 'FASTER', 'x3 CHANGES', 'MILESTONE', '12 MIN BUILDS']);
+  assert.match(plan.words[0].font, /Anton/);
+  const four = plan.words[1];
+  assert.equal(vfxWordAt(four, four.start - 0.01, 6).opacity, '0', 'not before its effect');
+  assert.match(vfxWordAt(four, four.start, 6).transform, /scale\(1\.7\)/, 'slams in big');
+  assert.deepEqual(vfxWordAt(four, four.start + 0.6, 6), {opacity: '1', transform: 'translate(-50%, -50%) translate(0px, 0px) scale(1)'});
+  assert.equal(vfxWordAt(four, four.start + 1.2, 6).opacity, '0', 'gone with its pop');
+  // the runtime's word painter writes exactly vfxWordAt's styles
+  const sandbox = {window: {}};
+  vm.runInNewContext(VFX_RUNTIME, sandbox);
+  for (const t of [0.5, 2.3, 2.6, 3.2, 4.7, 5.5]) {
+    const nodes = plan.words.map(() => ({style: {}}));
+    sandbox.window.lcVfx.words(nodes, plan, t);
+    plan.words.forEach((word, i) => assert.deepEqual({...nodes[i].style}, vfxWordAt(word, t, plan.grid), `${word.text} at ${t}`));
+  }
+  const {html} = await compileStoryToHyperFrames(hitsStory(), {write: false, sourceDir: new URL('.', HITS).pathname});
+  assert.match(html, /<div id="lc-vfx-word-1" data-launchclip-vfx="word"[^>]*font-family:&#39;Anton&#39;[^>]*>4×<\/div>/);
+  const pixel = hitsStory();
+  pixel.vfx = {words: 'pixel'};
+  const pixelPlan = vfxPlan(pixel);
+  assert.deepEqual(pixelPlan.words, []);
+  assert.ok(pixelPlan.cues.every(cue => cue.words === undefined));
+  assert.match(validateStory({...pixel, vfx: {words: 'comic'}}).errors.join('\n'), /vfx\.words must be/);
 });

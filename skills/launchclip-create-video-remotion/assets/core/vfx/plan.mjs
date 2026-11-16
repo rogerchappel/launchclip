@@ -7,7 +7,8 @@
 // are that small and scaled up nearest-neighbour (the `pixel` render; the
 // `smooth` painter is phase 3 of the RFC).
 import {hashUnit} from '../fluid-motion.mjs';
-import {VFX_EFFECTS, VFX_MODULES} from './catalog.mjs';
+import {brandFontStacks} from '../fonts.mjs';
+import {VFX_EFFECTS, VFX_MODULES, VFX_WORDS} from './catalog.mjs';
 
 /** Stacking: over the scenes and the light's over group, under the dot wipes, light sweeps, frame and captions. */
 export const VFX_Z = Object.freeze({hyperframes: 78500, remotion: 47});
@@ -32,16 +33,22 @@ export function rampOf(color, bg = '#000000') {
 /**
  * The plan for a resolved story (every cue's `at` in story seconds), or null
  * when no scene has cues: {aw, ah, grid, cues: [{effect, start, end, x, y,
- * seed, palette?, flip?, angle?, light?}]}, x and y in art pixels, start and
- * end in story seconds (a one-shot ends after its duration, a loop with its
- * scene).
+ * seed, palette?, flip?, angle?, light?, opts?, words?}], words: [...]}, x
+ * and y in art pixels, start and end in story seconds (a one-shot ends after
+ * its duration, a loop with its scene). A hit with words (VFX_WORDS) gets its
+ * effect options in `opts`; unless the story keeps pixel words (vfx.words
+ * "pixel"), `words: false` tells the painter to leave the pixel word out and
+ * each of its lines joins `words`: {text, x, y, size (art pixels), start,
+ * enter, exit, in, out, shake?, seed, color, shadow, font}.
  */
 export function vfxPlan(story) {
   const width = Number(story?.format?.width), height = Number(story?.format?.height);
   const grid = Math.max(1, Math.round(Math.min(width, height) / VFX_ART_SHORT));
   const aw = Math.ceil(width / grid), ah = Math.ceil(height / grid);
   const colors = story?.brand?.colors ?? {};
-  const cues = [];
+  const pixelWords = story?.vfx?.words === 'pixel';
+  const font = brandFontStacks(story?.brand).display;
+  const cues = [], words = [];
   for (const scene of Array.isArray(story?.scenes) ? story.scenes : []) {
     (Array.isArray(scene?.vfx) ? scene.vfx : []).forEach((cue, index) => {
       const info = VFX_EFFECTS[cue.effect], mod = VFX_MODULES[cue.effect];
@@ -64,10 +71,24 @@ export function vfxPlan(story) {
       if (cue.flip) entry.flip = true;
       if (cue.angle) entry.angle = r3((cue.angle * Math.PI) / 180);
       if (cue.light !== undefined) entry.light = cue.light;
+      const spec = VFX_WORDS[cue.effect];
+      if (spec) {
+        const fields = Object.fromEntries(Object.entries(spec.fields).map(([key, fallback]) => [key, typeof cue[key] === 'string' && cue[key] ? cue[key] : fallback]));
+        entry.opts = spec.options(fields);
+        if (!pixelWords) {
+          entry.words = false;
+          const ramp = entry.palette ?? mod.meta.options.palette, fill = ramp[Math.round((ramp.length - 1) * 0.85)];
+          for (const line of spec.lines) {
+            const word = {text: line.text.replace(/\{(\w+)\}/g, (_, key) => fields[key]), x: entry.x + line.dx, y: entry.y + line.dy, size: line.size, start, enter: line.enter, exit: line.exit, in: line.in, out: line.out, seed: entry.seed, color: fill, shadow: ramp[0], font};
+            if (line.shake) word.shake = line.shake;
+            words.push(word);
+          }
+        }
+      }
       cues.push(entry);
     });
   }
-  return cues.length ? {aw, ah, grid, cues} : null;
+  return cues.length ? {aw, ah, grid, cues, words} : null;
 }
 
 /** Sound cues for a resolved story's VFX: [{scene_id, at, cue}] at each effect's peak (sfx "auto": its paired family; "none": silent). */
