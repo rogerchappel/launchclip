@@ -39,6 +39,26 @@ import * as mHaste from './vendor/fx/status/haste.js';
 import * as mSlowed from './vendor/fx/status/slowed.js';
 import * as mFrozen from './vendor/fx/status/frozen.js';
 import * as mBurning from './vendor/fx/status/burning.js';
+import * as bBluntHit from './vendor/fx/impacts/blunt-hit.js';
+import * as bPlasmaExplosion from './vendor/fx/explosions/plasma-explosion.js';
+import * as bImplosion from './vendor/fx/explosions/implosion.js';
+import * as bSparkArc from './vendor/fx/lightning/spark-arc.js';
+import * as bZapHit from './vendor/fx/lightning/zap-hit.js';
+import * as bBallLightning from './vendor/fx/lightning/ball-lightning.js';
+import * as bHolyPillar from './vendor/fx/holy/holy-pillar.js';
+import * as bFeatherBurst from './vendor/fx/holy/feather-burst.js';
+import * as bHealAoe from './vendor/fx/holy/heal-aoe.js';
+import * as bManaBurst from './vendor/fx/arcane/mana-burst.js';
+import * as bStarFall from './vendor/fx/arcane/star-fall.js';
+import * as bChestOpen from './vendor/fx/pickups/chest-open.js';
+import * as bPowerStar from './vendor/fx/pickups/power-star.js';
+import * as bKeyGlint from './vendor/fx/pickups/key-glint.js';
+import * as bGemSpin from './vendor/fx/pickups/gem-spin.js';
+import * as bQuake from './vendor/fx/nature/quake.js';
+import * as bEarthSpike from './vendor/fx/nature/earth-spike.js';
+import * as bSpawnPortal from './vendor/fx/spawn/spawn-portal.js';
+import * as bCoinDrop from './vendor/fx/spawn/coin-drop.js';
+import * as bSplash from './vendor/fx/water/splash.js';
 import * as wAurora from './vendor/fx/weather/aurora.js';
 import * as wBlizzard from './vendor/fx/weather/blizzard.js';
 import * as wCherryBlossoms from './vendor/fx/weather/cherry-blossoms.js';
@@ -83,7 +103,27 @@ export const VFX_MODULES = Object.freeze({
   haste: mHaste,
   slowed: mSlowed,
   frozen: mFrozen,
-  burning: mBurning
+  burning: mBurning,
+  'blunt-hit': bBluntHit,
+  'plasma-explosion': bPlasmaExplosion,
+  implosion: bImplosion,
+  'spark-arc': bSparkArc,
+  'zap-hit': bZapHit,
+  'ball-lightning': bBallLightning,
+  'holy-pillar': bHolyPillar,
+  'feather-burst': bFeatherBurst,
+  'heal-aoe': bHealAoe,
+  'mana-burst': bManaBurst,
+  'star-fall': bStarFall,
+  'chest-open': bChestOpen,
+  'power-star': bPowerStar,
+  'key-glint': bKeyGlint,
+  'gem-spin': bGemSpin,
+  quake: bQuake,
+  'earth-spike': bEarthSpike,
+  'spawn-portal': bSpawnPortal,
+  'coin-drop': bCoinDrop,
+  splash: bSplash
 });
 
 export const VFX_EFFECT_NAMES = Object.freeze(Object.keys(VFX_MODULES));
@@ -133,7 +173,27 @@ export const VFX_EFFECTS = Object.freeze({
   haste: Object.freeze({use: 'a card or character sped up', sfx: 'whoosh', peak: 0.483}),
   slowed: Object.freeze({use: 'a card or character dragging: slow, stuck', sfx: 'tape-stop', peak: 1.633}),
   frozen: Object.freeze({use: 'a card or character frozen: stalled, on ice', sfx: 'shimmer', peak: 0}),
-  burning: Object.freeze({use: 'a card or character on fire: burning money, burnout', sfx: 'riser', peak: 0.6})
+  burning: Object.freeze({use: 'a card or character on fire: burning money, burnout', sfx: 'riser', peak: 0.6}),
+  'blunt-hit': Object.freeze({use: 'a soft, heavy thud: a weight dropped, a bad number landing', sfx: 'thud', peak: 0}),
+  'plasma-explosion': Object.freeze({use: 'a clean energy blast with no smoke: a breakthrough, a power-up', sfx: 'impact', peak: 0}),
+  implosion: Object.freeze({use: 'everything sucked into one point, then a pop: a collapse, a squeeze', sfx: 'subdrop', peak: 1.033}),
+  'spark-arc': Object.freeze({use: 'a live arc between two points: a connection, a current', sfx: 'snap', peak: 0}),
+  'zap-hit': Object.freeze({use: 'a contact zap: a shock, a bug, a short circuit', sfx: 'snap', peak: 0.067}),
+  'ball-lightning': Object.freeze({use: 'a wandering ball of energy: an idea, a live charge', sfx: 'shimmer', peak: 2.083}),
+  'holy-pillar': Object.freeze({use: 'a spotlight from above on the one that matters', sfx: 'shimmer', peak: 0.667}),
+  'feather-burst': Object.freeze({use: 'a puff of feathers: something light, a soft landing', sfx: 'pop', peak: 0}),
+  'heal-aoe': Object.freeze({use: 'a healing ring across the floor: a fix, a recovery', sfx: 'chime', peak: 0.3}),
+  'mana-burst': Object.freeze({use: 'energy gathering and blowing out: a charge, a release', sfx: 'riser', peak: 0.233}),
+  'star-fall': Object.freeze({use: 'stars falling over an area: a shower of wins', sfx: 'sparkle', peak: 1.033}),
+  'chest-open': Object.freeze({use: 'a chest kicking open with coins: a payout, a reward', sfx: 'cash', peak: 0.817}),
+  'power-star': Object.freeze({use: 'a power star: the bonus, the upgrade', sfx: 'sparkle', peak: 0.4}),
+  'key-glint': Object.freeze({use: 'a key with a glint: the answer, access', sfx: 'ping', peak: 0.967}),
+  'gem-spin': Object.freeze({use: 'a spinning gem: the valuable one, the premium tier', sfx: 'sparkle', peak: 0.6}),
+  quake: Object.freeze({use: 'the ground jolting and splitting: a shake-up, a market shock', sfx: 'thud', peak: 0.067}),
+  'earth-spike': Object.freeze({use: 'a stone spike ramming up from the floor: a sudden spike', sfx: 'impact', peak: 0.35}),
+  'spawn-portal': Object.freeze({use: 'a rift opening and closing: something new arriving', sfx: 'whoosh', peak: 1.017}),
+  'coin-drop': Object.freeze({use: 'coins bursting out and settling: earnings, a drop of cash', sfx: 'cash', peak: 0}),
+  splash: Object.freeze({use: 'a drop into water: a launch into a market, a first step', sfx: 'pop', peak: 0.167})
 });
 
 /**
