@@ -225,7 +225,8 @@ test("frame-pure layer states match GSAP seeking the same tweens", () => {
         const state = layerStateAt(t, list, getEase);
         for (const tw of list) {
           const expected = target[tw.prop];
-          const actual = tw.prop === "iris" && state.iris === null ? tw.to : state[tw.prop];
+          // A landed iris or mask is no clip (null): GSAP holds its last value.
+          const actual = (tw.prop === "iris" || tw.prop === "mask") && state[tw.prop] === null ? tw.to : state[tw.prop];
           assert.ok(Math.abs(actual - expected) < 1e-6, `${type} ${role} ${tw.prop} at ${t}: ${actual} vs GSAP ${expected}`);
         }
       }
