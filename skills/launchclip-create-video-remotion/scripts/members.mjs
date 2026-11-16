@@ -24,9 +24,13 @@
 import {GRAPHIC_PARAM, cardHeight, fitGraphic, graphicNodes, graphicSpec, graphicWidth} from './graphic.mjs';
 import {r2} from './catalog-h-base.mjs';
 import {markMember} from './member-mark.mjs';
+import {toneMember} from './member-tone.mjs';
 
 // One line per member module; each member session appends its own.
-const LIST = [markMember];
+const LIST = [
+  toneMember,
+  markMember
+];
 
 // Not frozen: a test may register a stand-in member.
 export const MEMBERS = Object.fromEntries(LIST.map(m => [m.id, m]));
