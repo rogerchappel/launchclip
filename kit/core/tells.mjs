@@ -27,6 +27,7 @@ import { FONT_ROLE_DEFAULTS } from './fonts.mjs';
 import { CAPTION_ECHO_MODULES, sceneTextWords } from './captions.mjs';
 import { resolveGrammar } from './grammar.mjs';
 import { textWidth } from './catalog-b-base.mjs';
+import { moduleVariants } from './modules.mjs';
 
 // Thresholds. Proposals from the RFC, calibrated on examples/story/* (RFC §1
 // "Calibration" lists every change).
@@ -43,6 +44,9 @@ export const TELLS = Object.freeze({
   stragglerLines: 3, organicPoints: 12, pulseShare: 0.02,
   heroMetrics: 1, signatureScenes: 3,
   chipBoxes: 2, headlineEcho: 0.5, headlineLetters: 4,
+  // boxed-on-flat with footage in the story: one filled box of this share of
+  // the frame is enough; a split-screen panel its text fills less of is bare.
+  boxArea: 0.04, splitFill: 0.5,
   // Frame rules (frameTells): shares of the sampled frame, colour distances in RGB.
   accentShare: 0.1, accentDistance: 48, rasterDim: 0.85, edgeStep: 60, blackStep: 12, edgeSides: 3,
   // Text over footage (thin-text-on-footage): the share of edge pixels (a
@@ -93,7 +97,7 @@ export const TELL_REGISTRY = Object.freeze([
   tell('card-grid', 'slop', 'warning', 'plan', 'cardGrid', 'Vary the sizes so one leads, or use item-list.', 'impeccable, unslop'),
   tell('icon-tile', 'slop', 'warning', 'plan', 'iconTile', 'The icon beside the text, or none.', 'impeccable'),
   // The pilot's cheap modules (a 9:16 explainer with the brand's own footage).
-  tell('boxed-on-flat', 'slop', 'error', 'plan', 'boxedOnFlat', 'Free type over the footage or a photo: before-after for one thing in two states, media-compare for two options with footage, item-list over footage, media-grid photo-backed tiles, photo-scene lines; or the same module on a scene backdrop.', 'LaunchClip pilot review'),
+  tell('boxed-on-flat', 'slop', 'error', 'plan', 'boxedOnFlat', 'Free type over the footage or a photo (a split-screen only when its text fills the panel; else full-bleed footage with the card on it): before-after for one thing in two states, media-compare for two options with footage, item-list over footage, media-grid photo-backed tiles, photo-scene lines; or the same module on a scene backdrop.', 'LaunchClip pilot review'),
   tell('stock-icon', 'slop', 'warning', 'plan', 'stockIcon', 'Show the thing itself (the footage, a photo, an object), or no icon.', 'LaunchClip pilot review'),
   tell('caption-echoes-headline', 'slop', 'warning', 'plan', 'captionEchoesHeadline', 'Make the on-screen text add what the narration does not say (the figure, the name, the trade-off), or drop the headline and let the caption carry the line.', 'LaunchClip pilot review'),
   tell('emoji-icons', 'slop', 'error', 'plan', 'emojiIcons', 'One icon set (catalog-h-icons) or none.', 'unslop, impeccable'),
@@ -195,9 +199,28 @@ const EMOJI = /\p{Extended_Pictographic}/u;
 const AI_STOCK = /\b(robots?|android|cyborg|glowing brain|brain|neural|circuit(?:s| board| lines)?|hologram|matrix code)\b/i;
 const PROMPT_KEY = /prompt|query|search/i;
 // Real interfaces rebuilt on screen, and diagrams and charts: their boxes are the information.
-const REAL_UI = /social|tooltip|window|terminal|repo-|commit|diff|device|evidence|tokenizer|calendar|month|date-|heatmap|keyboard|ui-|table|code|chat|notification|browser|person-id|subscribe|watermark|chart|plot|map|diagram|graph|clock|odometer|grid|multiples|cloud|ticker|archive/;
+const REAL_UI = /social|tooltip|window|terminal|repo-|commit|diff|device|evidence|tokenizer|calendar|month|date-|heatmap|keyboard|ui-|code|chat|notification|browser|person-id|subscribe|watermark|chart|plot|map|diagram|graph|clock|odometer|grid|multiples|cloud|ticker|archive/;
 const wordedBox = (node) => viewTexts(node).some((t) => words(t.text).filter((w) => /\p{L}{2,}/u.test(w)).length >= 2);
 const isFill = (v) => typeof v === 'string' && v.trim() && !/^(transparent|none)$/i.test(v.trim()) && !/^#[0-9a-f]{6}00$/i.test(v.trim());
+// Footage in the story: a scene that shows a shot, a footage backdrop or plate, or a base recording.
+const FOOTAGE_MODULE = /^(clip|photo-scene|before-after|split-screen|landscape-card|picture-in-picture)$|^media-/;
+const isFootage = (plate) => Boolean(plate) && typeof plate === 'object' && ['video', 'image', 'shot'].includes(plate.kind);
+const hasFootage = (input) => input.footage === true || Boolean(input.story?.base) || isFootage(input.story?.plate) || input.scenes.some((s) => FOOTAGE_MODULE.test(s.module) || isFootage(s.scene?.backdrop) || isFootage(s.scene?.plate));
+// The repairs themselves, and closing cards (the planner puts those on footage).
+const UNBOXED_MODULES = new Set(['item-list', 'end-card', 'cta', 'brand-lockup']);
+// Unboxed variant names a card or table module may offer (moduleVariants()); the first the module has is the repair.
+export const UNBOXED_VARIANTS = Object.freeze(['open', 'free', 'bare', 'plain']);
+const unboxedVariant = (module) => (moduleVariants()[module] ?? []).find((name) => UNBOXED_VARIANTS.includes(name)) ?? null;
+const LIST_MODULE = /list|icon-row|checklist|steps/;
+const COMPARE_MODULE = /compare|table|versus/;
+/** boxed-on-flat's repair for a module → {backdrop: true, modules: [repair modules], variant?: an unboxed variant}. */
+export function boxRepair(module) {
+  if (module === 'split-screen') return { backdrop: false, modules: ['clip', 'landscape-card'] };
+  const variant = unboxedVariant(module);
+  const modules = LIST_MODULE.test(module) ? ['item-list', 'media-grid'] : COMPARE_MODULE.test(module) ? ['media-compare', 'before-after'] : ['photo-scene'];
+  return { backdrop: true, modules, ...(variant ? { variant } : {}) };
+}
+const repairLine = (r) => !r.backdrop ? `play the footage full-bleed (${r.modules.join(' with callouts, or ')}), or give the panel enough text to fill it` : `put it on a footage backdrop (scenes[i].backdrop {kind: "video", params: {src: "assets/…"}} or {kind: "shot", shows}), or use ${r.modules.join(' or ')}${r.variant ? `, or params.variant "${r.variant}" (unboxed)` : ''}`;
 const isBox = (node) => Boolean(parseFloat(node.style?.borderRadius) || /%/.test(String(node.style?.borderRadius ?? ''))) && (isFill(node.style?.background) || isFill(node.style?.backgroundColor) || /\b(solid|dashed)\b/.test(String(node.style?.border ?? '')));
 // Icons that stand for any topic: on a hero card they read as a placeholder.
 const STOCK_ICONS = new Set(['layers', 'box', 'boxes', 'sparkle', 'sparkles', 'star', 'lightbulb', 'rocket', 'bolt', 'zap', 'check', 'check-circle', 'info', 'grid', 'layout', 'target', 'diamond', 'gear', 'puzzle', 'trophy', 'flag', 'help']);
@@ -417,15 +440,34 @@ const DETECTORS = {
     }
     return null;
   }),
-  boxedOnFlat: (input) => perScene(input, (s) => {
-    if (!s.view || REAL_UI.test(s.module) || s.scene?.backdrop || input.scenes.some((o) => o !== s && overlaps(o, s) && PICTURED.test(o.module))) return null;
-    const frame = Number(input.story?.format?.width) || 1080;
-    for (const { node } of viewNodes(s.view)) {
-      const boxes = (node.children ?? []).filter((k) => k && typeof k === 'object' && isBox(k) && wordedBox(k) && !(Number(k.style?.width) >= frame * 0.9));
-      if (boxes.length >= TELLS.chipBoxes) return `${s.id} (${s.module}) sets ${boxes.length} boxed text panels side by side on a flat plate`;
+  boxedOnFlat(input) {
+    const frame = Number(input.story?.format?.width) || 1080, height = Number(input.story?.format?.height) || 1920;
+    // With footage to hand, one filled box (or a split's bare panel) is enough; without, only a set of chips side by side.
+    const footage = input.story?.lane !== 'footage-led' && hasFootage(input);
+    const out = [];
+    for (const s of input.scenes) {
+      if (REAL_UI.test(s.module) || UNBOXED_MODULES.has(s.module) || isFootage(s.scene?.backdrop) || isFootage(s.scene?.plate) || input.scenes.some((o) => o !== s && overlaps(o, s) && PICTURED.test(o.module) && o.module !== 'split-screen')) continue;
+      const hit = (detail, single) => out.push({ at: s.start, ids: [s.id], detail: single ? `${detail}; ${repairLine(boxRepair(s.module))}` : detail, ...(single ? { repair: boxRepair(s.module) } : {}) });
+      if (s.module === 'split-screen') {
+        const media = s.model?.content?.windows?.[0]?.rect, texts = (s.model?.content?.texts ?? []).map((t) => t.box).filter(Boolean);
+        const panel = media ? (media.width >= frame * 0.99 ? height - media.height : height) : 0;
+        const used = texts.length ? Math.max(...texts.map((box) => box.y + box.height)) - Math.min(...texts.map((box) => box.y)) : 0;
+        if (panel > 0 && used / panel < TELLS.splitFill) hit(`${s.id} (split-screen) runs footage over a flat panel its text fills ${Math.round((used / panel) * 100)}% of`, true);
+        continue;
+      }
+      if (!s.view || PICTURED.test(s.module)) continue;
+      let found = null;
+      for (const { node } of viewNodes(s.view)) {
+        const boxes = (node.children ?? []).filter((k) => k && typeof k === 'object' && isBox(k) && wordedBox(k) && !(Number(k.style?.width) >= frame * 0.9));
+        if (boxes.length >= TELLS.chipBoxes) { found = `${s.id} (${s.module}) sets ${boxes.length} boxed text panels side by side on a flat plate`; break; }
+      }
+      if (found) { hit(found, footage); continue; }
+      if (!footage || !viewTexts(s.view).length) continue;
+      const big = viewNodes(s.view).some(({ node }) => isBox(node) && Number(node.style?.width) * Number(node.style?.height) >= TELLS.boxArea * frame * height);
+      if (s.model?.surface === 'card' || big) hit(`${s.id} (${s.module}) sets its text in a filled box on a flat plate while the story has footage`, true);
     }
-    return null;
-  }),
+    return out;
+  },
   stockIcon: (input) => perScene(input, (s) => {
     const icon = s.scene?.params?.icon;
     if (!HERO_ICON.has(s.module) || !STOCK_ICONS.has(icon)) return null;
@@ -508,7 +550,7 @@ export function planTells(input) {
   for (const t of PLAN_TELLS) {
     let hits = [];
     try { hits = DETECTORS[t.detector](data) ?? []; } catch { hits = []; }
-    for (const hit of hits) findings.push({ rule: t.id, severity: t.severity, at: hit.at ?? 0, ids: hit.ids ?? [], detail: `${hit.detail}; ${t.fix.charAt(0).toLowerCase()}${t.fix.slice(1)}`, added: t.added });
+    for (const hit of hits) findings.push({ rule: t.id, severity: t.severity, at: hit.at ?? 0, ids: hit.ids ?? [], detail: hit.repair ? hit.detail : `${hit.detail}; ${t.fix.charAt(0).toLowerCase()}${t.fix.slice(1)}`, ...(hit.repair ? { repair: hit.repair } : {}), added: t.added });
   }
   return findings;
 }
@@ -619,7 +661,7 @@ export function frameTells(input) {
   for (const t of FRAME_TELLS) {
     let hits = [];
     try { hits = FRAME_DETECTORS[t.detector](data) ?? []; } catch { hits = []; }
-    for (const hit of hits) findings.push({ rule: t.id, severity: t.severity, at: hit.at ?? 0, ids: hit.ids ?? [], detail: `${hit.detail}; ${t.fix.charAt(0).toLowerCase()}${t.fix.slice(1)}`, added: t.added });
+    for (const hit of hits) findings.push({ rule: t.id, severity: t.severity, at: hit.at ?? 0, ids: hit.ids ?? [], detail: hit.repair ? hit.detail : `${hit.detail}; ${t.fix.charAt(0).toLowerCase()}${t.fix.slice(1)}`, ...(hit.repair ? { repair: hit.repair } : {}), added: t.added });
   }
   return findings;
 }
