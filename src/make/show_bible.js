@@ -311,7 +311,9 @@ export async function makeBible(options = {}, hooks = {}) {
     cast: { style, characters: cast.entries },
     world: { kind: design.world.kind, time: design.world.time, ...(design.props?.length ? { props: design.props.map((id) => biblePropEntry(id, options.script)), shows: [...design.props] } : {}), ...(design.sets.length ? { sets: design.sets } : {}) },
     style: { drawing_style: style },
-    ...(design.rules.length ? { rules: design.rules } : {})
+    ...(design.rules.length ? { rules: design.rules } : {}),
+    // The series engine the writers' room checked, with the episodes it pitched.
+    ...(options.script?.engine ? { engine: options.script.engine } : {})
   };
   await writeFile(path.join(project, BIBLE_FILE), `${JSON.stringify(draft, null, 2)}\n`);
   const frozen = await freezeBible(project, { style, force: true, pin: false, ...(options.pack ? { pack: options.pack } : {}), ...(options.seed != null ? { seed: options.seed } : {}), ...(options.chromium ? { chromium: options.chromium } : {}), ...(options.sheetConcurrency ? { sheetConcurrency: options.sheetConcurrency } : {}) }, hooks);
