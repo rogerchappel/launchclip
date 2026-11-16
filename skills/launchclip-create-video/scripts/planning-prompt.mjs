@@ -676,6 +676,19 @@ export function guardrailLines() {
 
 // Ambient motion (kit/core/ambient.mjs): what the planner may set and what
 // the default already does.
+// The art direction (docs/VIDEO_TELLS_RFC.md §3): written before any scene,
+// checked by validateStory and the tells.
+export function artDirectionLines() {
+  return [
+    'Write the direction block first, before any scene: direction {product: what the subject is and who the video is for, one sentence; character: two or three concrete words ("exact, a little warm"); world: the place or material the subject belongs to, which sets the plate, the neutral tint and the accent (a note app lives near paper and ink); moments: one or two scene ids where colour and detail may be rich, everywhere else is quiet; signature: {detail, element}, one small detail only this video has, drawn on at least three scenes under the same element id}.',
+    'Never describe the character as clean, modern, sleek, minimal, premium, dynamic, engaging, vibrant, stunning, professional or bold: they describe every template, and validate refuses them.',
+    'Template check: if you swapped the subject for another, would the video still fit? If yes, push the copy, the world and the signature harder.',
+    'One bright element, quiet chrome: each scene names its one hero element in scene.hero (an element id, like "s2.price"). It carries the colour and the biggest move; captions, labels and panels stay in the neutrals. Use the accent once or twice a frame, outside the moments.',
+    'Motion thesis, before scenes: motion.thesis {focal: the one focal moment of the video, from this subject; continuity: what carries between scenes; emphasis: which words get a beat; budget: what is expensive and how often}.',
+    'Refuse: eyebrows and kickers above headlines, gradient text, glass and glow as decoration, identical card grids, a bare big number as the hero, sparklines standing in for content, emoji as icons, mono type as costume, and one identical entrance on every scene. Each may be earned by the brief\'s own words, except the kicker.'
+  ];
+}
+
 function ambientLines() {
   return [
     `ambient? (optional): {level: ${STORY_AMBIENT_LEVELS.join(' | ')}, background?: boolean, drift?: boolean}, or just the level. Ambient motion keeps settled frames alive between beats: a slow push-in on each settled module (kept inside the safe zone) and soft brand-colour light drifting behind the plates.`,
@@ -754,13 +767,15 @@ export function exampleStoryboard({ format, brand } = {}) {
     lane: 'motion',
     format: fmt,
     brand: brand ?? DEFAULT_BRAND,
+    direction: { product: 'A build cache for small teams whose CI runs take most of an hour.', character: 'exact, impatient', world: 'a CI log scrolling in a dark terminal', moments: ['s2'], signature: { detail: 'every figure is read in CI minutes', element: 'min' } },
+    motion: { thesis: { focal: 'The run time dropping from 40 to 12 minutes in s2.', continuity: 'The minute figure stays in one place across s1 and s2.', emphasis: 'Beats on "40", "12" and each change ticked off.', budget: 'One big count in s2; everything else enters quietly.' } },
     audio: { music: { provider: 'synth', bpm: 100, key: 'A' }, sfx: 'auto' },
     base: null,
     scenes: [
-      { id: 's1', module: 'count-up', start: 0, end: 3, energy: 1, params: { value: 40, suffix: ' min', label: 'One CI run on your repo today', note: 'illustrative' }, hits: [{ at: 1.4, event: 'hit' }] },
-      { id: 's2', module: 'count-up', start: 3, end: 6.5, energy: 2, in: { type: 'push', dur: 0.4, direction: 'left' }, params: { value: 12, suffix: ' min', label: 'Same pipeline after caching', note: 'illustrative' }, hits: [{ at: 4.6, event: 'hit' }] },
-      { id: 's3', module: 'checklist', start: 6.5, end: 11, energy: 2, in: { type: 'whip', dur: 0.3, direction: 'up' }, params: { title: 'Three changes', rows: [{ label: 'Cache dependencies', status: 'done', at: 0.5 }, { label: 'Split the test suite', status: 'done', at: 1.4 }, { label: 'Ship smaller images', status: 'done', at: 2.3 }] } },
-      { id: 's4', module: 'cta', start: 11, end: 14, energy: 1, in: { type: 'fade', dur: 0.3 }, params: { action: 'Try it on your repo', handle: '@launchclip', loop: true } }
+      { id: 's1', module: 'count-up', start: 0, end: 3, energy: 1, hero: 's1.value', params: { value: 40, suffix: ' min', label: 'One CI run on your repo today', note: 'illustrative' }, hits: [{ at: 1.4, event: 'hit' }] },
+      { id: 's2', module: 'count-up', start: 3, end: 6.5, energy: 2, hero: 's2.value', in: { type: 'push', dur: 0.4, direction: 'left' }, params: { value: 12, suffix: ' min', label: 'Same pipeline after caching', note: 'illustrative' }, hits: [{ at: 4.6, event: 'hit' }] },
+      { id: 's3', module: 'checklist', start: 6.5, end: 11, energy: 2, hero: 's3.rows', in: { type: 'whip', dur: 0.3, direction: 'up' }, params: { title: 'Three changes, 28 min saved', rows: [{ label: 'Cache dependencies', status: 'done', at: 0.5 }, { label: 'Split the test suite', status: 'done', at: 1.4 }, { label: 'Ship smaller images', status: 'done', at: 2.3 }] } },
+      { id: 's4', module: 'cta', start: 11, end: 14, energy: 1, hero: 's4.action', in: { type: 'fade', dur: 0.3 }, params: { action: 'Try it on your repo', handle: '@launchclip', loop: true } }
     ],
     overlays: [{ type: 'captions', style: 'word-highlight' }],
     ending: { loop_to: 's1' }
@@ -1026,6 +1041,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
       `brand: ${JSON.stringify(brand ?? DEFAULT_BRAND)}`
     ]),
     ...(style ? section('Style pack (keep the channel consistent)', stylePromptLines(style, { lane }).map((line) => `- ${line}`)) : []),
+    ...section('Art direction (write it before any scene)', artDirectionLines().map((line) => `- ${line}`)),
     ...section('Contract', contractLines().map((line) => `- ${line}`)),
     ...section('Lane rules', laneRules(lane, profile).map((line) => `- ${line}`)),
     ...(profile ? section(`Cadence profile (${profile.id})`, cadenceLines(profile).map((line) => `- ${line}`)) : []),
@@ -1137,6 +1153,7 @@ export function storyboardModulesReference() {
       `| guided | the above plus enum variants and ${TUNING_PARAMS.map((name) => `\`${name}\``).join(', ')} | \`custom\` |`,
       '| bespoke | the above plus `custom` modules (pure functions of time with a catalogue fallback) | bypassing gates |'
     ]),
+    ...section('Art direction (write it before any scene)', artDirectionLines().map((line) => `- ${line}`)),
     ...section('Contract', contractLines().map((line) => `- ${line}`)),
     ...section('Lane rules', laneRules().map((line) => `- ${line}`)),
     ...section('Motion grammar and camera', motionLines().map((line) => `- ${line}`)),

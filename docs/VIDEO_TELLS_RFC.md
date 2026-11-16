@@ -181,8 +181,6 @@ number is the hook or appears more than once.
 
 **Still to do:**
 
-- The frame rules: `accent-everywhere`, `buried-raster`, `unblended-media`
-  (registry entries with no detector yet; phase 3).
 - The on-screen copy rules of §2 (`exclaim`, `meta-dots`, `em-dash` labels,
   buzzwords) in `tellsGate`, through the functions in `src/script_check.js`.
 - View trees for catalogue A, D and the character modules (`hook-title`,
@@ -191,6 +189,51 @@ number is the hook or appears more than once.
 - `straggler` wraps with the text-fit advance model, not `fitText`'s own
   breaks; move it onto `fitText` once that returns its lines.
 - Contrast on all text (the phase 2 row below) is not in this phase.
+
+### Phase 3: what landed
+
+**The direction block, `hero` and `motion.thesis`** are story fields, checked
+by `validateStory` (`kit/core/story.mjs`): `direction {product, character,
+world, moments, signature: {detail, element}}`, `scene.hero` (the element
+id, a string, rather than `hero: true` on an element: most modules have no
+per-element plan fields to mark), and `motion.thesis {focal, continuity,
+emphasis, budget}`. Every field is optional, so old stories still validate.
+`direction.character` refuses the template words by name (an error) and
+`direction.moments` must be one or two scene ids. Nothing renders from them,
+so both renderers are untouched. The planner prompt and the storyboard
+reference gain an "Art direction" section ahead of the contract, the example
+storyboard carries all three, and `skills-src/shared/design.md` teaches them.
+
+Two plan rules read them, and only when the story has a `direction` block
+(none of the shipped examples do yet, so calibration is unchanged):
+
+| id | Detect | Severity |
+| --- | --- | --- |
+| hero-missing | a main-track scene with no `scene.hero` | warning |
+| signature-thin | the signature's element id on fewer than three scenes (in the params, the hero or a view node id) | warning |
+
+**The frame rules** have detectors. `frameTells` in `kit/core/tells.mjs`
+judges pixels that `src/frame_tells.js` samples, and finish adds the findings
+to `gates.tells` after the render (warnings and advisories only, so they never
+fail the gate). Both renderers draw the same frame, so one measure covers
+both.
+
+| Rule | Sample | Detect |
+| --- | --- | --- |
+| accent-everywhere | one quarter-size frame per main-track scene, mid-hold | over 10% of the frame within RGB distance 48 of `brand.colors.accent` (or `primary`), outside `direction.moments`. Off when the accent is within 48 of `bg`, `background` or `paper` |
+| buried-raster | each image or video plate with `dim` over 0.85, read from its asset (the media-presence grey frames) | the asset has detail (edge share at least 1%) and loses it once the edge step is scaled by 1 / (1 − dim) |
+| unblended-media | each media window the layout check placed (not full frame, not the footage base), full size, mid-time | a mean colour step of 60 or more across the edge on three of its measured sides, and black levels (the darkest tenth of the luma) 12 or more apart inside and around it |
+
+Changes from the proposals: buried-raster reads the asset and the planned
+dim rather than the rendered frame, because cards drawn over the plate add
+edges of their own. It does not model the plate's blur yet, so a blurred and
+dimmed photo can slip by. The frame thresholds are set on synthetic frames
+(`test/tells.test.js`, `test/frame_tells.test.js`), not yet calibrated on
+renders of the example stories.
+
+**Left for later:** calibrating the frame thresholds on rendered examples;
+the plate blur in buried-raster; the critic reading `motion.thesis` and the
+template check (phase 4, the `specificity` category).
 
 ## 2. The copy check
 

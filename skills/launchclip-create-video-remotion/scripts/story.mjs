@@ -124,7 +124,7 @@ const EPS = 1e-6;
 // look: the whole-scene treatment (a style pack's look; kit/core/look.mjs).
 // light: the story's lighting (a style pack's light; kit/core/lighting.mjs).
 // grade: the colour grade applied to the finished render (a style pack's grade; kit/core/grade.mjs).
-const TOP_LEVEL = new Set(["grade", "look", "light", "cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine", "bible"]);
+const TOP_LEVEL = new Set(["grade", "look", "light", "cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine", "bible", "direction"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -581,6 +581,12 @@ export function validateStory(story, { modules, moduleParams } = {}) {
     if (!isObject(audio) || !audio.voice) err("audio.voice is required for the voiceover-motion lane (or set audio.narration to synthesise it)");
     if (!isObject(audio) || !audio.words) err("audio.words (NARRATION.json) is required for the voiceover-motion lane (or set audio.narration to synthesise it)");
   }
+
+  // direction: the art direction the planner writes before any scene (docs/VIDEO_TELLS_RFC.md §3).
+  validateArtDirection(story.direction, story.scenes, err);
+  if (Array.isArray(story.scenes)) story.scenes.forEach((scene, i) => {
+    if (isObject(scene) && scene.hero !== undefined && !(nonEmpty(scene.hero) && String(scene.hero).length <= 80)) err(`scenes[${i}].hero must name the scene's one bright element (an element id or a few words), like "s2.price"`);
+  });
 
   // motion.grammar and camera (kit/core/grammar.mjs, kit/core/camera-world.mjs).
   validateMotion(story.motion, err);
@@ -1335,10 +1341,45 @@ const EASE_ROLES = ["enter", "exit", "move", "camera", "emphasis"];
 const DURATION_ROLES = ["enter", "exit", "transition", "camera"];
 const EASE_NAME = /^(none|linear|(power[0-4]|quad|cubic|quart|quint|strong|expo|circ|sine|bounce|back|elastic)(\.(in|out|inOut))?(\(\s*[\d.]+\s*(,\s*[\d.]+\s*)?\))?|steps\(\d+\))$/;
 
+// The direction block (docs/VIDEO_TELLS_RFC.md §3). Character words that
+// describe every template are refused by name.
+export const DIRECTION_FIELDS = Object.freeze(["product", "character", "world", "moments", "signature"]);
+export const REFUSED_CHARACTER_WORDS = Object.freeze(["clean", "modern", "sleek", "minimal", "minimalist", "premium", "dynamic", "engaging", "vibrant", "stunning", "professional", "bold"]);
+function validateArtDirection(direction, scenes, err) {
+  if (direction === undefined || direction === null) return;
+  if (!isObject(direction)) { err(`direction must be {${DIRECTION_FIELDS.join(", ")}}`); return; }
+  for (const key of Object.keys(direction)) if (!DIRECTION_FIELDS.includes(key)) err(`direction.${key} is not supported (allowed: ${DIRECTION_FIELDS.join(", ")})`);
+  for (const key of ["product", "world"]) if (direction[key] !== undefined && !nonEmpty(direction[key])) err(`direction.${key} must be one sentence`);
+  if (direction.character !== undefined) {
+    const words = nonEmpty(direction.character) ? direction.character.toLowerCase().split(/[\s,;/]+/).filter((word) => /[a-z]/.test(word) && !["and", "a", "an", "but", "little", "bit"].includes(word)) : [];
+    if (!words.length || words.length > 3) err('direction.character must be two or three concrete words, like "exact, a little warm"');
+    const refused = words.filter((word) => REFUSED_CHARACTER_WORDS.includes(word));
+    if (refused.length) err(`direction.character uses ${refused.map((word) => `"${word}"`).join(", ")}, which describes every template; name what is particular to this subject`);
+  }
+  const ids = new Set(Array.isArray(scenes) ? scenes.filter(isObject).map((scene) => scene.id) : []);
+  if (direction.moments !== undefined) {
+    if (!Array.isArray(direction.moments) || direction.moments.length < 1 || direction.moments.length > 2) err("direction.moments must list one or two scene ids where colour and detail may be rich");
+    else for (const id of direction.moments) if (!ids.has(id)) err(`direction.moments: ${JSON.stringify(id)} is not a scene id`);
+  }
+  if (direction.signature !== undefined) {
+    const sig = direction.signature;
+    if (!isObject(sig) || !nonEmpty(sig.detail) || !nonEmpty(sig.element) || Object.keys(sig).some((key) => !["detail", "element"].includes(key))) err('direction.signature must be {detail, element}: one small detail only this video has, and the element id it is drawn as');
+  }
+}
+// motion.thesis: the motion plan before any scene (focal moment, continuity, emphasis, budget).
+export const THESIS_FIELDS = Object.freeze(["focal", "continuity", "emphasis", "budget"]);
+function validateThesis(thesis, err) {
+  if (thesis === undefined) return;
+  if (!isObject(thesis)) { err(`motion.thesis must be {${THESIS_FIELDS.join(", ")}}, each one sentence`); return; }
+  for (const key of Object.keys(thesis)) if (!THESIS_FIELDS.includes(key)) err(`motion.thesis.${key} is not supported (allowed: ${THESIS_FIELDS.join(", ")})`);
+  for (const key of THESIS_FIELDS) if (thesis[key] !== undefined && !nonEmpty(thesis[key])) err(`motion.thesis.${key} must be one sentence`);
+}
+
 function validateMotion(motion, err) {
   if (motion === undefined || motion === null) return;
   if (!isObject(motion)) { err("motion must be an object {grammar}"); return; }
-  for (const key of Object.keys(motion)) if (!["grammar", "feel", "blur"].includes(key)) err(`motion.${key} is not supported (allowed: grammar, feel, blur)`);
+  for (const key of Object.keys(motion)) if (!["grammar", "feel", "blur", "thesis"].includes(key)) err(`motion.${key} is not supported (allowed: grammar, feel, blur, thesis)`);
+  validateThesis(motion.thesis, err);
   validateFeel(motion.feel, err);
   validateBlur(motion.blur, err);
   const grammar = motion.grammar;
