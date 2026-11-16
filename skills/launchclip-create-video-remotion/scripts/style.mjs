@@ -42,7 +42,7 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 const NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 const TOP = new Set(['schema', 'name', 'description', 'brand', 'motion', 'camera', 'ambient', 'captions', 'sound', 'modules', 'layout', 'intro', 'outro', 'loop', 'references', 'reference_stats', 'notes', 'created_at', 'upgraded_from']);
 // v3 fields (docs/VIDEO_QUALITY_RFC.md §9.1–9.3).
-const TOP_V3 = new Set(['grade', 'layouts', 'vocabulary', 'profile', 'cast', 'brand_frame', 'dials', 'segments', 'generated', 'background', 'variants', 'world', 'medium', 'plate', 'light', 'look']);
+const TOP_V3 = new Set(['grade', 'layouts', 'vocabulary', 'profile', 'cast', 'brand_frame', 'dials', 'segments', 'avoid', 'generated', 'background', 'variants', 'world', 'medium', 'plate', 'light', 'look']);
 // Footage layouts (RFC §7.1). The layouts session owns their geometry; a
 // style only names them, so an unknown name is a warning, not an error.
 export const STYLE_LAYOUTS = Object.freeze(['full', 'split-left', 'split-right', 'framed', 'stacked', 'insert']);
@@ -527,6 +527,8 @@ function validateV3Fields(pack, { err, warn, modules }) {
     if (isObject(pack.brand_frame) && pack.brand_frame.sources !== undefined) warn('brand_frame.sources belong to a story (story.frame.sources); a style\'s source notes are ignored');
   }
   if (pack.segments !== undefined) for (const message of segmentErrors(pack.segments, { modules })) err(message);
+  // avoid: the style's banned tokens, where a direction map's treatment.banned starts (kit/core/treatment.mjs).
+  if (pack.avoid !== undefined && !(Array.isArray(pack.avoid) && pack.avoid.every(nonEmpty))) err('avoid must be a list of banned tokens (crossfade, bounce-ease, camera-shake, hold>1.0, …)');
   seededFieldErrors(pack, { err, warn, known });
   if (pack.dials !== undefined) {
     if (!isObject(pack.dials)) err(`dials must be {${STYLE_DIALS.join(', ')}}, each 0-1`);

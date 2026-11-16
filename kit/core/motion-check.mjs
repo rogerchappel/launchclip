@@ -1,7 +1,7 @@
 // Motion check: rules of good motion decided from a story's grammar and each
 // scene's timeline ops, so a plan with a motion fault fails before it renders.
 // Frame-pure data in, findings out; nothing is drawn. Plain ESM; imports only
-// ./grammar.mjs. Canonical copy: kit/core/motion-check.mjs.
+// ./grammar.mjs and ./motion.mjs. Canonical copy: kit/core/motion-check.mjs.
 // Contract: docs/DIRECTION_GUARDRAILS.md §8.
 //
 // The rules come from the checklist in LottieFiles' motion-design-skill (MIT,
@@ -12,6 +12,7 @@
 // Each finding: {rule, severity: "error" | "warning", at, ids, detail}.
 
 import { GRAMMARS, easeRole } from './grammar.mjs';
+import { getEase } from './motion.mjs';
 
 // staggerSpan: the longest a cascade may run from its first element starting
 //   to its last (s). The longest shipped cascade is 1.05 s (sixteen lines of
@@ -39,7 +40,19 @@ import { GRAMMARS, easeRole } from './grammar.mjs';
 //   entrance (0.28 s) of stillness before the next one lands.
 // frame: a grammar's exit may outlast its entrance by less than one frame at
 //   30 fps (a feel over a slow preset leaves 0.03 s longer than it arrives).
-export const MOTION_CHECK = Object.freeze({ frame: 1 / 30, staggerSpan: 2, staggerCount: 3, exitRatio: 2, pulse: 1.5, gesture: 1.5, crowdShare: 0.75, crowdElements: 6, crowdSettle: 0.5, beatRest: 1.2 });
+// anticipation: a move that starts on a state or a hit may reach half its
+//   travel at most this many frames after it (docs/PLAN_AND_PACE_RFC.md §2;
+//   long form allows 2, cadence.mjs pace.anticipation_frames).
+export const MOTION_CHECK = Object.freeze({ frame: 1 / 30, staggerSpan: 2, staggerCount: 3, exitRatio: 2, pulse: 1.5, gesture: 1.5, crowdShare: 0.75, crowdElements: 6, crowdSettle: 0.5, beatRest: 1.2, anticipation: 1 });
+
+/** The share of a tween's duration at which its ease reaches half its travel (power3.out: 0.206). */
+export function halfTravel(name) {
+  let curve;
+  try { curve = getEase(name); } catch { return 0.5; }
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 30; i += 1) { const mid = (lo + hi) / 2; if (curve(mid) < 0.5) lo = mid; else hi = mid; }
+  return Math.round(((lo + hi) / 2) * 1000) / 1000;
+}
 
 const EPS = 1e-6;
 const LINEAR = /^(none|linear|power0)\b/;
@@ -81,8 +94,9 @@ const displaced = (state) => Boolean(state) && (Math.abs(state.x ?? 0) > EPS || 
  *   motion  model.motion {enterDuration, exitDuration, enterEase, exitEase, enterFrom, exitTo, enterEnd, exitStart}
  *   ops     the timeline ops both renderers play ({type: "tween", target, start, duration, ease, from, to}); [] when the module has none
  *   states  the seconds at which the scene's shot states land
+ *   hits    the seconds of the scene's hits
  */
-export function sceneMotionFindings({ id, motion = null, ops = [], states = [], check = MOTION_CHECK } = {}) {
+export function sceneMotionFindings({ id, motion = null, ops = [], states = [], hits = [], check = MOTION_CHECK } = {}) {
   const findings = [];
   const m = motion ?? {};
 
@@ -164,6 +178,21 @@ export function sceneMotionFindings({ id, motion = null, ops = [], states = [], 
       if (!worst || moving > worst.moving) worst = { t, moving };
     }
     if (worst && worst.moving / elements.size > check.crowdShare + EPS) findings.push(finding('crowded-move', 'warning', worst.t, [id], `${worst.moving} of ${id}'s ${elements.size} elements move at once at ${round(worst.t)} s; the eye follows one thing at a time: change fewer of them in one beat, or split the change across two states`));
+  }
+
+  // Anticipation: a move that starts on its beat lands late; it should start
+  // early by its ease's half-travel time so the eye reads it on the beat.
+  const beatTimes = [...states, ...hits].filter(Number.isFinite);
+  const late = [];
+  for (const { op, keys } of tweens) {
+    if (op.target === id || !(travels(keys) || scales(keys)) || !beatTimes.some((t) => Math.abs(op.start - t) < 1e-3)) continue;
+    const lag = halfTravel(op.ease) * op.duration;
+    if (lag > check.anticipation * check.frame + EPS) late.push({ op, lag });
+  }
+  if (late.length) {
+    const worst = late.reduce((a, b) => (b.lag > a.lag ? b : a));
+    const what = late.length === 1 ? `1 move in ${id} starts on its beat and reaches half its travel` : `${late.length} moves in ${id} start on their beats and reach half their travel`;
+    findings.push(finding('late-beat', 'warning', worst.op.start, [id, ...new Set(late.map((entry) => entry.op.target))], `${what} up to ${round(worst.lag / check.frame, 1)} frames after it (${worst.op.target}, "${worst.op.ease ?? 'default'}" over ${round(worst.op.duration)} s); start a move early by its half-travel time so it lands on the beat`));
   }
 
   // A still moment between beats.

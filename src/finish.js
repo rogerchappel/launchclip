@@ -37,7 +37,7 @@ import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from 
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
 import { actingGate, densityGate, ghostingGate, physicsGate, tellsGate, varietyGate } from "./direction_guardrails.js";
 import { choreographyGate, holdGate, stateGate } from "./movement_guardrails.js";
-import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, lipSyncGate, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
+import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, lipSyncGate, paceGate, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
 import { worstStillSpans, writeMotionReport } from "./render_motion_analysis.js";
@@ -2133,6 +2133,9 @@ async function runGates(ctx, { pixels = true } = {}) {
     // Hook (src/short_form_checks.js): how a short opens, from the storyboard and the measured narration.
     const hook = hookGate({ story: ctx.resolved, words: scope.words, profile, duration: Number(ctx.resolved?.resolved?.duration) || null });
     if (hook.status !== "skipped") gates.hook = hook;
+    // Pace (docs/PLAN_AND_PACE_RFC.md §2): a dense hook, no long gap, no frozen frame.
+    const pace = paceGate({ resolved: ctx.resolved, profile, map: direction.map, media: ctx.layout?.media ?? {} });
+    if (pace.status !== "skipped") gates.pace = pace;
   } catch (error) {
     gates.direction ??= { status: "failed", error: error.message };
   }

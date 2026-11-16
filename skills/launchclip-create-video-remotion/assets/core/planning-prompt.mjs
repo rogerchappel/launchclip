@@ -20,6 +20,7 @@ import { packCaptionsFor, stylePromptLines } from './style.mjs';
 import { CAPTION_PRESETS, captionLineExtent, captionOptions } from './captions.mjs';
 import { PROFILE_MEASURES, profilePromptLines } from './profiles.mjs';
 import { DIRECTION_INTENTS, DIRECTION_LAYOUTS, DIRECTION_SCHEMA, DIRECTION_TREATMENTS, INTENT_RULES, NARRATIVE_BEATS, VISUAL_INTENTS, intentHints } from './direction.mjs';
+import { BANNED_CHECKS, CONCEPT_MAX_WORDS, DEFAULT_BANNED } from './treatment.mjs';
 import { LONG_FORM_SECONDS, longFormLines } from './long-form.mjs';
 import { WORLD_KINDS, WORLD_TIMES } from './worlds/index.mjs';
 import { physicsPromptLines } from './physics.mjs';
@@ -828,6 +829,26 @@ function directionContractLines({ lane } = {}) {
   ];
 }
 
+/**
+ * The treatment block's planner lines (docs/PLAN_AND_PACE_RFC.md §1): the
+ * film's idea and its rules, written before the sections. avoid: the style's
+ * banned tokens (style.avoid), else DEFAULT_BANNED. required: the bespoke tier.
+ */
+export function treatmentLines({ avoid = null, required = false } = {}) {
+  const start = Array.isArray(avoid) && avoid.length ? avoid : DEFAULT_BANNED;
+  return [
+    `treatment${required ? ' (required on this tier: concept, throughline, banned, transitions, signature)' : ' (optional)'}: one object beside sections that holds the film's idea and its rules. Each field is checked against the storyboard.`,
+    `concept: the whole film as one sentence of at most ${CONCEPT_MAX_WORDS} words. It names something that changes ("one cursor blink grows into every tool the agent can reach"), never a subject ("AI agents") and never the title.`,
+    'throughline: {object, states: [{at, form, carry?}]}. Pick one object that stays on screen from the first section to the last and takes a new form in each. at is a section id, form is what the object looks like there, carry is the transition that hands it across (card-to-card, morph).',
+    `banned: short tokens for what this film must never do. Start from the style's list (${start.join(', ')}) and add whatever the brief rules out. Use these tokens where one fits, since each is checked: ${Object.entries(BANNED_CHECKS).map(([token, meaning]) => `${token} (${meaning})`).join('; ')}. Any other phrase goes to the critic.`,
+    'locked_copy: {only?, lines: [...]}: the brief\'s exact words, in the order the brief gives them. Never reword, re-case or re-punctuate a locked line; a scene that shows it shows it exactly. With only: true, show no other slogan or headline.',
+    'guardrails: [{claim, forbid: [...]}]: each claim the film must not overstate, with the words that would overstate it ({"claim": "release status", "forbid": ["stable", "v1.0"]}). No scene text and no narration may use them.',
+    'locked_example: {label, values: {name: number}}: when the film works one example, fix its numbers here once. Every scene that shows one of them shows this value.',
+    'transitions: [{from, to, type, demonstrates}]: one entry for every scene change that is not a cut. demonstrates says in a few words what the change itself proves ("the stream stops mid-word and picks up where it stopped"); a change that proves nothing is a cut. At most one fade per 30 s.',
+    'signature: {at, describe}: the one shot a viewer will remember, in a section between a quarter and 85% of the way through. Describe what the viewer sees happen, with no effect names (no glow, blur, particles or transition names).'
+  ];
+}
+
 function intentRuleLines() {
   return [
     '| Intent | The line… |',
@@ -843,7 +864,7 @@ function intentRuleLines() {
  * storyboard. words: the narration words; the lines are pre-split with their
  * suggested intents from the shared rules, so both paths classify the same way.
  */
-export function directionPrompt({ lane, format, profile = null, words, subject = null, segments = null, cast = null, explainer = false } = {}) {
+export function directionPrompt({ lane, format, profile = null, words, subject = null, segments = null, cast = null, explainer = false, avoid = null, tier = null } = {}) {
   const hints = intentHints(words);
   const lines = [
     `You author DIRECTION.json (${DIRECTION_SCHEMA}) for LaunchClip: the visual decision for every line of the narration, made before the storyboard. The storyboard is planned against it next.`,
@@ -852,6 +873,7 @@ export function directionPrompt({ lane, format, profile = null, words, subject =
     ...section('Fixed inputs', [`lane: ${lane ?? '(given)'}`, `format: ${format ? JSON.stringify(format) : '(given)'}`, `profile: ${profile?.id ?? '(none)'}`]),
     ...section('Contract', directionContractLines({ lane }).map((line) => `- ${line}`)),
     ...section('Intent rules (first match wins)', intentRuleLines()),
+    ...section('Treatment (the film\'s idea and rules)', treatmentLines({ avoid, required: tier === 'bespoke' }).map((line) => `- ${line}`)),
     ...(profile ? section(`Cadence profile (${profile.id})`, [...cadenceLines(profile).map((line) => `- ${line}`), '- Coverage comes from the treatments: plan enough dress and insert lines to land near the coverage target, and no run of face or camera lines longer than the undressed limit.', ...(lane === 'footage-led' && profile.measures?.face_time?.p90 < 1 ? ['- Face time comes from the treatments too: only insert lines take the presenter off screen. Make the lines that name something the viewer could see (a thing, a place, a step) insert lines, so face time lands near its target and never above its ceiling.'] : [])]) : []),
     ...(profile?.id === 'youtube-long-form' || Number(format?.duration) >= LONG_FORM_SECONDS ? section('Long form', longFormLines().map((line) => `- ${line}`)) : []),
     ...(Array.isArray(segments) && segments.length ? section('Recurring segments (the style\'s)', ['When a section is one of these, set its "segment" to the id and title it like the segment, so the series looks like a series:', ...segments.map((segment) => `- ${segment.id}: "${segment.title}"${segment.layout ? `, layout ${segment.layout}` : ''}${segment.modules?.length ? `, prefer ${segment.modules.join(', ')}` : ''}`)]) : []),
@@ -922,6 +944,7 @@ export function directionMapReference() {
     ]),
     ...section('Contract', directionContractLines().map((line) => `- ${line}`)),
     ...section('Intent rules (first match wins)', intentRuleLines()),
+    ...section('Treatment', ['`treatment` sits beside `sections`: the film\'s idea and its rules, written before the storyboard (design: `docs/PLAN_AND_PACE_RFC.md` §1). `story validate` and the direction gate check every field against the storyboard. Optional on the structured and guided tiers; required on bespoke.', '', ...treatmentLines().map((line) => `- ${line}`)]),
     ...section('Narrative maps', [
       `A story told by characters uses story beats as sections (\`beat\`: ${NARRATIVE_BEATS.join(', ')}), and each line says who acts: \`cast: [{id, pose, expression, at: "word:<text>"}]\` and a \`set\`. Cast cues name characters from the story's cast and poses, expressions and sets from the character kit; validation checks them when the kit is present.`,
       'Each line with cast cues names its key action, `action: {verb, who, target?}` (an acting cue such as look-far, turn-to-look, gaze-at, point-at, walk-to, stand-up, stretch, or a pose), and each beat names at least one. If the idea is an action, someone does it on screen, toward what it is about. `launchclip finish` fails the acting gate when no cast scene performs it on its line.',

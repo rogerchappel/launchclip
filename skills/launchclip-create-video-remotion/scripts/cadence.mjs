@@ -292,13 +292,20 @@ export const CADENCE_BENCHMARK = Object.freeze({
 // seconds between hard cuts (p50 band); states: states per shot;
 // words_per_event: spoken words per visual event (a band; it holds whatever
 // the voice's pace, where seconds do not).
+// pace (docs/PLAN_AND_PACE_RFC.md §2, kit/core/pace-check.mjs): the opening
+// hook_window (s) holds at least hook_events events and hook_ratio × the
+// body's event rate; after it no gap between events passes gap_warn (a
+// warning) or gap_fail (an error; it sits inside gap.p90_max or
+// longest_static); nothing freezes past max_still (s; null: a presenter's
+// face always moves); a move tied to a beat reaches half its travel within
+// anticipation_frames of it.
 export const CADENCE_TARGETS = Object.freeze({
-  'long-form': Object.freeze({ label: 'Long-form explainer', per_min: Object.freeze({ min: 9, target: 11.5, max: 16 }), gap: Object.freeze({ p10_min: 1.5, p50_min: 4, p50_max: 6.5, p90_max: 10.5 }), longest_static: 14, cut_gap: Object.freeze({ min: 15, max: 25 }), states: Object.freeze({ min: 2, max: 4 }), words_per_event: Object.freeze({ min: 10, max: 20 }) }),
-  'short-form': Object.freeze({ label: 'Short form', per_min: Object.freeze({ min: 18, target: 24, max: 40 }), gap: Object.freeze({ p10_min: 0.8, p50_min: 1.8, p50_max: 3.5, p90_max: 5 }), longest_static: 6, cut_gap: Object.freeze({ min: 4, max: 12 }), states: Object.freeze({ min: 1, max: 3 }), words_per_event: Object.freeze({ min: 4, max: 10 }) }),
-  'talking-head': Object.freeze({ label: 'Talking-head base edit', per_min: Object.freeze({ min: 6, target: 10, max: 18 }), gap: Object.freeze({ p10_min: 1.2, p50_min: 3, p50_max: 8, p90_max: 14 }), longest_static: 20, cut_gap: Object.freeze({ min: 8, max: 30 }), states: Object.freeze({ min: 1, max: 3 }), words_per_event: Object.freeze({ min: 10, max: 30 }) }),
-  'art-direction': Object.freeze({ label: 'Full art direction', per_min: Object.freeze({ min: 10, target: 14, max: 24 }), gap: Object.freeze({ p10_min: 1.2, p50_min: 3, p50_max: 5.5, p90_max: 8 }), longest_static: 10, cut_gap: Object.freeze({ min: 6, max: 20 }), states: Object.freeze({ min: 2, max: 4 }), words_per_event: Object.freeze({ min: 7, max: 15 }) }),
-  'motion-graphics': Object.freeze({ label: 'Motion graphics', per_min: Object.freeze({ min: 14, target: 20, max: 36 }), gap: Object.freeze({ p10_min: 0.8, p50_min: 2, p50_max: 4.5, p90_max: 6.5 }), longest_static: 7, cut_gap: Object.freeze({ min: 4, max: 15 }), states: Object.freeze({ min: 2, max: 4 }), words_per_event: Object.freeze({ min: 4, max: 12 }) }),
-  'animated': Object.freeze({ label: 'Animated short and long form', per_min: Object.freeze({ min: 8, target: 12, max: 22 }), gap: Object.freeze({ p10_min: 1.2, p50_min: 3, p50_max: 6.5, p90_max: 11 }), longest_static: 14, cut_gap: Object.freeze({ min: 6, max: 25 }), states: Object.freeze({ min: 1, max: 4 }), words_per_event: Object.freeze({ min: 8, max: 20 }) })
+  'long-form': Object.freeze({ label: 'Long-form explainer', per_min: Object.freeze({ min: 9, target: 11.5, max: 16 }), gap: Object.freeze({ p10_min: 1.5, p50_min: 4, p50_max: 6.5, p90_max: 10.5 }), longest_static: 14, cut_gap: Object.freeze({ min: 15, max: 25 }), states: Object.freeze({ min: 2, max: 4 }), words_per_event: Object.freeze({ min: 10, max: 20 }), pace: Object.freeze({ hook_window: 8, hook_events: 1, hook_ratio: 1.0, gap_warn: 10.5, gap_fail: 14, max_still: 3, anticipation_frames: 2 }) }),
+  'short-form': Object.freeze({ label: 'Short form', per_min: Object.freeze({ min: 18, target: 24, max: 40 }), gap: Object.freeze({ p10_min: 0.8, p50_min: 1.8, p50_max: 3.5, p90_max: 5 }), longest_static: 6, cut_gap: Object.freeze({ min: 4, max: 12 }), states: Object.freeze({ min: 1, max: 3 }), words_per_event: Object.freeze({ min: 4, max: 10 }), pace: Object.freeze({ hook_window: 3, hook_events: 3, hook_ratio: 1.3, gap_warn: 2.5, gap_fail: 5, max_still: 0.5, anticipation_frames: 1 }) }),
+  'talking-head': Object.freeze({ label: 'Talking-head base edit', per_min: Object.freeze({ min: 6, target: 10, max: 18 }), gap: Object.freeze({ p10_min: 1.2, p50_min: 3, p50_max: 8, p90_max: 14 }), longest_static: 20, cut_gap: Object.freeze({ min: 8, max: 30 }), states: Object.freeze({ min: 1, max: 3 }), words_per_event: Object.freeze({ min: 10, max: 30 }), pace: Object.freeze({ hook_window: 3, hook_events: 2, hook_ratio: 1.2, gap_warn: 6, gap_fail: 14, max_still: null, anticipation_frames: 1 }) }),
+  'art-direction': Object.freeze({ label: 'Full art direction', per_min: Object.freeze({ min: 10, target: 14, max: 24 }), gap: Object.freeze({ p10_min: 1.2, p50_min: 3, p50_max: 5.5, p90_max: 8 }), longest_static: 10, cut_gap: Object.freeze({ min: 6, max: 20 }), states: Object.freeze({ min: 2, max: 4 }), words_per_event: Object.freeze({ min: 7, max: 15 }), pace: Object.freeze({ hook_window: 4, hook_events: 3, hook_ratio: 1.2, gap_warn: 3.5, gap_fail: 6.5, max_still: 1, anticipation_frames: 1 }) }),
+  'motion-graphics': Object.freeze({ label: 'Motion graphics', per_min: Object.freeze({ min: 14, target: 20, max: 36 }), gap: Object.freeze({ p10_min: 0.8, p50_min: 2, p50_max: 4.5, p90_max: 6.5 }), longest_static: 7, cut_gap: Object.freeze({ min: 4, max: 15 }), states: Object.freeze({ min: 2, max: 4 }), words_per_event: Object.freeze({ min: 4, max: 12 }), pace: Object.freeze({ hook_window: 4, hook_events: 3, hook_ratio: 1.2, gap_warn: 3.5, gap_fail: 6.5, max_still: 1, anticipation_frames: 1 }) }),
+  'animated': Object.freeze({ label: 'Animated short and long form', per_min: Object.freeze({ min: 8, target: 12, max: 22 }), gap: Object.freeze({ p10_min: 1.2, p50_min: 3, p50_max: 6.5, p90_max: 11 }), longest_static: 14, cut_gap: Object.freeze({ min: 6, max: 25 }), states: Object.freeze({ min: 1, max: 4 }), words_per_event: Object.freeze({ min: 8, max: 20 }), pace: Object.freeze({ hook_window: 4, hook_events: 2, hook_ratio: 1.2, gap_warn: 6.5, gap_fail: 11, max_still: 1, anticipation_frames: 1 }) })
 });
 export const CADENCE_FORMATS = Object.freeze(Object.keys(CADENCE_TARGETS));
 // A style stretches or tightens every second in the band (and the event rate inversely).
@@ -319,7 +326,8 @@ export function cadenceTarget(format = 'long-form', style = 'default') {
     longest_static: s(base.longest_static),
     cut_gap: { min: s(base.cut_gap.min), max: s(base.cut_gap.max) },
     states: { ...base.states },
-    words_per_event: { min: s(base.words_per_event.min), max: s(base.words_per_event.max) }
+    words_per_event: { min: s(base.words_per_event.min), max: s(base.words_per_event.max) },
+    pace: { ...base.pace, gap_warn: s(base.pace.gap_warn), gap_fail: s(base.pace.gap_fail), max_still: base.pace.max_still === null ? null : s(base.pace.max_still) }
   };
 }
 

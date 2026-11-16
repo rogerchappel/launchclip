@@ -8,6 +8,8 @@
 //   constraintsGate(ctx) → {status, file, errors, …}: the app's CONSTRAINTS.json
 //   lipSyncGate(ctx)    → {status, scenes, lines, findings, errors}: drawn
 //     mouths against the voice (docs/ANIMATION_PIPELINE_RFC.md §8.2)
+//   paceGate(ctx)       → {status, format, events, findings}: the plan's pace
+//     (docs/PLAN_AND_PACE_RFC.md §2): hook density, longest gap, frozen frames
 //   qualityFindings(measures, profile) → critic-style findings
 //     (missed-opportunity, sparseness) the headless critic carries
 //   prototypeCut(resolved, words, {min, max}) → {cut, story} | null
@@ -20,7 +22,10 @@ import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { DIRECTION_LANES, directionMeasures, validateDirection } from "@launchclip/core/direction.mjs";
-import { storyboardMeasures, unionIntervals } from "@launchclip/core/cadence.mjs";
+import { cadenceTarget, storyboardMeasures, unionIntervals } from "@launchclip/core/cadence.mjs";
+import { paceFindings, paceFormat } from "@launchclip/core/pace-check.mjs";
+import { bannedHold } from "@launchclip/core/treatment.mjs";
+import { frozenSpans, planEvents } from "./movement_guardrails.js";
 import { compareMeasures } from "@launchclip/core/profiles.mjs";
 import { SPEAKING_MODULES, storyBase } from "@launchclip/core/story.mjs";
 import { resolveModule } from "@launchclip/core/modules.mjs";
@@ -90,6 +95,33 @@ export async function constraintsGate({ project, resolved, words, map = null, st
   const advisory = prototype ? check.errors.filter((entry) => /must_use/.test(entry)) : [];
   const errors = check.errors.filter((entry) => !advisory.includes(entry));
   return { status: errors.length ? "failed" : "passed", file: PROJECT_CONSTRAINTS_FILE, ...check.summary, errors: errors.slice(0, 20), warnings: check.warnings, ...(advisory.length ? { advisory } : {}) };
+}
+
+// Closing cards: the pace gate lets them hold to the end.
+const CLOSING_MODULES = Object.freeze(["cta", "end-card", "brand-lockup"]);
+
+/**
+ * Pace (docs/PLAN_AND_PACE_RFC.md §2, kit/core/pace-check.mjs), from the
+ * plan: the opening is denser than the body, no gap after it runs past the
+ * format's band, and nothing freezes past max_still (the treatment's
+ * `hold>N` when it bans one). The format follows the profile, the lane and
+ * the runtime; style: a cadence style (calm stretches the seconds).
+ */
+export function paceGate({ resolved, profile = null, map = null, media = {}, style = "default" }) {
+  const duration = Number(resolved?.resolved?.duration ?? resolved?.format?.duration) || 0;
+  if (!(duration > 0)) return { status: "skipped", reason: "no runtime" };
+  const format = paceFormat({ duration, footage: Boolean(storyBase(resolved)), profile });
+  const { pace } = cadenceTarget(format, style);
+  const maxStill = bannedHold(map?.treatment);
+  const still = maxStill ?? pace.max_still;
+  const { events, opaque } = planEvents(resolved);
+  // A closing card (the call to action, the end card) holds for its read.
+  const last = [...(resolved?.scenes ?? [])].filter((scene) => Number.isFinite(Number(scene?.start))).sort((a, b) => Number(a.start) - Number(b.start)).at(-1);
+  if (CLOSING_MODULES.includes(last?.module)) opaque.push([Number(last.start), duration]);
+  const findings = paceFindings({ events, opaque, duration, pace, maxStill, frozen: still === null ? [] : frozenSpans(resolved, still, { media }) });
+  const errors = findings.filter((entry) => entry.severity === "error").length;
+  findings.sort((a, b) => (a.severity === "error" ? 0 : 1) - (b.severity === "error" ? 0 : 1));
+  return { status: errors ? "failed" : "passed", format, style, events: events.length, errors, warnings: findings.length - errors, findings: findings.slice(0, 20) };
 }
 
 /**
