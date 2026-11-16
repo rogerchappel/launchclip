@@ -22,7 +22,9 @@ const REMOTION_REGISTRY = path.join(ROOT, 'kit', 'remotion', 'modules', 'index.t
  */
 export const FIXTURE_ALLOWLIST = Object.freeze({
   // Sprite casts are being reworked with the character system; their fixtures belong to that work.
-  'sprite-scene': 'owned by the character and sprite work'
+  'sprite-scene': 'owned by the character and sprite work',
+  // sprout needs another scene's anchor, so a single-module fixture cannot draw it.
+  sprout: 'covered by the story parity fixture sprout-ad-card-9x16'
 });
 
 /** The ids the HyperFrames compiler has an emitter for. */
