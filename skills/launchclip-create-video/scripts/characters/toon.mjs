@@ -459,6 +459,22 @@ export function face(ctx, name) {
 }
 
 /**
+ * A character's flaw (rig param `flaw`), in toon face units around the
+ * head's centre cy; the same marks for a person's face and a kind's.
+ */
+export function flawMarks(P, cy, flaw, cute = false, cheek = null) {
+  // On the cheek, below and outside the eye (a cute face's eyes sit lower and wider); cheek: a narrower face's own cheek.
+  const cheekX = cheek ?? (cute ? 62 : 52), cheekY = cy + (cute ? 58 : 38);
+  if (flaw === 'cheek-plaster') return [P.shape(`M${-cheekX - 15} ${cheekY - 9}L${-cheekX + 13} ${cheekY - 3}Q${-cheekX + 17} ${cheekY - 2} ${-cheekX + 16} ${cheekY + 2}L${-cheekX + 15} ${cheekY + 6}Q${-cheekX + 14} ${cheekY + 10} ${-cheekX + 10} ${cheekY + 9}L${-cheekX - 18} ${cheekY + 3}Q${-cheekX - 22} ${cheekY + 2} ${-cheekX - 21} ${cheekY - 2}L${-cheekX - 20} ${cheekY - 6}Q${-cheekX - 19} ${cheekY - 10} ${-cheekX - 15} ${cheekY - 9}Z`, '#f0cfa0', {width: 3.5})];
+  if (flaw === 'brow-scar') {
+    const x = cute ? CUTE.eyeX : EYE_X, y = cy + (cute ? CUTE.browY : -22);
+    return [P.line(`M${x - 3} ${y - 12}L${x + 9} ${y + 16}`, 'outline', 4)];
+  }
+  if (flaw === 'cheek-scratch') return [P.line(`M${cheekX - 8} ${cheekY - 8}L${cheekX + 8} ${cheekY + 2}M${cheekX - 10} ${cheekY}L${cheekX + 4} ${cheekY + 9}`, '#c0505a', 3.5)];
+  return [];
+}
+
+/**
  * The face's marks and facial hair. jaw: undefined draws them all; 'only'
  * just the hair that follows the jaw (beard, stubble), which stays on the
  * head when the face turns to look (turnedHead); 'none' all but that.
@@ -468,6 +484,7 @@ export function facial(ctx, {jaw: part} = {}) {
   const {rx, ry, cy} = g.head;
   const out = [];
   const marks = part !== 'only', jawHair = part !== 'none';
+  if (marks && p.flaw) out.push(...flawMarks(P, cy, p.flaw, ctx.cute));
   if (marks && p.accessories.includes('freckles')) for (const [x, y] of [[-48, 26], [-38, 32], [-56, 34], [48, 26], [38, 32], [56, 34]]) out.push(P.ellipse(x, cy + y, 2.6, 2.6, 'skinShade', {outline: false}));
   // Beards follow the jaw below the cheeks; the mouth stays clear so the
   // face still acts.

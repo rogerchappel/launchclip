@@ -101,7 +101,20 @@ export const kindsOf = group => KIND_NAMES.filter(name => KINDS[name].group === 
 export const KIND_SIZES = Object.freeze(['small', 'medium', 'large']);
 export const KIND_SIZE_SCALE = Object.freeze({small: 0.84, medium: 1, large: 1.14});
 export const KIND_COLOR_SLOTS = Object.freeze(['body', 'detail', 'accent']);
-const KIND_KEYS = ['kind', 'size', 'marks', 'colors'];
+const KIND_KEYS = ['kind', 'size', 'marks', 'flaw', 'colors'];
+/**
+ * A character's one small deliberate imperfection (rig param `flaw`, a
+ * person's or a kind's): drawn on the face, so drift is easy to spot in any
+ * shot. FLAW_WORDS is how a bible's must_keep and description name it.
+ */
+export const FLAWS = Object.freeze(['cheek-plaster', 'brow-scar', 'cheek-scratch']);
+export const FLAW_WORDS = Object.freeze({'cheek-plaster': 'a sticking plaster on one cheek', 'brow-scar': 'a small scar through one eyebrow', 'cheek-scratch': 'two short scratches on one cheek'});
+/** A rig param flaw, checked: undefined/null for none. */
+export function checkFlaw(value, path) {
+  if (value === undefined || value === null) return null;
+  if (!FLAWS.includes(value)) fail(`${path}.flaw`, `must be one of ${FLAWS.join(', ')}; got ${JSON.stringify(value)}`);
+  return value;
+}
 /** Every marking some kind takes (KINDS[kind].marks says which). */
 export const KIND_MARKS = Object.freeze([...new Set(Object.values(KINDS).flatMap(spec => spec.marks))]);
 /** True for a kind drawn on four legs. */
@@ -118,7 +131,7 @@ function fail(path, message) {
 }
 
 /**
- * Validate and normalise the params of a kind. → {kind, size?, marks?,
+ * Validate and normalise the params of a kind. → {kind, size?, marks?, flaw?,
  * colors: {body, detail, accent}} with keys in a fixed order (size only when
  * not medium, marks only for a kind that has them and when any are set).
  * A person's params (hair, outfit, skin…) are refused by name.
@@ -127,7 +140,7 @@ export function normalizeKindParams(params, path = 'character') {
   const kind = params.kind;
   if (typeof kind !== 'string' || !Object.hasOwn(KINDS, kind)) fail(`${path}.kind`, `must be person or one of ${KIND_NAMES.join(', ')}; got ${JSON.stringify(kind)}`);
   const allowed = KINDS[kind].marks;
-  const takes = `${kindPhrase(kind)} takes kind, size${allowed.length ? ', marks' : ''} and colors {${KIND_COLOR_SLOTS.join(', ')}}`;
+  const takes = `${kindPhrase(kind)} takes kind, size${allowed.length ? ', marks' : ''}, flaw and colors {${KIND_COLOR_SLOTS.join(', ')}}`;
   for (const key of Object.keys(params)) if (!KIND_KEYS.includes(key)) fail(`${path}.${key}`, `does not apply to ${kindPhrase(kind)} (${takes})`);
   const size = params.size ?? 'medium';
   if (!KIND_SIZES.includes(size)) fail(`${path}.size`, `must be one of ${KIND_SIZES.join(', ')}; got ${JSON.stringify(size)}`);
@@ -135,6 +148,7 @@ export function normalizeKindParams(params, path = 'character') {
   if (!Array.isArray(marksIn)) fail(`${path}.marks`, 'must be an array');
   if (marksIn.length && !allowed.length) fail(`${path}.marks`, `does not apply to ${kindPhrase(kind)} (${takes})`);
   const marks = [...new Set(marksIn.map((name, i) => (allowed.includes(name) ? name : fail(`${path}.marks[${i}]`, `must be one of ${allowed.join(', ')}; got ${JSON.stringify(name)}`))))].sort();
+  const flaw = checkFlaw(params.flaw, path);
   const given = params.colors ?? {};
   if (!given || typeof given !== 'object' || Array.isArray(given)) fail(`${path}.colors`, 'must be an object');
   for (const key of Object.keys(given)) if (!KIND_COLOR_SLOTS.includes(key)) fail(`${path}.colors.${key}`, `is not a colour slot of ${kindPhrase(kind)} (allowed: ${KIND_COLOR_SLOTS.join(', ')})`);
@@ -143,7 +157,7 @@ export function normalizeKindParams(params, path = 'character') {
     colors[slot] = given[slot] ?? KINDS[kind].colors[slot];
     if (!isColorName(colors[slot])) fail(`${path}.colors.${slot}`, `must be a palette colour, brand role or six-digit hex; got ${JSON.stringify(colors[slot])}`);
   }
-  return {kind, ...(size !== 'medium' ? {size} : {}), ...(marks.length ? {marks} : {}), colors};
+  return {kind, ...(size !== 'medium' ? {size} : {}), ...(marks.length ? {marks} : {}), ...(flaw ? {flaw} : {}), colors};
 }
 
 const shade = (hex, amount = 0.18) => mixColor(OUTLINE, hex, amount);
