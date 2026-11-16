@@ -719,6 +719,21 @@ member. Graphics draw byte for byte as before. `test/members.test.js` proves
 the path with a stand-in member; each member module brings its own parity
 fixture, tests and 9:16 sample.
 
+**Member module: `tone`** (`kit/core/member-tone.mjs`). A card (`icon`,
+`label`, `badge`) in its own colour instead of the set's palette:
+`{member: {module: "tone", tone: "accent-deep", icon, label}}`. A tone is a
+step of the brand palette, never a hex: a hue (`primary`, `accent`, `paper`),
+alone or with `-deeper`, `-deep`, `-light` or `-lighter` (OKLCH lightness
+−0.16, −0.08, +0.08, +0.16 from the brand colour), pushed away from the ground
+until it clears 3:1 on bg; the ink on it is the brand colour that reads best.
+A hex fails with the nearest step. Steps that head toward the ground can meet
+at the 3:1 floor, and paper's lighter steps meet at white. A node-graph node in
+a tone runs its wire, pulse and lit rim in it too (the set takes a member's
+`color` when it gives one). Proof: parity fixture `h-node-graph-tone-portrait`
+(min SSIM 0.9959), `test/member-tone.test.js`, and the sample
+`examples/story/member-tone-9x16` (a kitchen whose hot stations sit in the
+primary's steps and cold ones in the accent's; finish's motion and pace gates
+pass).
 **Member module: `status`** (`kit/core/member-status.mjs`). A card (`icon`,
 `label`) whose status changes over time, as status-rack does for a whole
 module: `{member: {module: "status", icon, label, status}}`, where `status` is
