@@ -213,7 +213,7 @@ entrances and variants. The clamps only cap their timing.
     note while a repair can still fix it.
   - `boxed-list` (warning): a `checklist` scene, a list drawn as checkbox
     rows with status labels inside one card. It reads as a template; draw the
-    list with `item-list`, each item its own element (stack, fan, scatter or
+    list with `item-list`, each item its own element (pills, stack, fan, scatter or
     orbit, ticks landing one at a time).
 - **Planner prompt and skill: 9:16 composition.**
   - A card takes the top 30–40% of the frame and the cast stands in the lower

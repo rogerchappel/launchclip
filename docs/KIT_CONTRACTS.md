@@ -6642,11 +6642,11 @@ polaroid a brand gradient with an icon, so nothing shows empty.
 
 A list (steps, features, a checklist) is never rows inside one card. `item-list`
 draws each item as its own element in the view tree (`<id>-item-<i>`), with its
-own entrance and settle, in free type with no panel behind it.
+own entrance and settle: its own pill chip, or free type with nothing behind it.
 
 | Module | Variants | Params (beyond title, at, rect) | Events | Build |
 | --- | --- | --- | --- | --- |
-| `item-list` | stack, fan, scatter, orbit | `items` 2–6 (string or `{label ≤ 40, detail? ≤ 60, at?, tickAt?}`), `ticks`, `numbered` (default true without ticks), `subject` ≤ 24 (orbit only, required there), `tone`, `stagger` | item-&lt;i&gt;, tick-&lt;i&gt; | Items enter in order, `stagger` apart (the motion grammar's stagger by default). stack: free type down the frame, each slides in from the left. fan: the stack bent on an arc (each item turned a few degrees), every item flies out from one pile to its place. scatter: a loose grid, each item tilted and dropped in with a small overshoot. orbit: the subject pops in the middle and the items fly out from it to an ellipse round it (the phase that keeps them clear of the subject; fails when none does). With `ticks`, each item's tick (`<id>-tick-<i>`) draws on by itself at `tickAt` (default just after the item enters) and the number, if any, fades |
+| `item-list` | pills, stack, fan, scatter, orbit | `items` 2–6 (string or `{label ≤ 40, detail? ≤ 60, at?, tickAt?}`), `ticks`, `numbered` (default true without ticks), `subject` ≤ 24 (orbit only, required there), `tone`, `stagger` | item-&lt;i&gt;, tick-&lt;i&gt; | Items enter in order, `stagger` apart (the motion grammar's stagger by default). pills (default): each item a rounded chip that hugs its label, cascading a step right down the frame; it pops in from the left, and with `ticks` its ring fills and pops before the check draws on (the filled disc is `<id>-tick-<i>`). stack: free type down the frame, each slides in from the left. fan: the stack bent on an arc (each item turned a few degrees), every item flies out from one pile to its place. scatter: a loose grid, each item tilted and dropped in with a small overshoot. orbit: the subject pops in the middle and the items fly out from it to an ellipse round it (the phase that keeps them clear of the subject; fails when none does). With `ticks`, each item's tick (`<id>-tick-<i>`) draws on by itself at `tickAt` (default just after the item enters) and the number, if any, fades |
 
 All items share the smallest fitted label size, so the list reads as one set,
 and each label block centres in its measured box (the text measure can count

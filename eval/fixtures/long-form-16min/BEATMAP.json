@@ -86,7 +86,7 @@
          "No countdown",
          "No teaser trailer"
         ],
-        "variant": "stack"
+        "variant": "pills"
        },
        "why": "list: item-list"
       },
@@ -518,7 +518,7 @@
          "Expensive",
          "Very good"
         ],
-        "variant": "fan"
+        "variant": "stack"
        },
        "evidence": {
         "claim": "c-long-doc",
@@ -905,7 +905,7 @@
          "Remember more",
          "Finish longer tasks"
         ],
-        "variant": "scatter"
+        "variant": "fan"
        },
        "why": "list: item-list"
       }
@@ -1159,7 +1159,7 @@
          "Power",
          "People"
         ],
-        "variant": "stack"
+        "variant": "scatter"
        },
        "why": "list: item-list, ahead of icon-row"
       },
@@ -1185,7 +1185,7 @@
          "People",
          "Northlight confirmed"
         ],
-        "variant": "stack"
+        "variant": "scatter"
        },
        "why": "concept: builds on item-list (+1 items)"
       },
@@ -1211,7 +1211,7 @@
          "Northlight confirmed",
          "Finnish site chosen"
         ],
-        "variant": "stack"
+        "variant": "scatter"
        },
        "why": "concept: builds on item-list (+1 items)"
       }
@@ -2058,7 +2058,7 @@
          "They wait",
          "They read"
         ],
-        "variant": "stack"
+        "variant": "fan"
        },
        "why": "list: item-list, ahead of icon-row"
       }
@@ -3098,7 +3098,7 @@
          "Smaller model",
          "Thinner margins"
         ],
-        "variant": "fan"
+        "variant": "scatter"
        },
        "why": "list: item-list, ahead of icon-row"
       },
@@ -4811,7 +4811,7 @@
          "Benchmark chart second",
          "Launch video last"
         ],
-        "variant": "scatter"
+        "variant": "pills"
        },
        "evidence": {
         "claim": "c-leaderboard",

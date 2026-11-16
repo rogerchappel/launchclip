@@ -15,7 +15,7 @@ LaunchClip's goal: **a SaaS founder points it at their product and gets a launch
 - Export to Final Cut Pro, Premiere Pro, DaVinci Resolve or OpenTimelineIO
 - **Demo autopilot:** point it at your SaaS codebase and it starts the app, records the key flows on safe demo data, and edits them in with zooms and callouts timed to every action ([guide](guide/demo-autopilot.md))
 - **Subject-aware effects:** in a talking-head recording, graphics can sit behind you (your product name behind your head, your app on the wall behind you, a dolly zoom), chosen by the art director like any other module, or put on a clip yourself with `launchclip fx` ([guide](guide/effects.md))
-- **Lists as separate items:** a list (steps, features, a checklist) is one free-type element per item, stacked, fanned, scattered or orbiting a subject, with ticks landing one at a time (`item-list`); the finish gate warns on a boxed checklist card
+- **Lists as separate items:** a list (steps, features, a checklist) is one element per item (its own pill chip, or free type stacked, fanned, scattered or orbiting a subject), with ticks landing one at a time (`item-list`); the finish gate warns on a boxed checklist card
 - Published on npm
 
 ## Next
