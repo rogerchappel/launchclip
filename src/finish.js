@@ -23,7 +23,7 @@ import { resolveFinish } from "@launchclip/core/finish.mjs";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -53,6 +53,8 @@ import { vfxSounds } from "@launchclip/core/vfx/plan.mjs";
 import { VFX_EFFECTS } from "@launchclip/core/vfx/catalog.mjs";
 import { pairsCheck, storyVisuals } from "@launchclip/core/sound/pairs.mjs";
 import { ffmetadataChapters, youtubeChapterProblems, youtubeChapters } from "@launchclip/core/long-form.mjs";
+import { creditsText } from "@launchclip/core/sound/sampler.mjs";
+import { instrumentsDir, readSampleIndex } from "./music/samples.js";
 import { directionFileFor, moduleParamErrors, readScriptBeside, validateStory } from "./story_cli.js";
 import { ANIMATIC_FILE, ANIMATIC_VIDEO, writeAnimatic } from "./animatic.js";
 import { hasExactFile, readStoryEdl } from "./story_loader.js";
@@ -163,6 +165,7 @@ export const PATHS = Object.freeze({
   audio: "qa/finish/audio.json",
   style: "qa/style-check.json",
   chapters: "renders/chapters.txt",
+  credits: "renders/credits.txt",
   chaptersMeta: ".launchclip/finish/chapters.ffmetadata",
   report: "finish.json"
 });
@@ -771,7 +774,7 @@ export function defaultAdapters() {
     async synthKit(outDir, bed, kit = null) {
       const args = [SCRIPT.synth, outDir];
       if (bed) args.push("--bed", String(bed.seconds), "--bpm", String(bed.bpm), "--key", String(bed.key), "--kick-from", String(bed.kick_from), "--kick-to", String(bed.kick_to));
-      if (bed?.genre) args.push("--genre", bed.genre, "--progression", String(bed.progression));
+      if (bed?.genre) args.push("--genre", bed.genre, "--progression", String(bed.progression), "--instruments", instrumentsDir(this.env ?? process.env));
       args.push(...kitArgs(kit));
       await execFileAsync(process.execPath, args, { maxBuffer: 1 << 26 });
       return JSON.parse(await readFile(path.join(outDir, "AUDIO-KIT.json"), "utf8"));
@@ -1398,7 +1401,9 @@ const STAGES = [
       ctx.warnings.push(...plan.cueWarnings);
       const kitDir = path.join(ctx.project, PATHS.kit);
       const synthBed = plan.music.kind === "synth" ? plan.bed : null;
-      const kitKey = hashValue({ bed: synthBed, script: await fileHash(SCRIPT.synth), sound: await treeFingerprint(SOUND_DIR), ...(plan.kit ? { kit: plan.kit } : {}) });
+      // The sample index too: fetching instruments re-renders a sampled genre's bed.
+      const samples = synthBed?.genre ? readSampleIndex(instrumentsDir(ctx.adapters.env ?? process.env))?.instruments ?? null : null;
+      const kitKey = hashValue({ bed: synthBed, script: await fileHash(SCRIPT.synth), sound: await treeFingerprint(SOUND_DIR), ...(plan.kit ? { kit: plan.kit } : {}), ...(samples ? { samples: Object.keys(samples) } : {}) });
       const previousKit = ctx.state.stages?.sound?.details?.kit_key;
       const ambienceFile = plan.sound.ambience ? path.join(kitDir, "ambience", `${plan.sound.ambience}.wav`) : null;
       let kitReused = previousKit === kitKey && existsSync(path.join(kitDir, "AUDIO-KIT.json")) && (!synthBed || existsSync(path.join(kitDir, "music", "bed.wav"))) && (!ambienceFile || existsSync(ambienceFile));
@@ -1425,6 +1430,17 @@ const STAGES = [
       }
       const synced = track ? await beatSync(ctx, plan, track, { duration }) : null;
       const musicFile = synced?.file ?? null;
+      // Sampled instruments the synth bed played (AUDIO-KIT.json music.credits):
+      // renders/credits.txt and sound.credits; a sampled genre without its
+      // instruments plays synth with one warning line.
+      const kitMusic = plan.music.kind === "synth" && musicFile ? (await readOptionalJson(path.join(kitDir, "AUDIO-KIT.json")))?.music ?? null : null;
+      const credits = kitMusic?.credits ?? [];
+      if (kitMusic?.fallback) ctx.warnings.push(kitMusic.fallback);
+      const creditsFile = path.join(ctx.project, PATHS.credits);
+      if (credits.length) {
+        await mkdir(path.dirname(creditsFile), { recursive: true });
+        await writeFile(creditsFile, creditsText(credits));
+      } else await rm(creditsFile, { force: true });
       // Snapping moved scenes and hits: bind the SFX cues and the typing track
       // to the moved times.
       let boundCues = plan.cues;
@@ -1526,7 +1542,8 @@ const STAGES = [
           beat_sync: PATHS.beatSync,
           alignment: synced.alignment ? { offset: synced.alignment.offset, tempo: synced.alignment.tempo } : null,
           generation: track.generation ?? null,
-          ...(plan.bed.genre ? { genre: plan.bed.genre, progression: plan.bed.progression } : {})
+          ...(plan.bed.genre ? { genre: plan.bed.genre, progression: plan.bed.progression } : {}),
+          ...(credits.length ? { instruments: kitMusic.instruments, credits, credits_file: PATHS.credits } : {})
         } : null,
         ...(ambienceFile ? { ambience: { path: ambienceFile, bed: plan.sound.ambience, world: plan.sound.world, volume: AMBIENCE_VOLUME, ducking } } : {}),
         ...(plan.sound.active ? { sound: { palette: plan.sound.palette, seed: plan.sound.seed, genre: plan.bed?.genre ?? null, ambience: plan.sound.ambience } } : {}),
@@ -1534,7 +1551,7 @@ const STAGES = [
         sfx_kit: path.join(kitDir, "AUDIO-KIT.json"),
         sfx_libraries: plan.libraries.map((library) => ({ scope: library.scope, manifest: library.file })),
         ...(earshot.credits.length ? { sfx_credits: earshot.credits } : {}),
-        license: [sfxLicense(origins), musicLicense(plan.music.kind)].filter(Boolean).join(" ")
+        license: [sfxLicense(origins), musicLicense(plan.music.kind), credits.length ? `Music: some stems are played on sample libraries (${credits.map((credit) => `${credit.title}, ${credit.licence}`).join("; ")}); see ${PATHS.credits}.` : null].filter(Boolean).join(" ")
       });
       const details = {
         mix_file: PATHS.mix,
@@ -1555,6 +1572,7 @@ const STAGES = [
         sfx_generated: { count: eventSounds.generated.length, new: eventSounds.generated.filter((item) => !item.cached).length, cost_usd: eventSounds.cost_usd },
         sfx_sources: countBy(cues.map((cue) => ({ scope: cue.sfx_source ?? (cue.source === "typing" ? "typing" : "kit") })), "scope"),
         typing_keys: typing ? typing.keystrokes.length : 0,
+        ...(credits.length ? { credits } : {}),
         ...(plan.sound.active ? { sound: { palette: plan.sound.palette, seed: plan.sound.seed, genre: plan.bed?.genre ?? null, ambience: plan.sound.ambience } } : {})
       };
       STAGES[3].restore(ctx, details);
