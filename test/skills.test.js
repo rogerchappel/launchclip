@@ -89,3 +89,14 @@ test("both create-video skills open with a concise quick path in gate order", as
     assert.match(workflow, /## Preserve the cost boundary/);
   }
 });
+
+test("every skill description fits the 1,024-character limit", async () => {
+  const { readdir } = await import("node:fs/promises");
+  for (const name of await readdir(path.join(root, "skills"))) {
+    const skill = await text(`skills/${name}/SKILL.md`).catch(() => null);
+    if (skill === null) continue;
+    const description = skill.match(/^---\n[\s\S]*?^description:\s*(.+)$/m)?.[1]?.trim();
+    assert.ok(description, `${name} has a description`);
+    assert.ok(description.length <= 1024, `${name} description is ${description.length} characters`);
+  }
+});

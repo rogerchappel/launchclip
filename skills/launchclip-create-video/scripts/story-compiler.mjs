@@ -31,6 +31,8 @@ import { ambientField, blobBackground, fieldTileTransform, blobStateAt, blobTwee
 import { backgroundPlan, fieldStyle, layerCss, layerSvg, layerTweens, layoutFillClip, panelFillPlan, sceneBackground } from './backgrounds.mjs';
 import { scenePlatePlan, scenePlateSpec, storyPlatePlan } from './plates.mjs';
 import { LIGHT_OVER_ID, LIGHT_Z, lightLayerActive, lightLayerCss, lightPlan, lightTweens } from './lighting.mjs';
+import { VFX_Z, vfxPlan } from './vfx/plan.mjs';
+import { VFX_RUNTIME } from './vfx/runtime.mjs';
 import { worldBackdrops } from './world-backdrops.mjs';
 import { shotZooms, zoomOps } from './zooms.mjs';
 import { feelGsap, feelPlan } from './kinetic.mjs';
@@ -635,6 +637,17 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   // The light's over group (kit/core/lighting.mjs): wrap, pulse halos and the
   // vignette, above every scene and the camera, under the dot wipes.
   const lightOver = light?.over.length ? lightLayers(light.over, 'over', 0, D) : null;
+  // The VFX layer (kit/core/vfx): effect cues on two art-sized canvases over
+  // the scenes and the light, the light canvas added with plus-lighter; the
+  // inlined painter draws the timeline's time from a proxy tween, as Remotion's
+  // VfxCanvas does from its layout effect.
+  const vfx = isolate ? null : vfxPlan(story);
+  const vfxCanvas = (part) => `<canvas id="lc-vfx-${part}" data-launchclip-vfx="${part}" width="${vfx.aw}" height="${vfx.ah}" aria-hidden="true" style="position:absolute;left:0;top:0;width:${vfx.aw * vfx.grid}px;height:${vfx.ah * vfx.grid}px;image-rendering:pixelated;pointer-events:none;z-index:${VFX_Z.hyperframes}${part === 'light' ? ';mix-blend-mode:plus-lighter' : ''}"></canvas>`;
+  const vfxLines = vfx ? ['// vfx (over the scenes)', `(function () {
+  var color = document.getElementById('lc-vfx-color').getContext('2d'), light = document.getElementById('lc-vfx-light').getContext('2d'), plan = ${JSON.stringify(vfx)}, clock = {t: 0};
+  window.lcVfx.paint(color, light, plan, 0);
+  tl.fromTo(clock, {t: 0}, {t: ${num(D)}, duration: ${num(D)}, ease: 'none', immediateRender: false, onUpdate: function () { window.lcVfx.paint(color, light, plan, clock.t); }}, 0);
+})();`] : [];
 
   const fonts = brandFontStacks(story.brand);
   const fontCss = await projectFontFaces(story.brand, { sourceDir });
@@ -674,13 +687,13 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     ${audio}
     ${feelLines.length ? '<div id="lc-feel" class="lc-feel">' : ''}${plan ? cameraMarkup(plan, story.brand, world, worldField.html, !worldBackdrop && !covered, stack?.html ?? '') : ''}
     ${hoisted.join('\n    ')}
-    ${markup.join('\n    ')}${feelLines.length ? '\n    </div>' : ''}${lightOver ? `\n    <div id="${LIGHT_OVER_ID}" data-launchclip-light="over" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:${LIGHT_Z.hyperframes}">${lightOver.html}</div>` : ''}${wipeMarkup.length ? `\n    ${wipeMarkup.join('\n    ')}` : ''}
+    ${markup.join('\n    ')}${feelLines.length ? '\n    </div>' : ''}${lightOver ? `\n    <div id="${LIGHT_OVER_ID}" data-launchclip-light="over" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:${LIGHT_Z.hyperframes}">${lightOver.html}</div>` : ''}${vfx ? `\n    ${vfxCanvas('color')}${vfxCanvas('light')}\n    <script>\n${VFX_RUNTIME}\n    </script>` : ''}${wipeMarkup.length ? `\n    ${wipeMarkup.join('\n    ')}` : ''}
     ${look?.under ? `${lookGradeMarkup(look)}\n    ` : ''}${medium ? `${mediumDefs(medium)}<div id="${MEDIUM_LAYER_ID}" data-launchclip-medium="${medium.kind}" aria-hidden="true"></div>\n    ` : ''}${look && (look.furniture || (look.grade && !look.under)) ? `${look.under ? '' : lookGradeMarkup(look)}${lookFurnitureMarkup(look)}\n    ` : ''}${frame ? `<div id="lc-frame-root" aria-hidden="true"></div>\n    <script>\n${brandFrameRuntime(frame)}</script>\n    ` : ''}${captions ? '<div id="lc-captions" class="lc-captions"></div>' : ''}
     ${captions ? `<script>\n${captionPlanRuntime(captions.plan)}</script>` : ''}
     <script>
       window.__timelines = window.__timelines || {};
       const tl = gsap.timeline({ paused: true });${stepped ? `\n      // look ${look.name}: the picture runs on its own timeline, held on ${look.step} drawings a second\n      const lcPicture = gsap.timeline({ paused: true });\n      ((tl) => {` : ''}
-${seamTweens([...motion, ...(lightOver ? ['// light (over the scenes)', ...lightOver.motion] : [])].join('\n').split('\n')).map((line) => `      ${line}`).join('\n')}${feelLines.length || wipes.length || handles.length || sweeps.length ? `\n${[...feelLines, ...wipes.flatMap((wipe) => [`// dot-wipe into ${wipe.sceneId}`, ...dotWipeGsap(wipe)]), ...handles.flatMap((wipe) => [`// before-after into ${wipe.sceneId}`, ...beforeAfterGsap(wipe)]), ...sweeps.flatMap((sweep) => [`// ${sweep.type ?? 'light-sweep'} into ${sweep.sceneId}`, ...lightSweepGsap(sweep)])].map((line) => `      ${line}`).join('\n')}` : ''}${stepped ? `\n      })(lcPicture);\n      lcPicture.render(0, true, true);\n      tl.fromTo(lcPicture, { time: 0 }, { time: ${num(D)}, duration: ${num(D)}, ease: ${lookStepEase(look)}, immediateRender: false }, 0);` : ''}
+${seamTweens([...motion, ...(lightOver ? ['// light (over the scenes)', ...lightOver.motion] : [])].join('\n').split('\n')).map((line) => `      ${line}`).join('\n')}${feelLines.length || wipes.length || handles.length || sweeps.length || vfxLines.length ? `\n${[...feelLines, ...vfxLines, ...wipes.flatMap((wipe) => [`// dot-wipe into ${wipe.sceneId}`, ...dotWipeGsap(wipe)]), ...handles.flatMap((wipe) => [`// before-after into ${wipe.sceneId}`, ...beforeAfterGsap(wipe)]), ...sweeps.flatMap((sweep) => [`// ${sweep.type ?? 'light-sweep'} into ${sweep.sceneId}`, ...lightSweepGsap(sweep)])].map((line) => `      ${line}`).join('\n')}` : ''}${stepped ? `\n      })(lcPicture);\n      lcPicture.render(0, true, true);\n      tl.fromTo(lcPicture, { time: 0 }, { time: ${num(D)}, duration: ${num(D)}, ease: ${lookStepEase(look)}, immediateRender: false }, 0);` : ''}
       ${look ? `${lookSteps(look, D).map((step) => `tl.set(${js(lookSelector(look))}, ${js(step.vars)}, ${num(step.time)});`).join('\n      ')}\n      ` : ''}${medium ? `${mediumSteps(medium, D).map((step) => `tl.set(${js(`#${MEDIUM_LAYER_ID}`)}, ${js({ '--lc-medium-filter': step.filter })}, ${num(step.time)});`).join('\n      ')}\n      ` : ''}${frame ? 'window.mountBrandFrame(tl, document.getElementById("lc-frame-root"));\n      ' : ''}${captions ? 'window.mountCaptions(tl, document.getElementById("lc-captions"));' : ''}${captions?.dips.length ? `\n      // captions dip out during sweeping camera moves (each dip out ends in a hard
       // set, so a seek past the fade, often onto a shot's start, finds them hidden)\n      ${captions.dips.map((dip) => `tl.fromTo('#lc-captions', { opacity: ${dip.from} }, { opacity: ${dip.to}, duration: ${num(dip.dur)}, ease: 'none', immediateRender: false }, ${num(dip.at)});${dip.to === 0 ? `\n      tl.set('#lc-captions', { opacity: 0 }, ${num(dip.at + dip.dur)});` : ''}`).join('\n      ')}` : ''}
       window.__timelines["${COMPOSITION_ID}"] = tl;

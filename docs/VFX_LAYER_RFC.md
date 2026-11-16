@@ -79,8 +79,22 @@ effect, options and seed); a later `t` steps forward (4 steps a frame at 30
 fps), an earlier `t` rebuilds, the same rule `PARTICLE_RUNTIME` uses for its
 bitmaps. Remotion renders each chunk in order, so a seek costs one replay per
 chunk. Checkpointing is not worth it: state lives in closures, so snapshots
-would mean editing 120 files. The check caps simulated effects at 4 s; long
-loops (all of weather) are pure.
+would mean editing 120 files. Long loops (all of weather) are pure.
+
+*Measured (phase 1, `kit/core/vfx/driver.mjs`, Node 22 on an Apple M4, seed
+7, a cold seek to the last frame):* a step costs 0.7–4 µs, not 5–20 µs, and the
+longest one-shots run past 3 s: small-explosion (5.4 s, 644 steps) and
+smoke-bomb (5 s, 596 steps) leave smoke behind. A full replay still costs at
+most 1.8 ms (firework-burst 1.7, smoke-bomb 1.7, small-explosion 1.4,
+ground-slam 1.4 ms; the sub-second hits under 0.3 ms). The exception is
+impact-frame: its `create()` precomputes eight full-canvas masks, about 40 ms,
+once per cache slot, and its steps are free. So the cap on simulated effects is
+6 s, not 4 s: the replay is cheap, and the smoke tails are the point. Drawing a
+frame forward through the cache costs under 1 ms median (4.6 ms worst, a
+ground-slam frame) on a 320 × 180 art canvas. The purity test
+(`test/vfx_driver.test.js`) draws five times per effect by 30 fps forward play,
+by a cached seek backwards and by an uncached replay, and compares the colour
+and light buffers byte for byte.
 
 **One runtime string.** `kit/core/vfx/runtime.mjs` exports `VFX_RUNTIME`, an
 IIFE bundle built with the esbuild already in our dev dependencies: the
@@ -214,7 +228,7 @@ Checks:
   bytes; `Math.random`/`Date` are absent (grep and a trapped global).
 - **Effect check** (our own, after upstream's checker): draws stay inside the
   canvas, one-shots draw nothing at `duration`, loops have no seam, a frame
-  costs under 4 ms at 1080p, simulated effects are 4 s or less.
+  costs under 4 ms at 1080p, simulated effects are 6 s or less.
 - **motion-check:** a VFX cue reads as a flash (`pulse`), not an entrance.
   New findings: `vfx-crowd` (more than three hits within 1 s), `vfx-off-beat`
   (peak more than one frame off its beat), `vfx-over-caption` (an impact
@@ -224,6 +238,50 @@ Checks:
 - **Contact sheet:** `vfx-sheet.mjs` renders every effect at six times, in
   both modes and three style palettes, one PNG per category. Golden hashes
   catch drift; the sheet is also what a human reviews before a batch merges.
+
+## 4a. Built so far (phases 0–2) and where it differs from the plan above
+
+The impact layer works end to end in both renderers. What was built, and the
+places the plan changed once it met the code:
+
+- **Vendored:** the core (no actor rig, scenes, acts or `createFx`) and ten
+  effects: hit-spark, crit-hit, impact-frame, ground-slam, small-explosion,
+  smoke-bomb, firework-burst, poof, sunburst, collect-burst
+  (`kit/core/vfx/vendor/`, licence verbatim, a source header on every file).
+- **Driver:** `kit/core/vfx/driver.mjs`, measured above. The painter also
+  snaps story time to the 1/120 s grid, so float noise in a renderer's clock
+  never decides whether a cue has started.
+- **One layer per story, not per scene.** The cues of every scene go on one
+  colour canvas and one light canvas (`plus-lighter`) over all the scenes and
+  the light's over group, under the wipes, the brand frame and the captions.
+  `layer: "back"` is not built.
+- **Timing uses the story's anchor grammar:** `at` is seconds, `"word:<text>"`
+  or `"beat:<n>"`, resolved like `hits`. `{"anchor": …}` (module anchors) waits
+  for the fluid-motion anchors. `align` defaults to `"peak"`: impacts land on
+  their moment unless a cue asks for `"start"`.
+- **Placement:** `x`/`y` are fractions of the frame (default the centre),
+  snapped to the art grid: the short side is 180 art pixels (6 px at 1080p).
+  `scale`, `mask` and the camera shake are not built.
+- **Colour:** `color` names a brand colour or a `#rrggbb`; `rampOf` makes an
+  8-step ramp from it (shadows from the background, highlights to white).
+  Without one, an effect keeps its own palette. The semantic ramps, the hue
+  shift and the brand-strict pull are not built.
+- **Peaks** come from the light buffer only (colour as a fallback): counting
+  colour put smoke-bomb's peak on its biggest smoke cloud at 2.95 s, not its
+  flash at 0.97 s. `scripts/vfx-peaks.mjs` measures; the test keeps them current.
+- **Sound:** each cue's paired family (or a named one, or `"none"`) is bound by
+  `finish` on the effect's peak, like a hit.
+- **Runtime:** `VFX_RUNTIME` is generated into the repo by
+  `scripts/vfx-runtime.mjs` (80 KB with all ten effects) rather than bundled
+  per story at compile time, because the compiler cannot rely on esbuild at
+  run time. Per-story trimming is worth doing once the catalogue grows.
+- **Render:** `pixel` only. `smooth` is still phase 3.
+- **Checks:** `test/vfx_driver.test.js` (purity), `test/vfx_layer.test.js`
+  (catalogue, validation, plan, runtime against the import byte for byte,
+  compiled page, sound), story parity on `examples/story/vfx-impacts-9x16`,
+  and `scripts/vfx-sheet.mjs` (every effect at six times in three palettes).
+  Golden sheet hashes, the effect check and the motion-check findings are
+  not built.
 
 ## 5. Phases
 

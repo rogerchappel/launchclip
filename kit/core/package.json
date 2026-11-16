@@ -19,6 +19,7 @@
   "files": [
     "*.mjs",
     "*/*.mjs",
+    "vfx",
     "types",
     "README.md",
     "LICENSE",
