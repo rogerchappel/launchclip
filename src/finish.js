@@ -467,7 +467,7 @@ export function resolveCueFiles(cues, { libraries = [], kit = null, storyId = ""
   return cues.map((cue) => {
     const resolved = resolveCueFile(cue, { libraries, kit, key: `${storyId}|${cue.cue}`, turn: turnOf.get(cue) });
     if (!resolved) return cue;
-    const placed = { ...cue, file: resolved.file, sfx_source: resolved.scope, sfx_origin: resolved.source, variant: resolved.variant };
+    const placed = { ...cue, file: resolved.file, sfx_source: resolved.scope, sfx_origin: resolved.source, ...(resolved.generated ? { sfx_generated: resolved.generated } : {}), variant: resolved.variant };
     const peak = Number(resolved.measurements?.peak_at_ms);
     if (cue.cue === "riser" && Number.isFinite(cue.lands_at) && Number.isFinite(peak)) placed.at = round3(Math.max(0, cue.lands_at - peak / 1000));
     return placed;
@@ -502,7 +502,7 @@ async function sonifyCues(ctx, { key, seed }) {
 export function typingBanks(libraries, kit) {
   const bank = (family) => {
     const source = familySource(family, libraries, kit);
-    return source ? source.files.map((file, index) => ({ file, measurements: source.measurements[index], scope: source.scope, source: source.source })) : [];
+    return source ? source.files.map((file, index) => ({ file, measurements: source.measurements[index], scope: source.scope, source: source.source, generated: source.generated ?? null })) : [];
   };
   return { key: bank("keystroke"), space: bank("keystroke-space"), enter: bank("keystroke-enter"), word: bank("click") };
 }
@@ -512,13 +512,14 @@ function firstKeyPerShot(keystrokes) {
   return keystrokes.filter((key) => key.kind !== "word" && !seen.has(key.shot) && seen.add(key.shot));
 }
 
-/** The licence line for the SFX actually used. origins: Set of "procedural" | "elevenlabs" | ... */
-export function sfxLicense(origins) {
+/** The licence line for the SFX actually used. origins: Set of "procedural" | "elevenlabs" | "comfy" | ...; generated: Set of "model (licence id)" for locally generated SFX. */
+export function sfxLicense(origins, generated = new Set()) {
   const parts = ["Original procedural synthesis (synth-audio-kit.mjs); no third-party samples."];
   if (origins.has("elevenlabs")) parts.push("Some SFX were generated with ElevenLabs sound effects (launchclip sfx seed); their use is governed by the ElevenLabs terms of service.");
   if (origins.has("earshot") || origins.has("earshot-fit")) parts.push("Some SFX were rendered from the Earshot sound bank (https://github.com/Leonxlnx/earshot, MIT) by its own code recipes.");
   if (origins.has("earshot-fit")) parts.push("Some of those are Earshot fits: recipes measured from CC0 1.0 Freesound recordings, credited in sfx_credits.");
-  const other = [...origins].filter((origin) => !["procedural", "elevenlabs", "earshot", "earshot-fit"].includes(origin));
+  if (origins.has("comfy")) parts.push(`Some SFX were generated on this machine with ComfyUI (launchclip sfx seed --provider comfy) using ${[...generated].join(", ") || "a user-supplied model"}; their use is governed by that model licence.`);
+  const other = [...origins].filter((origin) => !["procedural", "elevenlabs", "comfy", "earshot", "earshot-fit"].includes(origin));
   if (other.length) parts.push(`Other SFX library sources: ${other.join(", ")}.`);
   return parts.join(" ");
 }
@@ -1503,7 +1504,9 @@ const STAGES = [
         libraries: plan.libraries.map((library) => ({ scope: library.scope, manifest: library.file }))
       });
       const origins = new Set(cues.map((cue) => cue.sfx_origin).filter(Boolean));
-      if (typing) for (const kind of Object.values(typingBanks(plan.libraries, kit))) for (const entry of kind) origins.add(entry.source);
+      const generated = new Set(cues.map((cue) => cue.sfx_generated).filter(Boolean));
+      if (typing) for (const kind of Object.values(typingBanks(plan.libraries, kit))) for (const entry of kind) { origins.add(entry.source); if (entry.generated) generated.add(entry.generated); }
+      if (generated.size) ctx.warnings.push(`sfx licence: some SFX were generated with ComfyUI under ${[...generated].join(", ")}; check your use is within those terms`);
       const ducking = voiceFile ? "sidechain under voice" : speechKey ? "sidechain under footage speech" : null;
       await writeJson(path.join(ctx.project, PATHS.audioManifest), {
         schema_version: "launchclip.audio-manifest.v1",
@@ -1534,7 +1537,7 @@ const STAGES = [
         sfx_kit: path.join(kitDir, "AUDIO-KIT.json"),
         sfx_libraries: plan.libraries.map((library) => ({ scope: library.scope, manifest: library.file })),
         ...(earshot.credits.length ? { sfx_credits: earshot.credits } : {}),
-        license: [sfxLicense(origins), musicLicense(plan.music.kind)].filter(Boolean).join(" ")
+        license: [sfxLicense(origins, generated), musicLicense(plan.music.kind)].filter(Boolean).join(" ")
       });
       const details = {
         mix_file: PATHS.mix,
