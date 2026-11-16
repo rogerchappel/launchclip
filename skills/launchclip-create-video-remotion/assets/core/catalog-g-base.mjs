@@ -192,6 +192,7 @@ export function spread(layout, maxHeight, gaps) {
  * panel (model.panel, kit/core/panels.mjs) it takes that treatment and
  * radius; without one it is today's opaque card.
  */
+// Its id (<id>-card) lets the card be pinned across a cut and published as an anchor (FLUID_MOTION_RFC §6.4).
 export function cardSurface(model) {
   if (model.surface !== 'card') return null;
   const {theme, unit: u, rect} = model;
@@ -201,9 +202,9 @@ export function cardSurface(model) {
     // A panel fill (model.panel.fill, kit/core/backgrounds.mjs cardFillStyles): still pattern layers clipped to the card.
     // The pattern layers are larger than the card and clipped to it on purpose.
     const inner = fill ? [el('div', null, abs(0, 0, rect.width, rect.height, {overflow: 'hidden', borderRadius: surface.borderRadius, ...fill.mask}), fill.styles.map(style => el('div', null, style)), {'data-layout-allow-overflow': 'true'})] : [];
-    return el('div', null, abs(0, 0, rect.width, rect.height, surface), inner);
+    return el('div', `${model.id}-card`, abs(0, 0, rect.width, rect.height, surface), inner);
   }
-  return el('div', null, abs(0, 0, rect.width, rect.height, {boxSizing: 'border-box', borderRadius: r2(32 * u), background: theme.bg,
+  return el('div', `${model.id}-card`, abs(0, 0, rect.width, rect.height, {boxSizing: 'border-box', borderRadius: r2(32 * u), background: theme.bg,
     border: `${r2(2 * u)}px solid ${theme.border}`, boxShadow: `0 ${r2(18 * u)}px ${r2(48 * u)}px #00000073`}));
 }
 

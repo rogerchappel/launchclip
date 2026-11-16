@@ -2484,6 +2484,19 @@ params:
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build, node-<id>, converge
 
+### sprout (keeps captions)
+Labels that branch out of an element another scene already shows (an ad card, a hub), on glowing wires with pulses, so nothing new appears unattached: an overlay on a higher track aimed at that scene's anchor. Each wire grows from the element's edge and its label lands as it arrives; pulses then run out to the labels on the beat and light them.
+params:
+- from: {scene, anchor}: an anchor another scene publishes (required; that element must stay on screen for this whole scene, pinned across a cut if needed)
+- branches: [label ≤ 16 | {label ≤ 16, icon? (kit/core/icons.mjs), id? (default b<i>)}] 1–4 (events branch-<id>)
+- side: auto (default: the side of the element with the most room) | below | above | left | right
+- tone: wires and rims: primary | accent (default) | paper | #rrggbb
+- at: when the first wire leaves: seconds from scene start (optional; else a matching hit, else a default); default half a beat after the anchor lands
+- bpm: beats per minute for default timing, 60–200 (default 120)
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
+- rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
+events: build, branch-<id>
+
 ### drop-grid (keeps captions)
 Things pile up as they are said: 1–40 cards, coins or tiles drop into a grid one by one ("10 times a day": ten cards land), each with a weighted fall, a squash on contact, a contact shadow and a puff of dust, over faint empty slots; an optional counter climbs with every landing, and confetti bursts and the grid ripples when it fills. Landed items rock gently on their base. Time each drop to its word with params.times.
 params:
@@ -2777,6 +2790,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | feynman-diagram | 2 s | 0.5 s | scene − 0.65 s | lines draw in 0.6 s each, about 0.55 s apart from at; both compress so every label stays up 1 s plus 0.3 s a word before the exit, and a label the scene has no time for is dropped; vertices pop as the first line reaches them; the caption shows with the build |
 | line-diagram | 2 s | 0.5 s | scene − 0.65 s | strokes draw in 0.6 s, 0.5 s apart from at; both compress so every label stays up 1 s plus 0.3 s a word before the exit, and a label the scene still has no time for is dropped (keep labels few and short, or lengthen the scene); an explicit line at must leave its label that read |
 | node-graph | 2 s | 0.5 s | scene − 0.65 s | the hub pops on the first beat after 0.5 s; nodes flock out from the middle of the fan outwards a quarter beat apart; a pulse lands on every beat once the wires are drawn; converge falls on the first bar line two beats after the last wire, or the last beat before the exit |
+| sprout | 2 s | 0.5 s | scene − 0.65 s | wires leave half a beat after the anchor lands, nearest first, a quarter beat apart; each label lands 0.4 s after its wire leaves; a pulse reaches one label per beat once all have landed |
 | drop-grid | 2 s | 0.5 s | scene − 0.65 s | each item lands TACTILE.fall s after its drop time; time drops to the words that count them; the last item lands before the exit |
 | live-counter | 2 s | 0.5 s | scene − 0.65 s | the count runs from at until just before the exit, so the figure is moving whenever it is on screen |
 | live-bars | 2 s | 0.5 s | scene − 0.65 s | the bars climb from at until just before the exit |

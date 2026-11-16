@@ -1,0 +1,23 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "An ad card sprouts what it needs (golden, 9:16 growth from existing elements)",
+  "notes": "Golden story for growth from existing elements (docs/FLUID_MOTION_RFC.md §6.4): an ad card lands, then Copy and Images branch out of it on glowing wires, and pulses run out to them on the beat. The card is pinned across the cut at 3.5 s, so the same wires stay attached while Video grows out of the card's right side in the next scene. No narration and no paid calls.",
+  "lane": "motion",
+  "format": {"width": 1080, "height": 1920, "fps": 30, "duration": 7, "platform": "youtube-shorts"},
+  "brand": {
+    "colors": {"bg": "#0b0d1a", "primary": "#ffb547", "accent": "#46d4ff", "ink": "#0b0d1a", "paper": "#f6f3ee"},
+    "fonts": {"display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono"}
+  },
+  "camera": {"mode": "cuts"},
+  "scenes": [
+    {"id": "ad", "module": "concept-card", "start": 0, "end": 3.5,
+      "params": {"text": "Your next ad", "icon": "megaphone", "sub": "One brief in, every asset out", "tone": "primary", "surface": "card", "rect": {"x": 80, "y": 300, "width": 460, "height": 540}}},
+    {"id": "ad-held", "module": "concept-card", "start": 3.5, "end": 7,
+      "carry": {"map": {"ad-card": "ad-held-card", "ad-icon": "ad-held-icon", "ad-word": "ad-held-word", "ad-sub": "ad-held-sub"}},
+      "params": {"text": "Your next ad", "icon": "megaphone", "sub": "One brief in, every asset out", "tone": "primary", "surface": "card", "rect": {"x": 80, "y": 300, "width": 460, "height": 540}}},
+    {"id": "grow", "module": "sprout", "track": 1, "start": 0, "end": 7,
+      "params": {"from": {"scene": "ad", "anchor": "card"}, "side": "below", "branches": [{"label": "Copy", "icon": "pen-line"}, {"label": "Images", "icon": "image"}]}},
+    {"id": "grow-more", "module": "sprout", "track": 2, "start": 3.5, "end": 7,
+      "params": {"from": {"scene": "ad", "anchor": "card"}, "side": "right", "tone": "primary", "branches": [{"label": "Video", "icon": "clapperboard"}]}}
+  ]
+}

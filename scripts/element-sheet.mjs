@@ -85,7 +85,7 @@ async function main(argv) {
   const opts = args(argv);
   const TILE_H = opts.tile;
   const brand = opts.body ? {...BRAND, fonts: {...BRAND.fonts, body: opts.body}} : BRAND;
-  const ids = opts.modules ?? Object.keys(MODULES);
+  const ids = opts.modules ?? Object.keys(MODULES).filter(id => MODULES[id].standalone);
   const work = await mkdtemp(path.join(os.tmpdir(), 'launchclip-elements-'));
   try {
     const rows = [], paints = [];

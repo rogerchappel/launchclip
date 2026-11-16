@@ -194,6 +194,16 @@ function measure(story, A, B, resolveBare, explicitMap, flow) {
 }
 
 /**
+ * The elements pinned into scene B from its source (explicit or automatic):
+ * {A id: B id}, {} when none. A moved (FLIP) carry is not a pin.
+ */
+export function pinnedInto(story, B, resolveBare) {
+  const A = carrySource(story, B);
+  const pairs = A ? pairsFor(story, A, B, resolveBare) : null;
+  return pairs ? Object.fromEntries(Object.entries(pairs.map).filter(([, to]) => pairs.pins.has(to))) : {};
+}
+
+/**
  * Tag a resolved op-list model with what its scene hands on and receives.
  * resolveBare(scene) resolves a scene with no carry. Throws on an explicit
  * carry the story cannot play; automatic pairing never throws.

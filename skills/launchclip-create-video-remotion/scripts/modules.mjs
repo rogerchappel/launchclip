@@ -34,7 +34,7 @@ import { sceneLayoutAt, storySections } from './footage-layout.mjs';
 import { resolveShotStates, stateSpec, stateTargetRect } from './shot-states.mjs';
 import { scenePassage } from './media-passage.mjs';
 import { publishAnchors } from './anchors.mjs';
-import { applyFlow } from './flow.mjs';
+import { applyFlow, pinnedInto } from './flow.mjs';
 
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
@@ -589,8 +589,10 @@ function resolveModuleInner(scene, story, { track, end }) {
 
 /**
  * The anchors a scene publishes (kit/core/anchors.mjs; docs/FLUID_MOTION_RFC.md
- * §7): its module's declared points on the plate with the time each lands.
- * → {name: {x, y, time}}. Throws a message when the scene is not in the story
+ * §7): its module's declared points on the plate with the time each lands,
+ * and until when each stays on screen (§6.4: the scene's end, or a later one
+ * an explicit pin hands it on to). → {name: {x, y, width, height, element,
+ * time, until}}. Throws a message when the scene is not in the story
  * or its module publishes none.
  */
 export function sceneAnchors(story, sceneId) {
@@ -603,7 +605,29 @@ export function sceneAnchors(story, sceneId) {
   }
   const model = resolveModule(scene, story);
   // shortcut: measured at rest, so a camera push inside the module (node-graph's 1 → 1.05) is not followed; map through it when one grows large.
-  return publishAnchors(model, modelView(model), definition.anchors(model));
+  const anchors = publishAnchors(model, modelView(model), definition.anchors(model));
+  for (const anchor of Object.values(anchors)) anchor.until = heldUntil(story, scene, anchor.element);
+  return anchors;
+}
+
+// When an element leaves: its scene's end, followed through pins (explicit or automatic) to later scenes.
+// A moved carry stops it: a wire end does not follow a FLIP yet (FLUID_MOTION_RFC §6.4).
+function heldUntil(story, scene, element) {
+  // As the compilers draw it: through a transition overlap and the final hold.
+  const drawnEnd = (s) => endingEnd(s, story, windowEnds(story).get(s.id) ?? Number(s.end)) ?? Number(s.end);
+  const bare = (other) => resolveModule(other, story, { end: sceneRenderEnd(story, other), carry: false });
+  let until = drawnEnd(scene), from = scene, id = element;
+  for (let hops = 0; hops < story.scenes.length; hops++) {
+    let next = null, to = null;
+    for (const other of story.scenes) {
+      if (other === from || !(Number(other?.start) >= Number(from.start))) continue;
+      to = pinnedInto(story, other, bare)[id];
+      if (to) { next = other; break; }
+    }
+    if (!next) break;
+    [from, id, until] = [next, to, drawnEnd(next)];
+  }
+  return until;
 }
 
 // A scene's ctx.anchorsOf: each referenced scene resolves once per resolve.
