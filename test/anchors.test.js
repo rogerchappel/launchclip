@@ -48,7 +48,7 @@ test('anchor targets: unknown anchor, unknown scene, a scene without anchors and
   assert.throws(() => castModel(withCues([{action: 'gaze-at', target: {scene: 'nope', anchor: 'hub'}}])), /cues\[0\]\.target scene "nope" is not in the story/);
   assert.throws(() => castModel(withCues([{action: 'gaze-at', target: {scene: 'room', anchor: 'hub'}}])), /scene "room" \(cast-scene\) publishes no anchors \(modules with anchors: concept-card, node-graph/);
   // The graph starts after the cast scene's cues end: a defaulted time falls outside it.
-  assert.throws(() => castModel(withCues([{pose: 'cheer', target: {scene: 'team', anchor: 'converge'}}], story => { story.scenes[0].end = 3; return story; })), /cues\[0\]\.at defaults to anchor "converge" of scene "team" at 4\.5 s, outside this scene's cues/);
+  assert.throws(() => castModel(withCues([{pose: 'cheer', target: {scene: 'team', anchor: 'converge'}}], story => { story.scenes[0].end = 3; return story; })), /cues\[0\]\.at defaults to anchor "converge" of scene "team" at 3 s, outside this scene's cues/);
   assert.equal(targetError({scene: 'team', anchor: 'hub'}), null);
   assert.match(targetError({scene: 'team'}), /\{scene: id, anchor: name\}/);
 });
