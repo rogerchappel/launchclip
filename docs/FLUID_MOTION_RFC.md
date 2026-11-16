@@ -479,8 +479,25 @@ the painter:
 ## 12. What is unproven
 
 - Carry through a moving camera or a moving transition (§6).
-- Whether a container morph (tween only the box's width, height and corner
-  radius, cross-fade its contents) reads well enough to join auto-pairing.
+- ~~Whether a container morph (tween only the box's width, height and corner
+  radius, cross-fade its contents) reads well enough to join auto-pairing.~~
+  **Verdict (2026-11-17): it reads well; wire it in next, not yet.** The R&D
+  sample ([docs/rd/container-morph.html](rd/container-morph.html), rendered 9:16
+  with HyperFrames, below) runs a URL pill into a node card two ways. The box
+  morph keeps the corners, the border width and the text crisp, and the beat
+  where the box is briefly empty between the cross-fades (content out over
+  0.25 s, in from 0.4 s) reads as the box becoming something, not as a gap. The
+  same change as a FLIP scale squashes the label, turns the icon into an oval
+  and stretches the border and radius, which is the failure §6 warned about.
+  The reference's search pill → command bar → rows (a streak with blur only at
+  peak speed, the bar growing, three rows dropping in and filling in turn) also
+  reads cleanly. It is not wired into auto-pairing, because the op list has no
+  `width`, `height` or `radius` props: both renderers need them first (GSAP
+  tweens them natively, and Remotion's `propsToStyle` would map them), along
+  with parity fixtures. Then a carry pair whose aspect ratio changes by more
+  than about 1.3× should morph the box instead of scaling it.
+
+  ![Box morph (top) against a FLIP scale (middle) of the same pill → card change, then pill → command bar → rows (bottom), 0.9–6.5 s](images/flow-container-morph.jpg)
 - Whether idle on every element of a busy scene reads as alive or as nervous.
   What the set modules' 9:16 sample (`examples/story/group-idle-9x16`)
   showed: the grammar table holds for large elements (node-graph cards, a

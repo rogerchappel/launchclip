@@ -151,3 +151,83 @@ test('an overlay that rests hidden and only flashes is not an entrance: lit rims
   assert.equal(first.get('s2-hub-ring').opacity, 0);
   assert.equal(first.get('s2-node-n0').opacity, 1);
 });
+
+// ---------------------------------------------------------------------------
+// The switch: story.motion.flow (docs/FLUID_MOTION_RFC.md §6.1)
+
+import {resolveFlow} from '@launchclip/core/flow.mjs';
+
+test('flow: feels set the default, an explicit motion.flow wins', () => {
+  const on = {carry: 'auto', pin: true};
+  assert.deepEqual(resolveFlow({motion: {feel: 'kinetic'}}), on);
+  assert.deepEqual(resolveFlow({motion: {feel: 'steady'}}), on);
+  assert.deepEqual(resolveFlow({motion: {feel: {preset: 'steady', kicks: false}}}), on);
+  assert.equal(resolveFlow({motion: {feel: 'snap'}}), null);
+  assert.equal(resolveFlow({}), null);
+  assert.equal(resolveFlow({motion: {feel: 'kinetic', flow: false}}), null);
+  assert.deepEqual(resolveFlow({motion: {feel: 'snap', flow: true}}), on);
+  assert.deepEqual(resolveFlow({motion: {flow: {carry: false}}}), {carry: false, pin: true});
+  assert.equal(resolveFlow({motion: {flow: {carry: false, pin: false}}}), null);
+});
+
+const autoStory = (motion, second = {}) => ({...pinStory([
+  graph('s1', 0, 4, ['Research', 'Script', 'Voice', 'Camera']),
+  graph('s2', 4, 8, ['Research', 'Script', 'Voice', 'Camera', 'Edit'], second)
+]), motion});
+
+test('flow on: identical elements pin, same-kind elements with the same text carry, nearest first', () => {
+  const story = autoStory({feel: 'steady'});
+  const a = resolveModule(story.scenes[0], story), b = resolveModule(story.scenes[1], story);
+  const items = Object.fromEntries(b.carry.in.items.map(item => [item.id, item.pin]));
+  assert.equal(items['s2-title'], true);
+  for (const k of [0, 1, 2, 3]) assert.equal(items[`s2-node-n${k}`], false, `card ${k} carries`);
+  assert.equal(items['s2-node-n4'], undefined, 'the new card flocks in');
+  assert.ok(a.carry.out.ids.includes('s1-node-n0'));
+  // Every pair is the same card by its label.
+  const {children: ca} = opList(a), {children: cb} = opList(b);
+  const label = (children, id) => JSON.stringify(children).includes(id);
+  assert.ok(label(ca, 's1-node-n3') && label(cb, 's2-node-n3'));
+});
+
+test('flow: carry: false on a scene opts it out; a typed transition, snap or flow: false leave it off', () => {
+  const opt = autoStory({feel: 'steady'}, {carry: false});
+  assert.equal(resolveModule(opt.scenes[1], opt).carry, undefined);
+  assert.equal(resolveModule(opt.scenes[0], opt).carry, undefined);
+  const whip = autoStory({feel: 'kinetic'}, {in: {type: 'whip-pan', dur: 0.26, direction: 'left'}});
+  assert.equal(resolveModule(whip.scenes[1], whip).carry, undefined);
+  assert.equal(resolveModule(autoStory({feel: 'snap'}).scenes[1], autoStory({feel: 'snap'})).carry, undefined);
+  const off = autoStory({feel: 'kinetic', flow: false});
+  assert.equal(resolveModule(off.scenes[1], off).carry, undefined);
+});
+
+test('flow: pin false drops pins; carry false keeps only pins', () => {
+  const noPin = autoStory({flow: {pin: false}});
+  const ids = resolveModule(noPin.scenes[1], noPin).carry.in.items.map(item => item.id);
+  assert.ok(!ids.includes('s2-title') && ids.includes('s2-node-n0'));
+  const pinsOnly = autoStory({flow: {carry: false}});
+  assert.deepEqual(resolveModule(pinsOnly.scenes[1], pinsOnly).carry.in.items.map(item => item.id), ['s2-title']);
+});
+
+test('flow: an explicit carry map replaces the automatic pairing', () => {
+  const story = autoStory({feel: 'steady'}, {carry: {map: {'s1-title': 's2-title'}}});
+  assert.deepEqual(resolveModule(story.scenes[1], story).carry.in.items.map(item => item.id), ['s2-title']);
+});
+
+test('story validation checks motion.flow', () => {
+  const errors = (flow) => validateStory({...twoGraphs(), motion: {flow}}).errors.filter(error => /flow/.test(error));
+  for (const ok of [true, false, {carry: 'auto'}, {carry: false, pin: true}, {}]) assert.deepEqual(errors(ok), [], JSON.stringify(ok));
+  for (const bad of ['on', {carry: true}, {pin: 'yes'}, {carry: 'auto', mode: 'x'}]) assert.equal(errors(bad).length, 1, JSON.stringify(bad));
+});
+
+test('style packs carry flow: calm and premium seeds always have it, and applyStyle passes it to the story', async () => {
+  const {generateStyle} = await import('@launchclip/core/style-seed.mjs');
+  const {applyStyle, validateStylePack} = await import('@launchclip/core/style.mjs');
+  for (const tone of ['calm', 'premium']) for (const seed of ['0badc0de', '12345678', 'cafef00d']) {
+    const pack = generateStyle({seed, tone}).pack ?? generateStyle({seed, tone});
+    assert.equal(pack.motion.flow, true, `${tone} ${seed}`);
+    assert.deepEqual(validateStylePack(pack).errors ?? [], []);
+    const story = applyStyle(twoGraphs(), pack).story ?? applyStyle(twoGraphs(), pack);
+    assert.equal(story.motion.flow, true);
+  }
+  assert.ok(validateStylePack({schema: 'launchclip.style.v3', name: 'x', motion: {flow: 'yes'}}).errors.some(error => /motion\.flow/.test(error)));
+});

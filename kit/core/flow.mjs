@@ -18,6 +18,8 @@ import {MODULES as CATALOG_B, catalogBTimeline, catalogBView} from './catalog-b.
 import {MODULES as CATALOG_G, catalogGTimeline, catalogGView} from './catalog-g.mjs';
 import {MODULES as CATALOG_H, catalogHTimeline, catalogHView} from './catalog-h.mjs';
 import {ROOT_REST, sameBox, visualBoxes} from './carry.mjs';
+import {indexView} from './shot-states.mjs';
+import {FEELS} from './feel.mjs';
 
 const EPS = 1e-3;
 const isObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -79,7 +81,26 @@ function tag(model, {out = null, into = null}) {
   if (model.layout) model.layout.drift = false;
 }
 
-// Boundary rects per story: keyed by the two scenes and what moves them.
+/**
+ * The story's flow (docs/FLUID_MOTION_RFC.md §6.1): {carry: "auto" | false,
+ * pin} or null when off. An explicit motion.flow wins; otherwise a named
+ * feel's default (kit/core/feel.mjs FEELS[...].flow: kinetic and steady on).
+ */
+export function resolveFlow(story) {
+  const own = story?.motion?.flow;
+  let flow;
+  if (own === true) flow = {carry: 'auto', pin: true};
+  else if (own === false) return null;
+  else if (isObject(own)) flow = {carry: own.carry === false ? false : 'auto', pin: own.pin !== false};
+  else {
+    const feel = story?.motion?.feel;
+    const name = typeof feel === 'string' ? feel : isObject(feel) ? feel.preset ?? 'kinetic' : null;
+    flow = FEELS[name]?.flow ? {carry: 'auto', pin: true} : null;
+  }
+  return flow && (flow.carry || flow.pin) ? flow : null;
+}
+
+// Boundary pairs per story: keyed by the two scenes and the flow.
 const MEMO = new WeakMap();
 function memo(story, key, make) {
   let map = MEMO.get(story);
@@ -88,38 +109,108 @@ function memo(story, key, make) {
   return map.get(key);
 }
 
+const SVG = new Set(['svg', 'g', 'path', 'circle', 'rect', 'line', 'polyline', 'polygon', 'ellipse', 'text']);
+
+/**
+ * A model's elements for automatic pairing: id-bearing boxes whose nearest
+ * id-bearing ancestor is the root or a wrapper that fills the module's rect.
+ * → [{id, suffix, kind, text, shape}]
+ */
+function elementsOf(model, children) {
+  const index = indexView(children);
+  const W = model.rect.width, H = model.rect.height;
+  const fills = entry => Math.abs(entry.ax) < 0.5 && Math.abs(entry.ay) < 0.5 && Math.abs((entry.width ?? -1) - W) < 0.5 && Math.abs((entry.height ?? -1) - H) < 0.5;
+  const textOf = node => (typeof node === 'string' ? node : (node?.children ?? []).map(textOf).join(' ')).replace(/\s+/g, ' ').trim();
+  const prefix = `${model.id}-`;
+  const shapeOf = node => JSON.stringify(node, (key, value) => (key === 'id' && typeof value === 'string' && value.startsWith(prefix) ? value.slice(prefix.length) : value));
+  const out = [];
+  for (const [id, entry] of index.byId) {
+    if (!id.startsWith(prefix) || !(entry.width > 0 && entry.height > 0) || SVG.has(entry.node.tag)) continue;
+    let up = entry.parent;
+    while (up && up.parent && !up.id) up = up.parent;
+    if (up && up.parent && !fills(up)) continue;
+    const suffix = id.slice(prefix.length);
+    out.push({id, suffix, kind: suffix.replace(/-[a-z]*\d[a-z0-9]*$/i, ''), text: textOf(entry.node), shape: shapeOf(entry.node)});
+  }
+  return out;
+}
+
+/**
+ * The pairs at the boundary into scene B from its source A, or null:
+ * {map: {A id: B id}, boxes: {A id: box on A's last frame}, pins: Set of B ids}.
+ * An explicit carry map is used as given (errors throw); otherwise, with flow
+ * on and a still plate, identical elements pin and same-kind elements with the
+ * same text carry, nearest centres first.
+ */
+function pairsFor(story, A, B, resolveBare) {
+  const explicit = explicitCarry(story, B);
+  const flow = explicit ? null : resolveFlow(story);
+  if (!explicit && (!flow || B.carry === false || stillPlateProblem(story, B) || !isOpListModule(B.module))) return null;
+  const key = JSON.stringify([A, B, flow, story.format?.width, story.format?.height]);
+  return memo(story, key, () => {
+    try { return measure(story, A, B, resolveBare, explicit?.map ?? null, flow); }
+    catch (error) { if (explicit) throw error; return null; }
+  });
+}
+
+function measure(story, A, B, resolveBare, explicitMap, flow) {
+  let map = explicitMap;
+  if (!map) {
+    const a = resolveBare(A), b = resolveBare(B);
+    const la = opList(a), lb = opList(b);
+    const ea = elementsOf(a, la.children), eb = elementsOf(b, lb.children);
+    // Where each element rests: A before its exit, B once its entrances are done.
+    const ra = visualBoxes(a, la.children, la.ops, a.motion.exitStart, ea.map(e => e.id)), rb = visualBoxes(b, lb.children, lb.ops, b.motion.exitStart, eb.map(e => e.id));
+    map = {};
+    const taken = new Set();
+    for (const e of ea) {
+      const twin = eb.find(other => other.suffix === e.suffix && other.shape === e.shape);
+      if (twin && flow.pin) { map[e.id] = twin.id; taken.add(twin.id); }
+    }
+    if (flow.carry) {
+      const options = [];
+      for (const e of ea) if (!map[e.id]) for (const other of eb) if (!taken.has(other.id) && other.kind === e.kind && other.text === e.text && ra[e.id] && rb[other.id]) options.push([Math.hypot(ra[e.id].cx - rb[other.id].cx, ra[e.id].cy - rb[other.id].cy), e.id, other.id]);
+      options.sort((x, y) => x[0] - y[0] || (x[1] < y[1] ? -1 : 1));
+      for (const [, from, to] of options) if (!map[from] && !taken.has(to)) { map[from] = to; taken.add(to); }
+    }
+    if (!Object.keys(map).length) return null;
+  }
+  // Exact rects: A on its last frame with its hand-off, B on its first with its entrances skipped.
+  const a = resolveBare(A);
+  tag(a, {out: {ids: Object.keys(map), to: B.id}});
+  const la = opList(a);
+  const boxes = visualBoxes(a, la.children, la.ops, a.end, Object.keys(map));
+  const b = resolveBare(B);
+  tag(b, {into: {from: A.id, items: Object.values(map).map(id => ({id}))}});
+  const lb = opList(b);
+  const slots = visualBoxes(b, lb.children, lb.ops, b.start, Object.values(map));
+  const pins = new Set(Object.entries(map).filter(([from, to]) => sameBox(boxes[from], slots[to])).map(([, to]) => to));
+  if (!explicitMap) {
+    // A same-shape twin that moved is a carry (flow.carry) or nothing; carry: false keeps only pins.
+    for (const [from, to] of Object.entries(map)) if (pins.has(to) ? !flow.pin : !flow.carry) delete map[from];
+    if (!Object.keys(map).length) return null;
+  }
+  return {map, boxes, pins};
+}
+
 /**
  * Tag a resolved op-list model with what its scene hands on and receives.
- * resolveBare(scene) resolves a scene with no carry. Throws on a carry the
- * story cannot play.
+ * resolveBare(scene) resolves a scene with no carry. Throws on an explicit
+ * carry the story cannot play; automatic pairing never throws.
  */
 export function applyFlow(model, scene, story, resolveBare) {
-  if (!isOpListModule(model?.module) || !model.motion) return model;
-  const ownCarry = explicitCarry(story, scene);
-  // Out: every later scene on the track that carries from this one.
-  const outIds = [];
-  for (const other of story?.scenes ?? []) {
-    if (other === scene || !isObject(other?.carry)) continue;
-    if (carrySource(story, other)?.id !== scene.id) continue;
-    outIds.push(...Object.keys(other.carry.map ?? {}));
+  if (!isOpListModule(model?.module) || !model.motion || !Array.isArray(story?.scenes)) return model;
+  const source = carrySource(story, scene);
+  if (!source && isObject(scene.carry)) explicitCarry(story, scene);
+  const into = source ? pairsFor(story, source, scene, resolveBare) : null;
+  // Out: the next scene on the track whose source this is.
+  let out = null;
+  for (const other of story.scenes) {
+    if (other === scene || carrySource(story, other)?.id !== scene.id) continue;
+    const pairs = pairsFor(story, scene, other, resolveBare);
+    if (pairs) out = {ids: Object.keys(pairs.map), to: other.id};
   }
-  if (!ownCarry && !outIds.length) return model;
-  const outTo = outIds.length ? (story.scenes.find(other => isObject(other?.carry) && carrySource(story, other)?.id === scene.id)?.id ?? null) : null;
-  const items = ownCarry ? Object.entries(ownCarry.map).map(([from, id]) => ({id, from})) : [];
-  tag(model, {out: outIds.length ? {ids: [...new Set(outIds)], to: outTo} : null, into: ownCarry ? {from: ownCarry.from.id, items: items.map(({id}) => ({id}))} : null});
-  if (!ownCarry) return model;
-
-  // The source's rects on its last frame, with its hand-off applied.
-  const key = JSON.stringify([ownCarry.from, scene.id, ownCarry.map, story.format?.width, story.format?.height]);
-  const before = memo(story, key, () => {
-    const source = resolveBare(ownCarry.from);
-    tag(source, {out: {ids: Object.keys(ownCarry.map), to: scene.id}});
-    const {children, ops} = opList(source);
-    return visualBoxes(source, children, ops, source.end, Object.keys(ownCarry.map));
-  });
-  const {children, ops} = opList(model);
-  const slots = visualBoxes(model, children, ops, model.start, items.map(item => item.id));
-  // The same rect on both sides is a pin; any other is a carry (the FLIP, kit/core/carry.mjs).
-  model.carry.in.items = items.map(({id, from}) => ({id, box: before[from], pin: sameBox(before[from], slots[id])}));
+  if (!into && !out) return model;
+  tag(model, {out, into: into ? {from: source.id, items: Object.entries(into.map).map(([from, id]) => ({id, box: into.boxes[from], pin: into.pins.has(id)}))} : null});
   return model;
 }

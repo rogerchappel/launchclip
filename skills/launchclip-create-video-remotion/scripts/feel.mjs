@@ -33,6 +33,9 @@
 // What "steady" turns on: the same, except the ambient camera floats on one
 // smooth path (ambient.mode "steady"), kicks only where asked, and eased.
 // Explicit motion.grammar overrides always win over the feel's.
+// Flow (docs/FLUID_MOTION_RFC.md §6.1, kit/core/flow.mjs): kinetic and steady
+// carry and pin elements across still cuts by default; snap is about hard
+// jumps and leaves it off. An explicit story.motion.flow wins.
 // Footage-led stories (a base recording) keep their own camera: the feel's
 // ambient camera and kicks are off there; its grammar still applies.
 
@@ -52,7 +55,8 @@ export const FEELS = Object.freeze({
     kicks: Object.freeze({ auto: true, scale: 1.05, gap: 1.5 }),
     spring: 0,
     whip: 0.26,
-    dotWipe: 0.5
+    dotWipe: 0.5,
+    flow: true
   }),
   // Hold sharp, then snap: measured on an interface explainer reel, the
   // camera rests (no drift, so a held frame is crisp) for about a third of a
@@ -71,7 +75,8 @@ export const FEELS = Object.freeze({
     spring: 0,
     whip: 0.26,
     dotWipe: 0.5,
-    hold: 'off'
+    hold: 'off',
+    flow: false
   }),
   // A steadicam: the camera floats on one smooth path through wandering
   // framings, never stopping or reversing on a beat. A camera that stepped
@@ -89,7 +94,8 @@ export const FEELS = Object.freeze({
     spring: 0,
     whip: 0.26,
     dotWipe: 0.5,
-    hold: 'off'
+    hold: 'off',
+    flow: true
   })
 });
 

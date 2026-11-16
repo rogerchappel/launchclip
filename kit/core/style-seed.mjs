@@ -795,7 +795,7 @@ function buildPack(hex, toneName, t, fixed, attempt, ctx) {
     name: `seed-${hex}`,
     // A drawn palette is already a working one (patterns and contrast are tuned to its ground); a brand's raw pale ground is not (palette.mjs).
     brand: { colors: palette.colors, fonts, ...(isPale(ctx.roles.bg) ? {} : { palette: 'as-given' }) },
-    motion: feel ? { grammar: feel.grammar, transition_preference: feel.transitions, feel: feel.feel } : { grammar, transition_preference: preference },
+    motion: feel ? { grammar: feel.grammar, transition_preference: feel.transitions, feel: feel.feel, ...(feel.flow ? { flow: true } : {}) } : { grammar, transition_preference: preference },
     camera,
     // A plate only draws where the story draws a background (plates.mjs scenePlateSpec).
     ambient: { level, background: kind === 'blobs' || Boolean(plate) },
