@@ -333,6 +333,9 @@ no render and runs with `--plan-only`.
 | `long-stagger` | error | three or more elements with the same tween, each starting before the one before has finished, run over 2 s from the first start to the last |
 | `crowded-move` | warning | in a scene of six or more elements, over three quarters of them are in a move of 1.5 s or less at one moment, from 0.5 s after the entrance to the exit |
 | `no-rest` | warning | two of a scene's states (`scene.states`) land less than 1.2 s apart |
+| `shake-overshoot` | error | three or more abutting x/y steps of 0.1 s or less on one target that reverse (an impact shake) land further from rest than the step before, do not end at rest, or run over 0.3 s (docs/FLUID_MOTION_RFC.md §8) |
+| `loop-seam` | error | a model with `loop: true` shows a different frame one frame before its end than at its start (over half a pixel or degree, or 1 % of opacity or scale) |
+| `static-hold` | warning | a scene over 3 s that has an op list has a stretch over 1.5 s between its entrance and its exit where no op moves and no state or hit lands |
 | `late-beat` | warning | a travel or scale tween starts exactly on a state or hit and reaches half its travel more than a frame after it (docs/PLAN_AND_PACE_RFC.md §2); it warns until the compiler starts moves early |
 
 Each finding names the scene and the element, says what is wrong and gives
@@ -356,7 +359,9 @@ the fix, so a repair pass or a person can act on it.
   stillness after it gives 1.2 s. Validation already refuses states under
   0.6 s apart.
 
-**Left alone on purpose.** An element that appears and is gone again within
+**Left alone on purpose.** An `-idle` wrapper (docs/FLUID_MOTION_RFC.md §4) is
+its element's breath, not an element of its own, and is not counted for
+crowding. An element that appears and is gone again within
 1.5 s is a flash (a bloom, a ring, a sweep) and is not held to the entrance
 and exit rules. A tween longer than 1.5 s is continuous motion (a turn, a
 sway, a scroll, a progress bar) and may be linear. Fades with no movement are

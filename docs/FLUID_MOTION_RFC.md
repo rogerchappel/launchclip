@@ -268,6 +268,30 @@ out until a rect can be mapped through the camera at the boundary frame. Text
 that reflows between layouts (a card that grows) is a cross-fade inside the
 moving card, not a morph.
 
+**Reference notes (2026-11-17).** A second reel shows carry working through a
+talking-head video: graphics sit on a dark dot-grid plate above the speaker,
+with cutaways to the speaker full frame between beats. What makes it read as
+one continuous piece, and what it adds to this section:
+
+- **The plate survives footage cutaways.** When the cut returns to the
+  graphics, they resume where they left off rather than rebuilding. The plate
+  never moves its camera, so it meets the "same coordinate space" condition
+  above by construction. That makes it a good first target for phase 3.
+- **Pinned elements.** A hub mark at the top stays put across several beats
+  while content below it changes. This is simpler than carry (same rect on
+  both sides, so no FLIP) and could ship first: a carried id whose slot equals
+  its last rect.
+- **Container morph.** A URL pill becomes a node; a search pill streaks in
+  (motion blur at peak speed), becomes a command bar, then three empty rows
+  drop in under it and fill in turn. The shape itself changes, which this
+  section currently rules out. Worth testing a rect-only morph (tween width,
+  height and corner radius of the box, cross-fade the contents) before
+  deciding it stays out.
+- **Growth from what's already there.** Labels branch out of an ad card on
+  wires and icons branch out of the hub, so nothing new appears unattached.
+  `node-graph` wires already do this; the gap is wires from an arbitrary
+  element of another module, which needs the anchors in §7.
+
 ## 7. Characters reacting to graphics (phase 4)
 
 Cast scenes already direct gaze and gestures at targets
@@ -318,11 +342,26 @@ pass it as designed, and it learns two things:
   `pulse`. An element that flashes on every beat used to be read as one long
   life from its first fade-in to its last fade-out; the check now reads each
   fade-in and the fade-out after it as one flash (shipped in phase 1).
-- **New findings** (phase 2): `static-hold` (warning) when a scene longer than
-  3 s has a settled stretch over 1.5 s where nothing on screen moves, which is
-  what this whole entry is against; `loop-seam` (error) when `loop: true` and
-  frame 0 differs from the last frame; `shake-overshoot` (error) when a camera
-  shake's steps do not decay.
+- **New findings** (phase 2, shipped): `static-hold` (warning) when a scene
+  longer than 3 s has a settled stretch over 1.5 s where nothing on screen
+  moves, which is what this whole entry is against; `loop-seam` (error) when
+  `loop: true` and frame 0 differs from the last frame; `shake-overshoot`
+  (error) when a camera shake's steps do not decay.
+
+  **As shipped.** The idle suffix is in: an `-idle` target is neither an
+  element nor a gesture for `crowded-move`. `static-hold` reads the ops, states
+  and hits from the end of the entrance to the start of the exit; a scene with
+  no op list is not measured, since its motion is not visible to the check.
+  `shake-overshoot` reads three or more abutting x/y steps of 0.1 s or less on
+  one target that reverse direction as a shake, and fails one whose step lands
+  further from rest than the step before (by over half a pixel), that does
+  not end at rest, or that runs over 0.3 s. `loop-seam` compares `frameState`
+  at the model's start and one frame before its end, within half a pixel or
+  degree and 1 % for opacity and scale; it runs on a model with `loop: true`,
+  which nothing sets until phase 6. The phase-1 `node-graph` sample has no
+  still gap at all and its shake runs 0.24 s. Most older catalogue modules
+  hold still after their entrance and warn `static-hold` until phase 5 gives
+  them idle motion.
 
 ## 10. Planner-drawn graphics (phase 5)
 
@@ -343,8 +382,8 @@ world kit), any icon from `kit/core/icons.mjs`, text that fits; nothing else.
 1. **`node-graph` and `fluid-motion.mjs`** (this PR): flock, wave, idle, impact
    shake, beat grid, glowing wires with pulses, hub lit on arrival; schema,
    both renderers, parity fixtures, tests, a 9:16 sample.
-2. **Motion check additions**: `static-hold`, `loop-seam`, `shake-overshoot`;
-   the idle suffix in crowding.
+2. **Motion check additions** (shipped): `static-hold`, `loop-seam`,
+   `shake-overshoot`; the idle suffix in crowding.
 3. **Carry across scenes** (§6) on still-camera plates, in four steps: pins
    (§6.2), carry with the FLIP, including a plate that comes back after a
    footage cutaway, the `motion.flow` switch (§6.1), then a container-morph
