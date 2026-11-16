@@ -44,7 +44,10 @@ export const BEYOND = Object.freeze({
   x: null, y: null, left: null, top: null, width: null, height: null, size: null, position: null, layout: null, align: null, rotate: null, scale: null, offset: null
 });
 // Words past the list that a member module draws (kit/core/members.mjs): the item takes {member} instead.
-export const BEYOND_MEMBER = Object.freeze({sub: 'sub-card', detail: 'sub-card', subtitle: 'sub-card', description: 'sub-card', caption: 'sub-card'});
+export const BEYOND_MEMBER = Object.freeze({
+  sub: 'sub-card', detail: 'sub-card', subtitle: 'sub-card', description: 'sub-card', caption: 'sub-card',
+  value: 'value-card', figure: 'value-card', multiplier: 'value-card', price: 'value-card', amount: 'value-card'
+});
 const NESTED = new Set(['graphic', 'children', 'item', 'member', 'group', 'node']);
 const LAYOUT = new Set(['x', 'y', 'left', 'top', 'width', 'height', 'size', 'position', 'layout', 'align', 'rotate', 'scale', 'offset']);
 
@@ -91,6 +94,7 @@ export function graphicSpec(check, raw, path, {labelMax = 14} = {}) {
     if (!PROP_STATES[raw.prop]) check.fail(`${path}.state`, `${raw.prop} has no states (props with states: ${Object.keys(PROP_STATES).join(', ')})`);
     check.oneOf(raw.state, `${path}.state`, PROP_STATES[raw.prop]);
   }
+  for (const key of ['badge', 'text']) if (raw[key] !== undefined && String(raw[key]).length > SHORT) check.fail(`${path}.${key}`, `must be a string of 1–${SHORT} characters; ${beyondGraphic('value')}`);
   return {
     kind, icon: raw.icon ?? null,
     label: raw.label === undefined ? null : check.str(raw.label, `${path}.label`, labelMax),
