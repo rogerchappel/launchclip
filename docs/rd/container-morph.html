@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=1080, height=1920">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+<style>
+*{box-sizing:border-box} html,body{margin:0;width:1080px;height:1920px;overflow:hidden;background:#0b0d1a}
+#root{position:relative;width:1080px;height:1920px;overflow:hidden;font-family:Helvetica,Arial,sans-serif;color:#f6f3ee;
+ background:radial-gradient(circle,#ffffff14 2px,transparent 2.5px) 0 0/36px 36px,#0b0d1a}
+.tag{position:absolute;left:60px;font:600 28px/1 Menlo,monospace;color:#8b93b0;letter-spacing:.08em}
+.box{position:absolute;background:#161a2e;border:3px solid #46d4ff;box-shadow:0 0 30px #46d4ff55;overflow:hidden}
+.c{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px}
+.pill{font:600 40px/1 Menlo,monospace}
+.card .ic{width:84px;height:84px;border-radius:50%;background:#46d4ff33;border:3px solid #46d4ff}
+.card .lb{font:700 40px/1 Helvetica}
+.row{position:absolute;left:110px;width:860px;height:96px;border-radius:20px;background:#161a2e;border:2px solid #2b3150}
+.fill{position:absolute;left:28px;top:34px;height:28px;border-radius:14px;background:#ffb547}
+</style></head><body>
+<div id="root" data-composition-id="morph" data-start="0" data-duration="7" data-width="1080" data-height="1920" data-fps="30">
+ <div class="tag" style="top:120px">BOX MORPH (width, height, radius; contents cross-fade)</div>
+ <div class="tag" style="top:560px">FLIP SCALE (the same change as a scale)</div>
+ <div class="tag" style="top:1000px">PILL → COMMAND BAR → ROWS</div>
+ <div id="m" class="box" style="left:340px;top:200px;width:400px;height:92px;border-radius:46px">
+   <div id="m-a" class="c pill">launchclip.dev</div><div id="m-b" class="c card" style="opacity:0"><div class="ic"></div><div class="lb">Site</div></div></div>
+ <div id="f" class="box" style="left:340px;top:640px;width:400px;height:92px;border-radius:46px;transform-origin:50% 50%">
+   <div id="f-a" class="c pill">launchclip.dev</div><div id="f-b" class="c card" style="opacity:0"><div class="ic"></div><div class="lb">Site</div></div></div>
+ <div id="s" class="box" style="left:-520px;top:1080px;width:420px;height:92px;border-radius:46px;opacity:0">
+   <div id="s-a" class="c pill">search…</div><div id="s-b" class="c pill" style="opacity:0;justify-content:flex-start;padding-left:40px">› find the best b-roll</div></div>
+ <div id="r0" class="row" style="top:1250px;opacity:0"><div id="r0f" class="fill" style="width:0"></div></div>
+ <div id="r1" class="row" style="top:1370px;opacity:0"><div id="r1f" class="fill" style="width:0"></div></div>
+ <div id="r2" class="row" style="top:1490px;opacity:0"><div id="r2f" class="fill" style="width:0"></div></div>
+</div>
+<script>
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({paused:true});
+const D = 0.7, E = 'power3.inOut';
+// Box morph: pill (400x92 r46) -> card (260x260 r36), centred on the same point.
+tl.fromTo('#m', {left:340,top:200,width:400,height:92,borderRadius:46}, {left:410,top:116+84,width:260,height:260,borderRadius:36,duration:D,ease:E,immediateRender:false}, 1.0);
+tl.fromTo('#m', {top:200}, {top:130,duration:D,ease:E,immediateRender:false}, 1.0);
+tl.fromTo('#m-a', {opacity:1}, {opacity:0,duration:0.25,ease:'power1.in',immediateRender:false}, 1.0);
+tl.fromTo('#m-b', {opacity:0}, {opacity:1,duration:0.3,ease:'power1.out',immediateRender:false}, 1.4);
+// FLIP scale: the same box scaled to the card's size (radius and text distort).
+tl.fromTo('#f', {scaleX:1,scaleY:1,y:0}, {scaleX:0.65,scaleY:2.826,y:14,duration:D,ease:E,immediateRender:false}, 1.0);
+tl.fromTo('#f-a', {opacity:1}, {opacity:0,duration:0.25,ease:'power1.in',immediateRender:false}, 1.0);
+tl.fromTo('#f-b', {opacity:0}, {opacity:1,duration:0.3,ease:'power1.out',immediateRender:false}, 1.4);
+// Search pill streaks in (blur only at peak speed), then becomes a command bar, then rows drop and fill in turn.
+tl.fromTo('#s', {left:-520,opacity:1,filter:'blur(0px)'}, {left:330,duration:0.55,ease:'expo.inOut',immediateRender:false}, 2.4);
+tl.fromTo('#s', {filter:'blur(0px)'}, {filter:'blur(14px)',duration:0.275,ease:'power2.in',immediateRender:false}, 2.4);
+tl.fromTo('#s', {filter:'blur(14px)'}, {filter:'blur(0px)',duration:0.275,ease:'power2.out',immediateRender:false}, 2.675);
+tl.set('#s', {opacity:1}, 2.4);
+tl.fromTo('#s', {left:330,width:420,height:92,borderRadius:46,top:1080}, {left:110,width:860,height:120,borderRadius:24,top:1080,duration:D,ease:E,immediateRender:false}, 3.3);
+tl.fromTo('#s-a', {opacity:1}, {opacity:0,duration:0.25,immediateRender:false}, 3.3);
+tl.fromTo('#s-b', {opacity:0}, {opacity:1,duration:0.3,immediateRender:false}, 3.7);
+['r0','r1','r2'].forEach((r,i)=>{
+  tl.fromTo('#'+r, {opacity:0,y:-40}, {opacity:1,y:0,duration:0.45,ease:'power3.out',immediateRender:false}, 4.2+i*0.12);
+  tl.fromTo('#'+r+'f', {width:0}, {width:[520,380,610][i],duration:0.5,ease:'power2.inOut',immediateRender:false}, 4.9+i*0.35);
+});
+tl.set({}, {}, 7);
+window.__timelines['morph'] = tl;
+</script></body></html>
