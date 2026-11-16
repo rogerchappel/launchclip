@@ -250,8 +250,10 @@ world kit), any icon from `kit/core/icons.mjs`, text that fits; nothing else.
    full; `social-wall`'s field arrives as one wave along the drift and its
    pulled posts breathe; `item-list` (every layout already enters as a group)
    breathes once in. Each has a long 9:16 parity fixture (`h-*-idle-portrait`)
-   that samples mid-breath, and `examples/story/group-idle-9x16` shows all
-   four. Left out on purpose: `unit-grid` (up to a hundred tiny units, where a
+   that samples mid-breath. `examples/story/group-idle-9x16` shows three
+   of them. drop-grid is not in it, because its existing fall (`power2.in`
+   into the contact shadow) and `back.out` settle trip the example-story
+   entrance and bounce gates; that physics predates this phase. Left out on purpose: `unit-grid` (up to a hundred tiny units, where a
    breath each is noise and a hundred more nodes), ranked and tabular sets
    (`leaderboard`, `comparison-table`, `heatmap`), whose rows must stay
    aligned to read, and modules that already move a set the whole time
