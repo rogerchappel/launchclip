@@ -117,3 +117,27 @@ test("audioFeatures decodes buses through FFmpeg and skips absent ones", { skip:
   assert.deepEqual(Object.keys(out.buses), ["mix"]);
   assert.equal(out.buses.mix.loud.length, 30);
 });
+
+// audio-visualizer (kit/core/catalog-h-audio.mjs): the scene's band frames, painted by the shared spectrum painter.
+test("audio-visualizer reads its bus's bands, sliced to the scene, and rests without features", async () => {
+  const { resolveModule } = await import("@launchclip/core/modules.mjs");
+  const { spectrumValues } = await import("@launchclip/core/particles.mjs");
+  const { audioFeatureNeeds } = await import("@launchclip/core/audio-react.mjs");
+  const full = features(4, 30);
+  const scene = { id: "viz", module: "audio-visualizer", start: 1, end: 3, params: { variant: "ring", bus: "music" } };
+  const story = { schema: "launchclip.story.v1", format: { width: 1080, height: 1920, fps: 30, duration: 4 }, brand: { colors: { bg: "#06070d", primary: "#fdb022", accent: "#46d4ff", ink: "#06070d", paper: "#f2eee6" } }, scenes: [scene] };
+  assert.deepEqual(audioFeatureNeeds(story).map((need) => `${need.bus}.${need.series}`), ["music.sub", "music.low", "music.mid", "music.high", "music.air"]);
+  const picked = pickAudioFeatures(story, full);
+  assert.deepEqual(Object.keys(picked.buses.music), ["sub", "low", "mid", "high", "air"]);
+  const layer = (s) => Object.values(resolveModule(scene, s).content.paint)[0].layers[0];
+  const live = layer({ ...story, audio: { features: picked } });
+  assert.equal(live.f0, 30);
+  assert.equal(live.bands.length, 61 * 5);
+  assert.equal(live.bands[0], full.buses.music.sub[30]);
+  // A kick frame lifts the bass bars over the frame before the next kick.
+  const kick = spectrumValues(live, 2.0), tail = spectrumValues(live, 2.45);
+  assert.ok(kick[0] > tail[0], `bass ${kick[0]} on the kick vs ${tail[0]} after it`);
+  const rest = layer(story);
+  assert.deepEqual(rest.bands, []);
+  assert.ok(spectrumValues(rest, 2).every((v) => Math.abs(v - 0.04) < 1e-9));
+});
