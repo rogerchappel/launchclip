@@ -31,6 +31,7 @@ import { directionJson } from "@launchclip/core/direction.mjs";
 import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { storyStyleRequest } from "@launchclip/core/style.mjs";
 import { resolveProfile } from "./profile_store.js";
+import { readMotionCurve } from "./motion_curve.js";
 import { coverageGate } from "./quality_gates.js";
 import { checkStoryboard, createPlannerClient, planStoryboard } from "./storyboard_planner.js";
 import { directionFileFor } from "./story_cli.js";
@@ -75,7 +76,8 @@ export async function runCutdown(projectPath, flags = {}, adapters = {}) {
     : chooseCutWindow(map, words, { section: flags.section ? String(flags.section) : null, max, min: target.min });
   if (!motion && window.segments.length > 1) throw new Error("a footage-led Short is one stretch of the recording; pick consecutive lines");
   const { profile } = resolveProfile(motion ? target.motionProfile : target.profile);
-  const cut = motion ? cutdownMotionStory(resolved, { story, words, window, profile, target }) : cutdownStory(resolved, { story, words, window, profile, target });
+  const calm = await longFormMotion(project, adapters);
+  const cut = motion ? cutdownMotionStory(resolved, { story, words, window, profile, target, ...calm }) : cutdownStory(resolved, { story, words, window, profile, target, ...calm });
   const length = cut.story.format.duration;
   if (picked && length > 60) throw new Error(`the picked narration runs ${length} s; a Short is 60 s at most`);
   if (picked && length < target.min) cut.warnings.push(`the picked narration runs ${length} s, under the ${target.min} s a Short usually needs`);
@@ -133,6 +135,7 @@ export async function runCutdown(projectPath, flags = {}, adapters = {}) {
     section: window.section,
     title: window.title,
     window: { start: window.start, end: window.end, words: window.words, ...(cut.segments ? { segments: cut.segments } : {}) },
+    ...(calm ? { calm_edges: { video: calm.video, edges: cut.calm } } : {}),
     duration: planned.format.duration,
     ...(motion ? { voice: CUTDOWN_VOICE } : { trim: planned.base.trim }),
     planner: plan ? { model: String(flags.model), cost_usd: plan.cost?.estimated_usd ?? null } : "deterministic",
@@ -184,6 +187,16 @@ async function stylePack(story, project) {
 // copied and renderers that copy the public folder (Remotion's bundle) still
 // find real files. What finish makes again for the Short stays out. A link
 // that fails (another volume) is a copy.
+// The long form's render, read as a motion curve so the Short's edges land
+// on calm moments (docs/PLAN_AND_PACE_RFC.md §4.4); null when there is none.
+async function longFormMotion(project, adapters) {
+  const video = ["renders/final.mp4", "renders/draft.mp4"].find((file) => existsSync(path.join(project, file)));
+  if (!video) return null;
+  const beatsDoc = await readFile(path.join(project, "BEATS.json"), "utf8").then(JSON.parse).catch(() => null);
+  const motion = await (adapters.motionCurve ?? readMotionCurve)(path.join(project, video));
+  return { video, motion, beats: Array.isArray(beatsDoc?.beats) ? beatsDoc.beats.map(Number) : null };
+}
+
 async function linkAssets(project, out) {
   const from = path.join(project, "assets");
   if (!existsSync(from)) return;

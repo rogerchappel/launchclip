@@ -277,6 +277,39 @@ still ask the critic afresh each round; a recapture there has no shot to aim
 at and stops the rounds. Nothing yet collects `tooling_checks` across runs for
 threshold tuning.
 
+### Phase 6: what landed
+
+`make --comps` adds a `comps` stage after the storyboard (`src/make/comps.js`,
+`stageComps` in `src/make/index.js`). It runs only with the flag, so other
+runs keep their stage list.
+
+- **Three comps of the hook.** Comp 1 is the planner's opening scene. Comps 2
+  and 3 come from the opening designer (`designOpening` in
+  `src/make/candidates.js`), each with a note that fixes its shape (2 is
+  sparse, one element alone; 3 is dense, several elements in one layout),
+  lists the comps already made and tells it to lead with another element in
+  another layout. Palette and type stay as the direction set them. A design
+  that repeats a comp, or fails the storyboard checks, is dropped with a note.
+  At least two comps are needed. Each comp is `comps/<id>/storyboard.json`
+  (the plan-only storyboard) and `comps/<id>/still.png`, one still at the
+  hook's peak from the project's renderer.
+- **One pick.** `--comp N` is the person's pick. An attended run (a terminal,
+  or the app's `ask`) stops `awaiting-approval` (exit 3) with the stills
+  listed, and the same command with `--comp N` picks from the same comps
+  without designing them again. A headless run lets the vision judge
+  (`judgeCandidates`) pick from the stills, recorded as `by: "critic",
+  delegated: true`. With no model that can see, comp 1 stands (`by:
+  "default"`) and the run warns. The picked comp's storyboard becomes
+  `storyboard.json`.
+- **The record.** `MAKE.json` `comps`: the hook scene and time, each comp's
+  module, still and storyboard, and `picked {id, still, storyboard, by,
+  delegated, rationale?}`. The candidates stage then leaves the hook alone and
+  compares only the risky transition.
+
+**Left for later:** footage-led, long-form and visual-explainer videos skip
+comps, for the same reasons the candidates stage skips them. The comps change
+only the hook scene, not the whole layout of the video.
+
 ## 2. The copy check
 
 The words are the cheapest place to catch a tell, and `checkScript` already

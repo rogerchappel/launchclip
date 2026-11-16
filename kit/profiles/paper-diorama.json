@@ -12,7 +12,7 @@
     "kind": "measured",
     "tool": "launchclip profile measure",
     "measured_at": "2026-11-08T22:45:31.516Z",
-    "note": "Measured from one public reel, as statistics only, with bands at \u00b125% because one reference cannot show its own spread. Moving sharpness and soft-frame share are left out: they are unstable with few held frames. A target, not a survey.",
+    "note": "Measured from one public reel, as statistics only, with bands at ±25% because one reference cannot show its own spread. Moving sharpness and soft-frame share are left out: they are unstable with few held frames. A target, not a survey. The pace fields (hook_rate_ratio, max_event_gap_seconds, cuts_on_beat_ratio) are not measured yet: the references were not at hand when they were added, so the format's pace band holds until launchclip profile measure runs on them again.",
     "sources": [
       {
         "id": "ref-01",

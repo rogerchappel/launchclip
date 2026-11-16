@@ -19,6 +19,7 @@ import path from "node:path";
 import { DEFAULT_BRAND, suggestMotion } from "@launchclip/core/planning-prompt.mjs";
 import { estimateModelUsageCost } from "../cost_tracker.js";
 import { SHOTS_DIR, shotRequestLimit } from "../asset_provider.js";
+import { createComfyAssetProvider } from "../comfy/asset_provider.js";
 import { MAX_ASSET_PROVIDER_CONCURRENCY, assetProviderConcurrency, assetProviderTimeoutMs, createCommandAssetProvider } from "../asset_provider_cmd.js";
 import { CONSTRAINTS_FILE, PROJECT_CONSTRAINTS_FILE, constrainProvider, constraintsDocument, hasConstraints, loadConstraints, neverUseMatcher, storySrc } from "../constraints.js";
 import { mediaNotesLine } from "../inventory_notes.js";
@@ -59,6 +60,7 @@ import { entityIndex, extractClaims } from "../research/claims.js";
 import { findLogos, logoManifest, publicFetch, simpleIconsIndex, simpleIconsSlug, writeLogos } from "../research/logos.js";
 import { directLongFormVisuals, revertCards, typographyShare, unresolvedScenes } from "./long_form_direct.js";
 import { checkModelAccess, createMakeClient, scriptModelSpec, selectMakeModel } from "./models.js";
+import { COMPS_DIR, COMP_SHAPES, compChoice, compNote, compsWanted, sameComp } from "./comps.js";
 import { alternativeTransition, candidatesMode, comparisonEntry, designOpening, judgeCandidates, meanScore, openingScene, renderCandidate, rendererStill, riskyBoundary, sceneResolves, sceneTimes, selectCandidate, storyWith, transitionTimes, writeReceipt } from "./candidates.js";
 import { characterLed, explainerContent, explainerSeed } from "./explainer.js";
 import { VISUAL_DIR, explainerMode, planVisualExplainer, visualExplainer } from "./visual_explainer.js";
@@ -240,6 +242,8 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     // The animation path's own stages sit here, between the voiced script and the shot list.
     ["bible", stageBible],
     ["storyboard", stageStoryboard],
+    // --comps: three structural comps of the hook, and one pick, before anything else renders.
+    ...(compsWanted(options) ? [["comps", stageComps]] : []),
     ["candidates", stageCandidates],
     // The animation path's cheap cut: reviewed for story, staging and acting before the delivery render.
     ["animatic", stageAnimatic],
@@ -1561,7 +1565,7 @@ async function planStage(ctx) {
   if (lane === "footage-led" && ctx.base) {
     try { subjectTrack = await readStoryTrack(project, { base: ctx.base.src }); } catch (error) { report.warnings.push(`${TRACK_FILE} not used for placement (${String(error?.message ?? error).split("\n")[0]})`); }
   }
-  const hasProvider = Boolean(ctx.adapters.assets || ctx.options.assetProviderCmd);
+  const hasProvider = Boolean(ctx.adapters.assets || ctx.options.assetProviderCmd || ctx.options.assetProvider);
   const shotLimit = shotRequestLimit(ctx.format?.duration);
   const minShots = hasProvider ? Math.min(Number(options.minShots ?? 0), shotLimit) : 0;
   const cardBackdrops = hasProvider && String(options.cardBackdrops ?? "off").toLowerCase() === "footage" ? "footage" : null;
@@ -1570,7 +1574,7 @@ async function planStage(ctx) {
   const laidOut = layout !== "full" && lane === "footage-led" ? layout : null;
   if (layout !== "full" && !laidOut) report.warnings.push(`--layout ${layout} ignored: it lays out a talking head, and this video is ${lane} (no recording with speech is the base)`);
   if (laidOut === "stacked" && !(ctx.format.height > ctx.format.width)) report.warnings.push("--layout stacked ignored: it is for 9:16; this video is not portrait");
-  const planHash = hashValue({ brief, lane, format: ctx.format, ...(drafting ? { draft: 1, direction_ms: ctx.draft.waits.directionMs } : {}), ...(explainer ? { explainer: 1 } : {}), ...(visual ? { visual: 1 } : {}), ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(laidOut ? { layout: laidOut } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}), ...(subjectTrack ? { face_track: hashValue(subjectTrack.frames) } : {}), ...(pinned ? { bible: pinned.bible.hash } : {}) });
+  const planHash = hashValue({ brief, lane, format: ctx.format, ...(drafting ? { draft: 1, direction_ms: ctx.draft.waits.directionMs } : {}), ...(explainer ? { explainer: 1 } : {}), ...(visual ? { visual: 1 } : {}), ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? ctx.options.assetProvider ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(laidOut ? { layout: laidOut } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}), ...(subjectTrack ? { face_track: hashValue(subjectTrack.frames) } : {}), ...(pinned ? { bible: pinned.bible.hash } : {}) });
   // --min-shots: only an asset provider can supply shots; above what a plan of this length may ask for it is clamped.
   if (Number(options.minShots) > 0 && !hasProvider) report.warnings.push(`--min-shots ${options.minShots} ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for shots`);
   if (String(options.cardBackdrops ?? "off").toLowerCase() === "footage" && !hasProvider) report.warnings.push("--card-backdrops footage ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for footage");
@@ -1609,7 +1613,10 @@ async function planStage(ctx) {
   // The app's asset provider (adapters.assets, or --asset-provider-cmd): the
   // planner may ask it for shots, filed under assets/shots/.
   // A draft sends every request at once (the command takes up to its limit together) and waits a short time for each.
-  const provider = ctx.adapters.assets ?? (ctx.options.assetProviderCmd ? createCommandAssetProvider(ctx.options.assetProviderCmd, { timeoutMs: drafting ? Math.min(assetProviderTimeoutMs(ctx.env), ctx.draft.waits.shotMs + 1000) : assetProviderTimeoutMs(ctx.env), concurrency: drafting ? Math.max(assetProviderConcurrency(ctx.env), MAX_ASSET_PROVIDER_CONCURRENCY) : assetProviderConcurrency(ctx.env), notice: ctx.say, env: ctx.env, cwd: ctx.project }) : null);
+  // --asset-provider comfy: plates and draft clips from a local ComfyUI; any failure is "no shot".
+  if (ctx.options.assetProvider && ctx.options.assetProvider !== "comfy") throw new Error(`--asset-provider must be comfy; got ${ctx.options.assetProvider} (for your own command, use --asset-provider-cmd)`);
+  const comfyAssets = !ctx.adapters.assets && ctx.options.assetProvider === "comfy" ? await createComfyAssetProvider({ project: ctx.project, url: ctx.options.comfyUrl, env: ctx.env, allowRemote: Boolean(ctx.options.comfyAllowRemote), allowLicences: String(ctx.options.allowModelLicence ?? "").split(",").map((id) => id.trim()).filter(Boolean), ...(ctx.options.comfyPlate ? { plate: ctx.options.comfyPlate } : {}), notice: ctx.say }) : null;
+  const provider = ctx.adapters.assets ?? comfyAssets ?? (ctx.options.assetProviderCmd ? createCommandAssetProvider(ctx.options.assetProviderCmd, { timeoutMs: drafting ? Math.min(assetProviderTimeoutMs(ctx.env), ctx.draft.waits.shotMs + 1000) : assetProviderTimeoutMs(ctx.env), concurrency: drafting ? Math.max(assetProviderConcurrency(ctx.env), MAX_ASSET_PROVIDER_CONCURRENCY) : assetProviderConcurrency(ctx.env), notice: ctx.say, env: ctx.env, cwd: ctx.project }) : null);
   // never_use: the provider is told, and a shot that is one is refused.
   const constrained = provider && constraints?.never_use.length ? constrainProvider(provider, constraints, { assetsDir: ctx.assetsDir, notice: ctx.say }) : provider;
   const assets = constrained && drafting ? deadlineProvider(constrained, ctx.draft.waits.shotMs) : constrained;
@@ -1932,6 +1939,114 @@ export function worldLook(story, prompt = "") {
   return added;
 }
 
+// Structural comps (--comps, src/make/comps.js): three stills of the hook
+// scene that differ in structure, and one pick before anything else renders.
+// The person picks with --comp N (an attended run stops for it); a headless
+// run lets the vision judge pick, recorded as delegated. The comps of a
+// storyboard are made once: a run with --comp N picks from them.
+async function stageComps(ctx) {
+  const { project, report, state, options } = ctx;
+  const choice = compChoice(options.comp);
+  const skip = (reason) => { report.comps = { status: "skipped", reason }; report.warnings.push(`comps: ${reason}`); return { status: "skipped", reason }; };
+  if (ctx.routing.lane === "footage-led") return skip("footage-led: the hook is the recording itself");
+  if (ctx.longForm) return skip("long form: its storyboard comes from the beat map, which comps do not change yet");
+  if (ctx.visual) return skip("visual explainer: its scenes are drawn for the video, not chosen from the kit's modules");
+  const storyFile = path.join(project, MAKE_PATHS.story);
+  let raw = await readJson(storyFile);
+  const hash = hashValue(raw);
+  if (state.comps?.picked && state.comps.applied === hash && (!choice || choice === state.comps.picked.id)) {
+    report.comps = { ...state.comps.report, status: "reused" };
+    ctx.compPicked = true;
+    return { status: "cached", reason: `the storyboard is ${state.comps.picked.id}, picked by ${state.comps.picked.by}` };
+  }
+  // Comps made for this storyboard (or for the one a comp was applied to) are picked from again.
+  const made = state.comps && (state.comps.story === hash || state.comps.applied === hash) ? state.comps : null;
+  let comps = made?.comps ?? null;
+  let hook = made?.hook ?? null;
+  const notes = [];
+  if (!comps) {
+    if (choice && !options.comps) return skip(`--comp ${choice.slice(5)}: there are no comps of this storyboard; run with --comps first`);
+    if (!ctx.storyCheck) return skip("the storyboard was reused from an earlier run; pass --replan to make comps");
+    const resolved = (await readProjectStory(project)).resolved;
+    const opening = openingScene(resolved);
+    if (!opening) return skip("the storyboard has no base scene to open on");
+    const times = sceneTimes(opening);
+    hook = { scene: opening.id, at: times[1] ?? times[0] };
+    const line = (ctx.words ?? []).filter((word) => word.start >= opening.start - 0.05 && word.start < opening.end).map((word) => word.text).join(" ");
+    const built = [{ id: "comp-1", source: "the planner's hook", module: opening.module, params: opening.params, why: "", raw, resolved }];
+    const briefNotes = await notesText(ctx);
+    for (const shape of COMP_SHAPES) {
+      try {
+        ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (hook ${shape.id}: ${shape.label})`);
+        let design;
+        try { design = await designOpening({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, line, seconds: opening.end - opening.start, format: ctx.format, assets: assetManifestLines(ctx).filter((item) => item.src), notes: [...briefNotes, compNote(shape, built)] }); }
+        catch (error) { if (error.cost) addCost(report, shape.id, ctx.model, error.cost); throw error; }
+        addCost(report, shape.id, ctx.model, design.cost);
+        if (sameComp(design, built)) throw new Error("it repeats a comp already made");
+        const variantRaw = storyWith(raw, opening.id, design);
+        const errors = ctx.storyCheck(variantRaw);
+        const variant = storyWith(resolved, opening.id, design);
+        if (errors.length || !sceneResolves(variant, opening.id)) throw new Error(`it does not pass the storyboard checks (${errors[0] ?? "its module does not resolve"})`);
+        built.push({ id: shape.id, source: shape.label, module: design.module, params: design.params, why: design.why, raw: variantRaw, resolved: variant });
+      } catch (error) { notes.push(`${shape.id}: ${String(error?.message ?? error).split("\n")[0]}`); }
+    }
+    if (built.length < 2) return skip(`no second comp could be made (${notes.join("; ")})`);
+    // One still per comp, at the hook's peak, beside its plan-only storyboard.
+    const still = ctx.adapters.candidateStill ?? await rendererStill({ project, renderer: ctx.renderer });
+    await rm(path.join(project, COMPS_DIR), { recursive: true, force: true });
+    comps = [];
+    for (const comp of built) {
+      const dir = path.join(project, COMPS_DIR, comp.id);
+      await mkdir(dir, { recursive: true });
+      await writeJson(path.join(dir, "storyboard.json"), comp.raw);
+      await still(comp.resolved, hook.at, path.join(dir, "still.png"), { dir });
+      comps.push({ id: comp.id, source: comp.source, module: comp.module, ...(comp.why ? { why: comp.why } : {}), still: `${COMPS_DIR}/${comp.id}/still.png`, storyboard: `${COMPS_DIR}/${comp.id}/storyboard.json` });
+    }
+    state.comps = { story: hash, hook, comps, picked: null, applied: null, report: null };
+    ctx.say(`comps: ${comps.map((comp) => `${comp.id} ${comp.module}`).join(", ")} (stills in ${COMPS_DIR}/)`);
+  }
+  const record = (picked) => ({ status: "done", hook: hook.scene, at: hook.at, comps, picked, ...(notes.length ? { notes } : {}) });
+  let picked = null;
+  if (choice) {
+    const comp = comps.find((entry) => entry.id === choice);
+    if (!comp) return skip(`--comp ${choice.slice(5)}: only ${comps.map((entry) => entry.id).join(", ")} were made`);
+    picked = { id: comp.id, still: comp.still, storyboard: comp.storyboard, by: "user", delegated: false };
+  } else if (Boolean(ctx.adapters.ask) || Boolean(process.stdin.isTTY && process.stderr.isTTY)) {
+    // An attended run stops for the person's pick.
+    report.comps = record(null);
+    const again = `launchclip make ${JSON.stringify(ctx.text)} --out ${project} --comps --comp <1-${comps.length}>`;
+    ctx.stop = { after: "comps", status: "awaiting-approval", reason: "stopped for the pick of a structural comp (--comps)", next: [`Look at the hook comps (${comps.map((comp) => comp.still).join(", ")}) and pick one: run the same command with --comp N (${again}); the script, the voice and the storyboard are reused.`] };
+    return { status: "done" };
+  } else if (ctx.model.vision) {
+    // Headless: the pick is delegated to the vision judge, from the stills alone.
+    ctx.say(`model: PAID call to ${ctx.model.provider} ${ctx.model.model} (the hook comps judged from ${comps.length} stills)`);
+    try {
+      const judged = await judgeCandidates({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, kind: "opening", candidates: comps.map((comp) => ({ id: comp.id, frames: [comp.still] })), project, context: "These are structural comps of the hook, one still each at the scene's peak (not three frames): judge what leads, the layout and the density, not the palette or the type." });
+      addCost(report, "comps-judge", ctx.model, judged.cost);
+      const id = selectCandidate(comps.map((comp) => comp.id), judged.scores);
+      if (!id) throw new Error("the judge found no admissible comp");
+      const comp = comps.find((entry) => entry.id === id);
+      picked = { id, still: comp.still, storyboard: comp.storyboard, by: "critic", delegated: true, rationale: judged.rationale };
+    } catch (error) {
+      if (error.cost) addCost(report, "comps-judge", ctx.model, error.cost);
+      notes.push(`judge: ${String(error?.message ?? error).split("\n")[0]}`);
+    }
+  }
+  if (!picked) {
+    picked = { id: "comp-1", still: comps[0].still, storyboard: comps[0].storyboard, by: "default", delegated: true };
+    report.warnings.push(`comps: nobody could pick (${notes.at(-1) ?? `${ctx.model.spec} cannot take images`}); the planner's hook (comp-1) stands`);
+  }
+  if (picked.id !== "comp-1" || hashValue(raw) !== state.comps.story) {
+    raw = await readJson(path.join(project, picked.storyboard));
+    await writeJson(storyFile, raw);
+  }
+  report.comps = record(picked);
+  state.comps = { ...state.comps, picked, applied: hashValue(raw), report: report.comps };
+  ctx.compPicked = true;
+  ctx.say(`comps: ${picked.id} (${comps.find((comp) => comp.id === picked.id).module}), picked by ${picked.by}`);
+  return { status: "done" };
+}
+
 // Rendered candidates (src/make/candidates.js): the opening and one risky
 // transition, two candidates each, as stills scored from the pixels; a
 // winning alternative replaces the planner's in storyboard.json. Never fatal:
@@ -1969,7 +2084,8 @@ async function stageCandidates(ctx) {
     const slots = sideBySide(ctx, 2, "candidate stills");
     const render = createLimiter(slots);
     // The opening: the planner's scene against one designed without seeing it.
-    const opening = openingScene(resolved);
+    // A hook picked from the comps is not challenged again.
+    const opening = ctx.compPicked ? null : openingScene(resolved);
     if (opening) {
       // The planner's opening needs nothing from the second one, so it renders while that is designed.
       const times = sceneTimes(opening);
@@ -2003,7 +2119,7 @@ async function stageCandidates(ctx) {
         await planned.catch(() => {});
         await rm(path.join(project, CANDIDATE_DIR, "open-a"), { recursive: true, force: true });
       }
-    } else notes.push("opening: the storyboard has no base scene");
+    } else notes.push(ctx.compPicked ? "opening: picked from the comps" : "opening: the storyboard has no base scene");
     // One risky transition: the planner's move against a different kind of move.
     const boundary = riskyBoundary(resolved);
     if (boundary) {
@@ -2846,7 +2962,7 @@ function visualContentOf(ctx) {
 
 // Whether this video's content calls for a character-led explainer (src/make/explainer.js), whatever its style.
 function explainerContentOf(ctx) {
-  return explainerContent({ lane: ctx.routing.lane, format: ctx.scriptPlan?.format ?? null, bible: ctx.bible ?? null, animation: Boolean(ctx.options.animation), media: assetManifestLines(ctx).filter((item) => item.src).length, provider: Boolean(ctx.adapters.assets || ctx.options.assetProviderCmd), skeleton: ctx.skeleton ?? null, longForm: Boolean(ctx.longForm) });
+  return explainerContent({ lane: ctx.routing.lane, format: ctx.scriptPlan?.format ?? null, bible: ctx.bible ?? null, animation: Boolean(ctx.options.animation), media: assetManifestLines(ctx).filter((item) => item.src).length, provider: Boolean(ctx.adapters.assets || ctx.options.assetProviderCmd || ctx.options.assetProvider), skeleton: ctx.skeleton ?? null, longForm: Boolean(ctx.longForm) });
 }
 
 async function loadBrand(ctx) {

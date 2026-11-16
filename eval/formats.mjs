@@ -39,10 +39,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { beatMapToStory, windowWords } from '@launchclip/core/beat-director.mjs';
-import { cadenceGate, cadenceTarget, eventStats } from '@launchclip/core/cadence.mjs';
+import { cadenceGate, cadenceTarget, eventStats, mergeEvents } from '@launchclip/core/cadence.mjs';
 import { cutShorts } from '@launchclip/core/cutdown.mjs';
 import { ANIMATION_SCORECARD_SCHEMA, animationMetrics, formatAnimationScorecard, scoreAnimation } from './animation-metrics.mjs';
-import { SCENE_THRESHOLDS, SCORECARD_SCHEMA, SOFT_EVENT_FPS, CAPTIONS_REQUIRED, avSync, captionHygiene, changePeaks, evidenceCoverage, formatScorecard, moduleVariety, motionOnHold, parseFreezes, parseSceneScores, renderedCadence, scenesAbove, scoreBrief, stateEvents } from './scorecard.mjs';
+import { EVENT_THRESHOLD, SCENE_THRESHOLDS, SCORECARD_SCHEMA, SOFT_EVENT_FPS, CAPTIONS_REQUIRED, avSync, captionHygiene, changePeaks, evidenceCoverage, formatScorecard, moduleVariety, motionOnHold, parseFreezes, parseSceneScores, renderedCadence, renderedPace, scenesAbove, scoreBrief, stateEvents } from './scorecard.mjs';
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -167,9 +167,20 @@ export async function evaluateBrief(brief, { out = DEFAULT_OUT, renderer = 'hype
       for (const threshold of SCENE_THRESHOLDS) { scenes[threshold] = scenesAbove(scores, threshold); soft[threshold] = scenesAbove(sampled, threshold); }
       measures.cadence = renderedCadence(scenes, { duration, format: brief.format });
       measures.soft_cadence = renderedCadence(soft, { duration, format: brief.format });
-      measures.motion = motionOnHold(await freezes(video, duration), duration);
+      const frozen = await freezes(video, duration);
+      measures.motion = motionOnHold(frozen, duration);
       const loaded = await readProjectStory(staged.project);
       const planned = (loaded?.resolved?.scenes ?? []).filter((scene) => scene.track === undefined || scene.track === 0 || scene.insert === true).map((scene) => Number(scene.start));
+      // The pace on the render, and the plan against it (docs/PLAN_AND_PACE_RFC.md phase 7).
+      const { planEvents } = await import('../src/movement_guardrails.js');
+      const { readMotionCurve } = await import('../src/motion_curve.js');
+      const beatsDoc = await readJson(path.join(staged.project, 'BEATS.json')).catch(() => null);
+      measures.pace = renderedPace({
+        events: scenes[EVENT_THRESHOLD], cuts: mergeEvents(scenes[Math.max(...SCENE_THRESHOLDS)], 0.25), frozen,
+        planned: loaded?.resolved ? planEvents(loaded.resolved).events : [], plannedCuts: planned.filter((t) => t > 0.05 && t < duration - 0.05),
+        curve: await readMotionCurve(video).catch(() => null), beats: Array.isArray(beatsDoc?.beats) ? beatsDoc.beats.map(Number) : null,
+        duration, format: brief.format
+      });
       measures.sync = avSync(planned, changePeaks(scores), { probe, duration });
       if (loaded?.resolved) measures.states = stateEvents(scores, loaded.resolved);
       result.probe = { duration, fps: probe.fps, frames: probe.frames, width: probe.width, height: probe.height, audio: Boolean(probe.audio) };

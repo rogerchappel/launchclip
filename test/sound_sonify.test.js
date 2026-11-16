@@ -3,6 +3,7 @@
 // lands within one frame of the data point it plays, and a mix carrying the
 // sonification still masters to −14 LUFS / −1 dBTP.
 import test from "node:test";
+import { ffmpegMissing, mediaSkip } from "./helpers/media.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -101,7 +102,7 @@ test("sound.sonify is a boolean in the sound block", () => {
   assert.match(soundProblems({ sonify: "yes" })[0], /sonify/);
 });
 
-test("a clip carrying the sonification masters to −14 ± 1 LUFS and at most −1 dBTP after AAC", async () => {
+test("a clip carrying the sonification masters to −14 ± 1 LUFS and at most −1 dBTP after AAC", { skip: mediaSkip(ffmpegMissing()) }, async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-sonify-"));
   try {
     const pieces = ["bar-chart", "pie-chart", "sparkline"].map((id) => renderSonification(chartNotes(chart(id, VARIANTS[id][0]).model, SAMPLES[id], { key: "A" }), { seed: id }));

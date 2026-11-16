@@ -1,0 +1,297 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "VFX batch 1 on real scenes",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 20,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#06070d",
+      "primary": "#fdb022",
+      "accent": "#46d4ff",
+      "ink": "#06070d",
+      "paper": "#f2eee6"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "module": "metric",
+      "start": 0,
+      "end": 5,
+      "energy": 1,
+      "params": {
+        "title": "Build time",
+        "metric": {
+          "mode": "illustration",
+          "unit": "example minutes",
+          "format": "number",
+          "decimals": 0,
+          "values": [
+            {
+              "value": 48,
+              "at": 0.4
+            },
+            {
+              "value": 12,
+              "at": 1.6
+            }
+          ]
+        }
+      },
+      "vfx": [
+        {
+          "effect": "blunt-hit",
+          "at": 0.8,
+          "x": 0.5,
+          "y": 0.55
+        },
+        {
+          "effect": "plasma-explosion",
+          "at": 1.8,
+          "x": 0.5,
+          "y": 0.4,
+          "color": "accent"
+        },
+        {
+          "effect": "implosion",
+          "at": 2.8,
+          "x": 0.5,
+          "y": 0.45
+        },
+        {
+          "effect": "zap-hit",
+          "at": 3.8,
+          "x": 0.45,
+          "y": 0.55,
+          "color": "accent"
+        },
+        {
+          "effect": "spark-arc",
+          "at": 4.1,
+          "align": "start",
+          "x": 0.5,
+          "y": 0.62
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "module": "checklist",
+      "start": 5,
+      "end": 10,
+      "energy": 2,
+      "in": {
+        "type": "fade",
+        "dur": 0.4
+      },
+      "params": {
+        "title": "Three fixes",
+        "statusLabels": {
+          "pending": "Next",
+          "active": "Now",
+          "done": "Done"
+        },
+        "rows": [
+          {
+            "label": "Cache dependencies",
+            "status": "done",
+            "at": 0.5
+          },
+          {
+            "label": "Split the tests",
+            "status": "done",
+            "at": 1.1
+          },
+          {
+            "label": "Smaller images",
+            "status": "done",
+            "at": 1.7
+          }
+        ]
+      },
+      "vfx": [
+        {
+          "effect": "holy-pillar",
+          "at": 5.8,
+          "x": 0.5,
+          "y": 0.6,
+          "color": "primary"
+        },
+        {
+          "effect": "feather-burst",
+          "at": 6.8,
+          "x": 0.3,
+          "y": 0.45
+        },
+        {
+          "effect": "heal-aoe",
+          "at": 7.8,
+          "x": 0.5,
+          "y": 0.62
+        },
+        {
+          "effect": "mana-burst",
+          "at": 8.8,
+          "x": 0.7,
+          "y": 0.4,
+          "color": "accent"
+        },
+        {
+          "effect": "ball-lightning",
+          "at": 9.1,
+          "align": "start",
+          "x": 0.5,
+          "y": 0.5
+        }
+      ]
+    },
+    {
+      "id": "s3",
+      "module": "metric",
+      "start": 10,
+      "end": 15,
+      "energy": 1,
+      "params": {
+        "title": "Monthly saving",
+        "metric": {
+          "mode": "illustration",
+          "unit": "example minutes",
+          "format": "number",
+          "decimals": 0,
+          "values": [
+            {
+              "value": 0,
+              "at": 0.4
+            },
+            {
+              "value": 1800,
+              "at": 1.6
+            }
+          ]
+        }
+      },
+      "vfx": [
+        {
+          "effect": "star-fall",
+          "at": 10.8,
+          "x": 0.5,
+          "y": 0.55,
+          "color": "primary"
+        },
+        {
+          "effect": "chest-open",
+          "at": 11.8,
+          "x": 0.5,
+          "y": 0.6
+        },
+        {
+          "effect": "quake",
+          "at": 12.8,
+          "x": 0.5,
+          "y": 0.62
+        },
+        {
+          "effect": "earth-spike",
+          "at": 13.8,
+          "x": 0.5,
+          "y": 0.62
+        },
+        {
+          "effect": "power-star",
+          "at": 14.1,
+          "align": "start",
+          "x": 0.5,
+          "y": 0.42,
+          "color": "primary"
+        }
+      ],
+      "in": {
+        "type": "fade",
+        "dur": 0.4
+      }
+    },
+    {
+      "id": "s4",
+      "module": "checklist",
+      "start": 15,
+      "end": 20,
+      "energy": 2,
+      "in": {
+        "type": "fade",
+        "dur": 0.4
+      },
+      "params": {
+        "title": "What you get",
+        "statusLabels": {
+          "pending": "Next",
+          "active": "Now",
+          "done": "Done"
+        },
+        "rows": [
+          {
+            "label": "Faster deploys",
+            "status": "done",
+            "at": 0.5
+          },
+          {
+            "label": "Fewer failures",
+            "status": "done",
+            "at": 1.1
+          },
+          {
+            "label": "Lower bills",
+            "status": "done",
+            "at": 1.7
+          }
+        ]
+      },
+      "vfx": [
+        {
+          "effect": "spawn-portal",
+          "at": 15.8,
+          "x": 0.5,
+          "y": 0.6
+        },
+        {
+          "effect": "coin-drop",
+          "at": 16.8,
+          "x": 0.5,
+          "y": 0.55,
+          "color": "primary"
+        },
+        {
+          "effect": "splash",
+          "at": 17.8,
+          "x": 0.5,
+          "y": 0.6,
+          "color": "accent"
+        },
+        {
+          "effect": "key-glint",
+          "at": 18.4,
+          "align": "start",
+          "x": 0.35,
+          "y": 0.45
+        },
+        {
+          "effect": "gem-spin",
+          "at": 18.6,
+          "align": "start",
+          "x": 0.65,
+          "y": 0.45
+        }
+      ]
+    }
+  ]
+}

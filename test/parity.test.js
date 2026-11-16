@@ -58,8 +58,17 @@ const STORY_PARITY = Object.freeze([
   {id: 'vfx-hits-9x16', times: [1.3, 2.4, 3.25, 4.4, 5.2]},
   // The nine VFX cover transitions (burn-away … pixel-dissolve), each mid-cover, turned a quarter for portrait.
   {id: 'vfx-transitions-9x16', times: [1.85, 3.4, 5, 6.75, 8.2, 9.8, 11.4, 13.1, 14.6]},
+  // CSS transitions and behaviours (kit/core/transitions.mjs, kit/core/behaviours.mjs)
+  // on a bokeh background: mid wipe, clock, fan, both halves of a card flip,
+  // an upward hard wipe, a flip the other way; orbit, pendulum, heartbeat,
+  // flicker and spin at rest between them.
+  {id: 'css-transitions-9x16', times: [1.5, 2.45, 3.4, 4.45, 5.4, 6.45, 8.25, 8.6, 10.45, 11.5, 12.6, 13.5]},
   // The round-two sample: hits and cover transitions over crisp scenes.
   {id: 'vfx-arcade-9x16', times: [1.2, 3.5, 6.45, 10.9]},
+  // VFX phase 9 batch 1: each of the twenty new effects on its peak (a loop just after it starts).
+  {id: 'vfx-batch1-9x16', times: [0.8, 1.8, 2.8, 3.8, 4.6, 5.8, 6.8, 7.8, 8.8, 9.6, 10.8, 11.8, 12.8, 13.8, 14.6, 15.8, 16.8, 17.8, 18.9, 19.4]},
+  // Silhouette effects: scanner and hit-flash on a card, frozen, electrified, stunned and halo on two cast members.
+  {id: 'vfx-masks-9x16', times: [1.2, 2.3, 4.2, 6.5]},
   // Interface scenes on signal-ui (the CI smoke's times, scripts/parity-ci.mjs).
   {id: 'ui-parity-9x16', times: [...CI_UI_STORY.times]}
 ]);

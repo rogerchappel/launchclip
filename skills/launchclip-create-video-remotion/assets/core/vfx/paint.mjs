@@ -8,6 +8,7 @@
 import {VFX_DRAWABLE} from './catalog.mjs';
 import {drawVfx} from './driver.mjs';
 import {clearFrame, createFrame, painterFor, resolveOptions} from './vendor/core/fx.js';
+import {vfxActorFromWire} from './silhouette.mjs';
 
 const prepared = new WeakMap();
 
@@ -18,7 +19,7 @@ function prepare(plan) {
       frame: createFrame(plan.aw, plan.ah),
       cues: plan.cues.map(cue => {
         const mod = VFX_DRAWABLE[cue.effect];
-        const opts = resolveOptions(mod.meta, {...cue.opts, seed: cue.seed, ...(cue.palette ? {palette: cue.palette} : {})});
+        const opts = resolveOptions(mod.meta, {...cue.opts, ...(cue.opts?.actor ? {actor: vfxActorFromWire(cue.opts.actor)} : {}), seed: cue.seed, ...(cue.palette ? {palette: cue.palette} : {})});
         return {cue, mod, opts, key: JSON.stringify(cue)};
       })
     };

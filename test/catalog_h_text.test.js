@@ -12,11 +12,26 @@ const brand = {colors: {bg: '#06070d', primary: '#fdb022', accent: '#46d4ff', in
 const FORMATS = {'9:16': {width: 1080, height: 1920, fps: 30}, '16:9': {width: 1920, height: 1080, fps: 30}};
 const resolve = (params, aspect = '9:16') => ({...MODULES['motion-title'].resolve(params, {id: 'scene', start: 1, duration: 5, format: FORMATS[aspect], brand, aspect, hits: []}), module: 'motion-title'});
 
-test('motion-title has all 24 named effects as its variants', () => {
+test('motion-title has the 24 named effects and scramble as its variants', () => {
   const all = Object.values(TEXT_EFFECTS).flat();
-  assert.equal(all.length, 24);
+  assert.equal(all.length, 25);
   assert.deepEqual([...VARIANTS['motion-title']].sort(), [...all].sort());
-  assert.deepEqual(Object.fromEntries(Object.entries(TEXT_EFFECTS).map(([k, v]) => [k, v.length])), {character: 7, word: 8, line: 2, element: 7});
+  assert.deepEqual(Object.fromEntries(Object.entries(TEXT_EFFECTS).map(([k, v]) => [k, v.length])), {character: 8, word: 8, line: 2, element: 7});
+});
+
+test('scramble: glyphs from the charset, fixed by frame, locking left to right', () => {
+  const model = resolve({text: 'Ship it', variant: 'scramble', charset: 'hex'});
+  const ops = catalogHTimeline(model);
+  const glyphs = ops.filter(op => op.type === 'set' && /^scene-c\d+-g$/.test(op.target) && op.props.text).map(op => op.props.text);
+  assert.ok(glyphs.length > 10 && glyphs.every(g => '0123456789ABCDEF'.includes(g)));
+  assert.deepEqual(catalogHTimeline(resolve({text: 'Ship it', variant: 'scramble', charset: 'hex'})), ops, 'seeded: the same title scrambles the same way');
+  const lock = i => ops.find(op => op.target === `scene-c${i}-r` && op.props.opacity === 1).time;
+  assert.ok(lock(0) < lock(1) && lock(1) < lock(5));
+  // Seek purity: a mid-build frame alone equals the same frame after others.
+  const t = model.content.t0 + 0.2;
+  assert.deepEqual(frameState(ops, t).get('scene-c3-g'), (frameState(ops, t + 1), frameState(ops, t)).get('scene-c3-g'));
+  assert.throws(() => resolve({text: 'Ship it', variant: 'typewriter', charset: 'hex'}), /only for the scramble/);
+  assert.throws(() => resolve({text: 'Ship it', variant: 'scramble', charset: 'kanji'}), /charset/);
 });
 
 test('every effect starts hidden, builds after at, and settles unblurred with every unit in place', () => {

@@ -11,6 +11,7 @@ import { DESCRIPTION_MODES } from "../asset_understanding.js";
 import { DEFAULT_CRITIC_REPAIRS } from "./critic_repair.js";
 import { conceptsMode } from "./concept_story.js";
 import { candidatesMode } from "./candidates.js";
+import { compChoice } from "./comps.js";
 import { explainerMode } from "./visual_explainer.js";
 import { parseSfxMode } from "../sfx/event_sounds.js";
 import { talkingHeadLayoutError } from "../talking_head_layout.js";
@@ -107,6 +108,9 @@ export const MAKE_FLAGS = Object.freeze([
   ["concepts", { setting: true }],
   // Rendered candidates for the opening and one risky transition: on (default, with a model that can see) or off.
   ["candidates", { setting: true }],
+  // Three structural comps of the hook before the render (src/make/comps.js), and the one to keep (1 to 3).
+  ["comps", { boolean: true }],
+  ["comp", {}],
   ["critic", { boolean: true, setting: true }],
   ["no-critic", { boolean: true, setting: true }],
   ["max-repairs", { setting: true }],
@@ -171,6 +175,11 @@ export function makeOptionsFromFlags(flags = {}) {
     voice: flags.voice,
     voiceId: flags["voice-id"],
     assetProviderCmd: flags["asset-provider-cmd"],
+    assetProvider: flags["asset-provider"],
+    comfyUrl: flags["comfy-url"],
+    comfyAllowRemote: flags["comfy-allow-remote"],
+    comfyPlate: flags["comfy-plate"],
+    allowModelLicence: flags["allow-model-licence"],
     minShots: flags["min-shots"],
     cardBackdrops: flags["card-backdrops"],
     assetDescriptions: flags["asset-descriptions"],
@@ -208,6 +217,8 @@ export function makeOptionsFromFlags(flags = {}) {
     replan: Boolean(flags.replan),
     concepts: flags.concepts,
     candidates: flags.candidates,
+    ...(flags.comps ? { comps: true } : {}),
+    ...(flags.comp != null ? { comp: flags.comp } : {}),
     critic: flags["no-critic"] ? false : flags.critic ? true : undefined,
     maxRepairs: flags["max-repairs"] === undefined ? undefined : Number(flags["max-repairs"]),
     criticRepairs: flags["critic-repairs"] === undefined ? undefined : Number(flags["critic-repairs"]),
@@ -238,6 +249,7 @@ export function validateMakeOptions(options = {}) {
   researchMode(options.research);
   conceptsMode(options.concepts);
   candidatesMode(options.candidates);
+  compChoice(options.comp);
   // makeSpeed is the caller's to read; this only refuses a bad one.
   const speed = makeSpeed(options.speed);
   if (options.refine != null && typeof options.refine !== "boolean") throw new Error(`--refine takes no value; got ${options.refine}`);
