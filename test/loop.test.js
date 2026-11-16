@@ -47,3 +47,15 @@ test('scene.loop: validated as a boolean, and refused by modules whose timeline 
   assert.throws(() => resolveModule({id: 'b', module: 'hook-title', start: 0, end: 4, loop: true, params: {text: 'Hello'}}, story), /loop: true is for catalogue H and I modules/);
   assert.equal(resolveModule({...story.scenes[0], loop: true}, story).loop, true);
 });
+
+test('a short that loops: the hand-back lands on the last frame, and a loop to a scene other than the opener warns', async () => {
+  const {sceneWindows} = await import('@launchclip/core/transitions.mjs');
+  const {storyLoopFindings} = await import('@launchclip/core/story-loop.mjs');
+  const scenes = [{id: 'a', module: 'node-graph', start: 0, end: 4, params: SAMPLES['node-graph']}, {id: 'b', module: 'icon-grid', start: 4, end: 8, params: SAMPLES['icon-grid']}];
+  const story = {format: {width: 1080, height: 1920, fps: 30, duration: 8}, brand, scenes, ending: {loop_to: 'a', in: {type: 'fade', dur: 0.4}}};
+  const {loop} = sceneWindows(story);
+  const lastFrame = 8 - 1 / 30;
+  assert.ok(Math.max(...loop.tweens.map(tw => tw.at + tw.duration)) <= lastFrame + 1e-6, 'the fade is done on the last frame');
+  assert.deepEqual(storyLoopFindings(story), []);
+  assert.deepEqual(storyLoopFindings({...story, ending: {loop_to: 'b'}}).map(f => [f.rule, f.severity, f.ids]), [['loop-target', 'warning', ['b', 'a']]]);
+});
