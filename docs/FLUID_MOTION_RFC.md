@@ -441,8 +441,11 @@ the painter:
 - **Proof.** Parity fixtures `h-node-graph-graphics-portrait` and
   `h-icon-grid-graphics-portrait` (every kind; min SSIM 0.996),
   `test/graphic.test.js`, and the sample `examples/story/graphics-9x16` (a
-  robot in a kitchen, its team drawn as a card with a badge, a chip, two
-  badges, a ribbon and a loaf).
+  robot in a kitchen before dawn, its seven-strong team drawn as two cards,
+  one with a count badge, a chip, an icon badge, a number badge, a ribbon and
+  a loaf). Seven nodes fit the golden's rect where five do not: five sit on
+  taller tiers, and a chip or ribbon with an icon is wider than a card, which
+  shrank the labels under the 26 px floor.
 
 ## 11. Phases
 

@@ -1,7 +1,7 @@
 {
   "schema": "launchclip.story.v1",
   "title": "A bakery team drawn by the planner (9:16 planner-drawn graphics)",
-  "notes": "Sample for docs/FLUID_MOTION_RFC.md §10 (phase 5, first half): a robot runs the morning shift in a kitchen while its team flocks out of a head-chef hub, every node a planner-drawn graphic from the closed list (a card with a count badge, a chip, an icon badge, a number badge, a ribbon and a world-kit prop), wired into the hub with pulses on a 120 bpm grid. No narration and no paid calls.",
+  "notes": "Sample for docs/FLUID_MOTION_RFC.md §10 (phase 5, first half): a robot runs the pre-dawn shift in a kitchen while its team flocks out of a head-chef hub, every node a planner-drawn graphic from the closed list (two cards (one with a count badge), a chip, an icon badge, a number badge, a ribbon and a world-kit prop), wired into the hub with pulses on a 120 bpm grid. No narration and no paid calls.",
   "lane": "motion",
   "format": {"width": 1080, "height": 1920, "fps": 30, "duration": 10, "platform": "youtube-shorts"},
   "brand": {
@@ -11,7 +11,7 @@
   "motion": {"feel": "kinetic"},
   "camera": {"mode": "cuts", "kicks": [{"at": 0.15}, {"at": 2.5}, {"at": 4.5, "scale": 1.06}, {"at": 6.5}, {"at": 8.5}]},
   "cast": {"style": "chibi", "characters": [{"id": "bot", "name": "Bot", "kind": "robot", "position": "center"}]},
-  "world": {"kind": "kitchen", "time": "morning"},
+  "world": {"kind": "kitchen", "time": "night"},
   "scenes": [
     {"id": "room", "module": "cast-scene", "start": 0, "end": 10, "params": {"set": "standing", "shot": "wide",
       "cast": [{"id": "bot", "pose": "look", "expression": "happy", "cues": [{"at": 4.5, "pose": "cheer", "expression": "delighted"}, {"at": 6.2, "pose": "look", "expression": "happy"}]}]}},
@@ -19,12 +19,13 @@
       "hub": {"label": "Head chef", "icon": "chef-hat"},
       "nodes": [
         {"id": "baker", "graphic": {"kind": "card", "icon": "croissant", "label": "Baker", "badge": "3"}},
-        {"id": "proof", "graphic": {"kind": "chip", "icon": "timer", "label": "Proofing"}},
+        {"id": "proof", "graphic": {"kind": "chip", "icon": "timer", "label": "Proof"}},
         {"id": "oven", "graphic": {"kind": "badge", "icon": "flame", "label": "Oven"}},
         {"id": "fresh", "graphic": {"kind": "ribbon", "icon": "star", "label": "Fresh"}},
         {"id": "loaves", "graphic": {"kind": "prop", "prop": "bread", "label": "Loaves"}},
+        {"id": "pastry", "graphic": {"kind": "card", "icon": "cookie", "label": "Pastry"}},
         {"id": "orders", "graphic": {"kind": "badge", "text": "24", "label": "Orders"}}
       ],
-      "bpm": 120, "rect": {"x": 80, "y": 280, "width": 860, "height": 720}}}
+      "bpm": 120, "rect": {"x": 80, "y": 280, "width": 860, "height": 640}}}
   ]
 }
