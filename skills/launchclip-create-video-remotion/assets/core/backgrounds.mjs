@@ -34,6 +34,9 @@
 //   weather         a pixel weather loop (kit/core/vfx VFX_WEATHER: rain, snow,
 //                   fog, fireflies, aurora, god-rays …) on two canvases the VFX
 //                   painter draws per frame, in a ramp of one palette role
+//   flow-field      streamlines through a seeded noise field, integrated once
+//                   at plan time; dashes travel along them (an SVG
+//                   stroke-dashoffset loop, no GL). Same seed, same art.
 //
 // Every kind but blobs takes params.fade, a mask that keeps one area calm
 // (the centre or a side), and story.panel.fill draws any of them inside a
@@ -56,7 +59,7 @@ import { litMask } from './lighting.mjs';
 import { VFX_WEATHER } from './vfx/catalog.mjs';
 import { rampOf } from './vfx/plan.mjs';
 
-export const BACKGROUND_KINDS = Object.freeze(['flat', 'gradient', 'grain-gradient', 'paper', 'geometric', 'blobs', 'dot-grid', 'mesh', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'logo-pattern', 'motif', 'texture', 'weather']);
+export const BACKGROUND_KINDS = Object.freeze(['flat', 'gradient', 'grain-gradient', 'paper', 'geometric', 'blobs', 'dot-grid', 'mesh', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'logo-pattern', 'motif', 'texture', 'weather', 'flow-field']);
 export const DEFAULT_BACKGROUND_KIND = 'blobs';
 
 // Tested parameter ranges, per kind: {min, max, default}. angle in degrees;
@@ -85,11 +88,12 @@ export const BACKGROUND_PARAMS = Object.freeze({
   'logo-pattern': Object.freeze({ scale: SCALE, spacing: SCALE, offset: range(0, 1, 0.5), opacity: OPACITY, speed: SPEED }),
   motif: Object.freeze({ scale: SCALE, weight: range(0.5, 3, 1.5), opacity: range(0.04, 0.3, 0.14), angle: range(0, 180, 45), speed: SPEED }),
   texture: Object.freeze({ amount: DENSITY, scale: SCALE }),
-  weather: Object.freeze({ intensity: range(0, 1, 0.6), speed: SPEED })
+  weather: Object.freeze({ intensity: range(0, 1, 0.6), speed: SPEED }),
+  'flow-field': Object.freeze({ seed: range(0, 99999, 0), lines: range(80, 400, 160), scale: SCALE, octaves: range(1, 4, 2), intensity: INTENSITY, speed: SPEED })
 });
 // Kinds whose pattern takes a palette role (params.color).
-const COLORED = new Set(['gradient', 'grain-gradient', 'geometric', 'dot-grid', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'motif', 'weather']);
-const DEFAULT_COLOR = Object.freeze({ weather: 'primary', gradient: 'primary', 'grain-gradient': 'primary', geometric: 'primary', 'dot-grid': 'paper', stripes: 'paper', topographic: 'primary', halftone: 'primary', 'light-rays': 'paper', 'icon-pattern': 'paper', 'icon-scatter': 'paper', motif: 'paper' });
+const COLORED = new Set(['gradient', 'grain-gradient', 'geometric', 'dot-grid', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'motif', 'weather', 'flow-field']);
+const DEFAULT_COLOR = Object.freeze({ 'flow-field': 'primary', weather: 'primary', gradient: 'primary', 'grain-gradient': 'primary', geometric: 'primary', 'dot-grid': 'paper', stripes: 'paper', topographic: 'primary', halftone: 'primary', 'light-rays': 'paper', 'icon-pattern': 'paper', 'icon-scatter': 'paper', motif: 'paper' });
 // Fades keep an area calm: the pattern fades out toward it (center: a radial
 // mask; a side: a linear one). Every kind but blobs takes one.
 export const BACKGROUND_FADES = Object.freeze(['none', 'center', 'top', 'bottom', 'left', 'right']);
@@ -581,6 +585,42 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
         vfx: { aw: 320, ah: 180, grid, cues: [{ effect: params.type, start: 0, end: 1e6, speed: round(speed, 4), x: ox, y: oy, seed: 1 + Math.floor(random() * 999983), palette: rampOf(tint, colors.bg) }], words: [] } });
       break;
     }
+    case 'flow-field': {
+      // Streamlines follow fbm value noise (seed 0: the story's own seed).
+      // Each dash pattern moves a whole number of its periods per loop, so the
+      // --flow glide (0 → -1) wraps seamlessly.
+      const seed = params.seed > 0 ? Math.round(params.seed) : ambientSeed(story);
+      const rand = seededRandom(seed);
+      const cornerOf = (ix, iy, o) => seededRandom((Math.imul(ix, 73856093) ^ Math.imul(iy, 19349663) ^ Math.imul(o + 1, 83492791) ^ seed) >>> 0)();
+      const smooth = (f) => f * f * (3 - 2 * f);
+      const noise = (x, y, o) => {
+        const ix = Math.floor(x), iy = Math.floor(y), fx = smooth(x - ix), fy = smooth(y - iy);
+        const a = cornerOf(ix, iy, o), b = cornerOf(ix + 1, iy, o), c = cornerOf(ix, iy + 1, o), d = cornerOf(ix + 1, iy + 1, o);
+        return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+      };
+      const octaves = Math.round(params.octaves), cell = 420 * u * params.scale;
+      const angle = (x, y) => { let sum = 0, amp = 1, norm = 0; for (let o = 0; o < octaves; o += 1) { sum += amp * noise((x / cell) * 2 ** o, (y / cell) * 2 ** o, o); norm += amp; amp /= 2; } return (sum / norm) * Math.PI * 4; };
+      const alpha = lay(tint, 0.2 + 0.5 * params.intensity);
+      const margin = 40 * u, b = over(margin), step = 7 * u, width = round(1.6 * u, 2);
+      const paths = [];
+      for (let i = 0; i < Math.round(params.lines); i += 1) {
+        let x = rand() * b.width, y = rand() * b.height;
+        const points = [`${round(x, 1)} ${round(y, 1)}`];
+        for (let k = 0; k < 60; k += 1) {
+          const a = angle(x, y);
+          x += Math.cos(a) * step; y += Math.sin(a) * step;
+          if (x < 0 || y < 0 || x > b.width || y > b.height) break;
+          if (k % 2) points.push(`${round(x, 1)} ${round(y, 1)}`);
+        }
+        if (points.length < 4) continue;
+        const dash = round((40 + rand() * 80) * u, 1), gap = round(dash * (1.5 + rand() * 2), 1), cycle = round(dash + gap, 1);
+        paths.push(`<path d="M${points.join('L')}" style="stroke-dasharray:${dash}px ${gap}px;stroke-dashoffset:calc(var(--flow) * ${round(cycle * (1 + Math.floor(rand() * 2)), 1)}px + ${round(rand() * cycle, 1)}px)"/>`);
+      }
+      layers.push({ id: 'flow', box: b, style: { '--flow': 0 },
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${b.width}" height="${b.height}" viewBox="0 0 ${b.width} ${b.height}"><g fill="none" stroke="${tint}" stroke-opacity="${alpha}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round">${paths.join('')}</g></svg>`,
+        axes: { '--flow': speed > 0 ? { kind: 'glide', from: 0, to: -1, period: round(period(14), 4), offset: 0 } : undefined } });
+      break;
+    }
     default:
       return null;
   }
@@ -613,7 +653,9 @@ export function layerStateAt(layer, t) {
     x: axes.x ? axisValue(axes.x, t) : 0,
     y: axes.y ? axisValue(axes.y, t) : 0,
     rotation: axes.rotation ? axisValue(axes.rotation, t) : 0,
-    scale: axes.scale ? axisValue(axes.scale, t) : 1
+    scale: axes.scale ? axisValue(axes.scale, t) : 1,
+    // flow-field: the dash glide, a CSS variable the layer's SVG reads
+    ...(axes['--flow'] ? { '--flow': round(axisValue(axes['--flow'], t), 5) } : {})
   };
 }
 
@@ -625,15 +667,16 @@ export function layerTransform(state) {
 /** A layer's full inline CSS (camelCase) at absolute time t, for the Remotion kit. */
 export function layerStyle(layer, t) {
   const b = layer.box;
-  return { position: 'absolute', left: b.x, top: b.y, width: b.width, height: b.height, transformOrigin: '50% 50%', pointerEvents: 'none', ...layer.style, transform: layerTransform(layerStateAt(layer, t)) };
+  const state = layerStateAt(layer, t);
+  return { position: 'absolute', left: b.x, top: b.y, width: b.width, height: b.height, transformOrigin: '50% 50%', pointerEvents: 'none', ...layer.style, transform: layerTransform(state), ...(state['--flow'] === undefined ? {} : { '--flow': state['--flow'] }) };
 }
 
 const kebab = (key) => key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`); // WebkitMaskImage → -webkit-mask-image
 const cssValue = (value) => (typeof value === 'number' ? `${value}px` : String(value));
 
-/** layerStyle() as an inline style string, for the HyperFrames compiler. Numbers are px except opacity. */
+/** layerStyle() as an inline style string, for the HyperFrames compiler. Numbers are px except opacity and CSS variables. */
 export function layerCss(layer, t) {
-  return Object.entries(layerStyle(layer, t)).map(([key, value]) => `${kebab(key)}:${key === 'opacity' ? value : cssValue(value)}`).join(';');
+  return Object.entries(layerStyle(layer, t)).map(([key, value]) => `${kebab(key)}:${key === 'opacity' || key.startsWith('--') ? value : cssValue(value)}`).join(';');
 }
 
 /**
