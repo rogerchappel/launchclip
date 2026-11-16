@@ -235,7 +235,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | runs something in a terminal ("clone the repo", "pip install", "run the tests", "38 scripts pass"): commands type, output streams PASS/FAIL rows, a ⏩ timer fast-forwards long runs | terminal-session |
 | gives a number, time, price or count | count-up |
 | gives a sourced figure that should stay on screen with captions | metric |
-| lists steps, features or duties: each item its own free-type element (stack, fan, scatter, or orbit round a subject), ticks one at a time with ticks: true | item-list |
+| lists steps, features or duties: each item its own element (pill chips, free-type stack, fan, scatter, or orbit round a subject), ticks one at a time with ticks: true | item-list |
 | explains a sequence or mechanism | process-steps |
 | walks through the stages of a workflow | step-rail |
 | names a law or formula | equation-lockup |
@@ -2413,7 +2413,7 @@ params:
 events: enter, beat, pose
 
 ### item-list (keeps captions)
-A list (steps, features, a checklist) as separate free-type items, each with its own entrance: stacked down the frame, fanned out from a pile, scattered with a tilt, or orbiting a subject. Ticks draw on one item at a time. Use this, not a boxed checklist card, for any list.
+A list (steps, features, a checklist) as separate items, each with its own entrance: its own pill chip cascading down the frame (default), free type stacked down the frame, fanned out from a pile, scattered with a tilt, or orbiting a subject. Ticks draw on one item at a time. Use this, not a boxed checklist card, for any list.
 params:
 - items: [string | {label ≤ 40, detail? ≤ 60, at?, tickAt?}] 2–6
 - title: string ≤ 48 (optional)
@@ -2426,7 +2426,7 @@ params:
 - variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: item-<i>, tick-<i>
-variants: stack (default), fan, scatter, orbit
+variants: pills (default), stack, fan, scatter, orbit
 
 ### cast-scene (keeps captions)
 One to three animated characters in a set (desk-laptop, phone, meeting, screen, kitchen-counter, sofa, podium, stage, car, park-bench, video-call, standing-desk, standing), framed wide, medium or close, acting on cues: named poses and expressions at times or narration words, mouths moving on their lines, cuts in on a character. The screen set plays a real capture.

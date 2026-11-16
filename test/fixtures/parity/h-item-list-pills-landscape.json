@@ -1,7 +1,7 @@
 {
   "story": {
     "schema": "launchclip.story.v1",
-    "title": "Catalogue H parity: h-item-list-stack-landscape",
+    "title": "Catalogue H parity: h-item-list-pills-landscape",
     "lane": "motion",
     "format": {
       "width": 1920,
@@ -49,7 +49,7 @@
               "label": "End on the payoff"
             }
           ],
-          "variant": "stack"
+          "variant": "pills"
         }
       }
     ]

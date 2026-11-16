@@ -612,9 +612,9 @@ export function directChunk(chunk, options) {
       const previous = out.at(-1) ?? null;
       const decision = decide(state, previous, { history, avoid, registered, wide, check, last: previous && !STRUCTURE_KINDS.has(previous.kind) ? previous : lastOut, sinceEvent: lastEventAt === null ? null : state.start - lastEventAt, limit: target.longest_static * 0.8 });
       if (decision.change !== 'hold') lastEventAt = state.start;
-      // A list takes the next layout each time (stack, fan, scatter), so lists later in a video do not look alike.
+      // A list takes the next layout each time (pills, stack, fan, scatter), so lists later in a video do not look alike.
       if (decision.module === 'item-list' && decision.change !== 'build' && decision.params && decision.params.variant === undefined) {
-        const layouts = ['stack', 'fan', 'scatter'];
+        const layouts = ['pills', 'stack', 'fan', 'scatter'];
         const params = { ...decision.params, variant: layouts[(history.counts['item-list'] ?? 0) % layouts.length] };
         if (check('item-list', params)) decision.params = params;
       }

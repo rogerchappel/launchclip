@@ -2,19 +2,20 @@
 // free element per item, never rows inside one card. Each item is its own node
 // in the view tree with its own entrance and settle, and an optional tick that
 // draws on by itself, so a shot state can reveal one tick per state
-// (states: reveal ["tick-2"]). Layouts are the variants: stack (free type down
+// (states: reveal ["tick-2"]). Layouts are the variants: pills (each item its
+// own rounded chip, cascading down the frame), stack (free type down
 // the frame), fan (the stack fans out from a pile on an arc), scatter (tilted
 // type spread over the frame) and orbit (items fly out from a subject).
 // Registered in kit/core/catalog-h.mjs.
 
 import {timingRules} from './catalog-b-base.mjs';
 import {grammarStagger} from './grammar.mjs';
-import {VARIANT_PARAM, createHBase, fitText, r2, rt, textWidth, toneColor} from './catalog-h-base.mjs';
+import {VARIANT_PARAM, createHBase, fitText, inkOn, mixColor, r2, rt, textWidth, toneColor} from './catalog-h-base.mjs';
 import {chromeNodes, chromeOps, drawOps, el, label, set, strokePath, tw} from './catalog-h-view.mjs';
 
 const at = 'seconds from scene start (optional; else a matching hit, else a default)';
 const rect = '{x, y, width, height} canvas px inside the safe zone (optional)';
-export const LIST_VARIANTS = Object.freeze(['stack', 'fan', 'scatter', 'orbit']);
+export const LIST_VARIANTS = Object.freeze(['pills', 'stack', 'fan', 'scatter', 'orbit']);
 // The tick: one stroke in a 24-unit box, drawn on like a pen mark.
 const TICK = 'M4 12.5 L9.5 18 L20 6';
 const ENTER = 0.55, TICK_DRAW = 0.35;
@@ -48,8 +49,10 @@ function listResolve(params, ctx) {
   const cols = layout === 'scatter' ? (portrait ? 2 : Math.min(3, n)) : 1;
   const rows = layout === 'scatter' ? Math.ceil(n / cols) : n;
   const orbitW = r2(W * (portrait ? 0.44 : 0.28));
-  const textW = layout === 'orbit' ? orbitW : layout === 'scatter' ? r2(W / cols - u(56)) : r2(W - (showMarker ? marker + u(32) : 0) - (layout === 'fan' ? u(80) : 0));
-  const preferred = u(layout === 'stack' || layout === 'fan' ? (portrait ? 72 : 64) : 56);
+  // A pill: padding, the disc and a gap before its label.
+  const pill = {padX: u(34), padY: u(24), gap: u(24), disc: marker};
+  const textW = layout === 'pills' ? r2(W * 0.9 - pill.padX * 2 - pill.disc - pill.gap) : layout === 'orbit' ? orbitW : layout === 'scatter' ? r2(W / cols - u(56)) : r2(W - (showMarker ? marker + u(32) : 0) - (layout === 'fan' ? u(80) : 0));
+  const preferred = u(layout === 'stack' || layout === 'fan' ? (portrait ? 72 : 64) : layout === 'pills' ? (portrait ? 56 : 52) : 56);
   const detailSize = r2(Math.max(b.min.meta, u(34)));
   const items = raw.map((entry, i) => {
     const path = `params.items[${i}]`;
@@ -70,8 +73,15 @@ function listResolve(params, ctx) {
     if (item.size !== size) item.lines = fitText(check, `params.items[${item.index}].label`, item.label, {family: 'body', width: textW, preferred: size, min: size, maxLines: 2}).lines;
     item.size = size;
     item.height = r2((showMarker && centred ? marker + u(14) : 0) + item.lines * size * 1.12 + (item.detailLines ? u(10) + item.detailLines * detailSize * 1.3 : 0));
+    // A pill hugs its label: as wide as the text it sets (capped), as tall as the text or the disc.
+    if (layout === 'pills') {
+      const text = Math.min(textW, Math.max(...[item.label, item.detail ?? ''].map((line, k) => textWidth(line, k ? detailSize : size, 'body') / (k ? Math.max(1, item.detailLines) : item.lines))));
+      item.textW = r2(text);
+      item.width = r2(pill.padX * 2 + pill.disc + pill.gap + text);
+      item.height = r2(Math.max(item.height, pill.disc) + pill.padY * 2);
+    }
   }
-  const place = {stack: placeStack, fan: placeStack, scatter: placeScatter, orbit: placeOrbit}[layout];
+  const place = {pills: placePills, stack: placeStack, fan: placeStack, scatter: placeScatter, orbit: placeOrbit}[layout];
   const subjectFit = subject ? fitText(check, 'params.subject', subject, {family: 'display', width: W * 0.6, preferred: u(120), min: b.min.key, maxLines: 1}) : null;
   place({items, W, top, H0, u, cols, rows, marker, showMarker, subjectFit, subject, check});
   if (layout === 'fan') fanOut(items, top, H0, u);
@@ -80,7 +90,7 @@ function listResolve(params, ctx) {
     b.events.push({id: `${b.id}-item-${item.index}`, name: `item-${item.index}`, time: item.time, endTime: rt(item.time + ENTER), role: 'emphasis', cue: 'pop'});
     if (item.tickTime !== null) b.events.push({id: `${b.id}-tick-${item.index}`, name: `tick-${item.index}`, time: item.tickTime, endTime: rt(item.tickTime + TICK_DRAW), role: 'emphasis', cue: 'tick'});
   }
-  const content = {variant: layout, title: titleFit ? {text: title, size: titleFit.size, lines: titleFit.lines} : null, source: null, align: centred ? 'center' : 'left',
+  const content = {variant: layout, pill: layout === 'pills' ? {...pill, fill: mixColor(color, b.colors.bg, 0.14), border: mixColor(color, b.colors.bg, 0.45), discInk: inkOn(b.colors, color)} : null, title: titleFit ? {text: title, size: titleFit.size, lines: titleFit.lines} : null, source: null, align: centred ? 'center' : 'left',
     items, size, detailSize, marker, showMarker, numbered, ticks, centred, color, ink: b.theme.foreground, muted: b.theme.muted,
     subject: subjectFit ? {text: subject, size: subjectFit.size, lines: subjectFit.lines, x: r2(W / 2), y: r2(top + H0 / 2), time: rt(Math.max(b.motion.enterEnd - 0.2, items[0].time - 0.35))} : null,
     buildEnd: rt(Math.max(...items.map(item => (item.tickTime ?? item.time) + ENTER)))};
@@ -95,6 +105,19 @@ function placeStack({items, W, top, H0, u, marker, showMarker, check}) {
   let y = top + (H0 - total - gap * (items.length - 1)) / 2;
   for (const item of items) {
     Object.assign(item, {x: r2(showMarker ? marker + u(32) : 0), y: r2(y), rotation: 0});
+    y += item.height + gap;
+  }
+}
+
+// Chips down the frame, each a step further right, so the list reads as a sequence.
+function placePills({items, W, top, H0, u, check}) {
+  const total = items.reduce((sum, item) => sum + item.height, 0);
+  const gap = Math.min(u(36), (H0 - total) / Math.max(1, items.length - 1));
+  if (gap < u(16)) check.fail('params.items', 'too many or too long for the rect; use fewer items or a taller rect');
+  let y = top + (H0 - total - gap * (items.length - 1)) / 2;
+  const step = Math.min(u(56), (W - Math.max(...items.map(item => item.width))) / Math.max(1, items.length - 1));
+  for (const item of items) {
+    Object.assign(item, {x: r2(Math.max(0, item.index * step)), y: r2(y), rotation: 0});
     y += item.height + gap;
   }
 }
@@ -158,6 +181,7 @@ function listView(model) {
     kids.push(label(`${id}-subject`, r2(s.x - w / 2), r2(s.y - h / 2), r2(w), s.text, {size: s.size, family: fonts.display, color: c.color, align: 'center', lineHeight: 1.05, wrap: true, extra: {opacity: 0}}));
   }
   for (const item of c.items) {
+    if (c.pill) { kids.push(pillNode(model, item)); continue; }
     const align = c.centred ? 'center' : 'left';
     const m = c.marker;
     const block = [];
@@ -177,6 +201,28 @@ function listView(model) {
   return kids;
 }
 
+// One chip: a tinted rounded body, a disc (the number, or an empty ring that fills
+// with the tick) and the label. The tick is the filled disc with its check inside,
+// so revealing tick-<i> moves both.
+function pillNode(model, item) {
+  const {id, fonts, theme, unit: u} = model;
+  const c = model.content, P = c.pill, d = P.disc;
+  const discTop = r2((item.height - d) / 2), discBox = {position: 'absolute', left: P.padX, top: discTop, width: d, height: d, borderRadius: '50%'};
+  const disc = c.ticks
+    ? [el('div', null, {...discBox, boxSizing: 'border-box', border: `${r2(3 * u)}px solid ${P.border}`}),
+      el('div', `${id}-tick-${item.index}`, {...discBox, background: c.color, opacity: 0, transform: 'scale(0.4)'}, [
+        el('svg', null, {position: 'absolute', left: r2(d * 0.2), top: r2(d * 0.2), width: r2(d * 0.6), height: r2(d * 0.6), overflow: 'visible'}, [strokePath(`${id}-check-${item.index}`, TICK, P.discInk, 3.4)], {viewBox: '0 0 24 24'})])]
+    : c.numbered ? [el('div', null, {...discBox, background: c.color}, [label(`${id}-num-${item.index}`, 0, r2(d * 0.25), d, item.number, {size: r2(d * 0.42), family: fonts.meta, color: P.discInk, align: 'center', weight: 700})])] : [];
+  const textX = c.ticks || c.numbered ? P.padX + d + P.gap : P.padX;
+  const block = [el('div', null, {margin: 0, fontFamily: fonts.body, fontWeight: 650, fontSize: c.size, lineHeight: '1.12', color: theme.foreground}, [item.label])];
+  if (item.detail) block.push(el('div', null, {margin: 0, marginTop: 6 * u, fontFamily: fonts.body, fontWeight: 450, fontSize: c.detailSize, lineHeight: '1.3', color: c.muted}, [item.detail]));
+  return el('div', `${id}-item-${item.index}`, {position: 'absolute', left: item.x, top: item.y, width: item.width, height: item.height, opacity: 0, boxSizing: 'border-box',
+    borderRadius: r2(Math.min(item.height / 2, 60 * u)), background: P.fill, border: `${r2(2 * u)}px solid ${P.border}`, boxShadow: `0 ${r2(14 * u)}px ${r2(36 * u)}px #00000066`, transformOrigin: '0% 50%'}, [
+    ...disc,
+    el('div', null, {position: 'absolute', left: r2(textX), top: r2(item.height / 2), width: r2(item.width - textX - P.padX + 8 * u), transform: 'translateY(-50%)'}, block)
+  ]);
+}
+
 function listTimeline(model, ops) {
   const {id, start, unit: u} = model;
   const c = model.content;
@@ -189,14 +235,21 @@ function listTimeline(model, ops) {
     const target = `${id}-item-${item.index}`;
     const rest = {x: 0, y: 0, rotation: item.rotation, scaleX: 1, scaleY: 1};
     // Where each layout's entrance starts: a slide, the pile, a tilted drop, the subject.
-    const from = c.variant === 'stack' ? {x: r2(-48 * u), y: 0, rotation: 0, scaleX: 1, scaleY: 1}
+    const from = c.variant === 'pills' ? {x: r2(-60 * u), y: 0, rotation: 0, scaleX: 0.86, scaleY: 0.86}
+      : c.variant === 'stack' ? {x: r2(-48 * u), y: 0, rotation: 0, scaleX: 1, scaleY: 1}
       : c.variant === 'fan' ? {x: item.pile.x, y: item.pile.y, rotation: item.pile.rotation, scaleX: 0.92, scaleY: 0.92}
       : c.variant === 'scatter' ? {x: 0, y: r2(-36 * u), rotation: r2(item.rotation * 3), scaleX: 0.7, scaleY: 0.7}
       : {x: item.from.x, y: item.from.y, rotation: 0, scaleX: 0.4, scaleY: 0.4};
     set(ops, target, start, {opacity: 0, ...from});
     tw(ops, target, item.time, 0.2, 'power1.out', {opacity: 0}, {opacity: 1});
-    tw(ops, target, item.time, ENTER, c.variant === 'scatter' ? 'back.out(1.6)' : 'power3.out', from, rest);
-    if (item.tickTime !== null) {
+    tw(ops, target, item.time, ENTER, c.variant === 'scatter' || c.variant === 'pills' ? 'back.out(1.6)' : 'power3.out', from, rest);
+    if (item.tickTime !== null && c.pill) {
+      // The disc fills and pops, then its check draws on.
+      set(ops, `${id}-tick-${item.index}`, start, {opacity: 0, x: 0, y: 0, scaleX: 0.4, scaleY: 0.4});
+      tw(ops, `${id}-tick-${item.index}`, item.tickTime, 0.12, 'power1.out', {opacity: 0}, {opacity: 1});
+      tw(ops, `${id}-tick-${item.index}`, item.tickTime, 0.4, 'back.out(2)', {scaleX: 0.4, scaleY: 0.4}, {scaleX: 1, scaleY: 1});
+      drawOps(ops, `${id}-check-${item.index}`, start, rt(item.tickTime + 0.1), TICK_DRAW, 'power2.out');
+    } else if (item.tickTime !== null) {
       drawOps(ops, `${id}-tick-${item.index}`, start, item.tickTime, TICK_DRAW, 'power2.out');
       if (c.numbered) tw(ops, `${id}-num-${item.index}`, item.tickTime, 0.15, 'power1.out', {opacity: 1}, {opacity: 0});
     }
@@ -205,7 +258,7 @@ function listTimeline(model, ops) {
 
 export const itemList = {
   id: 'item-list',
-  describe: 'A list (steps, features, a checklist) as separate free-type items, each with its own entrance: stacked down the frame, fanned out from a pile, scattered with a tilt, or orbiting a subject. Ticks draw on one item at a time. Use this, not a boxed checklist card, for any list.',
+  describe: 'A list (steps, features, a checklist) as separate items, each with its own entrance: its own pill chip cascading down the frame (default), free type stacked down the frame, fanned out from a pile, scattered with a tilt, or orbiting a subject. Ticks draw on one item at a time. Use this, not a boxed checklist card, for any list.',
   params: {items: '[string | {label ≤ 40, detail? ≤ 60, at?, tickAt?}] 2–6', title: 'string ≤ 48 (optional)', subject: 'string ≤ 24, the centre the items circle (required for orbit, ignored by the others)',
     ticks: 'boolean: each item gets a tick that draws on at tickAt (default: just after it enters)', numbered: 'boolean (default true without ticks)', tone: 'primary | accent | paper | #rrggbb (numbers and ticks)',
     stagger: 'seconds between entrances (default min(0.35, 1.6 / count))', at: `first item: ${at}`, variant: VARIANT_PARAM, rect},

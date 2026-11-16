@@ -110,5 +110,5 @@ export const V2_MODULE_VARIANTS = freeze({
   'live-bars': ['slabs', 'flat'],
   'line-diagram': ['blueprint', 'plain'],
   // orbit needs a subject in params, so a seed never picks it.
-  'item-list': ['stack', 'fan', 'scatter']
+  'item-list': ['pills', 'stack', 'fan', 'scatter']
 });
