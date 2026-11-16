@@ -55,6 +55,9 @@ export function logoClass(logo) {
   return `${logo.tone}-clear`;
 }
 
+/** A layout's content fits: every `needs` field, and one of each `needsAny` group. */
+const fits = (layout, have) => layout.needs.every(field => have.has(field)) && (layout.needsAny ?? []).every(group => group.some(field => have.has(field)));
+
 /** The fields a layout can fill from: a layout fits when every `needs` field is present. */
 const present = fields => new Set(Object.entries(fields).filter(([, value]) => value !== undefined && value !== null && value !== '').map(([key]) => key));
 
@@ -69,7 +72,7 @@ export function endCardCandidates({action, footage = false, logo = null, aspect 
     && (footage || !layout.grounds.every(ground => ground === 'footage'))
     && (!layout.logo || layout.logo.includes(cls))
     && (!layout.aspects || layout.aspects.includes(aspect))
-    && layout.needs.every(field => have.has(field)))
+    && fits(layout, have))
     .map(layout => {
       let weight = 1 + layout.tags.filter(tag => tags.includes(tag)).length;
       // Over footage, the ending that stays in the video comes first.
@@ -151,7 +154,7 @@ function resolve(params, ctx) {
   const styled = ctx.variants && typeof ctx.variants === 'object' ? ctx.variants['end-card'] : undefined;
   let layoutId = p.layout ?? (BY_ID[styled] ? styled : undefined);
   if (layoutId === undefined) {
-    layoutId = pickEndCard({action, footage: !!still || ctx.footage === true, logo, aspect: b.portrait ? '9:16' : '16:9', fields: {...fields, logo, still, badges: badges.length ? badges : undefined},
+    layoutId = pickEndCard({action, footage: !!still || ctx.footage === true || !!ctx.base, logo, aspect: b.portrait ? '9:16' : '16:9', fields: {...fields, logo, still, badges: badges.length ? badges : undefined},
       tags: Array.isArray(ctx.tags) ? ctx.tags : [], avoid, seed: p.seed ?? `${id}:${colors.primary}:${fields.headline ?? fields.url ?? ''}`});
     if (!layoutId) check.fail('params', `no end-card layout fits ${action ? `action "${action}"` : 'this ending'} with these fields; set params.layout or add a headline, url or handle`);
   }
@@ -159,6 +162,8 @@ function resolve(params, ctx) {
   const have = present({...fields, logo, still, badges: badges.length ? badges : undefined});
   const missing = layout.needs.filter(field => !have.has(field));
   if (missing.length) check.fail(`params.${missing[0]}`, `is required by layout "${layout.id}" (it needs ${layout.needs.join(', ')})`);
+  const group = (layout.needsAny ?? []).find(options => !options.some(field => have.has(field)));
+  if (group) check.fail(`params.${group[0]}`, `or ${group.slice(1).map(field => `params.${field}`).join(' or ')} is required by layout "${layout.id}"`);
 
   // ---- the kit a layout builds with (geometry is rect-local px)
   const W = rect.width, H = rect.height;
@@ -223,6 +228,9 @@ function resolve(params, ctx) {
     /** Count a size drawn by hand toward the key-text floor. */
     keyText(size) { keyText.push(size); },
     hasLogo: !!logo,
+    // The logo's data ({src, ratio, tone, clear, box}); k.logo is the drawing method.
+    logoInfo: logo,
+    logoClass: logoClass(logo),
     /** Fit `value` and place it: → {key, size, lines, height, width}. key text counts toward the 44 px floor. */
     text(key, value, {x = 0, y = 0, width = W, family = 'display', preferred = 96, min, maxLines = 2, lineHeight = 1.05, color = colors.paper, align = 'left', weight, upper = false, spacing = 0, italic = false, meta = false, style = {}} = {}, motion = {kind: 'rise'}) {
       const shown = upper ? value.toUpperCase() : value;
@@ -344,8 +352,10 @@ function timeline(model, ops) {
         break;
       case 'type': {
         const value = String(m.text), per = Math.min(0.06, 1 / Math.max(1, value.length));
-        set(ops, m.target, start, {text: ''});
-        for (let i = 1; i <= value.length; i++) set(ops, m.target, rt(at + i * per), {text: value.slice(0, i)});
+        // Starts from the first character, hidden: an empty string does not seek back cleanly in GSAP.
+        set(ops, m.target, start, {text: value.slice(0, 1), opacity: 0});
+        set(ops, m.target, at, {opacity: 1});
+        for (let i = 2; i <= value.length; i++) set(ops, m.target, rt(at + (i - 1) * per), {text: value.slice(0, i)});
         break;
       }
       case 'push':
