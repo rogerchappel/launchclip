@@ -234,11 +234,12 @@ test("Remotion paints a real still in a medium and leaves the captions crisp", {
     await cp(MINIMAL, project, { recursive: true });
     const adapter = getRenderer("remotion");
     const plainFile = path.join(project, "qa", "plain.png");
-    await adapter.still(project, 1.5, plainFile);
+    // 1.7 s: "MINUTES." (1.46–1.9 s) has settled; at 1.5 s its 0.16 s power3.out entrance is still fading in.
+    await adapter.still(project, 1.7, plainFile);
     const file = path.join(project, "storyboard.json");
     await writeFile(file, JSON.stringify({ ...JSON.parse(await readFile(file, "utf8")), medium: "oil" }, null, 2));
     const oilFile = path.join(project, "qa", "oil.png");
-    await adapter.still(project, 1.5, oilFile);
+    await adapter.still(project, 1.7, oilFile);
     const [plain, oil] = [decodePng(await readFile(plainFile)), decodePng(await readFile(oilFile))];
     assert.equal(oil.width, 1080);
     assert.equal(oil.height, 1920);
