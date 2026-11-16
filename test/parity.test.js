@@ -65,6 +65,8 @@ const STORY_PARITY = Object.freeze([
   {id: 'css-transitions-9x16', times: [1.5, 2.45, 3.4, 4.45, 5.4, 6.45, 8.25, 8.6, 10.45, 11.5, 12.6, 13.5]},
   // The round-two sample: hits and cover transitions over crisp scenes.
   {id: 'vfx-arcade-9x16', times: [1.2, 3.5, 6.45, 10.9]},
+  // VFX phase 9 batch 1: each of the twenty new effects on its peak (a loop just after it starts).
+  {id: 'vfx-batch1-9x16', times: [0.8, 1.8, 2.8, 3.8, 4.6, 5.8, 6.8, 7.8, 8.8, 9.6, 10.8, 11.8, 12.8, 13.8, 14.6, 15.8, 16.8, 17.8, 18.9, 19.4]},
   // Silhouette effects: scanner and hit-flash on a card, frozen, electrified, stunned and halo on two cast members.
   {id: 'vfx-masks-9x16', times: [1.2, 2.3, 4.2, 6.5]},
   // Interface scenes on signal-ui (the CI smoke's times, scripts/parity-ci.mjs).
