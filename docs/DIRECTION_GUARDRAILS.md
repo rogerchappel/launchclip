@@ -157,6 +157,9 @@ emphasis. Plates appear only where they are needed.
     word, at least 1.2 s; source and role lines do not count). Only copy is
     counted: a diagram's point names (`from`, `to`, `point`), a line's
     weight and style, colour roles and layout modes are wiring, not words.
+    The gate's `text-hold` is an error only when a module is shown for
+    under 70% of its reading time (`TEXT_HOLD_ERROR_SHARE`); a near miss is
+    a warning, because the planner retimes it and a viewer does not notice.
 - **Planner.** `launchclip make` and `story plan` run the same count before
   anything is rendered (`readingFindings`): a card with more words than its
   time on screen allows goes back to the model as a `reading:` note with the

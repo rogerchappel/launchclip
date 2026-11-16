@@ -53,6 +53,11 @@ test("text fades are capped and text holds long enough to be read", () => {
   const rushed = story([{ id: "quote", module: "quote-card", track: 1, start: 0, end: 2.5, params: { quote: "The best way to protect your eyes against eye strain is to take regular breaks", author: "AAO" } }]);
   const result = ghostingGate(rushed);
   assert.ok(result.findings.some((finding) => finding.rule === "text-hold"), JSON.stringify(result.findings));
+  // A little short (3.15 s of 3.3 s) is a warning a viewer won't notice; far short (1.65 s) holds the render.
+  const hold = (end) => ghostingGate(story([{ ...rushed.scenes[0], end }]));
+  assert.deepEqual([hold(4).status, hold(4).findings.find((finding) => finding.rule === "text-hold")?.severity], ["passed", "warning"]);
+  assert.equal(result.findings.find((finding) => finding.rule === "text-hold").severity, "error");
+  assert.equal(result.status, "failed");
 });
 
 test("a card ending at a plate change leaves with the cut; one arriving with a moving plate waits for it", () => {
