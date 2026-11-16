@@ -8,9 +8,10 @@
 //                                                     drawn on past it through a camera move)
 //     in?:  {from: scene id, items: [{id, box?}],    elements it receives (box: the
 //            move?: {start, duration, ease},      source's rect at the boundary, in this
-//            ride?: {x, y, rotation, scale}}       plate's px; move: the camera move it
+//            ride?: {samples, centre}, restFrom?} plate's px; move: the camera move it
 //                                                     arrives by; ride: the camera's inverse
-//                                                     on a zoom or roll, see rideOps)
+//                                                     on a zoom or roll, see rideOps; restFrom:
+//                                                     when its rest is sampled from, the ride's end)
 //     exitTo?, enterFrom?                             the root motion lifted off the root
 //   }
 //
@@ -157,7 +158,7 @@ export function applyCarry(model, ops, children) {
   if (c.in) {
     skipEntrances(model, ops, plan.into.targets, plan.index);
     flipOps(model, ops, children);
-    if (c.in.ride) rideOps(model, ops);
+    if (c.in.ride) rideOps(model, ops, plan.index);
   }
   return ops;
 }
@@ -205,41 +206,55 @@ function flipOps(model, ops, children) {
 }
 
 /**
- * The ride layers (§6.6): the camera's inverse in the plate's px (ride: the
- * translate x, y and rotation it starts at, tweened to 0 on the move's ease,
- * and the scale as [time, value] samples joined by straight tweens),
- * conjugated into each element's parent px by its frame (origin: the canvas
- * centre in the parent's px, inverse: the parent's linear map inverted, a
- * similarity, so rotation and scale pass through unchanged).
+ * The ride layers (§6.6). ride.samples: [[t, x, y, scale, rotation]], the
+ * camera's inverse in the plate's px at each sample (a translate, then a
+ * rotation and scale about the canvas centre c). Each is conjugated into the
+ * element's parent px at that time, so a module's own camera (node-graph's
+ * slow -cam push) moving under the element is cancelled too, about the
+ * wrapper's fixed origin o (c in the parent's px at the start): the
+ * translate is A⁻¹(R(A(o))) − o, rotation and scale pass through (the
+ * parent's map A is a similarity). Samples are joined by straight tweens.
  */
-function rideOps(model, ops) {
-  const {ride, move, items} = model.carry.in;
+function rideOps(model, ops, index) {
+  const {ride, items} = model.carry.in;
   const r = value => Math.round(value * 1e4) / 1e4;
-  for (const item of items) {
-    const id = `${item.id}-ride`, [x, y] = apply(item.frame.inverse, [ride.x, ride.y]).map(r), s0 = ride.scale[0][1];
-    ops.push({type: 'set', target: id, time: model.start, props: {x, y, rotation: ride.rotation, scaleX: s0, scaleY: s0}});
-    ops.push({type: 'tween', target: id, start: move.start, duration: move.duration, ease: move.ease, from: {x, y, rotation: ride.rotation}, to: {x: 0, y: 0, rotation: 0}});
-    for (let k = 1; k < ride.scale.length; k += 1) {
-      const [t0, a] = ride.scale[k - 1], [t1, b] = ride.scale[k];
-      ops.push({type: 'tween', target: id, start: t0, duration: r(t1 - t0), ease: 'none', from: {scaleX: a, scaleY: a}, to: {scaleX: b, scaleY: b}});
+  const c = [model.rect.x, model.rect.y], centre = ride.centre;
+  const poses = items.map(() => []);
+  for (const [t, tx, ty, scale, rotation] of ride.samples) {
+    const state = frameState(ops, t), rad = (rotation * Math.PI) / 180, cos = Math.cos(rad), sin = Math.sin(rad);
+    for (const [k, item] of items.entries()) {
+      const {linear, offset} = parentMap(index.byId.get(item.id).parent, state, c);
+      const [ox, oy] = item.frame.origin, [vx, vy] = [offset[0] + linear[0] * ox + linear[1] * oy, offset[1] + linear[2] * ox + linear[3] * oy];
+      const dx = vx - centre[0], dy = vy - centre[1];
+      const w = [centre[0] + tx + scale * (cos * dx - sin * dy) - offset[0], centre[1] + ty + scale * (sin * dx + cos * dy) - offset[1]];
+      const [ux, uy] = apply(invert(linear), w);
+      poses[k].push([t, {x: r(ux - ox), y: r(uy - oy), rotation: r(rotation), scaleX: scale, scaleY: scale}]);
     }
   }
+  for (const [k, item] of items.entries()) {
+    const id = `${item.id}-ride`, track = poses[k];
+    ops.push({type: 'set', target: id, time: model.start, props: {...track[0][1]}});
+    for (let i = 1; i < track.length; i += 1) if (track[i][0] - track[i - 1][0] > 1e-6) ops.push({type: 'tween', target: id, start: track[i - 1][0], duration: r(track[i][0] - track[i - 1][0]), ease: 'none', from: {...track[i - 1][1]}, to: {...track[i][1]}});
+  }
+}
+
+/** An entry's parent map at a frame state: content px → canvas px, {linear, offset} (offset: c, the module's place). */
+function parentMap(parent, state, [rx, ry]) {
+  const at = point => { const [x, y] = toCanvas(parent, point, state); return [rx + x, ry + y]; };
+  const [ox, oy] = at([0, 0]), [ax, ay] = at([1, 0]), [bx, by] = at([0, 1]);
+  return {linear: [ax - ox, bx - ox, ay - oy, by - oy], offset: [ox, oy]};
 }
 
 /**
  * An element's parent frame at t: {origin: the canvas point (cx, cy) in the
- * parent's px, inverse: the parent's linear map to the canvas, inverted}.
- * Throws when that map is not a similarity (a ride needs rotation and scale to
- * commute with it).
+ * parent's px}. Throws when the parent's map is not a similarity (a ride needs
+ * rotation and scale to commute with it).
  */
 export function parentFrame(model, children, ops, t, id, [cx, cy]) {
-  const entry = indexView(children).byId.get(id), state = frameState(ops, t);
-  const at = point => { const [x, y] = toCanvas(entry.parent, point, state); return [model.rect.x + x, model.rect.y + y]; };
-  const [ox, oy] = at([0, 0]), [ax, ay] = at([1, 0]), [bx, by] = at([0, 1]);
-  const linear = [ax - ox, bx - ox, ay - oy, by - oy];
+  const {linear, offset} = parentMap(indexView(children).byId.get(id).parent, frameState(ops, t), [model.rect.x, model.rect.y]);
   if (Math.abs(linear[0] - linear[3]) > 1e-4 || Math.abs(linear[1] + linear[2]) > 1e-4) throw new Error(`carry: ${id} sits in a layer that stretches unevenly; a zoom or roll needs uniform scale`);
-  const inverse = invert(linear), round = value => Math.round(value * 100) / 100;
-  return {origin: apply(inverse, [cx - ox, cy - oy]).map(round), inverse: inverse.map(value => Math.round(value * 1e6) / 1e6)};
+  const round = value => Math.round(value * 100) / 100;
+  return {origin: apply(invert(linear), [cx - offset[0], cy - offset[1]]).map(round)};
 }
 
 const pick = (props = {}) => Object.fromEntries(['x', 'y', 'scaleX', 'scaleY', 'rotation'].filter(key => typeof props[key] === 'number').map(key => [key, props[key]]));
@@ -269,6 +284,10 @@ function skipEntrances(model, ops, targets, index) {
   const start = model.start;
   const settles = new Map();
   const rests = restValues(model, ops, targets);
+  // On a ride, a module may hold its elements' entrances until the camera arrives (an overview's 2 s or more), so
+  // the received elements' rest is sampled from then; their ancestors (node-graph's slow -cam push) keep the scene's.
+  const restFrom = model.carry.in?.restFrom;
+  if (restFrom !== undefined) for (const [id, rest] of restValues(model, ops, new Set(model.carry.in.items.map(item => item.id)), restFrom)) rests.set(id, rest);
   for (const target of targets) {
     const mine = ops.map((op, i) => ({op, i})).filter(({op}) => op.target === target).sort((a, b) => opTime(a.op) - opTime(b.op) || a.i - b.i);
     for (const key of KEYS) {
@@ -289,12 +308,12 @@ function skipEntrances(model, ops, targets, index) {
   for (const [target, props] of settles) ops.push({type: 'set', target, time: start, props});
 }
 
-/** target → {key: the value it holds for most of the scene (sampled up to the exit)}. */
-function restValues(model, ops, targets) {
+/** target → {key: the value it holds for most of the scene (sampled from `after` up to the exit)}. */
+function restValues(model, ops, targets, after = model.start) {
   const counts = new Map();
-  const end = model.motion.exitStart, samples = 48;
+  const from = Math.min(after, model.motion.exitStart), end = model.motion.exitStart, samples = 48;
   for (let k = 0; k <= samples; k += 1) {
-    const state = frameState(ops, model.start + ((end - model.start) * k) / samples);
+    const state = frameState(ops, from + ((end - from) * k) / samples);
     for (const target of targets) {
       const props = state.get(target);
       if (!props) continue;

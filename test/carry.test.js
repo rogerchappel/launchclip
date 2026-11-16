@@ -281,14 +281,11 @@ for (const [name, transition, camera] of [
     assert.equal(Boolean(ride), ['orbit', 'pull', 'overview'].includes(transition.type) || (transition.type === 'push' && camera.mode === 'world'));
     if (ride) {
       const plan = cameraPlan(story, {windows: sceneWindows(story), objects: sceneObjectLookup(story, (scene, value) => resolveModule(scene, value))});
-      const zoomAt = t => (({zoom}) => zoom)(cameraStateAt(plan, t)) * plan.placements[b.id].scale;
-      for (const [t, value] of ride.scale) assert.ok(Math.abs(value * zoomAt(t) - 1) < 1e-4, `ride scale at ${t}`);
-      // And its rotation cancels the camera's roll, so a carried element stays upright while the plates turn.
-      const rideId = `${items[0].id}-ride`;
-      for (let k = 0; k <= 10; k += 1) {
-        const t = move.start + (move.duration * k) / 10;
-        const roll = cameraStateAt(plan, t).rotation + plan.placements[b.id].rotation;
-        assert.ok(Math.abs((frameState(opList(b).ops, t).get(rideId).rotation ?? 0) + roll) < 1e-3, `ride rotation at ${t}`);
+      const P = plan.placements[b.id];
+      for (const [t, , , scale, rotation] of ride.samples) {
+        const cam = cameraStateAt(plan, t);
+        assert.ok(Math.abs(scale * cam.zoom * P.scale - 1) < 1e-4, `ride scale at ${t}`);
+        assert.ok(Math.abs(rotation + cam.rotation + P.rotation) < 1e-3, `ride rotation at ${t}`);
       }
     }
     // A hides its handed copies on the boundary; it is drawn on through the move.
@@ -309,9 +306,20 @@ for (const [name, transition, camera] of [
       assert.ok(Math.hypot(start[id].x - from[id].x, start[id].y - from[id].y) < 1.5, `${id} starts where A's copy was on screen`);
       assert.ok(Math.hypot(settled[id].x - slot[id].x, settled[id].y - slot[id].y) < 1.5, `${id} settles on its slot`);
     }
-    // In between: on the straight line from start to end, never past either end. Over a long move (an overview's
-    // 2.4 s) node-graph's own slow -cam push is 3.5% in by the landing and moves the slot with it: a few px.
-    const tol = move.duration > 1.5 ? 5 : 1.5;
+    // A ride makes B's px screen px: on every frame of the move each element is on screen where it is in B's px
+    // with the ride taken out (node-graph's own -cam push included).
+    if (ride) {
+      const strip = node => (!node || typeof node !== 'object' ? node : node.id?.endsWith('-ride') ? strip(node.children[0]) : {...node, children: (node.children ?? []).map(strip)});
+      const {children, ops} = opList(b), bare = children.map(strip);
+      for (let k = 0; k <= 10; k += 1) {
+        const t = move.start + (move.duration * k) / 10, now = onScreen(story, b, ids, t), canvas = visualBoxes(b, bare, ops, t, ids);
+        for (const id of ids) assert.ok(Math.hypot(now[id].x - canvas[id].cx, now[id].y - canvas[id].cy) < 1, `${id} at ${t}: on screen where it is in B's px`);
+      }
+    }
+    // In between: on the straight line from start to end, never past either end (an overview's 2.4 s path also
+    // carries node-graph's own slow -cam push on its own ease, so it bows by a few px: the check above covers it).
+    if (move.duration > 1.5) return;
+    const tol = 1.5;
     for (let k = 1; k < 10; k += 1) {
       const t = move.start + (move.duration * k) / 10, now = onScreen(story, b, ids, t);
       for (const id of ids) {

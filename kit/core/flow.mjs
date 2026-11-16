@@ -22,10 +22,9 @@ import {MODULES as CATALOG_B, catalogBTimeline, catalogBView} from './catalog-b.
 import {MODULES as CATALOG_G, catalogGTimeline, catalogGView} from './catalog-g.mjs';
 import {MODULES as CATALOG_H, catalogHTimeline, catalogHView} from './catalog-h.mjs';
 import {ROOT_REST, parentFrame, sameBox, visualBoxes} from './carry.mjs';
-import {scaleStepAt} from './motion.mjs';
 import {indexView} from './shot-states.mjs';
 import {FEELS} from './feel.mjs';
-import {cameraActive, cameraPlan, resolveCamera, sceneObjectLookup, worldPoint} from './camera-world.mjs';
+import {cameraActive, cameraPlan, cameraStateAt, resolveCamera, sceneObjectLookup, worldPoint} from './camera-world.mjs';
 import {isCameraTransition, sceneWindows} from './transitions.mjs';
 
 const EPS = 1e-3;
@@ -94,37 +93,36 @@ function arrivalMove(story, A, B, resolveBare) {
   const order = plan.order, at = order.indexOf(B.id);
   if (order[at - 1] !== A.id) throw new Error(`it arrives by a camera move from ${order[at - 1]}, not from ${A.id}`);
   if (CARRY_RIDES.includes(move.type)) {
-    // An overview is two moves (out to the span, in to B) with a hold between: the ride takes both, the FLIP spans them.
-    const legs = plan.moves.filter(entry => entry.sceneId === B.id && !entry.zoom), last = legs.at(-1);
-    return {move: {start: move.start, duration: Math.round((last.start + last.duration - move.start) * 1e6) / 1e6, ease: move.ease}, ride: rideOf(legs, plan.placements[B.id], plan)};
+    // An overview is two moves (out to the span, in to B) with a hold between: the ride and the FLIP span them.
+    const last = plan.moves.filter(entry => entry.sceneId === B.id && !entry.zoom).at(-1), end = last.start + last.duration;
+    return {move: {start: move.start, duration: Math.round((end - move.start) * 1e6) / 1e6, ease: move.ease}, ride: rideOf(plan, plan.placements[B.id], move.start, end)};
   }
   if (Math.abs(Math.log(move.to.zoom / move.from.zoom)) > 1e-4 || Math.abs(move.to.rotation - move.from.rotation) > 1e-3) throw new Error(`its ${move.type} changes the camera's zoom or roll; carry rides moves between plates of one scale`);
   return {move: {start: move.start, duration: move.duration, ease: move.ease}, from: plan.placements[A.id], to: plan.placements[B.id]};
 }
 
-// Ride samples of the camera's zoom per second (straight tweens between them).
+// Ride samples per second (straight tweens between them; at 30 and 60 fps they land on frames).
 const RIDE_RATE = 60;
 
 /**
- * The camera's inverse through one or more moves (legs), in plate B's canvas
- * px (§6.6): B's px reach the screen as c + k·Rot(θ)·(p − q) with k = zoom ·
- * B's scale, θ = roll + B's rotation and q the camera's centre in B's px.
- * → {legs: [{start, duration, ease, x, y, rotation}] (the translate q − c and
- * the rotation −θ at each leg's start, tweened on its ease to the next leg's,
- * the last to 0), scale: [[t, 1/k]] samples across every leg}.
+ * The camera's inverse through B's arrival, in plate B's canvas px (§6.6): B's
+ * px reach the screen as c + k·Rot(θ)·(p − q) with k = zoom · B's scale, θ =
+ * roll + B's rotation and q the camera's centre in B's px. → {centre: c,
+ * samples: [[t, x, y, scale, rotation]]}: the translate q − c, the scale 1/k
+ * and the rotation −θ, RIDE_RATE times a second from start to end (the last
+ * the identity).
  */
-function rideOf(moves, placement, {width, height}) {
+function rideOf(plan, placement, start, end) {
   const r = (-placement.rotation * Math.PI) / 180, round = (value, f = 1e4) => Math.round(value * f) / f + 0;
-  const legs = [], scale = [];
-  for (const move of moves) {
-    const dx = move.from.x - placement.x, dy = move.from.y - placement.y;
+  const W2 = plan.width / 2, H2 = plan.height / 2;
+  const count = Math.max(1, Math.ceil((end - start) * RIDE_RATE - 1e-6)), samples = [];
+  for (let i = 0; i <= count; i += 1) {
+    const t = round(start + ((end - start) * i) / count, 1e6), cam = cameraStateAt(plan, t);
+    const dx = cam.x - placement.x, dy = cam.y - placement.y;
     const qx = (dx * Math.cos(r) - dy * Math.sin(r)) / placement.scale, qy = (dx * Math.sin(r) + dy * Math.cos(r)) / placement.scale;
-    legs.push({start: move.start, duration: move.duration, ease: move.ease, x: round(qx - width / 2, 100), y: round(qy - height / 2, 100), rotation: round(-(move.from.rotation + placement.rotation))});
-    const count = Math.max(1, Math.ceil(move.duration * RIDE_RATE - 1e-6));
-    for (let i = 0; i <= count; i += 1) scale.push([round(move.start + (move.duration * i) / count, 1e6), round(1 / (scaleStepAt(i / count, {from: move.from.zoom, to: move.to.zoom, duration: move.duration, ease: move.ease}) * placement.scale), 1e6)]);
+    samples.push(i === count ? [t, 0, 0, 1, 0] : [t, round(qx - W2, 100), round(qy - H2, 100), round(1 / (cam.zoom * placement.scale), 1e6), round(-(cam.rotation + placement.rotation))]);
   }
-  scale.at(-1)[1] = 1;
-  return {legs, scale};
+  return {centre: [W2, H2], samples};
 }
 
 /** A visual box on plate `from` (canvas px) → the same box in the world, in plate `to`'s canvas px. */
