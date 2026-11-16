@@ -58,12 +58,14 @@ export const STORY_BACKGROUND_PARAMS = Object.freeze({
   stripes: { angle: [0, 180], scale: BG_SCALE, density: [0.15, 0.6], intensity: BG_UNIT, speed: BG_SPEED },
   topographic: { density: BG_UNIT, scale: BG_SCALE, intensity: BG_UNIT, speed: BG_SPEED },
   halftone: { angle: BG_ANGLE, scale: BG_SCALE, intensity: BG_UNIT, speed: BG_SPEED },
-  "light-rays": { angle: [-60, 60], density: BG_UNIT, intensity: BG_UNIT, speed: BG_SPEED },
+  "light-rays": { angle: [-60, 60], density: BG_UNIT, intensity: BG_UNIT, speed: BG_SPEED, sweep: BG_UNIT },
   "icon-pattern": { scale: BG_SCALE, spacing: BG_SCALE, rotation: [-45, 45], offset: BG_UNIT, opacity: [0.04, 0.2], stroke: [1, 3], speed: BG_SPEED },
   "icon-scatter": { scale: BG_SCALE, density: BG_UNIT, jitter: BG_UNIT, opacity: [0.04, 0.2], stroke: [1, 3], speed: BG_SPEED },
   "logo-pattern": { scale: BG_SCALE, spacing: BG_SCALE, offset: BG_UNIT, opacity: [0.04, 0.2], speed: BG_SPEED },
   motif: { scale: BG_SCALE, weight: [0.5, 3], opacity: [0.04, 0.3], angle: [0, 180], speed: BG_SPEED },
-  texture: { amount: BG_UNIT, scale: BG_SCALE }
+  texture: { amount: BG_UNIT, scale: BG_SCALE },
+  rings: { density: BG_UNIT, intensity: BG_UNIT, weight: [0.5, 3], bpm: [40, 200], speed: BG_SPEED },
+  bokeh: { density: BG_UNIT, intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED }
 });
 export const STORY_BACKGROUND_KINDS = Object.keys(STORY_BACKGROUND_PARAMS);
 export const STORY_BACKGROUND_COLORS = ["primary", "accent", "paper"];
@@ -74,7 +76,7 @@ const BG_PLAIN = ["flat", "paper", "mesh", "blobs", "logo-pattern", "texture"];
 export const STORY_BACKGROUND_OPTIONS = Object.freeze(Object.fromEntries(STORY_BACKGROUND_KINDS.map((kind) => [kind, {
   ...(BG_PLAIN.includes(kind) ? {} : { color: STORY_BACKGROUND_COLORS }),
   ...(kind === "blobs" ? {} : { fade: ["none", "center", "top", "bottom", "left", "right"] }),
-  ...(kind === "motif" ? { shape: ["plus", "circle", "chevron", "wave", "hatch", "crosshatch"] } : {}),
+  ...(kind === "motif" ? { shape: ["plus", "circle", "chevron", "wave", "hatch", "crosshatch", "checker", "grid"] } : {}),
   ...(kind === "texture" ? { type: ["noise", "fibre", "canvas", "linen"] } : {})
 }])));
 export const STORY_PANEL_TREATMENTS = ["solid", "glass", "paper", "outline", "soft-shadow", "rim-glass"];

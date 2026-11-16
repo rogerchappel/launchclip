@@ -53,7 +53,7 @@ test("background core is plain ESM that imports only ambient.mjs, panels.mjs, ic
 
 test("story.mjs keeps the kinds, param ranges, colours and treatments in step", () => {
   assert.deepEqual(STORY_BACKGROUND_KINDS, [...BACKGROUND_KINDS]);
-  assert.equal(BACKGROUND_KINDS.length, 17);
+  assert.equal(BACKGROUND_KINDS.length, 19);
   for (const kind of BACKGROUND_KINDS) {
     assert.deepEqual(STORY_BACKGROUND_PARAMS[kind], Object.fromEntries(Object.entries(BACKGROUND_PARAMS[kind]).map(([key, value]) => [key, [value.min, value.max]])), kind);
     assert.deepEqual(STORY_BACKGROUND_OPTIONS[kind], Object.fromEntries(Object.entries(BACKGROUND_OPTIONS[kind]).map(([key, value]) => [key, [...value.values]])), kind);
@@ -343,4 +343,20 @@ test("seeded patterns are visible: the strongest pattern tone stands off bg, and
       for (const tone of plan.tones) assert.ok(contrast(paper, tone) >= Math.min(4.5, contrast(paper, bg) - 0.01), `${kind} ${seed}: text on ${tone}`);
     }
   }
+});
+
+test("rings leave the centre one beat apart and wrap past the corners; still rings rest concentric", () => {
+  const base = story({ background: { kind: "rings", params: { bpm: 120 } } });
+  const plan = backgroundPlan(base);
+  const rings = plan.layers.filter((layer) => layer.id.startsWith("ring-"));
+  assert.ok(rings.length >= 4);
+  const { width: W, height: H } = base.format;
+  for (const [i, ring] of rings.entries()) {
+    assert.equal(ring.axes.scale.kind, "glide");
+    assert.equal(ring.axes.scale.offset, 0.5 * i, "one beat (0.5 s at 120 bpm) apart");
+    assert.ok((ring.box.width / 2) * ring.axes.scale.to > Math.hypot(W, H) / 2, "past the corners when it wraps");
+  }
+  const still = backgroundPlan(story({ background: { kind: "rings", params: { speed: 0 } } })).layers;
+  assert.ok(still.every((layer) => Object.keys(layer.axes).length === 0));
+  assert.deepEqual(still.map((layer) => layer.box.width), [...still.map((layer) => layer.box.width)].sort((a, b) => a - b));
 });

@@ -50,7 +50,7 @@ import { contrast, mix, panelFill, storyPanel, withAlpha } from './panels.mjs';
 import { ICONS, ICON_BOX, isIcon } from './icons.mjs';
 import { litMask } from './lighting.mjs';
 
-export const BACKGROUND_KINDS = Object.freeze(['flat', 'gradient', 'grain-gradient', 'paper', 'geometric', 'blobs', 'dot-grid', 'mesh', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'logo-pattern', 'motif', 'texture']);
+export const BACKGROUND_KINDS = Object.freeze(['flat', 'gradient', 'grain-gradient', 'paper', 'geometric', 'blobs', 'dot-grid', 'mesh', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'logo-pattern', 'motif', 'texture', 'rings', 'bokeh']);
 export const DEFAULT_BACKGROUND_KIND = 'blobs';
 
 // Tested parameter ranges, per kind: {min, max, default}. angle in degrees;
@@ -73,20 +73,22 @@ export const BACKGROUND_PARAMS = Object.freeze({
   stripes: Object.freeze({ angle: range(0, 180, 45), scale: SCALE, density: range(0.15, 0.6, 0.35), intensity: range(0, 1, 0.35), speed: SPEED }),
   topographic: Object.freeze({ density: DENSITY, scale: SCALE, intensity: INTENSITY, speed: SPEED }),
   halftone: Object.freeze({ angle: range(0, 360, 135), scale: SCALE, intensity: INTENSITY, speed: SPEED }),
-  'light-rays': Object.freeze({ angle: range(-60, 60, 0), density: DENSITY, intensity: INTENSITY, speed: SPEED }),
+  'light-rays': Object.freeze({ angle: range(-60, 60, 0), density: DENSITY, intensity: INTENSITY, speed: SPEED, sweep: range(0, 1, 0) }),
   'icon-pattern': Object.freeze({ scale: SCALE, spacing: SCALE, rotation: range(-45, 45, 0), offset: range(0, 1, 0.5), opacity: OPACITY, stroke: STROKE, speed: SPEED }),
   'icon-scatter': Object.freeze({ scale: SCALE, density: DENSITY, jitter: DENSITY, opacity: OPACITY, stroke: STROKE, speed: SPEED }),
   'logo-pattern': Object.freeze({ scale: SCALE, spacing: SCALE, offset: range(0, 1, 0.5), opacity: OPACITY, speed: SPEED }),
   motif: Object.freeze({ scale: SCALE, weight: range(0.5, 3, 1.5), opacity: range(0.04, 0.3, 0.14), angle: range(0, 180, 45), speed: SPEED }),
-  texture: Object.freeze({ amount: DENSITY, scale: SCALE })
+  texture: Object.freeze({ amount: DENSITY, scale: SCALE }),
+  rings: Object.freeze({ density: DENSITY, intensity: INTENSITY, weight: range(0.5, 3, 1.5), bpm: range(40, 200, 100), speed: SPEED }),
+  bokeh: Object.freeze({ density: DENSITY, intensity: INTENSITY, scale: SCALE, speed: SPEED })
 });
 // Kinds whose pattern takes a palette role (params.color).
-const COLORED = new Set(['gradient', 'grain-gradient', 'geometric', 'dot-grid', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'motif']);
-const DEFAULT_COLOR = Object.freeze({ gradient: 'primary', 'grain-gradient': 'primary', geometric: 'primary', 'dot-grid': 'paper', stripes: 'paper', topographic: 'primary', halftone: 'primary', 'light-rays': 'paper', 'icon-pattern': 'paper', 'icon-scatter': 'paper', motif: 'paper' });
+const COLORED = new Set(['gradient', 'grain-gradient', 'geometric', 'dot-grid', 'stripes', 'topographic', 'halftone', 'light-rays', 'icon-pattern', 'icon-scatter', 'motif', 'rings', 'bokeh']);
+const DEFAULT_COLOR = Object.freeze({ rings: 'primary', bokeh: 'accent', gradient: 'primary', 'grain-gradient': 'primary', geometric: 'primary', 'dot-grid': 'paper', stripes: 'paper', topographic: 'primary', halftone: 'primary', 'light-rays': 'paper', 'icon-pattern': 'paper', 'icon-scatter': 'paper', motif: 'paper' });
 // Fades keep an area calm: the pattern fades out toward it (center: a radial
 // mask; a side: a linear one). Every kind but blobs takes one.
 export const BACKGROUND_FADES = Object.freeze(['none', 'center', 'top', 'bottom', 'left', 'right']);
-export const BACKGROUND_MOTIFS = Object.freeze(['plus', 'circle', 'chevron', 'wave', 'hatch', 'crosshatch']);
+export const BACKGROUND_MOTIFS = Object.freeze(['plus', 'circle', 'chevron', 'wave', 'hatch', 'crosshatch', 'checker', 'grid']);
 export const BACKGROUND_TEXTURES = Object.freeze(['noise', 'fibre', 'canvas', 'linen']);
 // Option params (one of a list) per kind: {key: {values, default}}.
 const option = (values, value) => Object.freeze({ values, default: value });
@@ -450,7 +452,43 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
       layers.push({ id: 'rays', box: box(cx - size / 2, cy - size / 2, size, size), svg: null,
         style: { backgroundImage: `repeating-conic-gradient(from ${round(180 + params.angle, 2)}deg at 50% 50%, ${rgba(tint, alpha)} 0deg, ${rgba(tint, 0)} ${lit}deg, ${rgba(tint, 0)} ${slice}deg)`,
           maskImage: `radial-gradient(closest-side, #000000 0%, #000000b3 30%, #00000033 62%, #00000000 92%)`, WebkitMaskImage: `radial-gradient(closest-side, #000000 0%, #000000b3 30%, #00000033 62%, #00000000 92%)` },
-        axes: { rotation: wave(3, period(30), 0) } });
+        // sweep: the fan swings wider and quicker, a beam sweeping the frame.
+        axes: { rotation: wave(3 + 22 * (params.sweep ?? 0), period(30 - 14 * (params.sweep ?? 0)), 0) } });
+      break;
+    }
+    case 'rings': {
+      // Pulse rings: one ring leaves the centre on each beat and grows past
+      // the frame's corners before it wraps, so the wrap is never seen. Each
+      // ring is a scale glide offset by a beat; still (speed 0) they rest as
+      // concentric rings.
+      const count = Math.round(4 + 4 * params.density);
+      const alpha = lay(tint, 0.12 + 0.4 * params.intensity);
+      const size = round(diag * 1.08, 2), sw = round(params.weight * 2 * u, 2);
+      const beat = speed > 0 ? 60 / params.bpm : Infinity;
+      for (let i = 0; i < count; i += 1) {
+        const moving = Number.isFinite(beat), d = moving ? size : round(size * (0.08 + (0.92 * (i + 1)) / count), 2);
+        layers.push({ id: `ring-${i}`, box: box((W - d) / 2, (H - d) / 2, d, d), svg: null,
+          style: { borderRadius: '50%', background: `radial-gradient(circle closest-side, ${rgba(tint, 0)} calc(100% - ${round(sw * 4, 2)}px), ${rgba(tint, alpha)} calc(100% - ${sw}px), ${rgba(tint, 0)} 100%)` },
+          axes: moving ? { scale: { kind: 'glide', from: 0.04, to: 1, period: round(beat * count, 4), offset: round(beat * i, 4) } } : {} });
+      }
+      break;
+    }
+    case 'bokeh': {
+      // Out-of-focus lights: soft discs with a white-hot core and a soft rim
+      // (light-sweep.mjs's bokeh falloff), drifting slowly, a few white.
+      const count = Math.round(7 + 14 * params.density);
+      const alpha = lay(tint, 0.2 + 0.45 * params.intensity);
+      const white = lay('#ffffff', 0.12 + 0.3 * params.intensity);
+      const short = Math.min(W, H);
+      for (let i = 0; i < count; i += 1) {
+        const d = round(short * params.scale * (0.06 + 0.22 * random() * random()), 2);
+        const x = W * random(), y = H * random();
+        const c = i % 4 === 1 ? '#ffffff' : tint, a = i % 4 === 1 ? white : alpha;
+        const drift = short * 0.04;
+        layers.push({ id: `bokeh-${i}`, box: box(x - d / 2, y - d / 2, d, d), svg: null,
+          style: { borderRadius: '50%', background: `radial-gradient(circle closest-side, ${rgba(c, a)} 0%, ${rgba(c, round(a * 0.9, 4))} 34%, ${rgba(c, round(a * 0.4, 4))} 66%, ${rgba(c, 0)} 100%)` },
+          axes: { x: wave(drift * (0.5 + random()), period(20 + 14 * random()), random() < 0.5 ? 0 : 1), y: wave(drift * (0.5 + random()), period(24 + 12 * random()), random() < 0.5 ? 0 : 1) } });
+      }
       break;
     }
     case 'icon-pattern': {
@@ -533,7 +571,13 @@ export function planBackground({ kind, params }, { story, width: W, height: H, c
         wave: `<path d="M0 ${h}C${round(c * 0.25, 2)} ${round(c * 0.3, 2)} ${round(c * 0.25, 2)} ${round(c * 0.3, 2)} ${h} ${h}S${round(c * 0.75, 2)} ${round(c * 0.7, 2)} ${c} ${h}" ${stroke}/>`
       };
       const style = {};
-      if (params.shape === 'hatch' || params.shape === 'crosshatch') {
+      if (params.shape === 'checker') {
+        style.backgroundImage = `repeating-conic-gradient(${rgba(tint, alpha)} 0deg 90deg, ${rgba(tint, 0)} 90deg 180deg)`;
+        style.backgroundSize = `${round(c * 2, 2)}px ${round(c * 2, 2)}px`;
+      } else if (params.shape === 'grid') {
+        const line = (angle) => `repeating-linear-gradient(${angle}deg, ${rgba(tint, alpha)} 0px, ${rgba(tint, alpha)} ${sw}px, ${rgba(tint, 0)} ${sw}px, ${rgba(tint, 0)} ${cell}px)`;
+        style.backgroundImage = `${line(0)}, ${line(90)}`;
+      } else if (params.shape === 'hatch' || params.shape === 'crosshatch') {
         const line = (angle) => `repeating-linear-gradient(${round(angle, 2)}deg, ${rgba(tint, alpha)} 0px, ${rgba(tint, alpha)} ${sw}px, ${rgba(tint, 0)} ${sw}px, ${rgba(tint, 0)} ${cell}px)`;
         style.backgroundImage = params.shape === 'hatch' ? line(params.angle) : `${line(params.angle)}, ${line(params.angle + 90)}`;
       } else {
