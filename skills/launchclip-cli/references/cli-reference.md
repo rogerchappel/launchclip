@@ -863,8 +863,8 @@ fallback parser). Copy `.env.example` to start; `.env` is gitignored.
 ### Sound effects
 
 ```bash
-launchclip sfx seed [--provider elevenlabs|synth] [--variants 3] [--only whoosh,impact] \
-  [--reroll typing] [--dir .launchclip/sfx] [--force]
+launchclip sfx seed [--provider elevenlabs|comfy|synth] [--allow-model-licence <id>] \
+  [--comfy-url http://127.0.0.1:8188] [--variants 3] [--only whoosh,impact] [--reroll typing] [--dir .launchclip/sfx] [--force]
 launchclip sfx reroll <family> [--dir .launchclip/sfx]
 launchclip sfx list [--dir .launchclip/sfx]
 launchclip sfx audition <family> [--dir .launchclip/sfx] [--out audition.wav] [--gap 0.35]
@@ -886,6 +886,16 @@ the three keystroke families, `ui` for click, tick and pop).
   the number per family and `--only` limits the families. The key is read from
   the process environment only; `.env` loading is handled separately by the
   CLI. It is never logged, written or included in an error.
+- **Local ComfyUI** (`--provider comfy`, optional; `docs/guide/comfyui.md`):
+  four takes per family from the same prompts through the shipped
+  `sfx-stable-audio` template on a ComfyUI at `127.0.0.1:8188`
+  (`--comfy-url` or `LAUNCHCLIP_COMFY_URL`; other hosts need
+  `--comfy-allow-remote`). Stable Audio Open's licence is off the open
+  allowlist, so `--allow-model-licence stability-ai-community` is required.
+  Takes the SFX classifier puts in another family's row are dropped. Takes
+  are cached in `<dir>/cache/comfy/` by their inputs and logged in
+  `<dir>/generation-log.jsonl` with their licence. No server, a missing node
+  or a missing model file: the procedural kit, with a warning.
 - **Cache.** Every download is stored as `<dir>/cache/<request-hash>.mp3`. A
   cached request is never sent again, so `--force` (re-process everything)
   costs nothing, and it works without the key.
@@ -1745,10 +1755,10 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip export <project> --format fcpxml|premiere|edl|otio|all [--overlays prores4444|png|none] [--out exports/] [--fps 24|25|29.97|30|60] [--name name] [--absolute] [--force] [--json]
   ```
 
-- `sfx seed`: Seed the user SFX library (ElevenLabs, or the procedural kit with --provider synth). --missing fills only the families the library lacks (sfx list names them).
+- `sfx seed`: Seed the user SFX library (ElevenLabs, a local ComfyUI with --provider comfy, or the procedural kit with --provider synth). --missing fills only the families the library lacks (sfx list names them).
 
   ```text
-  launchclip sfx seed [--provider elevenlabs|synth] [--variants 3] [--only whoosh,impact | --missing] [--reroll typing] [--dir .launchclip/sfx] [--force]
+  launchclip sfx seed [--provider elevenlabs|comfy|synth] [--allow-model-licence <id>] [--comfy-url http://127.0.0.1:8188] [--variants 3] [--only whoosh,impact | --missing] [--reroll typing] [--dir .launchclip/sfx] [--force]
   ```
 
 - `sfx reroll`: Regenerate one SFX family.
