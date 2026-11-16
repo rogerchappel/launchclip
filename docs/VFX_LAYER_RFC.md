@@ -315,8 +315,10 @@ effect here draws in `pixel` mode, which is what the retro look wants anyway.
   sound as it starts. The mask version and `{type: "iris", lit: true}` are
   not built.
 - **Retro pack (§3b):** `pixel-arcade` is an SVG grade, so both renderers
-  draw it. It works like this: sample one pixel per art cell, spread it over
-  the cell with a cell-sized box convolution (no overlap, no seams), add a
+  draw it. It works like this: sample one pixel per art cell and spread it
+  over the cell by dilation, in four groups of cells by parity, each clipped
+  to its own cells (no overlap, no seams; a box convolution gave the same
+  pixels but stalled Chromium's filter path), add a
   4 × 4 Bayer tile of cells, then snap each channel to four levels. That is
   64 colours by ordered dither, not a 16-colour palette quantise, because a
   filter cannot pick the nearest of 16 colours. Scanlines sit one art row
