@@ -9,6 +9,7 @@
     "fonts": {"display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono"}
   },
   "motion": {"feel": "kinetic"},
+  "camera": {"mode": "cuts", "kicks": [{"at": 0.15}, {"at": 3.6}]},
   "cast": {"style": "chibi", "characters": [{"id": "bot", "name": "Bot", "kind": "robot", "position": "center"}]},
   "world": {"kind": "cafe", "time": "night"},
   "scenes": [
