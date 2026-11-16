@@ -413,8 +413,21 @@ world kit), any icon from `kit/core/icons.mjs`, text that fits; nothing else.
    test (R&D only, verdict in §12).
 4. **Anchors and character reactions** (§7). Shipped.
 5. **Planner-drawn graphics** (§10), then group patterns and idle on the other
-   catalogue H modules that draw sets of things (icon-grid, drop-grid,
-   social-wall).
+   catalogue H modules that draw sets of things. The second half has shipped:
+   `icon-grid` flocks out of the middle of the grid and breathes; `drop-grid`
+   keeps its word-timed fall, rocks on its base once landed and ripples when
+   full; `social-wall`'s field arrives as one wave along the drift and its
+   pulled posts breathe; `item-list` (every layout already enters as a group)
+   breathes once in. Each has a long 9:16 parity fixture (`h-*-idle-portrait`)
+   that samples mid-breath. `examples/story/group-idle-9x16` shows three
+   of them. drop-grid is not in it, because its existing fall (`power2.in`
+   into the contact shadow) and `back.out` settle trip the example-story
+   entrance and bounce gates; that physics predates this phase. Left out on purpose: `unit-grid` (up to a hundred tiny units, where a
+   breath each is noise and a hundred more nodes), ranked and tabular sets
+   (`leaderboard`, `comparison-table`, `heatmap`), whose rows must stay
+   aligned to read, and modules that already move a set the whole time
+   (`ticker-tape`, `live-bars`). `fan` and `unison` were not needed: the
+   modules' own entrances already are those patterns.
 6. **Loop** across a whole short (§8), with the seam check.
 
 ## 12. What is unproven
@@ -422,8 +435,20 @@ world kit), any icon from `kit/core/icons.mjs`, text that fits; nothing else.
 - Carry through a moving camera or a moving transition (§6).
 - Whether a container morph (tween only the box's width, height and corner
   radius, cross-fade its contents) reads well enough to join auto-pairing.
-- Whether idle on every element of a busy scene reads as alive or as nervous;
-  the amplitude table is a first guess, to be tuned against renders.
+- Whether idle on every element of a busy scene reads as alive or as nervous.
+  What the set modules' 9:16 sample (`examples/story/group-idle-9x16`)
+  showed: the grammar table holds for large elements (node-graph cards, a
+  pulled post), but a fixed 10 px bob is too much for small members of a set.
+  On 140 px icon tiles it was 7% of each tile's height, and neighbours
+  breathing out of phase wandered visibly out of line, so the grid read as
+  nervous. The bob is now capped at 4% of the element's own height
+  (`idleFor`, `IDLE_SHARE`), which keeps the rows legible while the set still
+  breathes. Three more adjustments came from the sample. Wide lines of type
+  (item-list, a pulled post) take half the tilt, because 1.8° swings the far
+  end of an 800 px line by about 12 px. Things with weight (drop-grid) rock on
+  their base at 0.3 of the bob and 0.7 of the tilt instead of floating off
+  their contact shadow. Sets of tiny units (unit-grid) get no idle at all.
+  Still unproven: a whole short where every scene breathes.
 - Whether two staggered arcs hold eight labels in every brand's display font;
   the module fails validation rather than overlap them, which may make it
   refuse some fonts at eight nodes.

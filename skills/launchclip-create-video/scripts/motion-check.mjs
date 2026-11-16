@@ -1,7 +1,7 @@
 // Motion check: rules of good motion decided from a story's grammar and each
 // scene's timeline ops, so a plan with a motion fault fails before it renders.
 // Frame-pure data in, findings out; nothing is drawn. Plain ESM; imports only
-// ./grammar.mjs and ./motion.mjs. Canonical copy: kit/core/motion-check.mjs.
+// ./grammar.mjs, ./motion.mjs and ./catalog-b-view.mjs (frameState). Canonical copy: kit/core/motion-check.mjs.
 // Contract: docs/DIRECTION_GUARDRAILS.md §8.
 //
 // The rules come from the checklist in LottieFiles' motion-design-skill (MIT,
@@ -13,6 +13,7 @@
 
 import { GRAMMARS, easeRole } from './grammar.mjs';
 import { getEase } from './motion.mjs';
+import { frameState } from './catalog-b-view.mjs';
 
 // staggerSpan: the longest a cascade may run from its first element starting
 //   to its last (s). The longest shipped cascade is 1.05 s (sixteen lines of
@@ -43,7 +44,18 @@ import { getEase } from './motion.mjs';
 // anticipation: a move that starts on a state or a hit may reach half its
 //   travel at most this many frames after it (docs/PLAN_AND_PACE_RFC.md §2;
 //   long form allows 2, cadence.mjs pace.anticipation_frames).
-export const MOTION_CHECK = Object.freeze({ frame: 1 / 30, staggerSpan: 2, staggerCount: 3, exitRatio: 2, pulse: 1.5, gesture: 1.5, crowdShare: 0.75, crowdElements: 6, crowdSettle: 0.5, beatRest: 1.2, anticipation: 1 });
+// holdScene, hold: a scene longer than holdScene (s) may not have a settled
+//   stretch over hold (s) where nothing in its ops moves
+//   (docs/FLUID_MOTION_RFC.md §9). hold is the gesture line: idle half-cycles
+//   are at least 1.6 s, so one breath always breaks a hold.
+// shakeStep: the longest tween read as one step of an impact shake (s). The
+//   RFC's steps are 0.05–0.08 s; 0.1 s (three frames) leaves room for a
+//   slower grammar without catching a quick snap of two steps.
+// shakeSteps: a shake is at least this many abutting steps that reverse.
+// shakeWindow: a shake is over within this long (s; RFC §8).
+// seamPx, seamUnit: how far a prop may differ between a loop's first and last
+//   frame: half a pixel (or degree) for positions, 1 % for opacity and scale.
+export const MOTION_CHECK = Object.freeze({ frame: 1 / 30, staggerSpan: 2, staggerCount: 3, exitRatio: 2, pulse: 1.5, gesture: 1.5, crowdShare: 0.75, crowdElements: 6, crowdSettle: 0.5, beatRest: 1.2, anticipation: 1, holdScene: 3, hold: 1.5, shakeStep: 0.1, shakeSteps: 3, shakeWindow: 0.3, seamPx: 0.5, seamUnit: 0.01 });
 
 /** The share of a tween's duration at which its ease reaches half its travel (power3.out: 0.206). */
 export function halfTravel(name) {
@@ -58,6 +70,7 @@ const EPS = 1e-6;
 const LINEAR = /^(none|linear|power0)\b/;
 const SCALE = ['scale', 'scaleX', 'scaleY'];
 const round = (value, digits = 2) => Math.round(value * 10 ** digits) / 10 ** digits;
+const IDLE = /-idle$/;
 const linear = (name) => typeof name === 'string' && LINEAR.test(name.trim());
 const finding = (rule, severity, at, ids, detail) => ({ rule, severity, at: Number.isFinite(at) ? round(at, 3) : null, ids, detail });
 
@@ -95,8 +108,10 @@ const displaced = (state) => Boolean(state) && (Math.abs(state.x ?? 0) > EPS || 
  *   ops     the timeline ops both renderers play ({type: "tween", target, start, duration, ease, from, to}); [] when the module has none
  *   states  the seconds at which the scene's shot states land
  *   hits    the seconds of the scene's hits
+ *   loop    {start, end} when the scene must loop: its first frame (start) and
+ *           its last (end − one frame) must match; null otherwise
  */
-export function sceneMotionFindings({ id, motion = null, ops = [], states = [], hits = [], check = MOTION_CHECK } = {}) {
+export function sceneMotionFindings({ id, motion = null, ops = [], states = [], hits = [], loop = null, check = MOTION_CHECK } = {}) {
   const findings = [];
   const m = motion ?? {};
 
@@ -166,9 +181,10 @@ export function sceneMotionFindings({ id, motion = null, ops = [], states = [], 
   }
 
   // Crowding: once the scene has settled, how many of its elements are in a gesture at one moment.
-  const elements = new Set((Array.isArray(ops) ? ops : []).map((op) => op?.target).filter(Boolean));
+  // An `-idle` wrapper is its element's breath, not an element of its own (RFC §9).
+  const elements = new Set((Array.isArray(ops) ? ops : []).map((op) => op?.target).filter((target) => target && !IDLE.test(target)));
   if (elements.size >= check.crowdElements) {
-    const gestures = tweens.filter((tween) => tween.op.duration <= check.gesture + EPS);
+    const gestures = tweens.filter((tween) => tween.op.duration <= check.gesture + EPS && !IDLE.test(tween.op.target));
     const from = (m.enterEnd ?? 0) + check.crowdSettle, to = m.exitStart ?? Infinity;
     let worst = null;
     for (const tween of gestures) {
@@ -201,5 +217,81 @@ export function sceneMotionFindings({ id, motion = null, ops = [], states = [], 
     const gap = beats[i] - beats[i - 1];
     if (gap < check.beatRest - EPS) findings.push(finding('no-rest', 'warning', beats[i], [id], `${id}'s state ${i + 1} lands ${round(gap)} s after state ${i}, before that one has settled; leave at least ${check.beatRest} s between states so there is a still moment to read`));
   }
+
+  findings.push(...staticHold(id, m, tweens, ops, beatTimes, check), ...shakeOvershoot(id, tweens, check), ...loopSeam(id, ops, loop, check));
   return findings;
+}
+
+// Static hold (RFC §9): between the entrance and the exit, the longest stretch
+// where no op moves anything and no state or hit lands. A scene with no op
+// list is not measured: its motion is not visible here.
+function staticHold(id, m, tweens, ops, beatTimes, check) {
+  const from = m.enterEnd, to = m.exitStart;
+  if (!tweens.length || !Number.isFinite(from) || !Number.isFinite(to) || to + (m.exitDuration ?? 0) - (m.enterStart ?? 0) <= check.holdScene + EPS) return [];
+  const loops = ops.filter((op) => op?.type === 'loop' && op.cycle > 0).map((op) => [op.start, op.start + op.cycle * (op.repeats ?? Infinity)]);
+  const spans = [...tweens.filter((t) => t.op.target !== id).map((t) => [t.op.start, t.end]), ...loops, ...beatTimes.map((t) => [t, t])].sort((a, b) => a[0] - b[0]);
+  let cursor = from, worst = { at: from, gap: 0 };
+  for (const [start, end] of [...spans, [to, to]]) {
+    const gap = Math.min(start, to) - cursor;
+    if (gap > worst.gap) worst = { at: cursor, gap };
+    cursor = Math.max(cursor, end);
+    if (cursor >= to) break;
+  }
+  if (worst.gap <= check.hold + EPS) return [];
+  return [finding('static-hold', 'warning', worst.at, [id], `${id} holds still for ${round(worst.gap)} s (${round(worst.at)}–${round(worst.at + worst.gap)} s) once it has settled; a settled frame should never be still: give its parts an idle breath, or a slow camera push (docs/FLUID_MOTION_RFC.md §4, §8)`)];
+}
+
+// Shake overshoot (RFC §8): abutting short x/y steps on one target that reverse
+// are an impact shake; each step must land no further from rest than the one
+// before, end at rest, and be over within the window.
+function shakeOvershoot(id, tweens, check) {
+  const findings = [];
+  const steps = new Map();
+  for (const tween of tweens) {
+    if (!travels(tween.keys) || tween.op.duration > check.shakeStep + EPS) continue;
+    (steps.get(tween.op.target) ?? steps.set(tween.op.target, []).get(tween.op.target)).push(tween);
+  }
+  const off = (props, rest) => Math.hypot((props?.x ?? rest.x) - rest.x, (props?.y ?? rest.y) - rest.y);
+  for (const [target, list] of steps) {
+    list.sort((a, b) => a.op.start - b.op.start);
+    const runs = [];
+    for (const tween of list) {
+      const run = runs.at(-1);
+      if (run && Math.abs(tween.op.start - run.at(-1).end) < 1e-3) run.push(tween); else runs.push([tween]);
+    }
+    for (const run of runs) {
+      if (run.length < check.shakeSteps) continue;
+      const rest = { x: run[0].op.from?.x ?? 0, y: run[0].op.from?.y ?? 0 };
+      const sign = (t) => Math.sign((t.op.to.x ?? rest.x) - rest.x || (t.op.to.y ?? rest.y) - rest.y);
+      if (!run.some((t, i) => i > 0 && sign(t) * sign(run[i - 1]) < 0)) continue;
+      const span = run.at(-1).end - run[0].op.start;
+      const grows = run.findIndex((t, i) => i > 0 && off(t.op.to, rest) > off(run[i - 1].op.to, rest) + check.seamPx);
+      const last = off(run.at(-1).op.to, rest);
+      const why = [];
+      if (grows > 0) why.push(`step ${grows + 1} lands ${round(off(run[grows].op.to, rest), 1)} px from rest, further than step ${grows} (${round(off(run[grows - 1].op.to, rest), 1)} px)`);
+      if (last > check.seamPx) why.push(`it ends ${round(last, 1)} px from rest`);
+      if (span > check.shakeWindow + EPS) why.push(`it runs ${round(span)} s`);
+      if (why.length) findings.push(finding('shake-overshoot', 'error', run[0].op.start, [id, target], `${target} shakes in ${run.length} steps and ${why.join(', and ')}; an impact shake decays: each step halves, the last lands at rest, all within ${check.shakeWindow} s (fluid-motion.mjs shakeOps)`));
+    }
+  }
+  return findings;
+}
+
+// Loop seam (RFC §8): a scene that loops shows the same frame at its start and its end.
+function loopSeam(id, ops, loop, check) {
+  if (!loop || !Number.isFinite(loop.start) || !Number.isFinite(loop.end)) return [];
+  const first = frameState(ops, loop.start), last = frameState(ops, loop.end - check.frame);
+  const diffs = [];
+  for (const target of new Set([...first.keys(), ...last.keys()])) {
+    const a = first.get(target) ?? {}, b = last.get(target) ?? {};
+    for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+      if (typeof (a[key] ?? b[key]) !== 'number') continue;
+      const rest = key === 'opacity' || SCALE.includes(key) ? 1 : 0;
+      const tolerance = key === 'opacity' || SCALE.includes(key) ? check.seamUnit : check.seamPx;
+      if (Math.abs((a[key] ?? rest) - (b[key] ?? rest)) > tolerance + EPS) diffs.push({ target, key, a: a[key] ?? rest, b: b[key] ?? rest });
+    }
+  }
+  if (!diffs.length) return [];
+  const shown = diffs.slice(0, 4).map((d) => `${d.target} ${d.key} ${round(d.a)} → ${round(d.b)}`).join(', ');
+  return [finding('loop-seam', 'error', loop.end, [id, ...new Set(diffs.map((d) => d.target))], `${id} loops but its last frame differs from its first (${shown}${diffs.length > 4 ? `, and ${diffs.length - 4} more` : ''}); end every layer where it began: fit idle to whole cycles and make the exit return to the entrance pose (docs/FLUID_MOTION_RFC.md §8)`)];
 }
