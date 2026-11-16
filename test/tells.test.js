@@ -246,9 +246,11 @@ test('boxed-on-flat: tooling puts a flagged card on the story\'s own footage, ne
 
 test('boxed-on-flat: the repair names an unboxed variant when the module has one', () => {
   for (const [module, names] of Object.entries(moduleVariants())) {
-    const variant = names.find(name => UNBOXED_VARIANTS.includes(name));
+    const variant = (UNBOXED_VARIANTS[module] ?? UNBOXED_VARIANTS['*']).find(name => names.includes(name));
     assert.equal(boxRepair(module).variant, variant, module);
   }
+  // icon-row's boxed pills never count: its list is its own.
+  assert.ok(!UNBOXED_VARIANTS['icon-row'].includes('pills'));
   assert.equal(boxRepair('no-such-module').variant, undefined);
 });
 

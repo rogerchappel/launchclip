@@ -207,9 +207,18 @@ const isFootage = (plate) => Boolean(plate) && typeof plate === 'object' && ['vi
 const hasFootage = (input) => input.footage === true || Boolean(input.story?.base) || isFootage(input.story?.plate) || input.scenes.some((s) => FOOTAGE_MODULE.test(s.module) || isFootage(s.scene?.backdrop) || isFootage(s.scene?.plate));
 // The repairs themselves, and closing cards (the planner puts those on footage).
 const UNBOXED_MODULES = new Set(['item-list', 'end-card', 'cta', 'brand-lockup']);
-// Unboxed variant names a card or table module may offer (moduleVariants()); the first the module has is the repair.
-export const UNBOXED_VARIANTS = Object.freeze(['open', 'free', 'bare', 'plain', 'ticks']);
-const unboxedVariant = (module) => (moduleVariants()[module] ?? []).find((name) => UNBOXED_VARIANTS.includes(name)) ?? null;
+// Unboxed variant names, in order of preference: a module's own list, else the shared names. The repair is the first
+// the module offers (moduleVariants()), so it names nothing until the variant exists.
+export const UNBOXED_VARIANTS = Object.freeze({
+  compare: Object.freeze(['halves', 'versus', 'verdict']),
+  'comparison-table': Object.freeze(['scorecard', 'pills', 'verdict']),
+  'icon-row': Object.freeze(['ticks']),
+  '*': Object.freeze(['free', 'open', 'bare', 'plain'])
+});
+const unboxedVariant = (module) => {
+  const offered = moduleVariants()[module] ?? [];
+  return (UNBOXED_VARIANTS[module] ?? UNBOXED_VARIANTS['*']).find((name) => offered.includes(name)) ?? null;
+};
 const LIST_MODULE = /list|icon-row|checklist|steps/;
 const COMPARE_MODULE = /compare|table|versus/;
 /** boxed-on-flat's repair for a module → {backdrop: true, modules: [repair modules], variant?: an unboxed variant}. */
