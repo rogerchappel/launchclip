@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { CADENCE_FORMATS } from "@launchclip/core/cadence.mjs";
 import { parseArguments, reportMarkdown } from "../eval/formats.mjs";
-import { avSync, captionHygiene, evidenceCoverage, formatScorecard, moduleVariety, motionOnHold, parseFreezes, parseSceneTimes, renderedCadence, scoreBrief } from "../eval/scorecard.mjs";
+import { avSync, captionHygiene, evidenceCoverage, formatScorecard, moduleVariety, motionOnHold, parseFreezes, parseSceneTimes, renderedCadence, renderedPace, scoreBrief } from "../eval/scorecard.mjs";
 
 const briefs = JSON.parse(readFileSync("eval/formats.json", "utf8")).briefs;
 
@@ -75,4 +75,24 @@ test("scorecard: per-frame scene scores, thresholds and change peaks", async () 
   assert.deepEqual(scenesAbove(scores, 0.08), [0.6]);
   assert.deepEqual(scenesAbove(scores, 0.02), [0.3, 0.6]);
   assert.deepEqual(changePeaks(scores), [0.3, 0.6]);
+});
+
+test("scorecard: the pace columns read the render against the format's pace band and the plan", () => {
+  const brief = { id: "short", format: "short-form", label: "Short" };
+  const beats = Array.from({ length: 40 }, (_, i) => i * 0.5);
+  // Three opening events, then one every 2 s, every cut on a beat, as planned.
+  const events = [0.2, 1, 2, ...Array.from({ length: 8 }, (_, i) => 4 + 2 * i)];
+  const good = renderedPace({ events, cuts: events.slice(3), planned: events, plannedCuts: events.slice(3), beats, duration: 20, format: "short-form" });
+  assert.deepEqual([good.hook_ratio, good.max_gap, good.cuts_on_beat], [2.13, 2, 1]);
+  const row = scoreBrief(brief, { pace: good });
+  assert.deepEqual(row.checks.map((check) => [check.id, check.status]), [["hook_ratio", "pass"], ["max_gap", "pass"], ["cuts_on_beat", "pass"], ["plan_vs_render", "pass"]]);
+  // A flat hook, a 6 s gap, cuts off the beat and planned events that never show.
+  const flat = [4.2, 6.2, 8.2, 14.2, 16.2];
+  const bad = renderedPace({ events: flat, cuts: flat, planned: [0, 0.5, 1, 1.5, 2, 4, 6, 8, 10, 12], beats, duration: 20, format: "short-form" });
+  const checks = Object.fromEntries(scoreBrief(brief, { pace: bad }).checks.map((check) => [check.id, check]));
+  assert.deepEqual([checks.hook_ratio.status, checks.max_gap.status, checks.cuts_on_beat.status, checks.plan_vs_render.status], ["fail", "fail", "fail", "warn"]);
+  assert.match(checks.plan_vs_render.value, /planned-events-missing/);
+  // Without a beat grid the beat column is not measured; the table shows the new columns.
+  assert.equal(scoreBrief(brief, { pace: renderedPace({ events, cuts: events, duration: 20, format: "short-form" }) }).checks.find((check) => check.id === "cuts_on_beat").status, "n/a");
+  assert.match(formatScorecard([row]).split("\n")[0], /hook ×\s+max gap\s+on beat\s+plan\/rndr/);
 });
