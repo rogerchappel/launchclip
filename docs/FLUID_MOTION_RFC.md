@@ -157,6 +157,11 @@ Because both sides are ordinary ops on ordinary ids, the renderers need nothing
 new. The transition between A and B for carried elements is a cut on the
 same frame (A's copy hides as B's shows), so they never double.
 
+![Carry: the title pinned, four cards fly into a five-card fan, a host cutaway, then the plate resumes and settles into three](images/flow-carry.jpg)
+
+Sample: `examples/story/flow-carry-9x16` (top row 3.5–5.2 s across the first
+cut, bottom row 9.9–12 s across the cutaway and back).
+
 ### 6.1 The switch: `story.motion.flow`
 
 Carry is an enhancement a feel or a style turns on, not something the planner
@@ -245,8 +250,10 @@ timeline functions apply it), so both renderers draw it with no new code.
 - **B skips the entrance of what it receives.** For each received element and
   its ancestors, each prop that starts away from its rest value (hidden,
   offset, undrawn) is set at B's start to where its first move takes it, and
-  that first move is dropped. Later moves (idle, a wave, a shot state, a
-  pulse lighting the card) still play.
+  that first move is dropped. Rest is the value the prop holds for most of
+  the scene, so an overlay that rests hidden and only flashes (node-graph's
+  lit rim, the hub's ring) is not an entrance. Later moves (idle, a wave, a
+  shot state, a pulse lighting the card) still play.
 - **Rects at the boundary** are visual: the element's layout box mapped
   through its own and every ancestor's transform at A's last frame (the
   module root at rest), and at B's first frame for the slot. That is what
@@ -254,7 +261,7 @@ timeline functions apply it), so both renderers draw it with no new code.
 - **Pin:** nothing more; A's copy hides and B's shows on the same frame.
 - **Carry:** B's element starts at A's rect, as an `x`, `y`, `scaleX`,
   `scaleY` and `rotation` offset from its slot, and tweens to the slot over
-  0.7 s (the grammar's move duration when it has one): slow → fast → slow,
+  0.7 s (scaled by the grammar's camera duration, 0.5–1 s): slow → fast → slow,
   `x` on `power2.inOut` and `y` on `power3.inOut` so the path arcs slightly,
   scale and rotation on `power3.inOut`, no overshoot. Members leave in order
   of distance a hashed 0.04–0.1 s apart, so a group arrives as a flock. There
@@ -450,10 +457,10 @@ world kit), any icon from `kit/core/icons.mjs`, text that fits; nothing else.
    full; `social-wall`'s field arrives as one wave along the drift and its
    pulled posts breathe; `item-list` (every layout already enters as a group)
    breathes once in. Each has a long 9:16 parity fixture (`h-*-idle-portrait`)
-   that samples mid-breath. `examples/story/group-idle-9x16` shows three
-   of them. drop-grid is not in it, because its existing fall (`power2.in`
-   into the contact shadow) and `back.out` settle trip the example-story
-   entrance and bounce gates; that physics predates this phase. Left out on purpose: `unit-grid` (up to a hundred tiny units, where a
+   that samples mid-breath. `examples/story/group-idle-9x16` shows all
+   four. drop-grid's squash now settles on `power3.out` with no overshoot, and
+   the impact carries in its contact shadow, which spreads on landing.
+   Left out on purpose: `unit-grid` (up to a hundred tiny units, where a
    breath each is noise and a hundred more nodes), ranked and tabular sets
    (`leaderboard`, `comparison-table`, `heatmap`), whose rows must stay
    aligned to read, and modules that already move a set the whole time
@@ -467,8 +474,25 @@ world kit), any icon from `kit/core/icons.mjs`, text that fits; nothing else.
 ## 12. What is unproven
 
 - Carry through a moving camera or a moving transition (§6).
-- Whether a container morph (tween only the box's width, height and corner
-  radius, cross-fade its contents) reads well enough to join auto-pairing.
+- ~~Whether a container morph (tween only the box's width, height and corner
+  radius, cross-fade its contents) reads well enough to join auto-pairing.~~
+  **Verdict (2026-11-17): it reads well; wire it in next, not yet.** The R&D
+  sample ([docs/rd/container-morph.html](rd/container-morph.html), rendered 9:16
+  with HyperFrames, below) runs a URL pill into a node card two ways. The box
+  morph keeps the corners, the border width and the text crisp, and the beat
+  where the box is briefly empty between the cross-fades (content out over
+  0.25 s, in from 0.4 s) reads as the box becoming something, not as a gap. The
+  same change as a FLIP scale squashes the label, turns the icon into an oval
+  and stretches the border and radius, which is the failure §6 warned about.
+  The reference's search pill → command bar → rows (a streak with blur only at
+  peak speed, the bar growing, three rows dropping in and filling in turn) also
+  reads cleanly. It is not wired into auto-pairing, because the op list has no
+  `width`, `height` or `radius` props: both renderers need them first (GSAP
+  tweens them natively, and Remotion's `propsToStyle` would map them), along
+  with parity fixtures. Then a carry pair whose aspect ratio changes by more
+  than about 1.3× should morph the box instead of scaling it.
+
+  ![Box morph (top) against a FLIP scale (middle) of the same pill → card change, then pill → command bar → rows (bottom), 0.9–6.5 s](images/flow-container-morph.jpg)
 - Whether idle on every element of a busy scene reads as alive or as nervous.
   What the set modules' 9:16 sample (`examples/story/group-idle-9x16`)
   showed: the grammar table holds for large elements (node-graph cards, a

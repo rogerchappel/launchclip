@@ -182,3 +182,20 @@ test('drop-grid: landed items rock on their base out of step, the full grid ripp
   const rest = frameState(ops, model.motion.exitStart - 0.04);
   c.cells.forEach((_, i) => assert.deepEqual([rest.get(`scene-i${i}-idle`).y, rest.get(`scene-i${i}-idle`).rotation], [0, 0]));
 });
+
+test('drop-grid: the squash settles with no overshoot, the shadow spreads on impact, and no ease is bouncy', () => {
+  const model = resolve('drop-grid', {count: 3, times: [0.6, 1.0, 1.4]});
+  const ops = catalogHTimeline(model);
+  assert.ok(!ops.some(op => /^(back|elastic|bounce)/.test(String(op.ease ?? ''))), 'no bouncy ease');
+  for (const [i, cell] of model.content.cells.entries()) {
+    const shadow = frameState(ops, cell.land + TACTILE.squash).get(`scene-sh${i}`);
+    assert.ok(shadow.scaleX > 1 && shadow.scaleY < 1, 'the shadow spreads on contact');
+    for (let t = cell.land + TACTILE.squash; t <= cell.land + TACTILE.squash + TACTILE.settle + 0.05; t += 1 / 60) {
+      const item = frameState(ops, t).get(`scene-i${i}`), sh = frameState(ops, t).get(`scene-sh${i}`);
+      assert.ok(item.scaleX >= 1 - 1e-6 && item.scaleY <= 1 + 1e-6, `item never passes its rest shape at ${t}`);
+      assert.ok(sh.scaleX >= 1 - 1e-6 && sh.scaleY <= 1 + 1e-6, `shadow never passes its rest shape at ${t}`);
+    }
+    const rest = frameState(ops, cell.land + TACTILE.squash + TACTILE.settle + 0.01);
+    assert.deepEqual([rest.get(`scene-i${i}`).scaleX, rest.get(`scene-sh${i}`).scaleX], [1, 1]);
+  }
+});

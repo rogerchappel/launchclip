@@ -39,8 +39,8 @@ export function tactileFace(fill) {
 
 /**
  * A drop with weight on `id` (its transform origin at the bottom): hidden
- * until `t`, then a gravity fall of `height` px, a squash on contact and an
- * overshoot settle. → the landing time.
+ * until `t`, then a gravity fall of `height` px, a squash on contact and a
+ * settle that slows into shape with no overshoot. → the landing time.
  */
 export function dropOps(ops, id, start, t, height, {fall = TACTILE.fall, give = TACTILE.give} = {}) {
   set(ops, id, start, {opacity: 0, x: 0, y: -height, scaleX: 1, scaleY: 1});
@@ -49,19 +49,24 @@ export function dropOps(ops, id, start, t, height, {fall = TACTILE.fall, give = 
   const land = rt(t + fall);
   const squashed = {scaleX: r2(1 + give * 0.6), scaleY: r2(1 - give)};
   tw(ops, id, land, TACTILE.squash, 'power1.out', {scaleX: 1, scaleY: 1}, squashed);
-  // Kept: squash-and-stretch on landing is the physical weight these satisfying-motion drops exist for.
-  tw(ops, id, rt(land + TACTILE.squash), TACTILE.settle, 'back.out(3)', squashed, {scaleX: 1, scaleY: 1});
+  // The squash is the weight; the settle eases out of it and never passes the rest shape (house no-overshoot rule).
+  tw(ops, id, rt(land + TACTILE.squash), TACTILE.settle, 'power3.out', squashed, {scaleX: 1, scaleY: 1});
   return land;
 }
 
-/** A contact shadow under an object: an ellipse that darkens and widens as it falls. */
+/** A contact shadow under an object: an ellipse that darkens and widens as it falls, and spreads on impact. */
 export function shadowNode(id, x, y, width, height) {
   return el('div', id, abs(r2(x), r2(y), r2(width), r2(height), {borderRadius: '50%', background: 'radial-gradient(closest-side, rgba(0,0,0,.55), rgba(0,0,0,0))', opacity: 0}));
 }
 
-export function shadowOps(ops, id, start, t, fall = TACTILE.fall) {
+export function shadowOps(ops, id, start, t, fall = TACTILE.fall, {give = TACTILE.give} = {}) {
   set(ops, id, start, {opacity: 0, scaleX: 0.35, scaleY: 0.35});
-  tw(ops, id, t, fall, 'power2.in', {opacity: 0, scaleX: 0.35, scaleY: 0.35}, {opacity: 0.7, scaleX: 1, scaleY: 1});
+  // In and out, so it slows into its resting size (entrances never speed into place).
+  tw(ops, id, t, fall, 'sine.inOut', {opacity: 0, scaleX: 0.35, scaleY: 0.35}, {opacity: 0.7, scaleX: 1, scaleY: 1});
+  // On contact it spreads with the squash, then eases back: the weight reads in the shadow too.
+  const land = rt(t + fall), spread = {scaleX: r2(1 + give), scaleY: r2(1 - give * 0.5)};
+  tw(ops, id, land, TACTILE.squash, 'power1.out', {scaleX: 1, scaleY: 1}, spread);
+  tw(ops, id, rt(land + TACTILE.squash), TACTILE.settle, 'power3.out', spread, {scaleX: 1, scaleY: 1});
 }
 
 /** A stamp press: in large and tilted, pressed down hard, a small recoil. */
