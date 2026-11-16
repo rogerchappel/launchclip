@@ -4399,7 +4399,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
 ### The kit (`kit/core/characters/`)
 
 - `rig.mjs`: rig params `{build, height, age?, skin, hair: {style, color},
-  outfit: {top, bottom, over?}, accessories, headwear?, mobility?, colors:
+  outfit: {top, bottom, over?}, accessories, headwear?, mobility?, flaw?, colors:
   {top, bottom, shoes, accent}}` (`normalizeRigParams` fixes the key order, so
   equal characters serialise identically; the optional fields appear only
   when set, so older characters keep their identity). The range: 8 builds, 5
@@ -4407,7 +4407,9 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   17 tops, 5 bottoms, 3 layers (apron, vest, hi-vis), 4 kinds of glasses, 6
   kinds of facial hair, jewellery, ties, scarves, stethoscopes, bags, 14
   headwear (faith headwear among them) and 6 mobility aids (wheelchair, cane,
-  white cane, forearm crutch, prosthetic leg or arm). A wheelchair seats the
+  white cane, forearm crutch, prosthetic leg or arm), and a `flaw` (`FLAWS`:
+  `cheek-plaster`, `brow-scar`, `cheek-scratch`, drawn on the face in every
+  style; a kind takes one too, `{kind, size?, marks?, flaw?, colors}`). A wheelchair seats the
   character in any set; a cane or crutch keeps its arm at rest
   (`acting.mjs sceneJoints`). body measurements (`rigGeometry`), the named poses
   (`stand point wave slump type think cheer shrug walk sit look stretch`, and
@@ -4892,22 +4894,25 @@ drawn (ANIMATION_PIPELINE_RFC.md §4.2):
         "build": "slim", "height": "tall", "skin": "deep",
         "hair": { "style": "locs", "color": "silver" },
         "outfit": { "top": "blazer", "bottom": "trousers" },
-        "accessories": ["round-glasses"],
+        "accessories": ["round-glasses"], "flaw": "brow-scar",
         "colors": { "top": "red", "bottom": "charcoal", "shoes": "black", "accent": "accent" },
         "character_file": "cast/nova.character.json",
         "sheet": "bible/sheets/nova.png", "fingerprint": "1acb77987b1a5632",
-        "must_keep": ["silver locs hair", "deep skin", "red blazer", "charcoal trousers", "round glasses"] } ] },
+        "must_keep": ["silver locs hair", "deep skin", "red blazer", "charcoal trousers", "round glasses", "a small scar through one eyebrow"],
+        "description": "Nova is an adult with a slim build and locs hair, in a blazer and trousers. Proportions: tall, about 5.5 heads tall, drawn outlined. Colours: skin #…, hair #…, … Signature item: round glasses. Gesture: folds both arms. Must keep: …; a small scar through one eyebrow. Flaw: a small scar through one eyebrow." } ] },
   "world": { "kind": "office", "time": "day", "sets": ["desk-laptop", "standing"],
     "props": [{ "id": "trophy", "on": "ground", "scale": 2.5 }], "shows": ["trophy"] },
   "style": { "pack": "project", "seed": 4821, "drawing_style": "outlined" },
   "rules": ["Rae never raises his voice."],
-  "inputs": { "script_hash": "sha256:…" } }
+  "inputs": { "script_hash": "sha256:…" },
+  "engine": { "problem": "Every fix Maya ships breaks something else in the office.",
+    "episodes": ["…five episode ideas pitched from it, one sentence each…"] } }
 ```
 
-- `cast` is the story cast shape with four additions per character:
+- `cast` is the story cast shape with five additions per character:
   `character_file` (the saved character it came from, inside the project;
-  a starter has none), `sheet`, `fingerprint` and `must_keep`.
-  `bibleCast(bible)` removes the four and is a valid `story.cast`. Every
+  a starter has none), `sheet`, `fingerprint`, `must_keep` and
+  `description`. `bibleCast(bible)` removes the five and is a valid `story.cast`. Every
   entry carries its full rig params, so the bible does not change when a
   starter or a saved file does. An `art` (illustrated) entry is refused:
   the rig draws the animatic and is the fallback for handed-in art.
@@ -4917,9 +4922,37 @@ drawn (ANIMATION_PIPELINE_RFC.md §4.2):
   `mustKeep(params)`: hair (or the headscarf), skin tone, top, bottom (not
   under a dress), over-layer, glasses, facial hair other than stubble, a
   hearing aid, a bindi, headwear, a mobility aid, and age when not an
-  adult. Colours are named as the params name them (`"hoodie in the
+  adult, and the flaw last. Colours are named as the params name them (`"hoodie in the
   brand's primary colour"` for a brand role). A file may add features; it
   may not drop one the params give.
+- `flaw` is a rig param (a person's or a kind's; `FLAWS`: `cheek-plaster`,
+  `brow-scar`, `cheek-scratch`): one small deliberate imperfection the rig
+  draws on the face in every drawing style, so drift is easy to spot for the
+  vision judge and a person. `bible freeze` gives a character with none one
+  fixed by its id (`defaultFlaw`) and writes it into the saved character
+  file, and `cast create` does the same; `--set flaw=<name>` chooses
+  another. The critic is told each character's flaw beside its sheet.
+- `description` is the character in words, written by
+  `characterDescription(member)` from the resolved rig params, the cast's
+  drawing style and the story brand's colours, in a fixed order: silhouette,
+  proportions (heads tall in the drawing style), colours as hex, one
+  signature item, one gesture, `must_keep` and the flaw. The same params
+  give the same words; it is frozen with the bible and pasted word for word
+  wherever the character is described in a prompt or brief
+  (GENERATED_FOOTAGE_RFC.md §4, §8). `cast create` returns the same
+  description for a character you design.
+- A bible frozen before flaws and descriptions keeps its hash: `bible
+  freeze` leaves it as it is (`validateBible` warns for each character)
+  until it is frozen with `--force`. The schema stays
+  `launchclip.show-bible.v1`: every new field is optional.
+- `engine` is for a bible a series shares: the recurring `problem` that
+  goes wrong every episode and is never solved for good, and the
+  `episodes` pitched from it. `engineFindings(engine)` is the premise check:
+  fewer than `ENGINE_EPISODES` (5) distinct ideas (an idea mostly another's
+  words, or only restating the problem, does not count) is a weak engine,
+  and the bible does not validate. `bible freeze --engine "…" --episode
+  "…"` writes it; `make --animation --engine "…"` pitches the episodes
+  first and stops with a stronger engine proposed when it is weak.
 - `world` is a story world (`storyWorldErrors`) plus `sets`, the sets the
   story may use (`SETS`), and `shows`, the props of `world.props` the story
   turns on (`launchclip bible freeze --props starting-gate,bucket`, or the
@@ -4941,8 +4974,12 @@ export function validateBible(bible, {script, exists} = {}) // → {ok, errors, 
 // exists(path): whether a project-relative file is on disk (sheets, character files).
 export function bibleHash(bible)                 // → "sha256:…"
 export function mustKeep(params)                 // → [feature]
+export const ENGINE_EPISODES                     // 5
+export function defaultFlaw(id)                  // → a FLAWS name, fixed by the id
+export function characterDescription(member)     // → the written description (a resolved cast member)
+export function engineFindings(engine)           // → [text]; [] when the engine gives five distinct episodes
 export function bibleFingerprint(member)         // member: a resolved cast member
-export function bibleCharacter(member, {character_file, sheet})  // → a bible cast entry
+export function bibleCharacter(member, {character_file, sheet, description})  // → a bible cast entry (description: false leaves it out)
 export function bibleCast(bible)                 // → story.cast
 export function bibleRef(bible, file)            // → {file, hash}
 export function bibleRefErrors(ref, path)        // also exported by story.mjs
@@ -4956,7 +4993,9 @@ Validation: the cast passes `storyCastErrors` and `resolveStoryCast`; a
 frozen bible has a voice, a sheet, a matching fingerprint and a complete
 `must_keep` on every character, and a hash that matches its content; every
 character the script lists has an entry and a voice; the world and every
-set exist; two characters sharing a voice is a warning.
+set exist; a description is non-empty text; an engine is `{problem,
+episodes}` and passes `engineFindings`; two characters sharing a voice, or a
+frozen character with no flaw or description, is a warning.
 
 Commands (`src/bible.js`):
 

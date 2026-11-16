@@ -5,22 +5,32 @@
 //
 //   {schema, frozen, hash,
 //    cast: {style, colors?, characters: [{...a story cast entry with full rig
-//           params, character_file?, sheet, fingerprint, must_keep}]},
+//           params, character_file?, sheet, fingerprint, must_keep, description}]},
 //    world?: {kind, time?, props?, detail?, sets?, shows?},
 //      shows: the props of world.props the story turns on (the starting gate
 //      of a story about one): the `bible` gate fails a story that never puts
 //      one of them on screen (biblePropFindings).
 //    style?: {pack?, seed?, drawing_style?},
-//    rules?: [text], inputs?: {script_hash?}}
+//    rules?: [text], inputs?: {script_hash?},
+//    engine?: {problem, episodes: [text]}}
+//      engine: for a bible a series shares, the recurring problem that goes
+//      wrong every episode and is never solved for good, with the episode
+//      ideas pitched from it. Fewer than ENGINE_EPISODES distinct ideas is a
+//      weak engine, and the bible does not validate (engineFindings).
 //
-// `cast` is the story.cast shape (characters/cues.mjs) with four additions
+// `cast` is the story.cast shape (characters/cues.mjs) with five additions
 // per character: the saved character file it came from, its reference sheet,
-// its fingerprint and must_keep. Every character has rig params; an
+// its fingerprint, must_keep and its written description (characterDescription:
+// silhouette, proportions, colours as hex, signature item, gesture, must_keep
+// and the flaw, in that order, pasted word for word wherever the character is
+// described). Each character's params carry a flaw (rig param `flaw`, one small
+// deliberate imperfection the rig draws); freeze gives one to a character that
+// has none, and must_keep names it. Every character has rig params; an
 // illustrated (`art`) entry is not a bible character, because the rig draws
 // the animatic and is the fallback for handed-in art.
 //
 // A draft (frozen: false) carries the same fields without the hash, the
-// sheets, the fingerprints and must_keep; `launchclip bible freeze`
+// sheets, the fingerprints, must_keep and the descriptions; `launchclip bible freeze`
 // (src/bible.js) fills those in and writes the hash. Once frozen, a story's
 // cast is the bible's cast (withBible), a story and its direction map name
 // the bible as bible: {file, hash}, and the `bible` gate in `finish` fails
@@ -29,6 +39,9 @@
 //   validateBible(bible, {script, exists}) → {ok, errors, warnings}
 //   bibleHash(bible)                       → "sha256:…" of the content
 //   mustKeep(params)                       → what a viewer would notice changing
+//   defaultFlaw(id)                        → the flaw freeze gives a character with none
+//   characterDescription(member)           → the written description of a resolved cast member
+//   engineFindings(engine)                 → why a series engine is too weak ([] when it holds)
 //   bibleCast(bible)                       → the bible's cast as story.cast
 //   bibleCharacter(member, extra)          → one bible cast entry
 //   bibleFingerprint(member)               → a character's identity digest
@@ -44,6 +57,9 @@ import {bibleRefErrors} from './story.mjs';
 import {DRAWING_STYLES, KOKORO_VOICES, resolveStoryCast, storyCastErrors} from './characters/cues.mjs';
 import {ACCESSORIES, FACIAL_HAIR, GLASSES} from './characters/rig.mjs';
 import {BRAND_ROLES} from './characters/palette.mjs';
+import {FLAWS, FLAW_WORDS, KINDS, isKind} from './characters/kinds.mjs';
+import {hashSeed} from './characters/generate.mjs';
+import {styleGeometry, styleHeight} from './characters/styles.mjs';
 import {SETS} from './characters/sets.mjs';
 import {storyWorldErrors} from './worlds/index.mjs';
 
@@ -51,11 +67,13 @@ export const BIBLE_SCHEMA = 'launchclip.show-bible.v1';
 export const BIBLE_FILE = 'BIBLE.json';
 /** Where a project keeps its reference sheets: bible/sheets/<id>.png. */
 export const BIBLE_SHEETS = 'bible/sheets';
-/** The four fields a bible character adds to a story cast entry. */
+/** The five fields a bible character adds to a story cast entry. */
 export {bibleRefErrors};
-export const BIBLE_CHARACTER_FIELDS = Object.freeze(['character_file', 'sheet', 'fingerprint', 'must_keep']);
+export const BIBLE_CHARACTER_FIELDS = Object.freeze(['character_file', 'sheet', 'fingerprint', 'must_keep', 'description']);
+/** How many distinct episode ideas a series engine must give before episode one. */
+export const ENGINE_EPISODES = 5;
 
-const TOP = ['schema', 'frozen', 'hash', 'cast', 'world', 'style', 'rules', 'inputs'];
+const TOP = ['schema', 'frozen', 'hash', 'cast', 'world', 'style', 'rules', 'inputs', 'engine'];
 const HASH = /^sha256:[0-9a-f]{64}$/;
 const isObj = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const nonEmpty = value => typeof value === 'string' && value.trim().length > 0;
@@ -100,7 +118,8 @@ export function mustKeep(params) {
   if (!isObj(params)) return [];
   const out = [];
   // An animal, a mascot or an object with a face: what it is, its main colour and its size.
-  if (typeof params.kind === 'string' && params.kind !== 'person') return [coloured(params.colors?.body, words(params.kind)), ...(params.size ? [`${params.size} size`] : []), ...(Array.isArray(params.marks) ? params.marks.map(name => `white ${name}`) : [])];
+  const flaw = FLAW_WORDS[params.flaw] ? [FLAW_WORDS[params.flaw]] : [];
+  if (typeof params.kind === 'string' && params.kind !== 'person') return [coloured(params.colors?.body, words(params.kind)), ...(params.size ? [`${params.size} size`] : []), ...(Array.isArray(params.marks) ? params.marks.map(name => `white ${name}`) : []), ...flaw];
   const colors = isObj(params.colors) ? params.colors : {};
   const hair = isObj(params.hair) ? params.hair : {};
   if (hair.style === 'bald') out.push('bald head');
@@ -115,7 +134,97 @@ export function mustKeep(params) {
   if (params.headwear) out.push(words(params.headwear));
   if (params.mobility) out.push(words(params.mobility));
   if (params.age && params.age !== 'adult') out.push(`a ${params.age}`);
-  return out;
+  return [...out, ...flaw];
+}
+
+/** The flaw `bible freeze` gives a character whose params have none: fixed by its id, so it never changes on a refreeze. */
+export const defaultFlaw = id => FLAWS[hashSeed(`flaw:${id}`) % FLAWS.length];
+
+// The gesture a description names, picked from the rig's poses by the character's params.
+const GESTURES = Object.freeze({
+  point: 'points with a straight arm', shrug: 'shrugs with both palms up', think: 'rests a hand on the chin', 'arms-crossed': 'folds both arms',
+  'hands-on-hips': 'puts both hands on the hips', 'point-self': 'points at the chest with a thumb', wave: 'waves with one raised hand', facepalm: 'drops the face into one hand'
+});
+// Accessories a description may name as the signature item, in order of how much they stand out.
+const SIGNATURE = ['scarf', 'tie', 'bowtie', 'stethoscope', 'backpack', 'crossbody-bag', 'lanyard', 'headphones', 'watch', 'necklace', 'earrings'];
+
+/**
+ * A character's written description, from a resolved cast member
+ * (resolveStoryCast: its rig params, resolved colours and drawing style):
+ * one fixed paragraph in a fixed order, silhouette, proportions, colours as
+ * hex, one signature item, one gesture, must_keep and the flaw. The same
+ * member always gives the same words; it is frozen with the bible and pasted
+ * word for word, never paraphrased (docs/GENERATED_FOOTAGE_RFC.md §4, §8).
+ */
+export function characterDescription(member) {
+  const p = member.params, c = member.colors ?? {}, style = member.style ?? 'flat';
+  const name = member.name ?? member.id;
+  const hex = slot => (typeof c[slot] === 'string' ? c[slot] : null);
+  const parts = [];
+  let item;
+  if (isKind(p)) {
+    const spec = KINDS[p.kind];
+    parts.push(`${name} is ${spec.describe}${p.size ? `, ${p.size} size` : ''}.`);
+    parts.push(`Proportions: ${heads(style, p)}, drawn ${style}.`);
+    parts.push(`Colours: ${Object.entries(spec.slots).filter(([slot]) => hex(slot)).map(([slot, what]) => `${what} ${hex(slot)}`).join(', ')}.`);
+    item = p.marks?.length ? `white ${words(p.marks[0])}` : `${spec.slots.accent ?? 'its accent'} in ${hex('accent')}`;
+  } else {
+    const hair = p.hair.style === 'bald' ? 'a bald head' : p.hair.style === 'headscarf' ? 'a headscarf' : `${words(p.hair.style)} hair`;
+    const extras = [p.headwear ? an(words(p.headwear)) : null, p.mobility ? an(words(p.mobility)) : null].filter(Boolean);
+    parts.push(`${name} is ${p.age && p.age !== 'adult' ? `a ${p.age}` : 'an adult'} with a ${p.build} build and ${hair}${extras.length ? `, with ${extras.join(' and ')}` : ''}, in a ${words(p.outfit.top)}${p.outfit.top === 'dress' ? '' : ` and ${words(p.outfit.bottom)}`}${p.outfit.over ? ` under ${an(words(p.outfit.over))}` : ''}.`);
+    parts.push(`Proportions: ${p.height === 'average' ? 'average height' : `${words(p.height)}`}, ${heads(style, p)}, drawn ${style}.`);
+    parts.push(`Colours: skin ${hex('skin')}, hair ${hex('hair')}, ${words(p.outfit.top)} ${hex('top')}${p.outfit.top === 'dress' ? '' : `, ${words(p.outfit.bottom)} ${hex('bottom')}`}, shoes ${hex('shoes')}, accent ${hex('accent')}.`);
+    const glasses = p.accessories.find(entry => GLASSES.includes(entry));
+    const worn = SIGNATURE.find(entry => p.accessories.includes(entry));
+    item = p.headwear ? words(p.headwear) : glasses ? words(glasses) : p.outfit.over ? `${words(p.outfit.over)} in ${hex('accent')}` : worn ? words(worn) : `${words(p.outfit.top)} in ${hex('top')}`;
+  }
+  const poses = Object.keys(GESTURES);
+  parts.push(`Signature item: ${item}.`);
+  parts.push(`Gesture: ${GESTURES[poses[hashSeed(member.fingerprint ?? JSON.stringify(p)) % poses.length]]}.`);
+  const keep = mustKeep(p);
+  if (keep.length) parts.push(`Must keep: ${keep.join('; ')}.`);
+  parts.push(`Flaw: ${FLAW_WORDS[p.flaw] ?? 'none'}.`);
+  return parts.join(' ');
+}
+
+const an = thing => (thing.endsWith('s') ? thing : `${/^[aeiou]/.test(thing) ? 'an' : 'a'} ${thing}`);
+// "about 3.5 heads tall" in this drawing style; the head's height from the style's own geometry.
+function heads(style, params) {
+  const head = styleGeometry(style, params)?.head?.ry;
+  const tall = styleHeight(style, params);
+  return head > 0 && tall > 0 ? `about ${Math.round((tall / (head * 2)) * 2) / 2} heads tall` : 'proportions as on the sheet';
+}
+
+// ---------------------------------------------------------------------------
+// The series engine
+
+const STOP = new Set('the a an and or but of to in on at for with from by is are was were be been his her its their they them he she it this that these those who what when where into over again every each one gets get got has have had not never no out up down off than then so as just'.split(' '));
+const content = text => new Set(String(text).toLowerCase().replace(/[^a-z0-9\s'-]/g, ' ').split(/\s+/).map(word => word.replace(/^'+|'+$/g, '')).filter(word => word.length > 2 && !STOP.has(word)));
+// Two ideas are the same episode when most of their content words are shared.
+const sameIdea = (a, b) => {
+  const shared = [...a].filter(word => b.has(word)).length;
+  return shared / Math.max(1, Math.min(a.size, b.size)) >= 0.6;
+};
+
+/**
+ * The premise check for a series engine ({problem, episodes}): the engine
+ * holds when it gives ENGINE_EPISODES distinct episode ideas. An idea that is
+ * mostly another's words, or that only restates the engine, does not count.
+ * → [] when it holds, else findings that say why and how to fix it.
+ */
+export function engineFindings(engine) {
+  if (!isObj(engine) || !nonEmpty(engine.problem)) return ['engine must be {problem, episodes}: the recurring problem that goes wrong every episode and can never be solved for good'];
+  const pitched = (Array.isArray(engine.episodes) ? engine.episodes : []).filter(nonEmpty);
+  const problem = content(engine.problem);
+  const kept = [];
+  let restated = 0;
+  for (const idea of pitched) {
+    const words = content(idea);
+    if (!words.size || [...words].every(word => problem.has(word))) { restated += 1; continue; }
+    if (!kept.some(other => sameIdea(words, other))) kept.push(words);
+  }
+  if (kept.length >= ENGINE_EPISODES) return [];
+  return [`the engine is too weak: it gives ${kept.length} distinct episode idea${kept.length === 1 ? '' : 's'} (of ${pitched.length} pitched${restated ? `, ${restated} only restating the engine` : ''}); a series engine needs ${ENGINE_EPISODES} before episode one. Fix the engine, not the pitches: make the problem recur by itself (a want that cannot be met for good, or two characters whose wants collide), and give it more places to go wrong, then pitch ${ENGINE_EPISODES} episodes again`];
 }
 
 // ---------------------------------------------------------------------------
@@ -141,7 +250,8 @@ export const bibleFingerprint = member => sha256Hex(member.fingerprint).slice(0,
 /**
  * One bible cast entry from a resolved cast member (resolveStoryCast):
  * its full rig params, so the entry no longer depends on a starter or a
- * saved file, plus its fingerprint and must_keep. extra: {character_file?, sheet?}.
+ * saved file, plus its fingerprint, must_keep and written description.
+ * extra: {character_file?, sheet?, description? (false leaves it out)}.
  */
 export function bibleCharacter(member, extra = {}) {
   const {skin: _skin, hair: _hair, ...colors} = member.params.colors ?? {};
@@ -155,7 +265,8 @@ export function bibleCharacter(member, extra = {}) {
     ...(extra.character_file ? {character_file: extra.character_file} : {}),
     ...(extra.sheet ? {sheet: extra.sheet} : {}),
     fingerprint: bibleFingerprint(member),
-    must_keep: mustKeep(member.params)
+    must_keep: mustKeep(member.params),
+    ...(extra.description === false ? {} : {description: characterDescription(member)})
   };
 }
 
@@ -232,7 +343,11 @@ export function validateBible(bible, {script = null, exists = null} = {}) {
       if (entry.sheet !== undefined && !insideProject(entry.sheet)) err(`${path}.sheet must be a path inside the project, like "${BIBLE_SHEETS}/${entry.id}.png"`);
       if (entry.must_keep !== undefined && !(Array.isArray(entry.must_keep) && entry.must_keep.every(nonEmpty))) err(`${path}.must_keep must be a list of features, like ["curly espresso hair", "round glasses"]`);
       if (entry.fingerprint !== undefined && typeof entry.fingerprint !== 'string') err(`${path}.fingerprint must be a string`);
+      if (entry.description !== undefined && !nonEmpty(entry.description)) err(`${path}.description must be the character's written description (launchclip bible freeze writes it)`);
       if (!frozen) return;
+      // A bible frozen before flaws and descriptions still holds; freezing again with --force adds them.
+      if (member?.params && !member.params.flaw) warnings.push(`${path} (${entry.id}) has no flaw; freeze again with --force to give it one (a small imperfection kept in must_keep, so drift is easy to spot)`);
+      if (entry.description === undefined) warnings.push(`${path} (${entry.id}) has no written description; freeze again with --force to write one`);
       if (entry.sheet === undefined) err(`${path} (${entry.id}) needs its reference sheet (sheet: "${BIBLE_SHEETS}/${entry.id}.png")`);
       else if (insideProject(entry.sheet) && exists && !exists(entry.sheet)) err(`${path}.sheet ${entry.sheet} does not exist; draw it again with launchclip bible freeze`);
       if (member && entry.fingerprint !== bibleFingerprint(member)) err(`${path}.fingerprint does not match ${entry.id}'s rig params and the cast's drawing style; freeze the bible again`);
@@ -282,6 +397,14 @@ export function validateBible(bible, {script = null, exists = null} = {}) {
   }
 
   if (bible.rules !== undefined && !(Array.isArray(bible.rules) && bible.rules.every(nonEmpty))) err('rules must be a list of sentences');
+  if (bible.engine !== undefined) {
+    if (!isObj(bible.engine)) err('engine must be {problem, episodes}');
+    else {
+      for (const key of Object.keys(bible.engine)) if (!['problem', 'episodes'].includes(key)) err(`engine.${key} is not supported (allowed: problem, episodes)`);
+      if (bible.engine.episodes !== undefined && !(Array.isArray(bible.engine.episodes) && bible.engine.episodes.every(nonEmpty))) err('engine.episodes must be a list of episode ideas, one sentence each');
+      else errors.push(...engineFindings(bible.engine).map(message => message.startsWith('engine') ? message : `engine: ${message}`));
+    }
+  }
   if (bible.inputs !== undefined) {
     if (!isObj(bible.inputs)) err('inputs must be {script_hash?}');
     else {
@@ -300,7 +423,7 @@ export function validateBible(bible, {script = null, exists = null} = {}) {
 // ---------------------------------------------------------------------------
 // The story against its bible
 
-const FIELDS = ['build', 'height', 'age', 'skin', 'hair', 'outfit', 'accessories', 'headwear', 'mobility', 'colors'];
+const FIELDS = ['build', 'height', 'age', 'skin', 'hair', 'outfit', 'accessories', 'headwear', 'mobility', 'flaw', 'colors'];
 
 /**
  * Where a story's cast differs from its bible's, as strings ([] when they

@@ -28,7 +28,7 @@
 //
 // Imports only sibling kit/core files.
 
-import {ACCESSORIES, AGES, BOTTOMS, BUILDS, GLASSES, HAIR_STYLES, HEADWEAR, HEIGHTS, MOBILITY, OVERS, TOPS, normalizeRigParams} from './rig.mjs';
+import {ACCESSORIES, AGES, BOTTOMS, BUILDS, FLAWS, GLASSES, HAIR_STYLES, HEADWEAR, HEIGHTS, MOBILITY, OVERS, TOPS, normalizeRigParams} from './rig.mjs';
 import {BRAND_ROLES, HAIR_COLORS, NEUTRALS, SKIN_TONES} from './palette.mjs';
 import {isStarterId} from './cast.mjs';
 import {DRAWING_STYLES} from './styles.mjs';
@@ -74,6 +74,7 @@ export function characterPaths() {
     accessories: {values: [...ACCESSORIES], list: true, clear: true},
     headwear: {values: [...HEADWEAR], clear: true},
     mobility: {values: [...MOBILITY], clear: true},
+    flaw: {values: [...FLAWS], clear: true, describe: 'one small deliberate imperfection on the face, kept in the show bible\'s must_keep'},
     'colors.top': {values: clothing(), hex: true},
     'colors.bottom': {values: clothing(), hex: true},
     'colors.shoes': {values: clothing(), hex: true},

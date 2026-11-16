@@ -4,6 +4,20 @@
 
 ### Added
 
+- Every character can carry one small deliberate flaw (`flaw`: a plaster
+  on one cheek, a scar through one eyebrow, scratches on one cheek), drawn
+  on the face in every drawing style. `bible freeze` and `cast create` give
+  one to a character that has none; it is kept in `must_keep`, and the
+  critic checks it beside each reference sheet. Each bible character also
+  gets a written `description` from its rig params (silhouette,
+  proportions, colours as hex, signature item, gesture, `must_keep`, the
+  flaw), the same words every time; `cast create` returns it too. A bible
+  frozen before this keeps its hash until it is frozen with `--force`.
+- A show bible can record a series `engine`: the problem that goes wrong
+  every episode, with the episodes pitched from it (`bible freeze --engine
+  "…" --episode "…"`). `make --animation --engine "…"` checks the premise
+  before episode one: when the writers' room cannot pitch five distinct
+  episodes from the engine, the run stops with a stronger engine proposed.
 - `exploded-view`: one object as an isometric drawing of solid parts, in
   four tones with a single lit part and ink outlines, that comes apart along
   its axes, holds with its labels beside it and snaps back. Three built-in

@@ -197,6 +197,11 @@ For characters a user designs themselves, `launchclip cast` should produce
 the same: the sheet (front, both profiles, back, a three-quarter pose), the
 description and the flaw.
 
+Status: the description (`description` on each bible character, and in
+`cast create`'s result) and the flaw (rig param `flaw`, in `must_keep`) have
+shipped. The turnaround sheet (front, both profiles, back, three-quarter)
+has not: the sheet still shows the poses and expressions.
+
 ## 9. Delivery plan
 
 1. **The brief only.** `generate brief`, the written description and the
