@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { ffmpegMissing, mediaSkip } from "./helpers/media.js";
 import { DIRECTING, directCues, directSound, measureDirecting, sceneSoundProblems, storySoundWarnings } from "@launchclip/core/sound/directing.mjs";
 import { resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { buildMix, mixGraph, scoreGraph } from "../src/scripts/build-mix.mjs";
@@ -125,7 +126,7 @@ test("the mixers multiply the curves into the beds, the room, the cues and the r
   assert.match(score, /level=0,asetnsamples=n=480:p=0,volume='if\(lt\(t,/);
 });
 
-test("measured in a real mix: the hush is quiet and its hit lands, the prelap leads; without directing both fail", async () => {
+test("measured in a real mix: the hush is quiet and its hit lands, the prelap leads; without directing both fail", { skip: mediaSkip(ffmpegMissing()) }, async () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "sound-directing-"));
   try {
     const bed = path.join(dir, "bed.wav");
