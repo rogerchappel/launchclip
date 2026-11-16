@@ -214,11 +214,26 @@ pass it as designed, and it learns two things:
   `pulse`. An element that flashes on every beat used to be read as one long
   life from its first fade-in to its last fade-out; the check now reads each
   fade-in and the fade-out after it as one flash (shipped in phase 1).
-- **New findings** (phase 2): `static-hold` (warning) when a scene longer than
-  3 s has a settled stretch over 1.5 s where nothing on screen moves, which is
-  what this whole entry is against; `loop-seam` (error) when `loop: true` and
-  frame 0 differs from the last frame; `shake-overshoot` (error) when a camera
-  shake's steps do not decay.
+- **New findings** (phase 2, shipped): `static-hold` (warning) when a scene
+  longer than 3 s has a settled stretch over 1.5 s where nothing on screen
+  moves, which is what this whole entry is against; `loop-seam` (error) when
+  `loop: true` and frame 0 differs from the last frame; `shake-overshoot`
+  (error) when a camera shake's steps do not decay.
+
+  **As shipped.** The idle suffix is in: an `-idle` target is neither an
+  element nor a gesture for `crowded-move`. `static-hold` reads the ops, states
+  and hits from the end of the entrance to the start of the exit; a scene with
+  no op list is not measured, since its motion is not visible to the check.
+  `shake-overshoot` reads three or more abutting x/y steps of 0.1 s or less on
+  one target that reverse direction as a shake, and fails one whose step lands
+  further from rest than the step before (by over half a pixel), that does
+  not end at rest, or that runs over 0.3 s. `loop-seam` compares `frameState`
+  at the model's start and one frame before its end, within half a pixel or
+  degree and 1 % for opacity and scale; it runs on a model with `loop: true`,
+  which nothing sets until phase 6. The phase-1 `node-graph` sample has no
+  still gap at all and its shake runs 0.24 s. Most older catalogue modules
+  hold still after their entrance and warn `static-hold` until phase 5 gives
+  them idle motion.
 
 ## 10. Planner-drawn graphics (phase 5)
 
@@ -239,8 +254,8 @@ world kit), any icon from `kit/core/icons.mjs`, text that fits; nothing else.
 1. **`node-graph` and `fluid-motion.mjs`** (this PR): flock, wave, idle, impact
    shake, beat grid, glowing wires with pulses, hub lit on arrival; schema,
    both renderers, parity fixtures, tests, a 9:16 sample.
-2. **Motion check additions**: `static-hold`, `loop-seam`, `shake-overshoot`;
-   the idle suffix in crowding.
+2. **Motion check additions** (shipped): `static-hold`, `loop-seam`,
+   `shake-overshoot`; the idle suffix in crowding.
 3. **Carry across scenes** (§6) on still-camera plates.
 4. **Anchors and character reactions** (§7).
 5. **Planner-drawn graphics** (§10), then group patterns and idle on the other
