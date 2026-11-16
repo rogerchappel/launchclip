@@ -95,3 +95,13 @@ test('the pace gate holds a story to its treatment\'s hold>N and counts a closin
   const demo = load('demo-autopilot-16x9');
   assert.equal(paceGate({resolved: demo.story, profile: demo.profile, map: demo.map}).findings.filter(f => f.rule === 'event-gap' && f.at >= 35).length, 0);
 });
+
+test('a cutaway on a playing footage backdrop, or under the camera breath, is not a frozen frame', () => {
+  const raw = JSON.parse(readFileSync('examples/story/deck-materials-9x16/storyboard.json', 'utf8'));
+  const frozen = (story) => paceGate({resolved: story}).findings.filter(f => f.rule === 'frozen-frame').flatMap(f => f.ids);
+  const bare = (story) => ({...story, scenes: story.scenes.map(scene => { const {backdrop: _b, ...rest} = scene; return rest; })});
+  const noFeel = ({motion: _m, ...story}) => story;
+  assert.deepEqual(frozen(resolveStory(raw)), []);
+  assert.deepEqual(frozen(resolveStory(noFeel(raw))), [], 'the backdrops play on their own');
+  assert.deepEqual(frozen(resolveStory(bare(raw))), [], 'the camera breath moves every pixel');
+});
