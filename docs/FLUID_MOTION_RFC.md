@@ -157,6 +157,11 @@ Because both sides are ordinary ops on ordinary ids, the renderers need nothing
 new. The transition between A and B for carried elements is a cut on the
 same frame (A's copy hides as B's shows), so they never double.
 
+![Carry: the title pinned, four cards fly into a five-card fan, a host cutaway, then the plate resumes and settles into three](images/flow-carry.jpg)
+
+Sample: `examples/story/flow-carry-9x16` (top row 3.5–5.2 s across the first
+cut, bottom row 9.9–12 s across the cutaway and back).
+
 ### 6.1 The switch: `story.motion.flow`
 
 Carry is an enhancement a feel or a style turns on, not something the planner
