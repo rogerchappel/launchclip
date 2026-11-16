@@ -1,0 +1,71 @@
+{
+  "story": {
+    "schema": "launchclip.story.v1",
+    "title": "Catalogue H parity: h-layer-stack-default-portrait",
+    "lane": "motion",
+    "format": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "duration": 10,
+      "platform": "youtube-shorts"
+    },
+    "brand": {
+      "colors": {
+        "bg": "#06070d",
+        "primary": "#fdb022",
+        "accent": "#46d4ff",
+        "ink": "#06070d",
+        "paper": "#f2eee6"
+      },
+      "fonts": {
+        "display": "anton",
+        "body": "space-grotesk",
+        "meta": "jetbrains-mono"
+      }
+    },
+    "base": null,
+    "scenes": [
+      {
+        "id": "el",
+        "module": "layer-stack",
+        "start": 0,
+        "end": 10,
+        "params": {
+          "hook": "How this shot was made",
+          "payoff": "One project. Every layer.",
+          "layers": [
+            {
+              "kind": "storyboard",
+              "label": "Storyboard",
+              "panels": [
+                "The hook",
+                "The chart",
+                "The turn",
+                "The payoff"
+              ]
+            },
+            {
+              "kind": "style",
+              "label": "Style"
+            },
+            {
+              "label": "Final",
+              "image": "assets/screens/dashboard.png",
+              "fit": "contain"
+            }
+          ],
+          "play": [
+            "assets/testsrc.png",
+            "assets/screens/dashboard.png"
+          ],
+          "variant": "default"
+        }
+      }
+    ]
+  },
+  "sceneId": "el",
+  "threshold": {
+    "ssim": 0.97
+  }
+}

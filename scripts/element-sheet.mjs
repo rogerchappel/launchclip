@@ -21,7 +21,7 @@ import {MODULES, VARIANTS, catalogHStyle, catalogHTimeline, catalogHView} from '
 import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {renderNode} from '../kit/hyperframes/catalog-b.mjs';
 import {copyProjectFonts, projectFontFaces} from '../kit/hyperframes/story-compiler.mjs';
-import {SAMPLES} from './element-samples.mjs';
+import {SAMPLES, SAMPLE_DURATIONS} from './element-samples.mjs';
 import {PARTICLE_RUNTIME} from '@launchclip/core/particles.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -47,7 +47,7 @@ function args(argv) {
 }
 
 /** The resolved model of one module variant at one aspect. */
-export function sampleModel(id, variant, aspect, {params = SAMPLES[id], duration = SCENE, sceneId = 's1'} = {}) {
+export function sampleModel(id, variant, aspect, {params = SAMPLES[id], duration = SAMPLE_DURATIONS[id] ?? SCENE, sceneId = 's1'} = {}) {
   return {...MODULES[id].resolve({...params, variant}, {id: sceneId, start: 0, duration, format: FORMATS[aspect], brand: BRAND, aspect, hits: []}), module: id};
 }
 
