@@ -46,8 +46,8 @@ export const MEDIA_PRESENCE = Object.freeze({
 const IMAGE = /\.(png|jpe?g|webp|svg)$/i;
 const cache = new Map();
 
-/** Facts from decoded grey frames (a Buffer of frames × width × height bytes). */
-export function mediaPresenceFacts(frames, { width, height, fps = MEDIA_PRESENCE.fps } = {}) {
+/** Facts from decoded grey frames (a Buffer of frames × width × height bytes); edgeLevel: the step that counts as an edge. */
+export function mediaPresenceFacts(frames, { width, height, fps = MEDIA_PRESENCE.fps, edgeLevel = MEDIA_PRESENCE.edgeLevel } = {}) {
   const size = width * height;
   const count = size > 0 ? Math.floor(frames.length / size) : 0;
   if (!count) return null;
@@ -58,7 +58,7 @@ export function mediaPresenceFacts(frames, { width, height, fps = MEDIA_PRESENCE
     let edges = 0;
     for (let y = 0; y < height - 1; y += 1) for (let x = 0; x < width - 1; x += 1) {
       const v = frames[o + y * width + x];
-      if (Math.abs(v - frames[o + y * width + x + 1]) >= P.edgeLevel || Math.abs(v - frames[o + (y + 1) * width + x]) >= P.edgeLevel) edges += 1;
+      if (Math.abs(v - frames[o + y * width + x + 1]) >= edgeLevel || Math.abs(v - frames[o + (y + 1) * width + x]) >= edgeLevel) edges += 1;
     }
     edgeShares.push(edges / ((width - 1) * (height - 1)));
   }

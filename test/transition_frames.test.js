@@ -30,6 +30,8 @@ function footageStory(transition, {mode = 'cuts', modules = ['clip', 'clip']} = 
     format: {width: W, height: H, fps: FPS, duration: 8},
     brand: {colors: {bg: '#0b1020', primary: '#ff7a59', accent: '#7ce7ff', ink: '#0b1020', paper: '#f5f1ea'}, fonts: {display: 'anton', body: 'inter', meta: 'jetbrains-mono'}},
     ...(mode === 'world' ? {camera: {mode: 'world'}} : {}),
+    // pixel-dissolve is retro only (kit/core/story.mjs)
+    ...(transition?.type === 'pixel-dissolve' ? {vfx: {words: 'pixel'}} : {}),
     scenes: [plate('s1', modules[0], 'assets/shots/ridge.svg', 0), plate('s2', modules[1], 'assets/shots/boards.svg', 4, {in: transition})]
   });
 }

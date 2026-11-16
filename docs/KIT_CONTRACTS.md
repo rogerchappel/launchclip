@@ -196,6 +196,14 @@ The shape is in STORYBOARD_ENGINE_RFC.md §4. Additional rules:
   (`{mode, layout?, spacing?, parallax?, blur?, kicks?, moves?}`): see "Motion grammar" and
   "World camera"; `moves: false` turns off a character story's default moves
   ("Zooms inside a shot").
+- `direction` (`{product, character, world, moments, signature: {detail,
+  element}}`), `scene.hero` and `motion.thesis` (`{focal, continuity,
+  emphasis, budget}`) are the art direction the planner writes before any
+  scene (docs/VIDEO_TELLS_RFC.md §3). Nothing renders from them; the tells
+  read them. `direction.character` refuses words that describe every
+  template (clean, modern, sleek, minimal, premium, dynamic, engaging,
+  vibrant, stunning, professional, bold); `direction.moments` are one or two
+  scene ids.
 - Assets are project-relative paths under `assets/`.
 - `audio.narration` = `{text, provider?, voice?, speed?}` is narration that
   `launchclip finish` synthesises into `audio.voice` and `audio.words` (text

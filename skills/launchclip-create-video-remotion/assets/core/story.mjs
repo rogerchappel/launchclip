@@ -12,7 +12,9 @@ export const STORY_SCHEMA = "launchclip.story.v1";
 export const STORY_REVISION = 0;
 
 export const STORY_LANES = ["motion", "voiceover-motion", "footage-led"];
-export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe", "light-sweep", "push-blur", "light-leak", "before-after"];
+export const STORY_TRANSITIONS = ["cut", "fade", "push", "whip", "zoom", "iris", "morph", "pan", "pull", "orbit", "whip-pan", "rack-focus", "glow-wipe", "card-to-card", "overview", "dot-wipe", "light-sweep", "push-blur", "light-leak", "before-after", "burn-away", "slash-wipe", "shatter", "crt-off", "glitch-wipe", "blinds", "diamond-wipe", "star-iris", "pixel-dissolve"];
+/** Transitions the VFX layer draws as a pixel cover (kit/core/transitions.mjs VFX_COVER_TRANSITIONS); color names the cover's colour. */
+export const STORY_VFX_TRANSITIONS = ["burn-away", "slash-wipe", "shatter", "crt-off", "glitch-wipe", "blinds", "diamond-wipe", "star-iris", "pixel-dissolve"];
 export const STORY_ENDING_KEYS = Object.freeze(["loop_to", "in", "loop", "final"]);
 export const STORY_ENDING_FINALS = Object.freeze(["hold", "fade", "exit"]);
 // Camera transitions (kit/core/camera-world.mjs): the camera travels to the
@@ -24,7 +26,7 @@ export const STORY_CAMERA_LAYOUTS = ["row", "column", "grid", "path", "auto"];
 // story.motion.grammar presets (kit/core/grammar.mjs GRAMMAR_NAMES).
 // What a scene hit's moment asks the sound score for (kit/core/sound/options.mjs SCORE_MOMENTS; kept in step by test/sound_score.test.js).
 /** Effects a scene's vfx cues may name (kit/core/vfx/catalog.mjs VFX_EFFECT_NAMES, kept here so this file stays import-free). */
-export const STORY_VFX_EFFECTS = ["hit-spark", "crit-hit", "impact-frame", "ground-slam", "small-explosion", "smoke-bomb", "firework-burst", "poof", "sunburst", "collect-burst"];
+export const STORY_VFX_EFFECTS = ["hit-spark", "crit-hit", "impact-frame", "ground-slam", "small-explosion", "smoke-bomb", "firework-burst", "poof", "sunburst", "collect-burst", "combo-counter", "crit-number", "level-up", "achievement", "confetti", "firework-rocket"];
 export const STORY_MOMENTS = ["letdown", "promise", "reveal", "impact", "crystallise", "wonder", "miss", "resolve"];
 export const STORY_GRAMMARS = ["editorial", "snappy", "smooth", "playful", "documentary", "cinematic"];
 export const STORY_DIRECTIONS = ["left", "right", "up", "down"];
@@ -82,7 +84,7 @@ export const STORY_MEDIUM_KINDS = ["none", "oil", "watercolour", "pastel", "ink"
 export const STORY_MEDIUM_KEYS = ["kind", "strength", "boil", "grain"];
 // story.look names and keys (kit/core/look.mjs LOOK_NAMES, LOOK_KEYS; kept in
 // step by test/look.test.js).
-export const STORY_LOOK_NAMES = ["none", "blueprint", "hologram", "thermal", "neon-night", "paper-cutout", "watercolour", "anime-cel", "ascii-terminal", "clay-2d", "isometric-layers"];
+export const STORY_LOOK_NAMES = ["none", "blueprint", "hologram", "thermal", "neon-night", "paper-cutout", "watercolour", "anime-cel", "ascii-terminal", "clay-2d", "isometric-layers", "pixel-arcade"];
 export const STORY_LOOK_KEYS = ["name", "strength", "step", "furniture", "palette", "labels"];
 // story.grade presets (kit/core/grade.mjs GRADE_PRESET_NAMES; kept in step by
 // test/grade.test.js, which also runs gradeErrors against validateGrade).
@@ -134,7 +136,7 @@ const EPS = 1e-6;
 // light: the story's lighting (a style pack's light; kit/core/lighting.mjs).
 // grade: the colour grade applied to the finished render (a style pack's grade; kit/core/grade.mjs).
 // finish: whole-frame shader passes over the finished render (kit/core/finish.mjs, src/finish_pass.js).
-const TOP_LEVEL = new Set(["grade", "finish", "look", "light", "cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine", "bible"]);
+const TOP_LEVEL = new Set(["grade", "finish", "look", "light", "cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine", "bible", "direction"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -398,11 +400,21 @@ function beforeAfterOptionErrors(transition, path) {
   return errors;
 }
 
+/** Whether a story is retro (the pixel-arcade look, or its hits keep pixel words): it unlocks the retro-only VFX. */
+function retroStory(story) {
+  return story?.look === "pixel-arcade" || story?.look?.name === "pixel-arcade" || story?.vfx?.words === "pixel";
+}
+
 /** Validation messages for a dot-wipe's options (scene.in or ending.in); path names the transition. */
 function dotWipeOptionErrors(transition, path, fps) {
   const errors = [];
   // hold is also the overview's (seconds); color and cover are the wipe's
   // alone (color also the light-sweep's, checked there).
+  if (STORY_VFX_TRANSITIONS.includes(transition.type)) {
+    for (const key of ["cover", "hold"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a dot-wipe option; ${JSON.stringify(transition.type)} does not take it`);
+    if (transition.color !== undefined && !(DOT_WIPE_COLORS.includes(transition.color) || (typeof transition.color === "string" && /^#[0-9a-fA-F]{6}$/.test(transition.color)))) errors.push(`${path}.color must be one of ${DOT_WIPE_COLORS.join(", ")} or a #rrggbb hex; got ${JSON.stringify(transition.color)}`);
+    return errors;
+  }
   if (transition.type !== "dot-wipe") {
     for (const key of transition.type === "light-sweep" ? [] : ["color", "cover"]) if (transition[key] !== undefined) errors.push(`${path}.${key} is a dot-wipe option; ${JSON.stringify(transition.type)} does not take it`);
     return errors;
@@ -582,8 +594,19 @@ export function validateStory(story, { modules, moduleParams } = {}) {
     if (!isObject(audio) || !audio.words) err("audio.words (NARRATION.json) is required for the voiceover-motion lane (or set audio.narration to synthesise it)");
   }
 
+  // direction: the art direction the planner writes before any scene (docs/VIDEO_TELLS_RFC.md §3).
+  validateArtDirection(story.direction, story.scenes, err);
+  if (Array.isArray(story.scenes)) story.scenes.forEach((scene, i) => {
+    if (isObject(scene) && scene.hero !== undefined && !(nonEmpty(scene.hero) && String(scene.hero).length <= 80)) err(`scenes[${i}].hero must name the scene's one bright element (an element id or a few words), like "s2.price"`);
+  });
+
   // motion.grammar and camera (kit/core/grammar.mjs, kit/core/camera-world.mjs).
   validateMotion(story.motion, err);
+  // vfx: the story's VFX layer settings (kit/core/vfx/plan.mjs). words "pixel" keeps a hit's words in its pixel font.
+  if (story.vfx !== undefined) {
+    if (!isObject(story.vfx)) err("vfx must be an object");
+    else if (story.vfx.words !== undefined && story.vfx.words !== "brand" && story.vfx.words !== "pixel") err('vfx.words must be "brand" (a hit\'s words in the brand\'s display face, the default) or "pixel"');
+  }
   const camera = validateCamera(story.camera, { err, warn, lane: story.lane });
   // world: the video-wide world for world scenes, usually from the style. Its
   // shape is checked here; kinds, times and props when a world scene resolves
@@ -741,8 +764,9 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (transition.from_object !== undefined) fromObjects.push({ index, path: `${path}.in.from_object`, value: transition.from_object });
         if (transition.type === "morph" && transition.from_object === undefined) warn(`${label} morphs without in.from_object; name the object handed across the boundary`);
         cameraTransitionRules(transition, `${path}.in`, { err, lane: story.lane, camera, track });
-        if ((transition.type === "dot-wipe" || transition.type === "light-sweep" || transition.type === "light-leak" || transition.type === "before-after") && track !== 0) err(`${path}.in.type "${transition.type}" covers the whole frame; only a track-0 scene can arrive with it`);
+        if ((transition.type === "dot-wipe" || transition.type === "light-sweep" || transition.type === "light-leak" || transition.type === "before-after" || STORY_VFX_TRANSITIONS.includes(transition.type)) && track !== 0) err(`${path}.in.type "${transition.type}" covers the whole frame; only a track-0 scene can arrive with it`);
         for (const message of dotWipeOptionErrors(transition, `${path}.in`, storyFps(story))) err(message);
+        if (transition.type === "pixel-dissolve" && !retroStory(story)) err(`${path}.in.type "pixel-dissolve" is retro only: set look "pixel-arcade" or vfx.words "pixel" (the retro-pixel style family sets both)`);
         for (const message of lightSweepOptionErrors(transition, `${path}.in`)) err(message);
         for (const message of beforeAfterOptionErrors(transition, `${path}.in`)) err(message);
         if (transition.type === "overview") overviews.push({ index, path: `${path}.in`, label, transition, start, track });
@@ -784,6 +808,8 @@ export function validateStory(story, { modules, moduleParams } = {}) {
         if (cue.angle !== undefined && !(typeof cue.angle === "number" && cue.angle >= -180 && cue.angle <= 180)) err(`${cuePath}.angle must be degrees between -180 and 180`);
         if (cue.light !== undefined && !(typeof cue.light === "number" && cue.light >= 0 && cue.light <= 2)) err(`${cuePath}.light must be a number between 0 and 2`);
         if (cue.sfx !== undefined && !nonEmpty(cue.sfx)) err(`${cuePath}.sfx must be "auto" (the effect's paired sound, the default), "none" or a sound family`);
+        // A hit's words (kit/core/vfx/catalog.mjs VFX_WORDS): short, so they read in one glance.
+        for (const key of ["text", "label", "title"]) if (cue[key] !== undefined && !(nonEmpty(cue[key]) && cue[key].length <= 24)) err(`${cuePath}.${key} must be a word or two (1–24 characters)`);
       }
     }
     // Shot states (kit/core/shot-states.mjs checks the set and the module side).
@@ -1329,10 +1355,45 @@ const EASE_ROLES = ["enter", "exit", "move", "camera", "emphasis"];
 const DURATION_ROLES = ["enter", "exit", "transition", "camera"];
 const EASE_NAME = /^(none|linear|(power[0-4]|quad|cubic|quart|quint|strong|expo|circ|sine|bounce|back|elastic)(\.(in|out|inOut))?(\(\s*[\d.]+\s*(,\s*[\d.]+\s*)?\))?|steps\(\d+\))$/;
 
+// The direction block (docs/VIDEO_TELLS_RFC.md §3). Character words that
+// describe every template are refused by name.
+export const DIRECTION_FIELDS = Object.freeze(["product", "character", "world", "moments", "signature"]);
+export const REFUSED_CHARACTER_WORDS = Object.freeze(["clean", "modern", "sleek", "minimal", "minimalist", "premium", "dynamic", "engaging", "vibrant", "stunning", "professional", "bold"]);
+function validateArtDirection(direction, scenes, err) {
+  if (direction === undefined || direction === null) return;
+  if (!isObject(direction)) { err(`direction must be {${DIRECTION_FIELDS.join(", ")}}`); return; }
+  for (const key of Object.keys(direction)) if (!DIRECTION_FIELDS.includes(key)) err(`direction.${key} is not supported (allowed: ${DIRECTION_FIELDS.join(", ")})`);
+  for (const key of ["product", "world"]) if (direction[key] !== undefined && !nonEmpty(direction[key])) err(`direction.${key} must be one sentence`);
+  if (direction.character !== undefined) {
+    const words = nonEmpty(direction.character) ? direction.character.toLowerCase().split(/[\s,;/]+/).filter((word) => /[a-z]/.test(word) && !["and", "a", "an", "but", "little", "bit"].includes(word)) : [];
+    if (!words.length || words.length > 3) err('direction.character must be two or three concrete words, like "exact, a little warm"');
+    const refused = words.filter((word) => REFUSED_CHARACTER_WORDS.includes(word));
+    if (refused.length) err(`direction.character uses ${refused.map((word) => `"${word}"`).join(", ")}, which describes every template; name what is particular to this subject`);
+  }
+  const ids = new Set(Array.isArray(scenes) ? scenes.filter(isObject).map((scene) => scene.id) : []);
+  if (direction.moments !== undefined) {
+    if (!Array.isArray(direction.moments) || direction.moments.length < 1 || direction.moments.length > 2) err("direction.moments must list one or two scene ids where colour and detail may be rich");
+    else for (const id of direction.moments) if (!ids.has(id)) err(`direction.moments: ${JSON.stringify(id)} is not a scene id`);
+  }
+  if (direction.signature !== undefined) {
+    const sig = direction.signature;
+    if (!isObject(sig) || !nonEmpty(sig.detail) || !nonEmpty(sig.element) || Object.keys(sig).some((key) => !["detail", "element"].includes(key))) err('direction.signature must be {detail, element}: one small detail only this video has, and the element id it is drawn as');
+  }
+}
+// motion.thesis: the motion plan before any scene (focal moment, continuity, emphasis, budget).
+export const THESIS_FIELDS = Object.freeze(["focal", "continuity", "emphasis", "budget"]);
+function validateThesis(thesis, err) {
+  if (thesis === undefined) return;
+  if (!isObject(thesis)) { err(`motion.thesis must be {${THESIS_FIELDS.join(", ")}}, each one sentence`); return; }
+  for (const key of Object.keys(thesis)) if (!THESIS_FIELDS.includes(key)) err(`motion.thesis.${key} is not supported (allowed: ${THESIS_FIELDS.join(", ")})`);
+  for (const key of THESIS_FIELDS) if (thesis[key] !== undefined && !nonEmpty(thesis[key])) err(`motion.thesis.${key} must be one sentence`);
+}
+
 function validateMotion(motion, err) {
   if (motion === undefined || motion === null) return;
   if (!isObject(motion)) { err("motion must be an object {grammar}"); return; }
-  for (const key of Object.keys(motion)) if (!["grammar", "feel", "blur"].includes(key)) err(`motion.${key} is not supported (allowed: grammar, feel, blur)`);
+  for (const key of Object.keys(motion)) if (!["grammar", "feel", "blur", "thesis"].includes(key)) err(`motion.${key} is not supported (allowed: grammar, feel, blur, thesis)`);
+  validateThesis(motion.thesis, err);
   validateFeel(motion.feel, err);
   validateBlur(motion.blur, err);
   const grammar = motion.grammar;

@@ -19,6 +19,7 @@ import { LOOK as animeCel } from './anime-cel.mjs';
 import { LOOK as asciiTerminal } from './ascii-terminal.mjs';
 import { LOOK as clay2d } from './clay-2d.mjs';
 import { LOOK as isometricLayers } from './isometric-layers.mjs';
+import { LOOK as pixelArcade } from './pixel-arcade.mjs';
 
 export const LOOKS = Object.freeze({
   blueprint,
@@ -30,7 +31,8 @@ export const LOOKS = Object.freeze({
   'anime-cel': animeCel,
   'ascii-terminal': asciiTerminal,
   'clay-2d': clay2d,
-  'isometric-layers': isometricLayers
+  'isometric-layers': isometricLayers,
+  'pixel-arcade': pixelArcade
 });
 
 /** What a look (story.look: a name or {name}) asks of the cast's drawing, or null: {pins: true} for paper cutout, {face: "cute"} for anime cel. */

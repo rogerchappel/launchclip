@@ -707,6 +707,11 @@ export function defaultAdapters() {
       const { measureCaptionLegibility } = await import("./caption_legibility.js");
       return measureCaptionLegibility(video, story, options);
     },
+    // The frame tells on the rendered frames and plate assets (src/frame_tells.js).
+    async frameTells(project, video, story, options) {
+      const { measureFrameTells } = await import("./frame_tells.js");
+      return measureFrameTells(project, video, story, options);
+    },
     async compileHyperFrames(resolved, options) {
       const { compileStoryToHyperFrames } = await import("../kit/hyperframes/story-compiler.mjs");
       return compileStoryToHyperFrames(resolved, options);
@@ -2027,6 +2032,16 @@ async function runGates(ctx, { pixels = true } = {}) {
     gates.tells = tellsGate(ctx.resolved, { words: ctx.words ?? [] });
   } catch (error) {
     gates.tells = { status: "failed", error: error.message };
+  }
+  // The frame tells (accent share, buried raster, unblended media) on the render; warnings and advisories only.
+  if (pixels && gates.tells.findings && ctx.adapters.frameTells && existsSync(ctx.raw)) {
+    try {
+      const frame = await ctx.adapters.frameTells(ctx.project, ctx.raw, ctx.resolved, { rects: ctx.layout?.rects ?? [] });
+      if (frame.length) gates.tells = { ...gates.tells, warnings: gates.tells.warnings + frame.length, findings: [...gates.tells.findings, ...frame].slice(0, 40) };
+      gates.tells.frame = frame.length;
+    } catch (error) {
+      ctx.warnings.push(`frame tells were not measured: ${firstLine(error.message)}`);
+    }
   }
   try {
     gates.holds = holdGate(ctx.resolved, { media: ctx.layout?.media ?? {} });

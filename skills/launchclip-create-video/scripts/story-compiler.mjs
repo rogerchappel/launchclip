@@ -32,6 +32,7 @@ import { backgroundPlan, fieldStyle, layerCss, layerSvg, layerTweens, layoutFill
 import { scenePlatePlan, scenePlateSpec, storyPlatePlan } from './plates.mjs';
 import { LIGHT_OVER_ID, LIGHT_Z, lightLayerActive, lightLayerCss, lightPlan, lightTweens } from './lighting.mjs';
 import { VFX_Z, vfxPlan } from './vfx/plan.mjs';
+import { vfxWordBox } from './vfx/paint.mjs';
 import { VFX_RUNTIME } from './vfx/runtime.mjs';
 import { AUDIO_REACT_Z, audioReactCss, audioReactPlan } from './audio-react.mjs';
 import { worldBackdrops } from './world-backdrops.mjs';
@@ -644,10 +645,14 @@ export async function compileStoryToHyperFrames(story, options = {}) {
   // VfxCanvas does from its layout effect.
   const vfx = isolate ? null : vfxPlan(story);
   const vfxCanvas = (part) => `<canvas id="lc-vfx-${part}" data-launchclip-vfx="${part}" width="${vfx.aw}" height="${vfx.ah}" aria-hidden="true" style="position:absolute;left:0;top:0;width:${vfx.aw * vfx.grid}px;height:${vfx.ah * vfx.grid}px;image-rendering:pixelated;pointer-events:none;z-index:${VFX_Z.hyperframes}${part === 'light' ? ';mix-blend-mode:plus-lighter' : ''}"></canvas>`;
+  // A hit's words (kit/core/vfx/paint.mjs vfxWordAt): brand-font text over the canvases.
+  const vfxWords = (vfx?.words ?? []).map((word, i) => `<div id="lc-vfx-word-${i}" data-launchclip-vfx="word" aria-hidden="true" style="${Object.entries({ ...vfxWordBox(word, vfx.grid), zIndex: String(VFX_Z.hyperframes) }).map(([key, value]) => `${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}:${attr(value)}`).join(';')}">${text(word.text)}</div>`).join('');
   const vfxLines = vfx ? ['// vfx (over the scenes)', `(function () {
   var color = document.getElementById('lc-vfx-color').getContext('2d'), light = document.getElementById('lc-vfx-light').getContext('2d'), plan = ${JSON.stringify(vfx)}, clock = {t: 0};
-  window.lcVfx.paint(color, light, plan, 0);
-  tl.fromTo(clock, {t: 0}, {t: ${num(D)}, duration: ${num(D)}, ease: 'none', immediateRender: false, onUpdate: function () { window.lcVfx.paint(color, light, plan, clock.t); }}, 0);
+  var words = plan.words.map(function (_, i) { return document.getElementById('lc-vfx-word-' + i); });
+  var paint = function (t) { window.lcVfx.paint(color, light, plan, t); window.lcVfx.words(words, plan, t); };
+  paint(0);
+  tl.fromTo(clock, {t: 0}, {t: ${num(D)}, duration: ${num(D)}, ease: 'none', immediateRender: false, onUpdate: function () { paint(clock.t); }}, 0);
 })();`] : [];
 
   // Audio-reactive layers (kit/core/audio-react.mjs): with the light's over
@@ -701,7 +706,7 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     ${audio}
     ${feelLines.length ? '<div id="lc-feel" class="lc-feel">' : ''}${plan ? cameraMarkup(plan, story.brand, world, worldField.html, !worldBackdrop && !covered, stack?.html ?? '') : ''}
     ${hoisted.join('\n    ')}
-    ${markup.join('\n    ')}${feelLines.length ? '\n    </div>' : ''}${lightOver ? `\n    <div id="${LIGHT_OVER_ID}" data-launchclip-light="over" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:${LIGHT_Z.hyperframes}">${lightOver.html}</div>` : ''}${audioReactHtml ? `\n    ${audioReactHtml}` : ''}${vfx ? `\n    ${vfxCanvas('color')}${vfxCanvas('light')}\n    <script>\n${VFX_RUNTIME}\n    </script>` : ''}${wipeMarkup.length ? `\n    ${wipeMarkup.join('\n    ')}` : ''}
+    ${markup.join('\n    ')}${feelLines.length ? '\n    </div>' : ''}${lightOver ? `\n    <div id="${LIGHT_OVER_ID}" data-launchclip-light="over" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:${LIGHT_Z.hyperframes}">${lightOver.html}</div>` : ''}${audioReactHtml ? `\n    ${audioReactHtml}` : ''}${vfx ? `\n    ${vfxCanvas('color')}${vfxCanvas('light')}${vfxWords}\n    <script>\n${VFX_RUNTIME}\n    </script>` : ''}${wipeMarkup.length ? `\n    ${wipeMarkup.join('\n    ')}` : ''}
     ${look?.under ? `${lookGradeMarkup(look)}\n    ` : ''}${medium ? `${mediumDefs(medium)}<div id="${MEDIUM_LAYER_ID}" data-launchclip-medium="${medium.kind}" aria-hidden="true"></div>\n    ` : ''}${look && (look.furniture || (look.grade && !look.under)) ? `${look.under ? '' : lookGradeMarkup(look)}${lookFurnitureMarkup(look)}\n    ` : ''}${frame ? `<div id="lc-frame-root" aria-hidden="true"></div>\n    <script>\n${brandFrameRuntime(frame)}</script>\n    ` : ''}${captions ? '<div id="lc-captions" class="lc-captions"></div>' : ''}
     ${captions ? `<script>\n${captionPlanRuntime(captions.plan)}</script>` : ''}
     <script>
