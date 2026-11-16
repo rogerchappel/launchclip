@@ -282,8 +282,9 @@ places the plan changed once it met the code:
   and `scripts/vfx-sheet.mjs` (every effect at six times in three palettes).
   Golden sheet hashes, the effect check and the motion-check findings are
   not built.
-- **Later rounds:** §4b (hits, cover transitions, retro pack) and §4c
-  (weather, masks) record what came after and where it differs.
+- **Later rounds:** §4b (hits, cover transitions, retro pack), §4c
+  (weather, masks) and §4d–4e (phase 9: planner text, cue rules, effect
+  batches) record what came after and where it differs.
 
 ## 4b. Built in round two (hits, transitions, retro pack) and where it differs
 
@@ -394,6 +395,30 @@ effect here draws in `pixel` mode, which is what the retro look wants anyway.
   wire round trip, cast silhouettes inside their reach, validation, plan,
   runtime byte for byte, page) and story parity on `vfx-masks-9x16`. The
   contact sheet draws the new rows round the stand-in.
+
+## 4d. Phase 9: the planner's catalogue and cue rules
+
+- **Opt-in.** The planner sees the effects only when the art direction asks
+  for them (effects, sparks, explosions, game feel, arcade, retro, pixel,
+  confetti, fireworks) or the style pack sets `vfx`
+  (`kit/core/planning-prompt.mjs` `vfxWanted`). Without that, the prompt has
+  no VFX section and a plan has no cues. The skill reference always carries it.
+- **Catalogue text** (`vfxLines`) is built from the catalogue, so it never
+  drifts: each effect's `use` line (a new field on `VFX_EFFECTS`), whether it
+  takes words or loops to the scene end, and its paired sound; then the
+  cover transitions with their sounds, the cue schema, and the rules.
+- **On the beat.** Cues are written on `"beat:<n>"` or `"word:<text>"`, and
+  `align: "peak"` puts the brightest frame there with its paired sound
+  (§3f, the #648 pairs table). The prompt tells the planner not to add a
+  separate hit for it.
+- **Cue rules** are motion-check warnings (`vfxCueFindings` in
+  `kit/core/vfx/plan.mjs`, run by `choreographyGate`): `vfx-crowd` (more
+  than three peaks within 1 s) and `vfx-over-caption` (an effect centred in
+  the default caption band of a captioned story). One hit with words a
+  scene (§3d) is a planner rule only: the hits showcase story packs two a
+  scene on purpose. `vfx-off-beat` is not built: the resolved
+  story no longer knows which `at` was a beat, and the gate has no beat
+  grid. Finish could check it once the music grid is known.
 
 ## 5. Phases
 

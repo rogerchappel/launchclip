@@ -11,9 +11,13 @@
 //          numeric scene boundaries to the nearest downbeat and numeric hits
 //          to the nearest beat within a tolerance (0.25 s), re-resolving each
 //          change and falling back when it breaks a module or the story.
+//          A cut over footage with a known motion curve takes the calmest
+//          moment in the tolerance instead, weighed against the beat
+//          (kit/core/calm-cut.mjs).
 //
 // Word-anchored times are never moved off their word, and beat anchors are on
 // the grid already. Every decision is recorded for qa/beat-sync.json.
+import { calmCut } from "@launchclip/core/calm-cut.mjs";
 import { resolveModule } from "@launchclip/core/modules.mjs";
 import { parseAnchor, resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { transformGrid } from "./beats.js";
@@ -134,10 +138,11 @@ export function chooseAlignment(musicGrid, moments, { duration, musicLength, all
  * Snap a story's numeric scene boundaries to downbeats (scene cuts) and its
  * numeric hits to beats, within `tolerance` seconds.
  * story: the unresolved finish copy; grid: story-time {beats, downbeats};
- * context: {words, beats} for re-resolving; mode: "auto"|"cuts"|"hits".
+ * context: {words, beats} for re-resolving; mode: "auto"|"cuts"|"hits";
+ * motion: a story-time motion curve {fps, values} (null where unknown).
  * → {story (new copy), changes, reverted, skipped}
  */
-export function snapStory(story, grid, { tolerance = SNAP_TOLERANCE, mode = "auto", words = [], beats = null, checkModule = defaultModuleCheck } = {}) {
+export function snapStory(story, grid, { tolerance = SNAP_TOLERANCE, mode = "auto", words = [], beats = null, checkModule = defaultModuleCheck, motion = null } = {}) {
   let working = clone(story);
   const changes = [];
   const reverted = [];
@@ -187,14 +192,18 @@ export function snapStory(story, grid, { tolerance = SNAP_TOLERANCE, mode = "aut
       const kindEnd = before ? anchorKind(before.end) : "seconds";
       if (kindStart === "word" || kindEnd === "word") { skipped.push({ kind: "cut", scene: scene.id, at, reason: "word-anchored: stays on its word" }); continue; }
       if (kindStart !== "seconds" || kindEnd !== "seconds") { skipped.push({ kind: "cut", scene: scene.id, at, reason: "beat-anchored: already on the grid" }); continue; }
+      const transition = Number(original?.in?.dur ?? 0);
+      // Over footage with a known motion curve, the cut takes the calmest
+      // moment within the tolerance, weighed against the beat (§4.4).
+      const calm = motion ? calmCut(motion, { target: at, step: scene.end - scene.start, span: tolerance, min: previous.start + MIN_SCENE, max: scene.end - Math.max(MIN_SCENE, transition + 0.1), beats: grid.beats }) : null;
       const down = nearest(grid.downbeats, at);
       const beatTarget = nearest(grid.beats, at);
-      const target = down.distance <= tolerance ? { time: down.value, grid: "downbeat" } : beatTarget.distance <= tolerance ? { time: beatTarget.value, grid: "beat" } : null;
+      const target = calm ? { time: calm.at, grid: calm.tag === "beat" && nearest(grid.downbeats, calm.at).distance < 0.002 ? "downbeat" : calm.tag }
+        : down.distance <= tolerance ? { time: down.value, grid: "downbeat" } : beatTarget.distance <= tolerance ? { time: beatTarget.value, grid: "beat" } : null;
       if (!target) { skipped.push({ kind: "cut", scene: scene.id, at, reason: `no beat within ${tolerance}s` }); continue; }
       if (Math.abs(target.time - at) < 0.002) { skipped.push({ kind: "cut", scene: scene.id, at, reason: `already on a ${target.grid}` }); continue; }
       const to = round3(target.time);
       // Both scenes keep a sane length (and room for the incoming transition).
-      const transition = Number(original?.in?.dur ?? 0);
       if (to - previous.start < MIN_SCENE || scene.end - to < Math.max(MIN_SCENE, transition + 0.1)) {
         reverted.push({ kind: "cut", scene: scene.id, from: at, to, grid: target.grid, reason: "a scene would become too short" });
         continue;

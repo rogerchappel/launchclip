@@ -35,6 +35,8 @@ import { clipLedLines } from './clip-led.mjs';
 import { explainerDirectionLines, explainerStoryboardLines } from './explainer.mjs';
 import { DEFAULT_BRAND } from './default-brand.mjs';
 import { CYCLE_KINDS, DARK_PLATE_KINDS, PLATE_KINDS, PLATE_NOTES } from './plates.mjs';
+import { VFX_EFFECTS, VFX_MASKED, VFX_MODULES, VFX_TRANSITIONS, VFX_WORDS } from './vfx/catalog.mjs';
+import { VFX_CUE_RULES } from './vfx/plan.mjs';
 
 export const PLANNER_TIERS = Object.freeze(['structured', 'guided', 'bespoke']);
 
@@ -545,6 +547,7 @@ export function satisfyingLines() {
     'Make the words physical. When the line counts things ("10 times a day"), drop-grid drops one card per word: set params.times to the word times so each landing hits its word. When a number is still growing, live-counter or live-bars keep it ticking for the whole scene instead of landing and stopping.',
     'Weight beats fades: drops fall, squash and settle with a contact shadow and a puff of dust; milestones and deltas stamp in. One tactile hero per beat; keep a still beat after a big landing so it reads.',
     'A progress frame holds the video together: frame.counter {label? ≤ 24 ("DAY", "LIABILITY"), format? {prefix?, suffix?, pad?}, steps: [{scene | start, value | text}]} climbs in a top corner on the words that move it (day 1 → day 14, $0 → $261,118), and frame.progress {style: "scrubber"} carries a knob along the bottom. Values come from the script only.',
+    'A documentary or lab-notebook explainer can number its scenes as figures: frame.figure: true (or {label: "PLATE"}) puts "FIG. 03" top left and "03 / 12" top right on every main scene; leave it off otherwise.',
     'Caption presets for this look: tag-chips (the sentence builds word by word; key phrases land in ink chips) or serif-accent (one key word per line turns serif italic in the brand colour). Mark the key phrases in captions.emphasis.'
   ];
 }
@@ -652,13 +655,41 @@ function worldLines() {
  * The script was planned first (kit/core/script-formats.mjs): its beats are
  * the video's structure, so the storyboard follows them.
  */
+// The VFX layer is opt-in (docs/VFX_LAYER_RFC.md §5 phase 9): the planner
+// sees its catalogue only when the direction or the style pack asks for effects.
+const VFX_WORDS_IN_DIRECTION = ['\\bvfx\\b', '\\beffects?\\b', '\\bsparks?\\b', '\\bexplosions?\\b', '\\bgame(y| feel)?\\b', '\\barcade\\b', '\\bretro\\b', '\\bpixel', '\\bconfetti\\b', '\\bfireworks?\\b'];
+
+/** Whether a story may carry VFX cues: the art direction asks for effects, or the style pack sets vfx. */
+export function vfxWanted({ artDirection = '', style = null } = {}) {
+  return Boolean(style?.vfx) || VFX_WORDS_IN_DIRECTION.some((source) => new RegExp(source, 'i').test(String(artDirection ?? '')));
+}
+
+/** The VFX catalogue and cue rules for the planner (kit/core/vfx/catalog.mjs, plan.mjs vfxCueFindings). */
+export function vfxLines() {
+  const words = (name) => (VFX_WORDS[name] ? ` (${Object.keys(VFX_WORDS[name].fields).join(', ')})` : '');
+  const loop = (name) => (VFX_MODULES[name].meta.loop ? ', loops to the scene end' : '');
+  const masked = (name) => (VFX_MASKED.includes(name) ? ', on a mask' : '');
+  return [
+    'Effects are opt-in: add scene.vfx only where the brief or art direction asks for game feel, sparks or celebration, and only on the moments that earn one. Most scenes have none.',
+    'scene.vfx: [{effect, at, align?: "peak" (default) | "start", x?, y? (fractions of the frame, default the centre), color? (a brand colour name or #rrggbb), seed?, flip?, angle? (degrees), light? (0–2), sfx?: "auto" (default) | "none" | a sound family, text? / label? / title? (a hit with words, 1–24 characters)}].',
+    'Land each effect on a beat: at is "beat:<n>" (on the music) or "word:<text>" (the spoken word it belongs to). With align "peak" the effect starts early so its brightest frame lands there, and its paired sound plays on that frame by itself: do not add a hit or a cue for it.',
+    `Rules: at most ${VFX_CUE_RULES.crowd} effects peak within any ${VFX_CUE_RULES.window} s and keep an effect's centre out of the caption band (y above it), or the motion check warns; one hit with words a scene (${Object.keys(VFX_WORDS).join(', ')}). Put the effect on the thing it hits (the number, the card landing, the floor under a slam), not over body text.`,
+    `Cover transitions (scene.in.type, track-0 scenes, once or twice a video): ${Object.entries(VFX_TRANSITIONS).map(([type, info]) => `${type} (${info.sfx}${type === 'pixel-dissolve' ? ', retro only' : ''})`).join(', ')}.`,
+    `Effects marked "on a mask" (${VFX_MASKED.join(', ')}) draw round the scene's card (mask: "module") or a cast member of a cast-scene (mask: "cast:<id>") and take no x or y.`,
+    'Effects (effect: when, sound):',
+    ...Object.entries(VFX_EFFECTS).map(([name, info]) => `${name}: ${info.use}${words(name)}${masked(name)}${loop(name)}; ${info.sfx}`)
+  ];
+}
+
 export function scriptBeatLines() {
   return [
     'The script was written against a beat skeleton (hook, problem, proof, CTA and so on). When the brief lists "Script beats", follow them in order: each beat gets its own scene or group of scenes, and no scene spans two beats.',
     'The hook beat\'s first scene shows the hook\'s subject from 0 s, with on-screen text that paraphrases the spoken hook in about 6–8 words and keeps its stakes (the myth, the mistake, the number with its unit, the bold claim): never a bare topic such as "Deck care?" or "Solar panels", which gives no reason to stay. In a video of 90 s or less that scene is an image (a photo, object, number with its unit, chart, character or product scene), never a title card (hook-title, motion-title, kinetic-words, section-card, masthead, glass-word, emphasis-caption); a title card may follow it.',
     'A beat with the share role carries the line a viewer would send or comment on: give it a scene of its own that shows it, not a recap card.',
     'Turns in the script ("but", "so", a reveal) are where a new scene, a transition or a hit lands; a payoff beat gets the strongest visual of the video.',
-    'The CTA beat gets the end card, worded exactly as the narration speaks it; no other scene shows a call to action.'
+    'The CTA beat gets the end card, worded exactly as the narration speaks it; no other scene shows a call to action.',
+    'The open-loop beat is a teaser, not a list item: its card is labelled as one (kicker "Coming up", or "Stay for number three"), never with the item\'s own label ("Material three", "Option 3"), and the item gets its own card in its turn. A later item shown before the earlier ones without that label fails the plan (order:).',
+    'Keep the frame full to the last second: the payoff and the CTA keep footage on screen (a clip, a media layout, or a card on a footage backdrop) or full-bleed type that fills most of the frame; never close on small cards or chips over the flat brand surface, and never run footage in one half over an empty panel for long. A stretch that is mostly flat surface fails the plan (density:).'
   ];
 }
 
@@ -1054,6 +1085,7 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     ...(explainer?.cast ? section('Characters carry the explainer', explainerStoryboardLines(explainer).map((line) => `- ${line}`)) : []),
     ...section('Script beats', scriptBeatLines().map((line) => `- ${line}`)),
     ...section('Motion grammar and camera', motionLines({ lane, artDirection, style }).map((line) => `- ${line}`)),
+    ...(vfxWanted({ artDirection, style }) ? section('Effects (VFX layer)', vfxLines().map((line) => `- ${line}`)) : []),
     ...section('Direction guardrails (finish gates fail these)', guardrailLines().map((line) => `- ${line}`)),
     ...section(`Tier rules (${tier})`, tierRules(tier).map((line) => `- ${line}`)),
     ...section('Time anchors', anchorLines().map((line) => `- ${line}`)),
@@ -1171,6 +1203,7 @@ export function storyboardModulesReference() {
     ...section('3D data objects', objectLines().map((line) => `- ${line}`)),
     ...section('Satisfying motion (weight, piles and live numbers)', satisfyingLines().map((line) => `- ${line}`)),
     ...section('Interface scenes (ui-scene)', interfaceLines().map((line) => `- ${line}`)),
+    ...section('Effects (VFX layer, opt-in)', vfxLines().map((line) => `- ${line}`)),
     ...section('Footage layouts (sections)', layoutLines()),
     ...section('Phrase → module', ['| The script… | Module |', '| --- | --- |', ...phraseLines()]),
     ...section('Modules', moduleLines('guided')),

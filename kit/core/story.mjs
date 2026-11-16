@@ -1,8 +1,11 @@
 // story.json v1: validate, resolve time anchors, derive boundaries.
 //
-// Plain ESM with no imports, so it can be bundled into Remotion and copied
-// into skills unchanged. The canonical copy lives in kit/core/; see
-// docs/KIT_CONTRACTS.md ("story.json v1") for the binding contract.
+// Plain ESM that imports only import-free siblings (palette.mjs, oklch.mjs),
+// so it can be bundled into Remotion and copied into skills unchanged. The
+// canonical copy lives in kit/core/; see docs/KIT_CONTRACTS.md
+// ("story.json v1") for the binding contract.
+
+import { BRAND_PALETTE_MODES, workingBrand } from "./palette.mjs";
 
 export const STORY_SCHEMA = "launchclip.story.v1";
 // Non-additive changes made inside STORY_SCHEMA so far: a story's
@@ -118,7 +121,8 @@ export const STORY_BACKGROUND_PARAMS = Object.freeze({
   texture: { amount: BG_UNIT, scale: BG_SCALE },
   weather: { intensity: BG_UNIT, speed: BG_SPEED },
   rings: { density: BG_UNIT, intensity: BG_UNIT, weight: [0.5, 3], bpm: [40, 200], speed: BG_SPEED },
-  bokeh: { density: BG_UNIT, intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED }
+  bokeh: { density: BG_UNIT, intensity: BG_UNIT, scale: BG_SCALE, speed: BG_SPEED },
+  "flow-field": { seed: [0, 99999], lines: [80, 400], scale: BG_SCALE, octaves: [1, 4], intensity: BG_UNIT, speed: BG_SPEED }
 });
 export const STORY_BACKGROUND_KINDS = Object.keys(STORY_BACKGROUND_PARAMS);
 export const STORY_BACKGROUND_COLORS = ["primary", "accent", "paper"];
@@ -600,6 +604,7 @@ export function validateStory(story, { modules, moduleParams } = {}) {
   else {
     if (!isObject(story.brand.colors) || !Object.keys(story.brand.colors).length) err("brand.colors must be an object of named six-digit hex colors");
     else for (const [name, value] of Object.entries(story.brand.colors)) if (typeof value !== "string" || !HEX.test(value)) err(`brand.colors.${name} must be a six-digit hex color like #1a2b3c`);
+    if (story.brand.palette !== undefined && !BRAND_PALETTE_MODES.includes(story.brand.palette)) err(`brand.palette must be one of ${BRAND_PALETTE_MODES.join(", ")}`);
     if (!isObject(story.brand.fonts) || !Object.keys(story.brand.fonts).length) err("brand.fonts must be an object of named font families");
     else for (const [name, value] of Object.entries(story.brand.fonts)) if (!nonEmpty(value)) err(`brand.fonts.${name} must be a non-empty font family name`);
   }
@@ -1235,6 +1240,8 @@ export function resolveStory(story, { words = [], beats = null, edl = null, subj
     .map((scene, index) => ({ scene, index }))
     .sort((a, b) => (Number(a.scene?.start) - Number(b.scene?.start)) || ((a.scene?.track ?? 0) - (b.scene?.track ?? 0)) || a.index - b.index)
     .map((entry) => entry.scene);
+  // Brand colours → the working palette (kit/core/palette.mjs): a pale ground moves to paper over a deep one.
+  if (isObject(copy.brand)) copy.brand = workingBrand(copy.brand);
   const format = storyFormat(copy);
   copy.resolved = { duration: format.duration, fps: format.fps, frames: Math.round(format.duration * format.fps) };
   // The whole-video head track (the loader's readStoryTrack): {source, fps,
@@ -1617,7 +1624,7 @@ function validateKicks(kicks, { err, lane, anchorField }) {
 // brandFrameErrors (story.mjs has no imports); here only what a story adds:
 // it is an object or false, and its section labels and source notes point
 // at real scenes.
-const FRAME_KEYS = ["enabled", "logo", "logo_mark", "kicker", "sections", "progress", "show", "labels", "color", "sources", "counter"];
+const FRAME_KEYS = ["enabled", "logo", "logo_mark", "kicker", "sections", "progress", "show", "labels", "color", "sources", "counter", "figure"];
 const FRAME_COUNTER_KEYS = ["label", "steps", "format", "position", "color"];
 const FRAME_COUNTER_FORMAT_KEYS = ["prefix", "suffix", "pad", "decimals", "separator"];
 // Modules that show study, survey or benchmark data; each needs a source on screen.
@@ -1644,6 +1651,9 @@ function validateFrame(frame, { err, warn, scenes }) {
   }
   if (isObject(frame.progress) && frame.progress.style !== undefined && !["line", "scrubber"].includes(frame.progress.style)) err('frame.progress.style must be "line" or "scrubber" (a knob that travels with the fill)');
   if (frame.counter !== undefined) validateFrameCounter(frame.counter, { err, warn, ids });
+  // figure: a "FIG. 03" label top left and a "03 / 12" count top right per track-0 scene (kit/core/brand-frame.mjs).
+  if (frame.figure !== undefined && frame.figure !== false && frame.figure !== true && !(isObject(frame.figure) && Object.keys(frame.figure).every((key) => key === "label") && (frame.figure.label === undefined || (nonEmpty(frame.figure.label) && frame.figure.label.length <= 12)))) err('frame.figure must be true, false or {label?} (the prefix, 1-12 characters, default "FIG.")');
+  if (frame.figure && (frame.labels !== undefined || frame.counter !== undefined)) warn("frame.figure draws the section labels and the counter itself; frame.labels and frame.counter are ignored");
   if (frame.labels === undefined) return;
   if (!Array.isArray(frame.labels)) { err("frame.labels must be a list of {start | scene, label}"); return; }
   frame.labels.forEach((entry, i) => {

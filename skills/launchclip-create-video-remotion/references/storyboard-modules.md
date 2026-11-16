@@ -165,6 +165,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - Make the words physical. When the line counts things ("10 times a day"), drop-grid drops one card per word: set params.times to the word times so each landing hits its word. When a number is still growing, live-counter or live-bars keep it ticking for the whole scene instead of landing and stopping.
 - Weight beats fades: drops fall, squash and settle with a contact shadow and a puff of dust; milestones and deltas stamp in. One tactile hero per beat; keep a still beat after a big landing so it reads.
 - A progress frame holds the video together: frame.counter {label? ≤ 24 ("DAY", "LIABILITY"), format? {prefix?, suffix?, pad?}, steps: [{scene | start, value | text}]} climbs in a top corner on the words that move it (day 1 → day 14, $0 → $261,118), and frame.progress {style: "scrubber"} carries a knob along the bottom. Values come from the script only.
+- A documentary or lab-notebook explainer can number its scenes as figures: frame.figure: true (or {label: "PLATE"}) puts "FIG. 03" top left and "03 / 12" top right on every main scene; leave it off otherwise.
 - Caption presets for this look: tag-chips (the sentence builds word by word; key phrases land in ink chips) or serif-accent (one key word per line turns serif italic in the brand colour). Mark the key phrases in captions.emphasis.
 
 ## Interface scenes (ui-scene)
@@ -193,6 +194,46 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - Sound tells the story too. signal-ui scores the video itself from what your scenes do: a playhead or scan-plane hunts like a typewriter carriage, a meter clicks round like an analog dial, a frame-ruler steps and slows, an unlockAt plays a reward that climbs each time, and a scene with energy 3 or "build" opens with a whoosh crossing the stereo field over a deep bass drum. So give interfaces moving parts the sound can follow. Then mark what the viewer should feel with hits carrying a moment, written from the script and the visuals: hits [{at: "word:cheap", event: "cheap", moment: "letdown"}]. Moments: letdown (a let-down, the floor drops), promise (three rising notes on what is coming), reveal (something unveiled), impact (the biggest precise hit, out of near silence), crystallise (something forms from nothing), wonder (scale: the room opens), miss (a search that finds nothing), resolve (warm ending). Choose a few that carry the arc, with quiet between them, and keep impact and wonder rare: if everything is big, nothing is.
 - Paper diorama (the paper-collage style): the scene is real 3D paper, not panels on a flat stage. params.stage.rig {keys [{at, rx, ry, rz, scale, x, y, ease: "back"}], explode {at, dur}, steps: 15} moves one camera over the whole scene: open flat on the table (rx 68), swing up with ease "back", orbit slowly (ry −16 to 15), then tip over (rx 57, rz −30) as the layers spread. Give each element a lift (px off the base, 0 to 300); screen: true keeps type flat on the screen and out of the 3D. Kinds: paper-sheet {title, meta, flaps, flapAt} (the page, with hatched side panels that fold up like a pop-up book); cutout {view [w, h], parts [{shape rect|circle|ellipse|path|text, fill paper|ink|mid|accent|alert|none|#hex, shade {kind dots|lines, from, to, dir, step}, at}]} (any object, drawn from shapes with a die-cut edge: shade the side away from the light and give a part an at to pop it on its word; a shaded path needs a box [x, y, w, h]); limb {path [[x, y]…], width, growAt, fillAt} (grows from its first point; lift it below a cut-out so it comes out from behind, above to wrap across; it stays a white outline until fillAt); paper-fold {panels [{title, value, bar}], openAt, closeAt} (opens like a folded map); torn-strip {text with *accent*, size, tone paper|ink}; tape {tone, rotate}; callout-pin {no, text, target, point} (a leader line to an element, right through the 3D). Draw objects with solid silhouettes and few, confident shapes; avoid drawn people, which read as clip art.
 - The signal-ui style fits this look: dark panels, one accent, a dark ground with a faint dot grid only under the key light, word-chip captions low-centre, the steady feel (a steadicam) and heavy motion blur (motion.blur {samples: 6, shutter: 1.5}: sub-frames blended across one and a half frames, so fast moves smear and settled panels stay sharp; captions are kept sharp, never two words at once), gated against the ui-steady-reel profile. A story's motion fills from the pack field by field: an object merges into the pack's (motion: {blur: false} keeps its grammar and feel; a grammar {defaultTransition: {cuts: {type: "light-sweep"}}} keeps the pack's dur and direction), a string, number or array replaces it (grammar: "smooth" replaces the whole grammar). The motion gate measures whole-frame motion (element entrances barely move it). When it asks for more change energy or harder bursts, keep content alive (a host idling and reacting, counters, live waveforms and meters), lift the steady camera a little (motion.feel: {preset: "steady", ambient: {scale: [1.025, 1.07], shift: 0.016, period: [2.5, 5]}}) and use whip-pans and push-blurs between scenes; never shorten the camera's period to chase a measure, since a camera that moves about every second pumps, and add a few camera.kicks on the words that earn one (a kick needs 0.25 s from the start and 0.47 s before the end); when it asks for more flow velocity, lengthen whip-pans toward 0.4 s (transition dur) and add sideways moves.
+
+## Effects (VFX layer, opt-in)
+
+- Effects are opt-in: add scene.vfx only where the brief or art direction asks for game feel, sparks or celebration, and only on the moments that earn one. Most scenes have none.
+- scene.vfx: [{effect, at, align?: "peak" (default) | "start", x?, y? (fractions of the frame, default the centre), color? (a brand colour name or #rrggbb), seed?, flip?, angle? (degrees), light? (0–2), sfx?: "auto" (default) | "none" | a sound family, text? / label? / title? (a hit with words, 1–24 characters)}].
+- Land each effect on a beat: at is "beat:<n>" (on the music) or "word:<text>" (the spoken word it belongs to). With align "peak" the effect starts early so its brightest frame lands there, and its paired sound plays on that frame by itself: do not add a hit or a cue for it.
+- Rules: at most 3 effects peak within any 1 s and keep an effect's centre out of the caption band (y above it), or the motion check warns; one hit with words a scene (combo-counter, crit-number, level-up, achievement). Put the effect on the thing it hits (the number, the card landing, the floor under a slam), not over body text.
+- Cover transitions (scene.in.type, track-0 scenes, once or twice a video): burn-away (whoosh), slash-wipe (swipe), shatter (snap), crt-off (tape-stop), glitch-wipe (glitch), blinds (slide), diamond-wipe (swipe), star-iris (sparkle), pixel-dissolve (glitch, retro only).
+- Effects marked "on a mask" (electrified, glitch, scanner, halo, hit-flash, confused, sleep, stunned, charmed, rage, haste, slowed, frozen, burning) draw round the scene's card (mask: "module") or a cast member of a cast-scene (mask: "cast:<id>") and take no x or y.
+- Effects (effect: when, sound):
+- hit-spark: the everyday hit: a number or word landing; impact
+- crit-hit: the biggest hit of a scene: a record, a win; impact
+- impact-frame: a freeze-frame flash on a hard turn; impact
+- ground-slam: something heavy landing at the foot of the frame; thud
+- small-explosion: a thing breaking or a launch going off, smoke after; impact
+- smoke-bomb: something vanishing in smoke; thud
+- firework-burst: a celebration in the air; sparkle
+- poof: a thing appearing or disappearing; pop
+- sunburst: a reveal: light opening behind the hero, loops to the scene end; sparkle
+- collect-burst: a tick, a gain, an item collected; pop
+- combo-counter: a streak counting up (text, label); tally
+- crit-number: a headline number slammed in (text, label); impact
+- level-up: a milestone (text); success
+- achievement: an unlock toast (title, text); chime
+- confetti: party poppers on a win or the ending; pop
+- firework-rocket: a launch: a rocket climbing and bursting; sparkle
+- electrified: a card or character jolted by current: a shock, a live wire, on a mask, loops to the scene end; glitch
+- glitch: a card or character breaking up: a bug, a bad signal, on a mask, loops to the scene end; glitch
+- scanner: a card or character being scanned and checked, on a mask, loops to the scene end; shimmer
+- halo: a halo over a character: the good choice, the hero, on a mask, loops to the scene end; chime
+- hit-flash: a card or character taking a hit: a loss, a blow, on a mask; impact
+- confused: a character puzzled, on a mask, loops to the scene end; boing
+- sleep: a character asleep: boredom, idle, waiting, on a mask, loops to the scene end; pop
+- stunned: a character seeing stars after a shock, on a mask, loops to the scene end; boing
+- charmed: a character smitten: the one they love, on a mask, loops to the scene end; sparkle
+- rage: a character seething, on a mask, loops to the scene end; thud
+- haste: a card or character sped up, on a mask, loops to the scene end; whoosh
+- slowed: a card or character dragging: slow, stuck, on a mask, loops to the scene end; tape-stop
+- frozen: a card or character frozen: stalled, on ice, on a mask, loops to the scene end; shimmer
+- burning: a card or character on fire: burning money, burnout, on a mask, loops to the scene end; riser
 
 ## Footage layouts (sections)
 
@@ -1683,7 +1724,7 @@ events: point
 variants: curve (default), straight, sketch
 
 ### motion-title (hides captions)
-A title that animates in with one of the 24 named text effects (its variants: per character, per word, per line or the whole element), with an optional kicker, sub-line, highlighted words (with a hand-drawn mark over them) and brand plate. Hides captions.
+A title that animates in with one of the 24 named text effects or a glyph scramble (its variants: per character, per word, per line or the whole element), with an optional kicker, sub-line, highlighted words (with a hand-drawn mark over them) and brand plate. Hides captions.
 params:
 - text: string ≤ 90 (≤ 16 words), required
 - kicker: string ≤ 32 above (optional)
@@ -1694,11 +1735,12 @@ params:
 - plate: boolean: set the title on a brand-colour plate
 - tone: primary | accent | paper | #rrggbb (highlight colour)
 - speed: stagger speed 0.5–2 (default 1)
+- charset: scramble only: the glyphs a letter cycles through before it locks, latin | hex | binary (default latin)
 - at: build start: seconds from scene start (optional; else a matching hit, else a default)
-- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first); one of the effects: soft-blur-in, per-character-rise, typewriter, bottom-up-letters, top-down-letters, stagger-from-center, stagger-from-edges, per-word-crossfade, spring-scale-in, shared-axis-y, blur-out-up, kinetic-center-build, short-slide-right, short-slide-down, depth-parallax-words, mask-reveal-up, line-by-line-slide, micro-scale-fade, shimmer-sweep, fade-through, shared-axis-z, scale-down-fade, focus-blur-resolve, shared-axis-x
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first); one of the effects: soft-blur-in, per-character-rise, typewriter, bottom-up-letters, top-down-letters, stagger-from-center, stagger-from-edges, scramble, per-word-crossfade, spring-scale-in, shared-axis-y, blur-out-up, kinetic-center-build, short-slide-right, short-slide-down, depth-parallax-words, mask-reveal-up, line-by-line-slide, micro-scale-fade, shimmer-sweep, fade-through, shared-axis-z, scale-down-fade, focus-blur-resolve, shared-axis-x
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: title
-variants: per-character-rise (default), soft-blur-in, typewriter, bottom-up-letters, top-down-letters, stagger-from-center, stagger-from-edges, per-word-crossfade, spring-scale-in, shared-axis-y, blur-out-up, kinetic-center-build, short-slide-right, short-slide-down, depth-parallax-words, mask-reveal-up, line-by-line-slide, micro-scale-fade, shimmer-sweep, fade-through, shared-axis-z, scale-down-fade, focus-blur-resolve, shared-axis-x
+variants: per-character-rise (default), soft-blur-in, typewriter, bottom-up-letters, top-down-letters, stagger-from-center, stagger-from-edges, scramble, per-word-crossfade, spring-scale-in, shared-axis-y, blur-out-up, kinetic-center-build, short-slide-right, short-slide-down, depth-parallax-words, mask-reveal-up, line-by-line-slide, micro-scale-fade, shimmer-sweep, fade-through, shared-axis-z, scale-down-fade, focus-blur-resolve, shared-axis-x
 
 ### icon-grid (keeps captions)
 A grid of 2–12 icons from the icon set (1,935: LaunchClip's own and Lucide's) that pop in on a stagger, with optional labels: stroke icons, duotone icons, or icons on tinted tiles.
