@@ -678,6 +678,10 @@
   sides at full level, 3 dB above what Remotion renders, so the HyperFrames
   compiler now declares a mono mix, voice or base recording at 0.7071 of its
   volume and the two renders sit at the same loudness again.
+  Known with this release: HyperFrames' audio is less exact than before in
+  its first 21 ms and, on FFmpeg 8.0.1, for about 50 ms in one test story;
+  and the older HyperFrames lane (`src/hyperframes_assembler.js`) plays a
+  mono sound 3 dB louder. Remotion renders are not affected.
 - `onnxruntime-node` moves to 1.31.1 (from 1.27.0), with compatible updates
   to the packages under the other dependencies. `npm audit --omit=dev` goes
   from fourteen findings to three, all one advisory: `sharp`, through

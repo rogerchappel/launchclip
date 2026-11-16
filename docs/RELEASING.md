@@ -53,4 +53,8 @@ You can run it locally with `node scripts/release-check.mjs pack`.
 
 Checked on 2026-11-16 for 0.3.0 with `npm audit --omit=dev`, on `hyperframes` 0.7.111 and `onnxruntime-node` 1.31.1.
 
-Run the media tests (`npm run test:media`) whenever these dependencies move. The move to `hyperframes` 0.7.111 needed two changes that only those tests showed: mono sound is declared 3 dB down so it matches Remotion's level, and the `minimal` story's audio residual limit is -29 dB (`eval/renderer-thresholds.json`).
+Run the media tests (`npm run test:media`) whenever these dependencies move. The move to `hyperframes` 0.7.111 showed three things only those tests and a measurement on Linux found:
+
+- It copies a mono sound to both sides at full level, so the HyperFrames compiler declares a mono source 3 dB down to match Remotion.
+- Its audio is less exact in the first 21 ms, and on FFmpeg 8.0.1 (Linux) it also differs from the source for about 50 ms at 1.2 s of `examples/story/minimal`. HyperFrames 0.7.58 on the same machine does neither, and Remotion's audio is the same on both systems. The cause inside HyperFrames is not known. The `minimal` story's audio residual limit is -26 dB for it (`eval/renderer-thresholds.json`); bring it back to -30 when a later HyperFrames no longer needs it.
+- The older HyperFrames lane (`src/hyperframes_assembler.js`) is not compensated, so a mono sound there is 3 dB louder than on 0.7.58.
