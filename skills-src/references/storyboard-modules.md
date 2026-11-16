@@ -165,6 +165,7 @@ Check every edit with `launchclip story validate storyboard.json` and `launchcli
 - Make the words physical. When the line counts things ("10 times a day"), drop-grid drops one card per word: set params.times to the word times so each landing hits its word. When a number is still growing, live-counter or live-bars keep it ticking for the whole scene instead of landing and stopping.
 - Weight beats fades: drops fall, squash and settle with a contact shadow and a puff of dust; milestones and deltas stamp in. One tactile hero per beat; keep a still beat after a big landing so it reads.
 - A progress frame holds the video together: frame.counter {label? ≤ 24 ("DAY", "LIABILITY"), format? {prefix?, suffix?, pad?}, steps: [{scene | start, value | text}]} climbs in a top corner on the words that move it (day 1 → day 14, $0 → $261,118), and frame.progress {style: "scrubber"} carries a knob along the bottom. Values come from the script only.
+- A documentary or lab-notebook explainer can number its scenes as figures: frame.figure: true (or {label: "PLATE"}) puts "FIG. 03" top left and "03 / 12" top right on every main scene; leave it off otherwise.
 - Caption presets for this look: tag-chips (the sentence builds word by word; key phrases land in ink chips) or serif-accent (one key word per line turns serif italic in the brand colour). Mark the key phrases in captions.emphasis.
 
 ## Interface scenes (ui-scene)
@@ -1723,7 +1724,7 @@ events: point
 variants: curve (default), straight, sketch
 
 ### motion-title (hides captions)
-A title that animates in with one of the 24 named text effects (its variants: per character, per word, per line or the whole element), with an optional kicker, sub-line, highlighted words (with a hand-drawn mark over them) and brand plate. Hides captions.
+A title that animates in with one of the 24 named text effects or a glyph scramble (its variants: per character, per word, per line or the whole element), with an optional kicker, sub-line, highlighted words (with a hand-drawn mark over them) and brand plate. Hides captions.
 params:
 - text: string ≤ 90 (≤ 16 words), required
 - kicker: string ≤ 32 above (optional)
@@ -1734,11 +1735,12 @@ params:
 - plate: boolean: set the title on a brand-colour plate
 - tone: primary | accent | paper | #rrggbb (highlight colour)
 - speed: stagger speed 0.5–2 (default 1)
+- charset: scramble only: the glyphs a letter cycles through before it locks, latin | hex | binary (default latin)
 - at: build start: seconds from scene start (optional; else a matching hit, else a default)
-- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first); one of the effects: soft-blur-in, per-character-rise, typewriter, bottom-up-letters, top-down-letters, stagger-from-center, stagger-from-edges, per-word-crossfade, spring-scale-in, shared-axis-y, blur-out-up, kinetic-center-build, short-slide-right, short-slide-down, depth-parallax-words, mask-reveal-up, line-by-line-slide, micro-scale-fade, shimmer-sweep, fade-through, shared-axis-z, scale-down-fade, focus-blur-resolve, shared-axis-x
+- variant: the module's designed look, one of its VARIANTS (optional; default: the style's variants[module], else the first); one of the effects: soft-blur-in, per-character-rise, typewriter, bottom-up-letters, top-down-letters, stagger-from-center, stagger-from-edges, scramble, per-word-crossfade, spring-scale-in, shared-axis-y, blur-out-up, kinetic-center-build, short-slide-right, short-slide-down, depth-parallax-words, mask-reveal-up, line-by-line-slide, micro-scale-fade, shimmer-sweep, fade-through, shared-axis-z, scale-down-fade, focus-blur-resolve, shared-axis-x
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: title
-variants: per-character-rise (default), soft-blur-in, typewriter, bottom-up-letters, top-down-letters, stagger-from-center, stagger-from-edges, per-word-crossfade, spring-scale-in, shared-axis-y, blur-out-up, kinetic-center-build, short-slide-right, short-slide-down, depth-parallax-words, mask-reveal-up, line-by-line-slide, micro-scale-fade, shimmer-sweep, fade-through, shared-axis-z, scale-down-fade, focus-blur-resolve, shared-axis-x
+variants: per-character-rise (default), soft-blur-in, typewriter, bottom-up-letters, top-down-letters, stagger-from-center, stagger-from-edges, scramble, per-word-crossfade, spring-scale-in, shared-axis-y, blur-out-up, kinetic-center-build, short-slide-right, short-slide-down, depth-parallax-words, mask-reveal-up, line-by-line-slide, micro-scale-fade, shimmer-sweep, fade-through, shared-axis-z, scale-down-fade, focus-blur-resolve, shared-axis-x
 
 ### icon-grid (keeps captions)
 A grid of 2–12 icons from the icon set (1,935: LaunchClip's own and Lucide's) that pop in on a stagger, with optional labels: stroke icons, duotone icons, or icons on tinted tiles.

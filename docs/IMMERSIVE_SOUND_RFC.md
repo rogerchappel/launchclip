@@ -369,6 +369,36 @@ licence. MMAudio's weights were released for non-commercial use. LaunchClip
 never ships or downloads either model; the user brings them, and `finish`
 prints the licence each generated sound came under.
 
+**Shipped (phase 7).** The adapter is `launchclip sfx seed --provider comfy`
+(and `sfx reroll`), on a base shared with the plate and draft provider
+(`src/comfy/`): `client.js` (loopback only unless `--comfy-allow-remote`;
+health from `/system_stats` and `/object_info`, which must list every node
+class and model file the template needs; `/prompt`, `/history`, `/view`,
+`/interrupt`; a job-time and download cap), `templates.js` (templates in
+`src/comfy/templates/`, inputs bound by name and type, a licence allowlist)
+and `generate.js` (the cache keyed by the bound workflow, so by prompt, model
+files, seed and every other value, and a JSONL ledger line per generation).
+Setup is in `docs/guide/comfyui.md`. Differences from the plan above:
+
+- **Seed, not a render flag.** Sounds are generated into the SFX library once,
+  like ElevenLabs takes, rather than per render with `--sfx comfy`; every
+  render then uses the library.
+- **The template lives with the others**, `src/comfy/templates/sfx-stable-audio.json`,
+  not under `kit/core/sound/`.
+- **The licence is an opt-in.** Stability AI Community is off the open-licence
+  allowlist, so `--allow-model-licence stability-ai-community` is required;
+  without it nothing is sent. The licence is stored per family and per take
+  in `library.json`, and `finish` adds it to `AUDIO-MANIFEST.json`'s licence
+  line and its notes.
+- **The ledger is the library's** (`<library>/generation-log.jsonl`), since
+  SFX belong to the library, not a project.
+- **Families with no classifier row** (riser, tally, tape-stop, glitch,
+  error-buzz, pen-scribble) keep every take that survives processing.
+- **Open:** the MMAudio video-to-audio template (a custom node, so not
+  shipped); progress over `/ws` (we poll `/history`); pinning model files by
+  hash (the API does not expose one); a real run (not yet made: no ComfyUI
+  or weights on the build machine).
+
 ## 8. Phases, effort and tests
 
 | Phase | Work | Effort |

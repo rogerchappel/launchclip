@@ -487,6 +487,39 @@ For trimming footage, Shorts from a long form, and `finish`'s cut snap
 On our renders: the score of each planned cut against the motion curve. A cut
 scoring > 1.2 (mid-move, off the beat) warns as `cut-mid-motion`.
 
+#### Built so far (phase 6, calm cuts)
+
+- **Scorer.** `kit/core/calm-cut.mjs`: `CALM_CUT` (the constants above,
+  one reason each), `energyAccumulator` / `motionEnergy` (the curve from grey
+  frames, mask boxes left out, 3-tap smoothed), `calmCut` (the §4.4 search and
+  score; `null` when nothing in range is known, so the caller keeps its own
+  cut) and `cutMotionScore` (motion + beat terms, no target term, for the
+  render-side `cut-mid-motion` check). `src/motion_curve.js` reads a video's
+  curve (`readMotionCurve`, streamed, so an hour of footage stays out of
+  memory) and builds a story-time curve from the footage scenes a story plays
+  (`storyMotionCurve`: track-0 scenes whose `params.media` is a video, from
+  their `sourceStart`; unknown elsewhere).
+- **Tags.** `beat` means within a quarter beat of one (the raw beat offset
+  below 0.25, not the weighted term). The p90 is the whole curve's.
+- **`finish` snap.** `snapStory` takes `motion`. Where the curve is known, a
+  cut searches ±0.25 s (the snap tolerance, not ±30% of the scene: snap only
+  nudges) inside each scene's minimum length, scored with the scene length as
+  the step; `qa/beat-sync.json` records the grid as `downbeat`, `beat` or
+  `calm`. Where it is unknown (no footage), cuts snap to the grid as before,
+  so motion-only stories are unchanged. Snap runs only on un-narrated
+  stories, so this reaches motion stories that play clips.
+- **Shorts from a long form.** `launchclip cutdown` reads the long form's
+  render (`renders/final.mp4`, else `draft.mp4`) and `BEATS.json` when they
+  exist. Each edge of the Short moves inside the silence around its first or
+  last word, at most 0.75 s out (a Short opens on its words), with the long
+  form's scene starts and base-edit joins as free seams. `CUTDOWN.json`
+  records `calm_edges`. The beat-map path (`cutShorts`) plans before any
+  render, so it has no curve yet; the roadmap's Shorts-from-a-long-video
+  entry points at `calmCut` for its edges.
+- **Not yet:** overlay masks from the story's caption and logo boxes (the
+  reader takes `mask`, nothing passes one), and trimming footage inside a
+  scene.
+
 ## 5. Phases, effort and tests
 
 | Phase | Work | Effort | Tests |

@@ -214,3 +214,26 @@ test("launchclip cutdown --model re-plans with the planner and keeps the base ed
 function round(value) {
   return Math.round(value * 1000) / 1000;
 }
+
+test("launchclip cutdown moves the Short's edges to calm moments of the long form's render", async () => {
+  const project = await longFormProjectDir();
+  try {
+    const plain = await runCutdown(project, { to: "shorts", section: "c2", out: path.join(project, "plain") });
+    const window = JSON.parse(await readFile(path.join(plain.out, "CUTDOWN.json"), "utf8")).window;
+    assert.equal(JSON.parse(await readFile(path.join(plain.out, "CUTDOWN.json"), "utf8")).calm_edges, undefined);
+    // A busy render, still for a moment in the 0.3 s silence before the first word.
+    await mkdir(path.join(project, "renders"));
+    await writeFile(path.join(project, "renders/final.mp4"), "stand-in");
+    const values = Array.from({ length: 620 * 12 }, (_, i) => (Math.abs(i / 12 - (window.start - 0.2)) < 0.05 ? 0 : 10));
+    const motionCurve = async (file) => { assert.equal(file, path.join(project, "renders/final.mp4")); return { fps: 12, values }; };
+    const result = await runCutdown(project, { to: "shorts", section: "c2", out: path.join(project, "calm") }, { motionCurve });
+    const receipt = JSON.parse(await readFile(path.join(result.out, "CUTDOWN.json"), "utf8"));
+    assert.equal(receipt.calm_edges.video, "renders/final.mp4");
+    const [start, end] = receipt.calm_edges.edges;
+    assert.deepEqual([start.edge, end.edge], ["start", "end"]);
+    assert.ok(Math.abs(start.at - (window.start - 0.2)) < 0.05, `start edge at ${start.at}`);
+    assert.ok(end.at > window.end && end.at <= window.end + 0.75, `end edge at ${end.at}`);
+  } finally {
+    await rm(project, { recursive: true, force: true });
+  }
+});

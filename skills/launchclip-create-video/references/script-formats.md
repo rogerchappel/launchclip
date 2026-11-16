@@ -39,7 +39,7 @@ The skeletons are LaunchClip's own vocabulary: swappable structures from common 
 ### `stakes-list`: Stakes hook → open loop → numbered list → pattern interrupt → payoff → CTA
 
 - **Stakes hook** (~10%): A cost, a consequence or a number the viewer feels, aimed at "you" ("your deck", "your app"): the stakes in one line.
-- **Open loop** (~7%): Promise a payoff and say when it comes ("…and one fix I'll give you at the end", "number three costs the most to fix"). Pay it off later.
+- **Open loop** (~7%): Promise a payoff and say when it comes, in words that mark it as later ("…and one fix I'll give you at the end", "stay for number three: it costs the most to fix"). Never a bare list item ("And number three…"): before item one it sounds like the list started out of order. Pay it off later.
 - **Numbered list** (~50%): A named, numbered list or framework of three to six items, each said with its number. Each item: its name, then one concrete specific from the brief (a number, a name, a rule), then an example or an analogy.
 - **Pattern interrupt** (~8%): One short line that reframes everything before it ("The word is per.", "All three fail the same way: water sits on the cut end."). It turns the list into one idea.
 - **Payoff** (~13%): Close the open loop and pay off the hook in concrete terms.

@@ -38,6 +38,7 @@ import { checkStorage, interruptedByStorage } from "./storage_check.js";
 import { buildTemporalEvidenceSchedule, validateTemporalEvidenceManifest } from "./cinematic_evidence.js";
 import { COMPILED_HYPERFRAMES, applySubjectFallback, cinematicMotionExpectations, resolveMusicMix, subjectFallbackLines, subjectMatteGate } from "./cinematic_check.js";
 import { actingGate, densityGate, ghostingGate, physicsGate, tellsGate, varietyGate } from "./direction_guardrails.js";
+import { visualDensityGate } from "./visual_density.js";
 import { choreographyGate, holdGate, stateGate } from "./movement_guardrails.js";
 import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, lipSyncGate, paceGate, prototypeCut, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
@@ -99,6 +100,7 @@ import { fitSceneTimings } from "./timing_fit.js";
 // face; a card moved off the face lands in the caption band).
 const LAYOUT_REPAIR_PASSES = 6;
 import { analyzeBeatsFile, beatsDocument, gridFromBpm, transformGrid } from "./music/beats.js";
+import { storyMotionCurve } from "./motion_curve.js";
 import { BEAT_SYNC_SCHEMA, chooseAlignment, keyMoments, momentReport, snapStory, summarizeMoments, syncStrategy } from "./music/beat_sync.js";
 
 const execFileAsync = promisify(execFile);
@@ -467,7 +469,7 @@ export function resolveCueFiles(cues, { libraries = [], kit = null, storyId = ""
   return cues.map((cue) => {
     const resolved = resolveCueFile(cue, { libraries, kit, key: `${storyId}|${cue.cue}`, turn: turnOf.get(cue) });
     if (!resolved) return cue;
-    const placed = { ...cue, file: resolved.file, sfx_source: resolved.scope, sfx_origin: resolved.source, variant: resolved.variant };
+    const placed = { ...cue, file: resolved.file, sfx_source: resolved.scope, sfx_origin: resolved.source, ...(resolved.generated ? { sfx_generated: resolved.generated } : {}), variant: resolved.variant };
     const peak = Number(resolved.measurements?.peak_at_ms);
     if (cue.cue === "riser" && Number.isFinite(cue.lands_at) && Number.isFinite(peak)) placed.at = round3(Math.max(0, cue.lands_at - peak / 1000));
     return placed;
@@ -502,7 +504,7 @@ async function sonifyCues(ctx, { key, seed }) {
 export function typingBanks(libraries, kit) {
   const bank = (family) => {
     const source = familySource(family, libraries, kit);
-    return source ? source.files.map((file, index) => ({ file, measurements: source.measurements[index], scope: source.scope, source: source.source })) : [];
+    return source ? source.files.map((file, index) => ({ file, measurements: source.measurements[index], scope: source.scope, source: source.source, generated: source.generated ?? null })) : [];
   };
   return { key: bank("keystroke"), space: bank("keystroke-space"), enter: bank("keystroke-enter"), word: bank("click") };
 }
@@ -512,13 +514,14 @@ function firstKeyPerShot(keystrokes) {
   return keystrokes.filter((key) => key.kind !== "word" && !seen.has(key.shot) && seen.add(key.shot));
 }
 
-/** The licence line for the SFX actually used. origins: Set of "procedural" | "elevenlabs" | ... */
-export function sfxLicense(origins) {
+/** The licence line for the SFX actually used. origins: Set of "procedural" | "elevenlabs" | "comfy" | ...; generated: Set of "model (licence id)" for locally generated SFX. */
+export function sfxLicense(origins, generated = new Set()) {
   const parts = ["Original procedural synthesis (synth-audio-kit.mjs); no third-party samples."];
   if (origins.has("elevenlabs")) parts.push("Some SFX were generated with ElevenLabs sound effects (launchclip sfx seed); their use is governed by the ElevenLabs terms of service.");
   if (origins.has("earshot") || origins.has("earshot-fit")) parts.push("Some SFX were rendered from the Earshot sound bank (https://github.com/Leonxlnx/earshot, MIT) by its own code recipes.");
   if (origins.has("earshot-fit")) parts.push("Some of those are Earshot fits: recipes measured from CC0 1.0 Freesound recordings, credited in sfx_credits.");
-  const other = [...origins].filter((origin) => !["procedural", "elevenlabs", "earshot", "earshot-fit"].includes(origin));
+  if (origins.has("comfy")) parts.push(`Some SFX were generated on this machine with ComfyUI (launchclip sfx seed --provider comfy) using ${[...generated].join(", ") || "a user-supplied model"}; their use is governed by that model licence.`);
+  const other = [...origins].filter((origin) => !["procedural", "elevenlabs", "comfy", "earshot", "earshot-fit"].includes(origin));
   if (other.length) parts.push(`Other SFX library sources: ${other.join(", ")}.`);
   return parts.join(" ");
 }
@@ -1503,7 +1506,9 @@ const STAGES = [
         libraries: plan.libraries.map((library) => ({ scope: library.scope, manifest: library.file }))
       });
       const origins = new Set(cues.map((cue) => cue.sfx_origin).filter(Boolean));
-      if (typing) for (const kind of Object.values(typingBanks(plan.libraries, kit))) for (const entry of kind) origins.add(entry.source);
+      const generated = new Set(cues.map((cue) => cue.sfx_generated).filter(Boolean));
+      if (typing) for (const kind of Object.values(typingBanks(plan.libraries, kit))) for (const entry of kind) { origins.add(entry.source); if (entry.generated) generated.add(entry.generated); }
+      if (generated.size) ctx.warnings.push(`sfx licence: some SFX were generated with ComfyUI under ${[...generated].join(", ")}; check your use is within those terms`);
       const ducking = voiceFile ? "sidechain under voice" : speechKey ? "sidechain under footage speech" : null;
       await writeJson(path.join(ctx.project, PATHS.audioManifest), {
         schema_version: "launchclip.audio-manifest.v1",
@@ -1534,7 +1539,7 @@ const STAGES = [
         sfx_kit: path.join(kitDir, "AUDIO-KIT.json"),
         sfx_libraries: plan.libraries.map((library) => ({ scope: library.scope, manifest: library.file })),
         ...(earshot.credits.length ? { sfx_credits: earshot.credits } : {}),
-        license: [sfxLicense(origins), musicLicense(plan.music.kind)].filter(Boolean).join(" ")
+        license: [sfxLicense(origins, generated), musicLicense(plan.music.kind)].filter(Boolean).join(" ")
       });
       const details = {
         mix_file: PATHS.mix,
@@ -2077,6 +2082,9 @@ async function runGates(ctx, { pixels = true } = {}) {
   try {
     const density = densityGate(ctx.resolved, { rects: ctx.layout?.rects ?? [], profile: ctx.layout?.profile });
     if (density.status !== "skipped") gates.density = density;
+    // Filled frame and footage share over the whole timeline, to the last second (src/visual_density.js).
+    const visual = visualDensityGate(ctx.resolved, { rects: ctx.layout?.rects ?? [] });
+    if (visual.status !== "skipped") gates.visual_density = visual;
     gates.variety = varietyGate(ctx.resolved);
   } catch (error) {
     gates.density ??= { status: "failed", error: error.message };
@@ -2533,7 +2541,9 @@ async function beatSync(ctx, plan, track, { duration }) {
   let changed = false;
   if (storyGrid && strategy === "snap" && mode !== "off") {
     const before = ctx.copy;
-    const result = snapStory(ctx.copy, storyGrid, { mode, words: ctx.words ?? [], beats: beatsForAnchors });
+    // Footage the story plays gives its cuts a motion curve: they snap to calm moments (§4.4).
+    const motion = mode === "hits" ? null : await (ctx.adapters.storyMotion ?? storyMotionCurve)(ctx.resolved, ctx.project).catch((error) => { ctx.warnings.push(`beat sync: the footage's motion could not be read (${firstLine(error.message)}); cuts snap to the grid only`); return null; });
+    const result = snapStory(ctx.copy, storyGrid, { mode, words: ctx.words ?? [], beats: beatsForAnchors, motion });
     ({ changes, reverted, skipped } = result);
     if (changes.length) {
       // Re-validate and re-run layout-check on the snapped copy; fall back
@@ -2584,7 +2594,7 @@ async function beatSync(ctx, plan, track, { duration }) {
     changes,
     reverted,
     skipped,
-    notes: strategy === "align" ? ["Narration timing is fixed: the music moved (offset/tempo); no story time changed."] : strategy === "snap" ? ["Second-timed cuts snap to downbeats and hits to beats within 0.25 s; word and beat anchors never move."] : ["Beat sync is off."]
+    notes: strategy === "align" ? ["Narration timing is fixed: the music moved (offset/tempo); no story time changed."] : strategy === "snap" ? ["Second-timed cuts snap to downbeats and hits to beats within 0.25 s (over footage, to the calmest moment there, weighed against the beat); word and beat anchors never move."] : ["Beat sync is off."]
   };
   await writeJson(path.join(ctx.project, PATHS.beatSync), report);
   return {

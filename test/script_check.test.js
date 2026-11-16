@@ -345,3 +345,11 @@ test("theater: \"security theater\" and its kin warn", () => {
   assert.ok(ids(check(GOOD.replace("Your team gets its evenings back.", "Spreadsheets are compliance theater.")), "warnings").includes("theater"));
   assert.ok(!ids(check(GOOD.replace("Your team gets its evenings back.", "Your team gets to the theatre on time.")), "warnings").includes("theater"));
 });
+
+test("loop-order: a later list item said bare before item one is an error; marked as a teaser it passes", () => {
+  const list = "One, treated pine is cheapest to buy. Two, hardwood is tough but greys. Three, composite never needs oil. Save this before you ask for a quote.";
+  const bare = check(`Your deck's real cost shows up after it's built. And number three catches bare feet in the sun. ${list}`);
+  assert.ok(ids(bare).includes("loop-order"), formatScriptCheck(bare));
+  const teaser = check(`Your deck's real cost shows up after it's built. Stay for number three: it catches bare feet in the sun. ${list}`);
+  assert.ok(!ids(teaser).includes("loop-order"), formatScriptCheck(teaser));
+});
