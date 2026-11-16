@@ -282,6 +282,8 @@ places the plan changed once it met the code:
   and `scripts/vfx-sheet.mjs` (every effect at six times in three palettes).
   Golden sheet hashes, the effect check and the motion-check findings are
   not built.
+- **Later rounds:** §4b (hits, cover transitions, retro pack) and §4c
+  (weather, masks) record what came after and where it differs.
 
 ## 4b. Built in round two (hits, transitions, retro pack) and where it differs
 
