@@ -260,7 +260,7 @@ A footage-led story may hold top-level `sections: [{id, start, end, layout, side
 | names two to four options, models or materials you can show together ("three options", "hardwood, composite and aluminium"): a tile of footage each (a grid, or a mosaic with one large), revealed on its word [motion, voiceover-motion] | media-grid |
 | lists steps or checks that each have something to show ("check the payload, measure the tray, ask about the warranty"): a row each with a small thumbnail, one by one [motion, voiceover-motion] | media-list |
 | gives a figure about something you can show (a payload, a weight, a build time, years in business): the figure counts up beside the footage, or over it full frame [motion, voiceover-motion] | media-stat |
-| leads with a point, a figure or a short list that real footage backs up ("payload explained", "what you can carry"): the point in a panel, a rounded clip card in its corner [motion, voiceover-motion] | picture-in-picture |
+| leads with a point, a figure or a short list that real footage backs up ("payload explained", "what you can carry"): the point in a panel, a rounded clip card in its corner (16:9 only; on 9:16 use split-screen) [motion, voiceover-motion] | picture-in-picture |
 | shows real footage while the line makes a point: the shot fills the top or bottom half (left or right on 16:9), the other half carries the title, a figure or a short list [motion, voiceover-motion] | split-screen |
 | shows a wide view in landscape footage (a vehicle side-on, a campsite, a road, a beach): the shot letterboxed in a rounded 16:9 window mid-frame, a title above and a caption or chip below, no heavy crop [motion, voiceover-motion] | landscape-card |
 | names the brand on a title or end card, with its logo and wordmark images (and an app-store badge or URL on the end card) | brand-lockup |
@@ -905,7 +905,7 @@ params:
 - chip: string ≤ 24, a pill under the window (optional)
 
 ### picture-in-picture (keeps captions)
-A rounded clip card in a corner of a panel that carries the line: a title, a stat or a short list beside or under it. Keeps captions.
+A rounded clip card in a corner of a panel that carries the line: a title, a stat or a short list beside it. 16:9 only: on a 9:16 or square frame it is drawn as a split-screen (footage top for a top corner, bottom for a bottom one), so use split-screen there. Keeps captions.
 params:
 - media: "assets/…" video (.mp4|.webm|.mov|.m4v) or still (.jpg|.png|.webp|.svg), or {src, kind?, sourceStart? (video), focus?: {x, y} 0–1, the point kept in the crop}
 - variant: top-right|top-left|bottom-right|bottom-left (default top-right)

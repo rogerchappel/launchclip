@@ -9,7 +9,8 @@
 //   landscape-card      a 16:9 clip letterboxed in a rounded window mid-frame,
 //                       a title above, a caption or chip below
 //   picture-in-picture  a rounded clip card in a corner of a panel that
-//                       carries a title, a stat or a list
+//                       carries a title, a stat or a list (16:9; on a tall or
+//                       square frame it is drawn as a split-screen)
 //   media-compare       two options side by side or stacked, each its own
 //                       footage and label, the second on its word
 //   media-stat          a figure that counts up beside or over footage
@@ -428,6 +429,12 @@ function resolvePip(params, ctx) {
   const aspect = p.aspect === undefined ? (b.shape === 'portrait' ? '1:1' : '16:9') : check.oneOf(p.aspect, 'params.aspect', Object.keys(ASPECTS));
   const align = p.align === undefined ? 'left' : check.oneOf(p.align, 'params.align', ['left', 'center']);
   const [vy, vx] = corner.split('-');
+  // On a tall or square frame a corner card shrinks the footage and leaves the panel beside it
+  // empty, so the line is drawn as a split-screen there: footage across the top or bottom.
+  if (b.shape !== 'wide') {
+    const {aspect: _aspect, variant: _variant, ...rest} = params;
+    return resolveSplit({...rest, variant: vy}, ctx);
+  }
   // The panel fills the safe area; the card sits in its corner, the content in the rest of it.
   const panel = {x: safe.x, y: safe.y, width: safe.width, height: safe.height};
   const pad = u(36), gap = u(32);
@@ -898,7 +905,7 @@ export const landscapeCard = definition('landscape-card',
   {media: MEDIA, aspect: '16:9|4:3|1:1|4:5|21:9, the window (default 16:9)', kicker: CONTENT.kicker, title: 'string ≤ 60 above the window (optional)', caption: 'string ≤ 60 under the window (optional)', chip: 'string ≤ 24, a pill under the window (optional)'},
   [], resolveLandscape);
 export const pictureInPicture = definition('picture-in-picture',
-  'A rounded clip card in a corner of a panel that carries the line: a title, a stat or a short list beside or under it. Keeps captions.',
+  'A rounded clip card in a corner of a panel that carries the line: a title, a stat or a short list beside it. 16:9 only: on a 9:16 or square frame it is drawn as a split-screen (footage top for a top corner, bottom for a bottom one), so use split-screen there. Keeps captions.',
   {media: MEDIA, variant: 'top-right|top-left|bottom-right|bottom-left (default top-right)', aspect: '16:9|4:3|1:1|4:5|21:9, the card (default 1:1 on 9:16, else 16:9)', ...CONTENT, align: 'left|center (default left)'},
   ['item-<i>'], resolvePip);
 export const mediaCompare = definition('media-compare',

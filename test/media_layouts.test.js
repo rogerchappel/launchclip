@@ -192,7 +192,7 @@ test('media layouts: HyperFrames hoists each video window; stills stay in the sc
 test('media layouts: a video window\'s shadow and ring are drawn by a twin under it in HyperFrames', () => {
   // HyperFrames draws a video's frames without its box-shadow (Remotion draws
   // it), so the emitter moves the shadow to a <div> that follows the same ops.
-  const pip = resolve(SCENES[3]);
+  const pip = resolve(SCENES[3], FORMATS['16:9']);
   const out = EMITTERS['picture-in-picture'](pip);
   const video = out.html.match(/<video\b[^>]*>/)[0];
   assert.doesNotMatch(video, /box-shadow/);
@@ -208,6 +208,20 @@ test('media layouts: a video window\'s shadow and ring are drawn by a twin under
   // A still keeps its shadow on its own frame, and a full-frame video has none to move.
   assert.doesNotMatch(EMITTERS['media-stat'](resolve(SCENES[6])).html, /-shadow"/);
   assert.doesNotMatch(EMITTERS['media-stat'](resolve(SCENES[7])).html, /-shadow"/);
+});
+
+test('media layouts: picture-in-picture is a corner card on 16:9 and a split-screen on 9:16 and 1:1', () => {
+  for (const [scene, side] of [[SCENES[3], 'top'], [SCENES[4], 'bottom']]) {
+    const wide = resolve(scene, FORMATS['16:9']);
+    assert.ok(wide.content.corner, `${scene.id}: a corner card on 16:9`);
+    for (const aspect of ['9:16', '1:1']) {
+      const tall = resolve(scene, FORMATS[aspect]);
+      const split = resolve({...scene, module: 'split-screen', params: {...scene.params, variant: side}}, FORMATS[aspect]);
+      assert.equal(tall.content.corner, undefined, `${scene.id} ${aspect}`);
+      assert.deepEqual(tall.content.windows.map((win) => win.rect), split.content.windows.map((win) => win.rect), `${scene.id} ${aspect}: the footage spans the frame as a split-screen's`);
+      assert.deepEqual(tall.content.texts.map((t) => t.key), split.content.texts.map((t) => t.key), `${scene.id} ${aspect}`);
+    }
+  }
 });
 
 test('media layouts: a scene may ask the library for a shot in each footage slot', async () => {
