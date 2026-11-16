@@ -57,7 +57,7 @@ const missSam = (request) => {
 // The two finish gates that measure rendered pixels (the evidence frames'
 // hashes, the palette of the video): the offline renderer writes no pixels,
 // so they are passed here and proven by a real render instead.
-const PIXEL_GATES = ["temporal_evidence", "style"];
+const PIXEL_GATES = ["temporal_evidence", "style", "pace"];
 
 // make with the real finish (offline stand-ins) and a model that can see.
 async function studio(recorded, options = {}) {
