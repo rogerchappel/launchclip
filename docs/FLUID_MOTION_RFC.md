@@ -626,6 +626,19 @@ member. Graphics draw byte for byte as before. `test/members.test.js` proves
 the path with a stand-in member; each member module brings its own parity
 fixture, tests and 9:16 sample.
 
+Member modules shipped:
+
+- `sub-card` (`kit/core/member-sub-card.mjs`): `{label, sub ≤ 24, icon?,
+  badge?}`, the default card with a second line under its label, in the meta
+  face and a muted ink, as map pins, grid-race and cell-grid carry theirs. The
+  sub is the label's size, so the fit that keeps labels over the brand's meta
+  floor keeps the sub over it too; the card is one line taller, and node-graph
+  gives every node that height. A `sub`, `detail` or `subtitle` on a graphic
+  now names it. Proof: `h-node-graph-sub-card-portrait`,
+  `h-icon-grid-sub-card-portrait`, `test/member_sub_card.test.js`, and
+  `examples/story/members-sub-9x16` (the bakery team, a line each). Five
+  sub-cards fit the golden's 880 px rect at 31 px labels; seven do not.
+
 ## 11. Phases
 
 1. **`node-graph` and `fluid-motion.mjs`** (this PR): flock, wave, idle, impact
