@@ -24,6 +24,38 @@ const KEYS = {card: ['icon', 'label', 'badge'], chip: ['icon', 'label'], badge: 
 const NEEDS = {card: ['icon', 'label'], chip: ['label'], badge: ['icon', 'text'], ribbon: ['label'], prop: ['prop']};
 const SHORT = 3;
 
+// Past the closed list is a catalogue module, never a bigger spec (RFC §10). A word
+// the planner reached for (an unknown kind, or a key no kind takes) → the module
+// that draws it, or null when none does yet. Matched on the word or its singular.
+export const BEYOND = Object.freeze({
+  chart: 'bar-chart', bar: 'bar-chart', pie: 'pie-chart', line: 'trend-chart', trend: 'trend-chart', sparkline: 'sparkline',
+  stat: 'stat-card', number: 'stat-card', metric: 'stat-card', value: 'stat-card', figure: 'stat-card', count: 'count-up',
+  progress: 'progress', percent: 'percent-fill', ring: 'progress-ring', gauge: 'gauge-compare',
+  arrow: 'callout-arrow', step: 'process-steps', flow: 'process-steps', table: 'comparison-table', list: 'item-list', bullet: 'item-list',
+  image: 'photo-scene', photo: 'photo-scene', picture: 'photo-scene', src: 'photo-scene', media: 'media-grid', logo: 'logo-row',
+  quote: 'quote-card', speech: 'speech-bubble', bubble: 'speech-bubble', tooltip: 'tooltip', sticker: 'sticker', note: 'tape-note',
+  avatar: 'person-id', person: 'person-id', face: 'person-id', character: 'cast-scene',
+  timeline: 'timeline', date: 'date-card', calendar: 'month-grid', map: 'map-highlight', code: 'code-snippet', terminal: 'terminal-session',
+  phone: 'device-frame', device: 'device-frame', screen: 'device-frame', ui: 'ui-scene', post: 'social-post', tweet: 'social-post',
+  title: 'motion-title', heading: 'motion-title', headline: 'motion-title',
+  detail: 'concept-card', description: 'concept-card', subtitle: 'concept-card', body: 'concept-card', caption: 'concept-card',
+  graphic: 'icon-grid', children: 'icon-grid', item: 'icon-grid', member: 'icon-grid', group: 'node-graph', node: 'node-graph',
+  color: null, colour: null, emoji: null, shape: null, circle: null, rect: null, svg: null, path: null, html: null, style: null, css: null,
+  x: null, y: null, left: null, top: null, width: null, height: null, size: null, position: null, layout: null, align: null, rotate: null, scale: null, offset: null
+});
+const NESTED = new Set(['graphic', 'children', 'item', 'member', 'group', 'node']);
+const LAYOUT = new Set(['x', 'y', 'left', 'top', 'width', 'height', 'size', 'position', 'layout', 'align', 'rotate', 'scale', 'offset']);
+
+/** Where a request past the closed list belongs: one clause naming the nearest catalogue module, or that none draws it yet. */
+export function beyondGraphic(word) {
+  const words = String(word).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const hit = words.flatMap(w => [w, w.replace(/s$/, ''), w.replace(/es$/, '')]).find(w => w in BEYOND);
+  if (!hit) return 'no catalogue module draws that yet; leave it out, or add a module (docs/ROADMAP.md)';
+  if (NESTED.has(hit)) return `graphics do not nest; a set of graphics is a module's members (${BEYOND[hit]}, ${hit === 'node' || hit === 'group' ? 'icon-grid' : 'node-graph'})`;
+  if (LAYOUT.has(hit)) return 'the module lays out its members; no module takes free positions or sizes';
+  return BEYOND[hit] ? `that is the ${BEYOND[hit]} module's job; give it its own scene` : 'no catalogue module draws that yet; leave it out, or add a module (docs/ROADMAP.md)';
+}
+
 /** One line for a module's params: what a `graphic` may be. */
 export const GRAPHIC_PARAM = `{kind: card | chip | badge | ribbon | prop, …} a drawn member (RFC §10): card {icon?, label?, badge? ≤ ${SHORT} chars}; chip {label, icon?}; badge {icon | text ≤ ${SHORT} chars, label?}; ribbon {label, icon?}; prop {prop (a world-kit prop: laptop, mug, robot, …), state?, label?}; icons from kit/core/icons.mjs`;
 
@@ -34,8 +66,14 @@ export const GRAPHIC_PARAM = `{kind: card | chip | badge | ribbon | prop, …} a
 export function graphicSpec(check, raw, path, {labelMax = 14} = {}) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) check.fail(path, `must be a graphic: ${GRAPHIC_PARAM}`);
   if (raw.kind === undefined) check.fail(`${path}.kind`, `is required (${GRAPHIC_KINDS.join(', ')})`);
-  const kind = check.oneOf(raw.kind, `${path}.kind`, GRAPHIC_KINDS);
-  check.obj(raw, path, ['kind', ...KEYS[kind]]);
+  if (!GRAPHIC_KINDS.includes(raw.kind)) check.fail(`${path}.kind`, `must be one of ${GRAPHIC_KINDS.join(', ')}, got ${JSON.stringify(raw.kind)}: the list is closed, and ${beyondGraphic(raw.kind)}`);
+  const kind = raw.kind;
+  for (const [key, value] of Object.entries(raw)) {
+    if (key !== 'kind' && value && typeof value === 'object') check.fail(`${path}.${key}`, `must be plain text or a name, not ${Array.isArray(value) ? 'a list' : 'an object'}: ${beyondGraphic('graphic')}`);
+    if (key === 'kind' || KEYS[kind].includes(key)) continue;
+    const others = GRAPHIC_KINDS.filter(k => KEYS[k].includes(key));
+    check.fail(`${path}.${key}`, `is not supported (allowed: kind, ${KEYS[kind].join(', ')}): ${others.length ? `${key} belongs on a ${others.join(' or ')}` : `the list is closed, and ${beyondGraphic(key)}`}`);
+  }
   if (!NEEDS[kind].some(key => raw[key] !== undefined)) check.fail(path, `a ${kind} needs ${NEEDS[kind].join(' or ')}`);
   if (kind === 'badge' && raw.icon !== undefined && raw.text !== undefined) check.fail(path, 'a badge shows an icon or text, not both');
   if (raw.icon !== undefined && !isIcon(raw.icon)) {
