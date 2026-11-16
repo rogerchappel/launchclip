@@ -3038,6 +3038,20 @@ a pure function of time, in both renderers.
 
 Kinds: `cutout` (an object drawn from shapes, die-cut, with halftone or engraved `shade`, a part's `at` pops it on its word), `limb` (grows from its first point, outline until `fillAt`), `paper-fold` (hinged panels opening like a map), `paper-sheet` (a page with `flaps` folding up), `torn-strip` (`typeAt` types it like a prompt), `tape`, `callout-pin` (a leader line to `target`, projected through the rig). A cut-out's `d` takes only SVG path commands and numbers, and its text is escaped. The `paper-collage` style has no frame-blended motion blur, which would ghost the stepped paper, and is gated by the `paper-diorama` profile.
 
+## Colour grade (`kit/core/grade.mjs`, `src/grade.js`)
+
+`story.grade` (a style pack's `grade` when the story sets none) is `"off"`,
+a preset name or `{preset | cube, strength 0–1}`. Presets (`clean`,
+`warm-film`, `teal-amber`, `cool-tech`, `neon-crush`, `bleach`, `ink-mono`)
+are generated 33³ cubes from OKLab operations; `cube` is a path to a 3D
+`.cube` (domain 0–1). Strength mixes the cube with identity. `launchclip
+finish` writes the cube to `.launchclip/finish/grade.cube` and grades the
+finished render once with ffmpeg `lut3d` (tetrahedral), so both renderers
+match by construction; the caption legibility pass then measures the graded
+frames, and the render stage warns when the grade takes a brand colour pair
+from 4.5:1 or more to under it. Generated styles take the look's preset
+(`GRADE_LOOK_DEFAULTS`), else the tone's (`GRADE_TONE_DEFAULTS`).
+
 ## Motion blur (`src/motion_blur.js`, `kit/core/motion-blur.mjs`)
 
 `story.motion.blur`: `true` (`{samples: 3, shutter: 1}`) or `{samples?: 2–6,
@@ -6690,7 +6704,7 @@ components are in `kit/remotion/catalog/CatalogH.tsx` and `registry-h.ts`.
 | `sankey` | ribbons, lines | `flows` 2–14 `{from, to, value}` | build | Nodes in up to four columns (longest path); ribbons as wide as each flow draw column by column |
 | `heatmap` | squares, circles, rounded | `rows` 1–10, `columns` 2–14, `values`, `showValues`, `low`, `high`, `tone` | build | Cells pop in a diagonal wave, shaded panel → tone |
 | `leaderboard` | bars, rows, cards | `entries` 3–8 `{label, value, detail?, icon?}`, `sort`, `highlight` | build, highlight | Rows slide in from last place to first with rank badges and counting values |
-| `map-highlight` | fill, pins, glow, outline, dots | `highlight` 1–8 (country name, alias or ISO numeric code, or `{country, label?, value?, badge? ≤ 8, color?}`) and/or `pins` 1–4 `{lon, lat, label, sub?, card? {title, sub?, image?}, color?}` (at most two cards), `route`, `focus` auto/world, `tone` | build, zoom, highlight-&lt;i&gt;, pin-&lt;i&gt;, route-&lt;i&gt; | The world (Natural Earth 1:110m, Equal Earth, `kit/core/world-110m.mjs` from `scripts/vendor-world.mjs`) fades in; when the countries' and pins' bounds cover little of it, it zooms (up to 8×) to fill the area with them; each country fills in turn with a label pill beside it (above, below, right or left, clear of the others) and its ×badge; then pins (projected with the same Equal Earth, `projectLonLat`) drop with a pulse and a label, cards land on the far side of the map, and a dashed route draws leg by leg. pins drop on countries, glow fills with a glow, outline traces the country's glowing outline then tints it, dots draws the land as a dot matrix (point in polygon on the vendored paths, about 13 px apart at the final zoom, at most about 9,000 dots) lighting the highlighted countries' dots, with a slow push-in |
+| `map-highlight` | fill, pins, glow, outline, dots | `highlight` 1–8 (country name, alias or ISO numeric code, or `{country, label?, value?, badge? ≤ 8, color?}`) and/or `pins` 1–4 `{lon, lat, label, sub?, card? {title, sub?, image?}, color?}` (at most two cards), `route` (true or `{head?}`), `camera`, `highlight[].arrive`, `focus` auto/world, `tone` | build, zoom, highlight-&lt;i&gt;, pin-&lt;i&gt;, route-&lt;i&gt; | The world (Natural Earth 1:110m, Equal Earth, `kit/core/world-110m.mjs` from `scripts/vendor-world.mjs`) fades in; when the countries' and pins' bounds cover little of it, it zooms (up to 8×) to fill the area with them; each country fills in turn with a label pill beside it (above, below, right or left, clear of the others) and its ×badge; then pins (projected with the same Equal Earth, `projectLonLat`) drop with a pulse and a label, cards land on the far side of the map, and a dashed route draws leg by leg. pins drop on countries, glow fills with a glow, outline traces the country's glowing outline then tints it, dots draws the land as a dot matrix (point in polygon on the vendored paths, about 13 px apart at the final zoom, at most about 9,000 dots) lighting the highlighted countries' dots, with a slow push-in. A journey (`route: {head: true}`) is one route in map units that draws leg by leg (1.2–2.4 s each, `power2.inOut`) under a white core and a soft glow (the last 3 % of its length, a dash window); each pin lands as the route reaches it and each country lights when the head passes the point nearest its centroid, its border drawing over a constant 1.6 s, its fill blooming then settling, its label rising. `camera: "follow"` (push in, follow leg by leg, pull back) or `[{at, centre, zoom?}]` moves the drawn map as one transform, slow → fast → slow with no overshoot and blur only at peak speed; pins and labels ride in anchors moved by the same ease |
 | `comparison-table` | grid, striped, cards | `columns` 2–4, `rows` 2–8 `{label, values: true/false/null/string}`, `highlight` | build, highlight | Headers pop, rows land with ticks and crosses, the pick column is outlined |
 
 ### Counters (`catalog-h-numbers.mjs`)
