@@ -1243,8 +1243,9 @@ saved pack is what renders, so a new version changes only rerolls.
   accent sit at least 30° apart unless the scheme is monochrome. Out-of-gamut
   colours lose chroma, never lightness or hue (`oklchToHex`).
 - Type: `FONT_PAIRINGS` (display, body, meta, case, weight, tones) over the
-  bundled fonts; a tone narrows the table to its pairings. Title case sets
-  `layout.title_case`.
+  bundled fonts; a tone narrows the table to its pairings. A third or fewer
+  use a body face the `overused-font` tell lists (`OVERUSED_FONTS`). Title
+  case sets `layout.title_case`.
 - Tone (`TONE_TABLE`, §3.3) narrows the grammars, themes, ambient levels,
   chroma, SFX density, music hints and the dials' centres (the seed adds up to
   ±0.12). `toneFromText(prompt)` reads tone words (`TONE_WORDS`). The grammar

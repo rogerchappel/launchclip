@@ -13,6 +13,7 @@
 //   node scripts/element-sheet.mjs [--modules bar-chart,pie-chart]
 //     [--aspects 9:16,16:9] [--at settled|build|2.4] [--out qa/elements/sheet.png]
 //     [--parity qa/parity --prefix h-] [--sample mid-hold] [--tile 420]
+//     [--body manrope] (the sheet brand's body face, to compare faces)
 import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -41,14 +42,15 @@ function args(argv) {
     else if (a === '--prefix') out.prefix = argv[++i];
     else if (a === '--tile') out.tile = Number(argv[++i]);
     else if (a === '--sample') out.sample = argv[++i];
+    else if (a === '--body') out.body = argv[++i];
     else throw new Error(`unknown argument ${a}`);
   }
   return out;
 }
 
 /** The resolved model of one module variant at one aspect. */
-export function sampleModel(id, variant, aspect, {params = SAMPLES[id], duration = SAMPLE_DURATIONS[id] ?? SCENE, sceneId = 's1'} = {}) {
-  return {...MODULES[id].resolve({...params, variant}, {id: sceneId, start: 0, duration, format: FORMATS[aspect], brand: BRAND, aspect, hits: []}), module: id};
+export function sampleModel(id, variant, aspect, {params = SAMPLES[id], duration = SAMPLE_DURATIONS[id] ?? SCENE, sceneId = 's1', brand = BRAND} = {}) {
+  return {...MODULES[id].resolve({...params, variant}, {id: sceneId, start: 0, duration, format: FORMATS[aspect], brand, aspect, hits: []}), module: id};
 }
 
 function timeFor(model, at) {
@@ -82,6 +84,7 @@ const escape = value => String(value).replace(/[&<>"]/g, ch => ({'&': '&amp;', '
 async function main(argv) {
   const opts = args(argv);
   const TILE_H = opts.tile;
+  const brand = opts.body ? {...BRAND, fonts: {...BRAND.fonts, body: opts.body}} : BRAND;
   const ids = opts.modules ?? Object.keys(MODULES);
   const work = await mkdtemp(path.join(os.tmpdir(), 'launchclip-elements-'));
   try {
@@ -108,7 +111,7 @@ async function main(argv) {
         const tile = paints.length;
         try {
           // A scene id per tile, so ids (and the masks they name) never repeat in one page.
-          const model = sampleModel(id, variant, aspect, {sceneId: `s${tiles.length + 1}`});
+          const model = sampleModel(id, variant, aspect, {sceneId: `s${tiles.length + 1}`, brand});
           const t = timeFor(model, opts.at);
           const state = frameState(catalogHTimeline(model), t);
           body = renderNode(stateTree(catalogHView(model), state));
@@ -122,7 +125,7 @@ async function main(argv) {
       maxWidth = Math.max(maxWidth, rowWidth);
       rows.push(`<section><h2>${escape(id)}</h2><div class="row">${tiles.map(tile => `<figure style="width:${tile.width}px"><div class="tile" style="width:${tile.width}px">${tile.html}</div><figcaption>${escape(tile.name)}</figcaption></figure>`).join('')}</div></section>`);
     }
-    const fonts = await projectFontFaces(BRAND, {sourceDir: work});
+    const fonts = await projectFontFaces(brand, {sourceDir: work});
     await copyProjectFonts(fonts.copies, work);
     const html = `<!doctype html><meta charset="utf-8"><style>${fonts.css}
 body{margin:0;padding:16px;background:#14151c;color:#f2eee6;font:18px/1.3 ui-monospace,Menlo,monospace;width:${Math.ceil(maxWidth)}px}

@@ -13,6 +13,7 @@ import {
 } from "@launchclip/core/style-seed.mjs";
 import { applyStyle, checkPackContrast, contrastRatio, validateStylePack } from "@launchclip/core/style.mjs";
 import { FONT_REGISTRY, registeredFamily } from "@launchclip/core/fonts.mjs";
+import { OVERUSED_FONTS } from "@launchclip/core/tells.mjs";
 import { seededRandom } from "@launchclip/core/ambient.mjs";
 
 const STYLES = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "kit", "styles");
@@ -179,6 +180,11 @@ test("every pairing names bundled families", () => {
     assert.ok(pairing.tones.length > 0);
   }
   for (const tone of Object.keys(TONE_TABLE)) assert.ok(FONT_PAIRINGS.filter((entry) => entry.tones.includes(tone)).length >= 3, tone);
+});
+
+test("a third or fewer pairings use a body face the overused-font tell lists", () => {
+  const listed = FONT_PAIRINGS.filter((entry) => OVERUSED_FONTS.includes(registeredFamily(entry.body)));
+  assert.ok(listed.length * 3 <= FONT_PAIRINGS.length, listed.map((entry) => entry.id).join(", "));
 });
 
 test("validation accepts the seeded fields and rejects bad shapes", () => {
