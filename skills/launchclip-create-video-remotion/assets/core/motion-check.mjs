@@ -144,7 +144,8 @@ export function sceneMotionFindings({ id, motion = null, ops = [], states = [], 
 
   for (const tween of tweens) {
     const { op, keys } = tween;
-    if (op.target === id) continue;
+    // A carry's ride layer (kit/core/carry.mjs) samples the camera's eased move in straight steps; the steps are not moves.
+    if (op.target === id || op.target.endsWith('-ride')) continue;
     const life = lives.get(op.target);
     if (travels(keys) && linear(op.ease) && op.duration <= check.gesture + EPS) { findings.push(finding('linear-move', 'error', op.start, [id, op.target], `${op.target} moves on a linear ease ("${op.ease}") for ${round(op.duration)} s; ${LINEAR_FIX}`)); continue; }
     if (isPulse(life)) continue;

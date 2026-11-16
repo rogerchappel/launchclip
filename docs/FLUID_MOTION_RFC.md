@@ -195,7 +195,7 @@ has to write per scene.
   its boundary; `carry: false` opts that scene out.
 - **Planner.** The prompt gets one sentence: with flow on, leave the boundary
   between two scenes that share elements a cut (no `in`), a pan, a
-  whip-pan, a push or a whip, and the engine carries what they share.
+  whip-pan, a push, a pull, an orbit or a whip, and the engine carries what they share.
 
 ### 6.2 Pairing (a resolve pass)
 
@@ -212,11 +212,11 @@ these is a validation error that names it):
 - A and B are on the same track and both are op-list modules;
 - B arrives by a cut (no `in`, or `in.type` `"cut"`), by a `pan` or
   `whip-pan` of the camera (world-camera or cuts story), or by a `push` or
-  `whip` slide. Across a camera move A's rect is mapped through the two
-  plates' world placements, across a slide by B's layer offset, and the
-  element travels with the move (§6.5). A push, pull, orbit or
-  overview changes the camera's zoom or roll, and they and every other typed
-  transition keep their own look. A world-camera cut stacks B on A's
+  `whip` slide, or by a `push` or `pull` of the camera. Across a pan A's
+  rect is mapped through the two plates' world placements, across a slide by
+  B's layer offset, and the element travels with the move (§6.5); across a
+  push, pull or orbit it rides a layer that cancels the camera (§6.6). An
+  overview and every other typed transition keep their own look. A world-camera cut stacks B on A's
   placement, so it is a still plate. A feel's ambient camera and kicks are
   fine: they move the whole composition, so A and B still share one
   coordinate space;
@@ -400,9 +400,9 @@ the camera travelling past it.
 Samples: `examples/story/flow-camera-9x16` (a pan at 4 s, a whip-pan at
 8 s), `examples/story/flow-slide-9x16` (a push at 4 s, a whip at 8 s).
 
-### 6.6 Carry through zoom and roll (R&D)
+### 6.6 Carry through zoom and roll
 
-Status: R&D, open for review (2026-11-17). Push, pull, orbit and overview
+Status: shipped (2026-11-17): push, pull, orbit and overview. Push, pull, orbit and overview
 change the camera's zoom or roll, so §6.5's rule (travel in the world with
 the camera's timing and ease) no longer lands on a straight line: through a
 2× dolly an element that should hold still bulges about 6% off its place
@@ -432,15 +432,19 @@ about the canvas centre that is a translate of `q(t) − c`, a rotation of
   ease**; the same goes for the rotation.
 - `1/k(t)` is the reciprocal of the camera's zoom. A wide zoom lerps on a log
   scale (motion.mjs `scaleLerp`), whose reciprocal is the same curve, but a
-  narrow one is linear and its reciprocal is not. The ride samples the
-  camera's own `scaleStepAt` 60 times a second and joins the samples with
-  straight tweens (as `scaleTweenOps` does for the camera), well under a pixel
-  off at 1080 px.
+  narrow one is linear and its reciprocal is not.
 - The wrapper sits inside the element's module ancestors (node-graph's
-  `-cam` push). Their transform at B's start is a similarity, which commutes
-  with a rotation and a scale, so only the wrapper's origin and translate are
-  converted into the parent's px; the rotation and scale tweens are unchanged.
-  A module's own slow push keeps moving under it, as it moves the slot.
+  `-cam` push). Their map is a similarity, which commutes with a rotation and
+  a scale, so only the translate changes when the ride is conjugated into the
+  parent's px. But it changes with the ancestors: a module's own 0.5% push
+  seen through a camera zoomed out 2.5× about a point off screen moves the
+  element about 5 px mid-overview.
+
+So the ride is **sampled**: 60 times a second (on every frame at 30 and 60
+fps) it takes the camera's exact state (`cameraStateAt`, its stepped zoom
+included) and the parent's map at that time, and writes the wrapper's
+translate, rotation and scale; straight tweens join the samples. The origin
+stays where the canvas centre was in the parent's px at B's start.
 
 On the boundary frame the camera rests on A, so A's canvas px are screen px
 and the box needs no mapping. B's element then does an ordinary FLIP inside
@@ -468,8 +472,7 @@ keeps type level; a carried card that rolled with the camera would land
 tilted against a slot that is upright.
 
 **Overview.** Out, hold, in: two camera moves with one hold. The ride takes
-both legs (one translate and rotation tween each, the zoom sampled across
-each). The FLIP spans from the first leg's start to the second's end on the
+both legs and the hold (it is sampled, below). The FLIP spans from the first leg's start to the second's end on the
 camera's ease, so a held title sits still over the whole overview while the
 span of plates shrinks and grows under it.
 
@@ -481,11 +484,36 @@ threshold at the ends; on an orbit the radial part is small. Per-element
 blur from the element's own screen velocity still needs it drawn outside the
 camera container (§6.5), which breaks its stacking with the plate it lands in.
 
-**First slice.** Push and pull (world mode; a cuts-mode pull is a camera move
-too), one ride wrapper per carried element of B, in kit/core only: the
-wrapper is a view node and its tweens are ordinary ops, so neither renderer
-changes. Pans, whip-pans, slides, cuts and still plates keep their exact ops.
-Then orbit (the rotation tween), then overview (two legs).
+**Shipped: push and pull** (world mode; a cuts-mode pull is a camera move
+too). `kit/core/flow.mjs` `rideOf` samples the camera's inverse in B's px from
+the flow pass's own camera plan, `parentFrame` (kit/core/carry.mjs) gives each
+received element its wrapper's origin, `carryView` wraps the element in
+`<id>-ride` and `rideOps` conjugates each sample through the parent's map at
+that time. It is a
+view node and ordinary ops, so neither renderer changed, and pans, whip-pans,
+slides, cuts and still plates keep their exact ops. Nothing is a pin on a ride
+(a twin in the same place holds still on screen as a carry with no offset).
+Tests: the screen-path tests of §6.5 now also run a world push, a world pull
+and a cuts pull (on A's copy at the boundary, never off the straight line,
+settled on the slot), and the ride's scale times the camera's zoom is 1 and
+its rotation cancels the roll on every sample. Sample and parity fixture:
+`examples/story/flow-zoom-9x16` (a push at 4 s, a pull at 8 s).
+
+**Shipped: orbit** (world and cuts mode), on the same ride: it cancels the
+roll, so carried elements stay upright while the plates turn 9° under them.
+Sample and parity fixture: `examples/story/flow-orbit-9x16` (an orbit right
+at 4 s, one left at 8 s).
+
+**Shipped: overview.** The ride samples the camera across both legs and the
+hold, and the FLIP spans them on the camera's ease. One more change: a module
+holds its entrances until the camera arrives (an overview's 2.4 s), so a
+received element's pre-entrance pose held a third of the scene and read as
+its rest. Its rest is now sampled from the ride's end (`restFrom`); its
+ancestors keep the scene's window, so node-graph's slow `-cam` push stays a
+push. The ride test also checks exactness: on every tenth of the move each
+element is on screen within a pixel of where it is in B's px with the ride
+taken out. Sample and parity fixture: `examples/story/flow-overview-9x16` (a
+pan at 4 s, an overview at 8 s).
 
 **Unproven.** A pan that rebalances the scale after a chain of pushes
 (`besidePlacement`) also changes zoom; the ride would handle it, but it stays
@@ -804,11 +832,11 @@ fill rather than overflow. A badge or count past three characters, or a
 ## 12. What is unproven
 
 - ~~Carry through a moving camera or a moving transition (§6).~~ **Pans,
-  whip-pans and the push and whip slides shipped (§6.5).** Still open
-  ([rd/carry-moving-camera.md](rd/carry-moving-camera.md)): moves that zoom or
-  roll (push, pull, orbit, overview), where the same world travel bulges about
-  6% off its line mid-move and needs a layer that cancels the camera (the
-  ride layer, proposed in §6.6); blur
+  whip-pans and the push and whip slides shipped (§6.5); push, pull, orbit
+  and overview shipped on the ride layer, which cancels the camera (§6.6).**
+  Still open ([rd/carry-moving-camera.md](rd/carry-moving-camera.md)): a pan
+  that rebalances the scale after a chain of pushes (refused, so pans keep
+  their ops); blur
   from the element's own screen velocity rather than the camera's.
 - ~~Whether a container morph (tween only the box's width, height and corner
   radius, cross-fade its contents) reads well enough to join auto-pairing.~~
