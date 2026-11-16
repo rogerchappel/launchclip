@@ -1,6 +1,6 @@
 // Media layouts (kit/core/catalog-d-media-layouts.mjs): library footage
 // inside the motion design (split-screen, landscape-card, picture-in-picture,
-// media-compare, media-stat, media-list, media-grid), at 9:16, 16:9 and 1:1,
+// media-compare, media-stat, media-list, media-grid, before-after), at 9:16, 16:9 and 1:1,
 // footage from the first visible frame, text clear of the captions and the
 // logo, seen by layout-check, both renderers, the shot provider and the
 // planner.
@@ -39,7 +39,9 @@ const SCENES = [
   {module: 'media-stat', params: {media: VIDEO, variant: 'behind', value: '30+', label: 'years building campers'}},
   {module: 'media-list', params: {title: 'Before you buy', items: [{text: 'Check your payload', media: STILL}, {text: 'Measure the tray', media: STILL, at: 0.9}, {text: 'Ask about the warranty', at: 1.8}]}},
   {module: 'media-grid', params: {title: 'Three deck options', items: [{media: STILL, label: 'Hardwood'}, {media: VIDEO, label: 'Composite', at: 0.9}, {media: STILL, label: 'Aluminium', at: 1.8}]}},
-  {module: 'media-grid', params: {items: [{media: STILL, label: 'Wash'}, {media: STILL, label: 'Sand', at: 0.7}, {media: STILL, label: 'Oil', at: 1.4}, {media: VIDEO, label: 'Seal', at: 2.1}]}}
+  {module: 'media-grid', params: {items: [{media: STILL, label: 'Wash'}, {media: STILL, label: 'Sand', at: 0.7}, {media: STILL, label: 'Oil', at: 1.4}, {media: VIDEO, label: 'Seal', at: 2.1}]}},
+  {module: 'before-after', params: {before: VIDEO, grade: 'flat', gradeSide: 'before', labels: {before: 'Raw', after: 'Graded'}}},
+  {module: 'before-after', params: {before: STILL, after: VIDEO, direction: 'up', stops: [0.6, 0.3, 1], labels: {after: 'Redesign'}}}
 ].map((scene, i) => ({id: `m${i}`, start: 0, end: 4, ...scene}));
 
 const resolve = (scene, format = FORMATS['9:16'], extra = {}) => resolveModule(scene, story([scene], format, extra));

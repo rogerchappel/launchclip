@@ -84,7 +84,8 @@ export const SHOT_LAYOUT_SLOTS = Object.freeze({
   "media-stat": Object.freeze(["media"]),
   "media-compare": Object.freeze(["left.media", "right.media"]),
   "media-grid": Object.freeze(["items.*.media"]),
-  "media-list": Object.freeze(["items.*.media"])
+  "media-list": Object.freeze(["items.*.media"]),
+  "before-after": Object.freeze(["before", "after"])
 });
 const STILL_LAYOUT_SLOTS = new Set(["media-list"]);
 export const SHOTS_DIR = "assets/shots";

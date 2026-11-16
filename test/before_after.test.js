@@ -92,3 +92,47 @@ test('before-after: the handle and labels markup, and HyperFrames drives the sam
   assert.ok(compiled.html.includes(beforeAfterHtml(1080, 1920, wipe)));
   for (const line of lines) assert.ok(compiled.html.includes(line), line);
 });
+
+test('before-after module: two versions full frame, the after side clipped at the handle as it rests and reverses', async () => {
+  const {resolveModule} = await import('@launchclip/core/modules.mjs');
+  const {mediaLayoutTimeline, mediaLayoutView} = await import('@launchclip/core/catalog-d.mjs');
+  const {frameState, propsToStyle} = await import('@launchclip/core/catalog-b-view.mjs');
+  const scene = (params) => ({id: 'ba', module: 'before-after', start: 0, end: 6, params});
+  const resolve = (params) => {
+    const s = scene(params);
+    return resolveModule(s, {schema: 'launchclip.story.v1', lane: 'motion', brand, format: {width: 1080, height: 1920, fps: 30, duration: 6}, scenes: [s]});
+  };
+  // One source needs a grade (else it compares a shot with itself); a grade goes on one side.
+  assert.throws(() => resolve({before: 'assets/shots/a.mp4'}), /give params\.after .* or params\.grade/);
+  assert.throws(() => resolve({before: 'assets/shots/a.mp4', after: 'assets/shots/b.mp4', gradeSide: 'before'}), /gradeSide.*needs params\.grade/);
+  assert.throws(() => resolve({before: 'assets/shots/a.mp4', grade: 'mono', stops: [0.5, 0.5]}), /repeats a position/);
+  const graded = resolve({before: 'assets/shots/a.mp4', grade: 'flat', gradeSide: 'before'});
+  assert.equal(graded.content.windows[0].media.src, graded.content.windows[1].media.src);
+  assert.match(mediaLayoutView(graded).windows[0].style.filter, /saturate/);
+  assert.equal(mediaLayoutView(graded).windows[1].style.filter, undefined);
+
+  const model = resolve({before: 'assets/shots/a.jpg', after: 'assets/shots/b.mp4', stops: [0.6, 0.3, 1], labels: {before: 'Before', after: 'After'}});
+  const {moves} = model.content.compare;
+  assert.deepEqual(moves.map((m) => [m.from, m.to]), [[0, 0.6], [0.6, 0.3], [0.3, 1]]);
+  for (let i = 1; i < moves.length; i += 1) assert.ok(moves[i].start > moves[i - 1].start + moves[i - 1].duration, 'a rest between legs');
+  const ops = mediaLayoutTimeline(model);
+  const at = (t) => frameState(ops, t);
+  for (const t of [0.2, moves[0].start + moves[0].duration / 2, moves[1].start - 0.05, moves[1].start + 0.4, moves[2].start + moves[2].duration]) {
+    const state = at(t);
+    const clip = state.get('ba-win-1').clipL, x = state.get('ba-handle').x;
+    // The seam: the after window's left edge, where the handle stands; its label's side shares the clip.
+    assert.ok(Math.abs((clip / 100) * 1080 - x) < 0.6, `t=${t}: seam ${clip}% vs handle ${x}px`);
+    assert.equal(state.get('ba-side-after').clipL, clip);
+    assert.ok(Math.abs(state.get('ba-side-before').clipR - (100 - clip)) < 0.02);
+    assert.match(propsToStyle(state.get('ba-win-1')).clipPath, /^inset\(0% 0% 0% [\d.]+%\)$/);
+  }
+  assert.ok(Math.abs(at(moves[1].start - 0.05).get('ba-win-1').clipL - 40) < 0.01, 'rests at 0.6 revealed');
+  assert.ok(at(moves[1].start + moves[1].duration).get('ba-win-1').clipL > 69.9, 'reverses to 0.3');
+  assert.equal(at(model.end - 0.4).get('ba-win-1').clipL, 0, 'all after at the end');
+  assert.equal(at(model.end - 0.4).get('ba-handle').opacity, 0, 'the handle fades onto the edge');
+  // HyperFrames tweens the same clip as a clip-path string.
+  const {EMITTERS} = await import('../kit/hyperframes/catalog-d.mjs');
+  const out = EMITTERS['before-after'](model);
+  assert.match(out.motion, /tl\.fromTo\("#ba-win-1", \{"clipPath":"inset\(0% 0% 0% 100%\)"\}, \{"clipPath":"inset\(0% 0% 0% 40%\)"/);
+  assert.match(out.overlay, /id="ba-handle"/);
+});
