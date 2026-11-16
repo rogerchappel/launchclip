@@ -83,6 +83,8 @@ launchclip sfx audition whoosh    # listen to every whoosh variant
 launchclip sfx reroll keystroke   # don't like the typing sounds? regenerate just those
 ```
 
+Running [ComfyUI](comfyui.md) locally? `launchclip sfx seed --provider comfy` makes the library on your own machine instead.
+
 Every clip is trimmed so it starts exactly on its hit, its tail is faded, and it is levelled. From then on, every video uses your library, so your channel sounds consistent. It lives in `.launchclip/sfx/`, or in `~/.launchclip/sfx/` to use it across projects.
 
 ## Visuals that move with the sound

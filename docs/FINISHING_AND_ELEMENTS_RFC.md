@@ -349,6 +349,30 @@ it did not template (custom nodes run arbitrary Python), pins model files by
 hash, takes output filenames only from `/history`, caps download size and
 job time, and sends nothing but the brief's text and the frames it renders.
 
+**Shipped (phase 8).** `launchclip make --asset-provider comfy`
+(`src/comfy/asset_provider.js`) answers the planner's shot requests on the
+base shared with the SFX adapter (`src/comfy/`: loopback client and health,
+templates with a licence allowlist, a cache keyed by the bound workflow, a
+ledger line per generation in `qa/generation-log.jsonl`). Setup is in
+`docs/guide/comfyui.md`. Stills come from `plate-flux-schnell` (default) or
+`plate-sdxl` (`--comfy-plate`), video from `draft-wan-5b` (text to video,
+about 480p, 4n + 1 frames at 24 fps, at most 121). Any failure is "no shot",
+so the scene is drawn in code. Templates live in `src/comfy/templates/`.
+Differences from the plan above, all open:
+
+- **The asset-provider hook, not the generation adapter.** There is no
+  `quote`/`submit`/`poll`/`fetch` adapter yet (the generation RFC's phase 2
+  is not built), so ComfyUI answers `findShot` directly. Its cost is 0 and
+  its time is in the ledger; the seconds-per-step quote table needs runs on
+  real machines first.
+- **Text only.** Nothing is uploaded: no start frame, no references, so no
+  `/upload/image`. `draft-wan-i2v`, `draft-ltx` (its licence is off the
+  allowlist) and `upscale` are not shipped.
+- **Polling, not the socket.** `/history` is polled; `/ws` progress is open.
+- **No hash pin.** The API exposes model file names, not hashes; health
+  checks that each file a template needs is listed by its loader.
+- **Not yet run on a real server**: tests use a fake ComfyUI API.
+
 ## E.8 Skill quality
 
 - **The description is over the limit.** The built
@@ -386,7 +410,7 @@ job time, and sends nothing but the brief's text and the frames it renders.
 | 5 | Scramble, chrome, flow-field (S–M); Lottie, morph, three inks (M); word-architecture, proof-mechanism (L) | L |
 | 6 | Looks: risograph, one-bit, pen-plotter (SVG); lidar; stained-glass and silkscreen after phase 2 | M |
 | 7 | GL generators (aurora, fog, plasma, cells, caustics) | M |
-| 8 | ComfyUI adapter and templates | L |
+| 8 | ComfyUI adapter and templates (shipped: plates and Wan drafts) | L |
 
 Tests: **seek purity** (frame N alone equals frame N in sequence) for every
 new pass, kind, effect and module; **parity** (`parity.test.js`, SSIM ≥
