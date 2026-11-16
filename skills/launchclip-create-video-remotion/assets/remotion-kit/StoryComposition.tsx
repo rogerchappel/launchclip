@@ -852,7 +852,7 @@ export const calculateStoryMetadata: CalculateMetadataFunction<StoryProps> = asy
 export type ModuleReviewProps = { scene: any; story: any; customModules?: StoryProps["customModules"] };
 
 export const ModuleReview: React.FC<ModuleReviewProps> = ({ scene, story, customModules }) => {
-  ensureFonts(story.brand);
+  const fonts = ensureFonts(story.brand);
   const element = React.useMemo(() => resolveSceneElement(scene, story, { customModules }), [scene, story, customModules]);
   // Footage-led stories review the module over the (muted) base, moved by the
   // module's own camera, like the HyperFrames sceneFilter compile.
@@ -864,7 +864,8 @@ export const ModuleReview: React.FC<ModuleReviewProps> = ({ scene, story, custom
   const depth = subject.needed ? subject.depth({ entry: { scene }, model: element.model }) : "front";
   const offset = Number(scene.start);
   return (
-    <AbsoluteFill style={{ backgroundColor: story.brand?.colors?.bg ?? "#000000" }}>
+    // The brand stacks modules read (var(--lc-font-body, …)), as StoryComposition sets them.
+    <AbsoluteFill style={{ backgroundColor: story.brand?.colors?.bg ?? "#000000", fontFamily: fonts.body, ["--lc-font-display" as any]: fonts.display, ["--lc-font-body" as any]: fonts.body, ["--lc-font-meta" as any]: fonts.meta }}>
       {base ? <BaseLayer base={base} cameraOps={cameraOps} offset={offset} muted rooms={subject.rooms} /> : null}
       {depth !== "front" ? element.render(depth === "split" ? "behind" : undefined) : null}
       {subject.clips.length ? <SubjectLayer base={base} clips={subject.clips} ops={subject.ops} offset={offset} styles={subject.styles} /> : null}
