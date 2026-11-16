@@ -238,10 +238,11 @@ export async function planStoryboard(options = {}) {
   if (assets && askedMin > shotLimit) shotWarnings.push(`shots: minShots ${askedMin} is more than a plan may ask for; using ${shotLimit}`);
   if (!assets && askedMin > 0) shotWarnings.push(`shots: minShots ${askedMin} ignored: there is no asset provider to ask for shots`);
   const clipLed = clipLedPlan({ lane, ...densityDial(options.density, style), clips: Array.isArray(options.clips) ? options.clips : [], provider: Boolean(assets), profile });
-  // cardBackdrops "footage" (make --card-backdrops): with a provider, the
-  // model may put a full-screen card on a library clip, and the card scenes
-  // it leaves on a stock plate ask for one too (src/asset_provider.js).
-  const footageBackdrops = Boolean(assets) && options.cardBackdrops === "footage" && lane !== "footage-led";
+  // cardBackdrops (make --card-backdrops): with a provider, the model may put
+  // a full-screen card on a library clip, and the card scenes it leaves on a
+  // stock plate ask for one too (src/asset_provider.js). On by default when
+  // there is footage to ask for; "off" keeps the stock plates.
+  const footageBackdrops = Boolean(assets) && (options.cardBackdrops ?? "footage") === "footage" && lane !== "footage-led";
   if (!assets && options.cardBackdrops === "footage") shotWarnings.push("backdrops: card backdrops ignored: there is no asset provider to ask for footage");
   const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style: planStyle, artDirection: brief, subject, profile, direction, clipLed, explainer }), ...(layout ? [layout.prompt()] : []), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : []), ...(featured?.length ? [featuredPrompt(featured)] : []), ...(bible ? [biblePrompt(bible)] : [])].join("\n\n");
   // shotCache: answers already asked for (a fast draft plans twice against one set of shots); shotFallback: {scene id: the drawn scene a missed shot becomes}.

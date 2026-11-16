@@ -693,7 +693,11 @@ export function scriptBeatLines() {
     'Turns in the script ("but", "so", a reveal) are where a new scene, a transition or a hit lands; a payoff beat gets the strongest visual of the video.',
     'The CTA beat gets the end card, worded exactly as the narration speaks it; no other scene shows a call to action.',
     'The open-loop beat is a teaser, not a list item: its card is labelled as one (kicker "Coming up", or "Stay for number three"), never with the item\'s own label ("Material three", "Option 3"), and the item gets its own card in its turn. A later item shown before the earlier ones without that label fails the plan (order:).',
-    'Keep the frame full to the last second: the payoff and the CTA keep footage on screen (a clip, a media layout, or a card on a footage backdrop) or full-bleed type that fills most of the frame; never close on small cards or chips over the flat brand surface, and never run footage in one half over an empty panel for long. A stretch that is mostly flat surface fails the plan (density:).'
+    'Keep the frame full to the last second: the payoff and the CTA keep footage on screen (a clip, a media layout, or a card on a footage backdrop) or full-bleed type that fills most of the frame; never close on small cards or chips over the flat brand surface, and never run footage in one half over an empty panel for long. A stretch that is mostly flat surface fails the plan (density:).',
+    'The opening builds in steps: at least three events in the first 3 s (the shot, then its words landing in two or three beats, a state or a second shot), never one shot under captions alone.',
+    'When the video has footage (supplied clips, a library or shots), every cutaway (a card, list, comparison or table scene) sits on a footage backdrop (scenes[i].backdrop {kind: "video", params: {src}}) with its words as free type on it; a single filled box on the flat plate fails the plan (tells: boxed-on-flat). The end card goes on footage too, so its layout is drawn over the shot: a light card after dark footage flashes white.',
+    'Use split-screen only when its text fills the panel (a title with a figure or a short list); a kicker and a one-line title leave the panel bare and fail the plan: play that line full-bleed in a clip with callouts instead.',
+    'A cutaway keeps moving after it lands: its footage backdrop plays, the camera breath (motion.feel ambient) runs under it, and item-list and other modules with an idle breathe; never hold a still card longer than the pace band allows.'
   ];
 }
 

@@ -19,7 +19,7 @@ import { talkingHeadLayoutError } from "../talking_head_layout.js";
 export const MAKE_RENDERERS = Object.freeze(["remotion", "hyperframes"]);
 export const MAKE_VOICES = Object.freeze(["kokoro", "elevenlabs", "test"]);
 export const MAKE_QUALITIES = Object.freeze(["draft", "high"]);
-// --card-backdrops: footage puts full-screen cards on the asset provider's clips (src/asset_provider.js).
+// --card-backdrops: footage (the default with a provider) puts full-screen cards on the asset provider's clips; off keeps stock plates (src/asset_provider.js).
 export const CARD_BACKDROPS = Object.freeze(["off", "footage"]);
 // --stop-after and --approve: the places a run can stop for a person's yes. bible and animatic are a character
 // story's (docs/ANIMATION_PIPELINE_RFC.md §6.3); storyboard is any video's: planned and playable, nothing rendered.

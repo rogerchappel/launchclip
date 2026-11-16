@@ -283,7 +283,8 @@ export function cardBackdrops(storyboard, { words = [], brief = "", max = MAX_BA
   const times = sceneTimes(storyboard, words);
   const cards = (storyboard?.scenes ?? []).map((scene, index) => ({ scene, index, span: times.get(scene?.id) }))
     .filter(({ scene, span }) => isCardScene(storyboard, scene) && span && span.end - span.start >= BACKDROP_MIN_SECONDS)
-    .sort((a, b) => (b.span.end - b.span.start) - (a.span.end - a.span.start) || a.index - b.index)
+    // The end card first (a light card after dark footage flashes), then the longest.
+    .sort((a, b) => (b.scene.module === "end-card") - (a.scene.module === "end-card") || (b.span.end - b.span.start) - (a.span.end - a.span.start) || a.index - b.index)
     .slice(0, room);
   if (!cards.length) return { storyboard, added: [] };
   const story = structuredClone(storyboard);

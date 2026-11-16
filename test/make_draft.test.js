@@ -185,7 +185,8 @@ test("a draft asks the asset provider for every shot at once; a clip that is lat
       }
     };
     const started = performance.now();
-    const { report } = await draft.run({ speed: "draft", minShots: 2 }, { assets });
+    // Backdrops are asked after the shots by design; this counts the shots alone.
+    const { report } = await draft.run({ speed: "draft", minShots: 2, cardBackdrops: "off" }, { assets });
     assert.ok(performance.now() - started < 20_000, "the run did not wait for the late clips");
     assert.equal(report.status, "awaiting-approval");
     assert.ok(asked.length >= 2, `asked for ${asked.length} shots`);

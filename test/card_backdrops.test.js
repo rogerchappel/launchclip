@@ -125,16 +125,22 @@ test("cardBackdrops asks for footage behind the full-screen cards a plan left on
   assert.match(backdropPrompt(), new RegExp(`at most ${MAX_BACKDROP_REQUESTS}`));
 });
 
-test("the planner offers card backdrops only with a provider and --card-backdrops footage", async (t) => {
+test("cardBackdrops asks for the end card's backdrop first, so the cap never leaves it on a light plate", () => {
+  const base = story();
+  const ending = { ...base, scenes: [...base.scenes.slice(0, 2), { id: "s3", module: "end-card", start: "word:Care", end: 9, energy: 1, params: { action: "follow", headline: "Care matters" } }] };
+  assert.deepEqual(cardBackdrops(ending, { words: WORDS, max: 1 }).added, ["s3"]);
+});
+
+test("the planner offers card backdrops by default with a provider; --card-backdrops off keeps the stock plates", async (t) => {
   const { project, files } = await library(t);
   const boards = [story()];
   const client = { requests: [], async runStructured(request) { this.requests.push(request); return { model: "m", value: { storyboard_json: JSON.stringify(boards[0]) }, usage: { input_tokens: 1, output_tokens: 1 } }; } };
   const assets = { async findShot(request) { return { file: request.slot === "backdrop" ? files.dusk : files.sanding, kind: "video" }; } };
   const base = { brief: "Decking materials and their care.", words: WORDS, lane: "voiceover-motion", format: FORMAT, audio: AUDIO, tier: "structured", model: "m", client, assets, project };
-  const off = await planStoryboard(base);
+  const off = await planStoryboard({ ...base, cardBackdrops: "off" });
   assert.doesNotMatch(client.requests[0].instructions, /Card backdrops/);
   assert.equal(off.storyboard.scenes[1].backdrop, undefined);
-  const on = await planStoryboard({ ...base, cardBackdrops: "footage" });
+  const on = await planStoryboard(base);
   assert.equal(on.status, "passed", on.errors.join("\n"));
   assert.match(client.requests.at(-1).instructions, /Card backdrops from the app's media library/);
   assert.equal(on.storyboard.scenes[1].backdrop.kind, "video");
