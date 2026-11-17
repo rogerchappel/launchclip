@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -282,7 +282,7 @@ test("an ElevenLabs voice that fails (out of credits) voices the narration with 
       if (name === "elevenlabs") throw new Error('ElevenLabs with-timestamps request failed (401): {"detail":{"code":"quota_exceeded"}}');
       return testVoice.synthesize(request);
     } });
-    const report = await runMake(PROMPT, { assets, voice: "elevenlabs", voiceId: "eleven-voice", music: "synth", cwd }, { env: { ELEVENLABS_API_KEY: "key" }, client: model, inventory: fakeInventory, finish: fakeFinish([]), voiceProvider, notice() {} });
+    const report = await runMake(PROMPT, { assets, voice: "elevenlabs", voiceId: "eleven-voice", music: "synth", cwd }, { env: { ELEVENLABS_API_KEY: "key" }, client: model, inventory: fakeInventory, finish: fakeFinish([]), voiceProvider, normalizeVoice: async (input, output) => { await copyFile(input, output); return null; }, notice() {} });
     assert.equal(report.status, "ready-for-review", JSON.stringify(report.stages));
     assert.ok(asked.includes("elevenlabs") && asked.at(-1) === "kokoro", asked.join(","));
     assert.ok(report.warnings.some((line) => /ElevenLabs could not voice the narration .*quota_exceeded.*local Kokoro voice/.test(line)), report.warnings.join("\n"));
