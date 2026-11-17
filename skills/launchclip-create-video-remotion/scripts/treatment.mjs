@@ -51,7 +51,11 @@ const wordsOf = (value) => String(value ?? '').trim().split(/\s+/).filter(Boolea
 // Locked copy compares case-folded with punctuation kept; the loose form (letters and digits) finds rewordings.
 const fold = (value) => String(value ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
 const plain = (value) => String(value ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
-const hasPhrase = (text, phrase) => ` ${plain(text)} `.includes(` ${plain(phrase)} `);
+// A phrase with no letters ("#1", "100%") is its symbols: match it as written, or "#1" would match any lone "1".
+const escapeRe = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const hasPhrase = (text, phrase) => (/\p{L}/u.test(plain(phrase))
+  ? ` ${plain(text)} `.includes(` ${plain(phrase)} `)
+  : new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(fold(phrase))}(?![\\p{L}\\p{N}])`, 'u').test(fold(text)));
 const round = (value) => Math.round(value * 100) / 100;
 
 /** The `hold>N` banned token as seconds, or null. */
