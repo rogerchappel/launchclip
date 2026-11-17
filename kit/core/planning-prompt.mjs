@@ -231,6 +231,75 @@ export const PHRASE_MODULE_TABLE = Object.freeze([
   { module: 'ui-scene', when: 'shows a software tool doing its job on screen (an editor timeline, a terminal, a search, a download, a locked or unlocked feature): built as interface panels that change on the words', patterns: ['\\b(on|in) (your|the|my) (timeline|terminal|editor|dashboard)\\b', '\\bscans? (your|the) (timeline|repo|codebase|project)\\b', '\\bsearch(es)? and download', '\\bunlocks?\\b', '\\bfrom (the )?(terminal|command line)\\b'] }
 ].map((row) => Object.freeze({ ...row, patterns: Object.freeze(row.patterns) })));
 
+// ---------------------------------------------------------------------------
+// Subjects (docs/EXPLAINER_CLAIMS_RFC.md §3.2): a direction-map line with a
+// subject (the fact of a script point it says) resolves in this order:
+//   1. footage that shows it, chosen by the asset descriptions;
+//   2. footage near enough plus an annotation (phase 2: skipped for now);
+//   3. an illustration of the subject (consequence and object points);
+//   4. full-bleed hero type.
+// A number point keeps the data modules (metric, stat-card, …): it is not routed here.
+export const SUBJECT_ROUTES = Object.freeze({ consequence: 'illustration', object: 'illustration' });
+export const SUBJECT_TYPE_MODULE = 'kinetic-words';
+// The illustration's change, read from what the fact says.
+export const ILLUSTRATION_CHANGE_GUIDE = Object.freeze([
+  ['wear', 'decay: it greys, fades, cracks or dents'],
+  ['measure', 'an amount: a heat, a cost, a level, a weight'],
+  ['count', 'a duration: days, weeks, a season, an hour'],
+  ['compare', 'options side by side'],
+  ['cause', 'a force acting on it: sun, a foot, rain, heat'],
+  ['before-after', 'a transformation: what it was, then what it is']
+]);
+const SUBJECT_STOP = new Set('the a an and or but of to in on for with at by from is are was it its it\'s this that you your they their them we our not no if so as be can will just very more most less than then when what how into out up over'.split(' '));
+const subjectWords = (text) => [...new Set(String(text ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').split(' ').filter((word) => word.length > 2 && !SUBJECT_STOP.has(word)).map((word) => word.replace(/(?:es|s)$/, '')))];
+
+/**
+ * Where each subject line of a direction map resolves (see SUBJECT_ROUTES).
+ * The headless planner and the skills call this one function, so both route
+ * alike. media: the asset inventory [{src, kind, description?, notes?}]; a
+ * shot shows the subject when its description shares at least two of the
+ * subject's words (all of them for a one-word subject). points: SCRIPT.json
+ * points, read for each subject's kind.
+ * → [{words, subject, kind, route: "footage" | "illustration" | "type", media?}]
+ */
+export function routeSubjects(direction, { media = [], points = [] } = {}) {
+  // shortcut: shared words stand in for "shows it"; a vision match on the shots comes with annotation (phase 2).
+  const shots = (Array.isArray(media) ? media : []).filter((item) => item && ['video', 'image'].includes(item.kind ?? 'video') && item.src).map((item) => ({ src: item.src, words: new Set(subjectWords(`${item.description ?? ''} ${[item.notes ?? []].flat().join(' ')}`)) }));
+  const kindOf = new Map((Array.isArray(points) ? points : []).filter((point) => point?.fact).map((point) => [String(point.fact).trim(), point.kind]));
+  const modules = knownModules();
+  const routes = [];
+  for (const section of direction?.sections ?? []) for (const line of section?.lines ?? []) {
+    const subject = typeof line?.subject === 'string' ? line.subject.trim() : '';
+    if (!subject) continue;
+    const kind = kindOf.get(subject) ?? null;
+    if (kind === 'number') continue;
+    const want = subjectWords(subject);
+    const shot = want.length ? shots.find((item) => want.filter((word) => item.words.has(word)).length >= Math.min(2, want.length)) : null;
+    const routed = SUBJECT_ROUTES[kind ?? 'consequence'];
+    const route = shot ? 'footage' : routed && modules.includes(routed) ? 'illustration' : 'type';
+    routes.push({ words: line.words, subject, kind, route, ...(shot ? { media: shot.src } : {}) });
+  }
+  return routes;
+}
+
+/** The resolution order and the change guide, worded once for the planner prompt and the skills' reference. */
+export function subjectResolutionLines() {
+  return [
+    'A line with a subject (the fact it says) shows that subject. Resolve it in this order: (1) footage that shows it, from the asset descriptions; (2) when no shot shows it, an illustration scene of the subject (its drawn object, and one change landing on the stressed word); (3) last, full-bleed hero type (kinetic-words). A number keeps its data module (metric, stat-card).',
+    `Choose the illustration's change from what the fact says: ${ILLUSTRATION_CHANGE_GUIDE.map(([change, when]) => `${change} for ${when}`).join('; ')}.`,
+    'Never show a subject on a flat brand panel, a small boxed photo (object-card, or a photo-scene under half the frame on a plain plate) or a gradient-only plate: the plan check flags it.'
+  ];
+}
+
+/** The planner's lines for routed subjects (routeSubjects()). */
+function subjectRouteLines(routes) {
+  return [
+    ...subjectResolutionLines(),
+    '',
+    ...routes.map((entry) => `- words [${entry.words.join(', ')}] "${entry.subject}": ${entry.route === 'footage' ? `footage (${entry.media} shows it)` : entry.route === 'illustration' ? 'illustration (no shot shows it)' : `${SUBJECT_TYPE_MODULE} (hero type)`}`)
+  ];
+}
+
 /** The registry module a phrase-table row maps to (its fallback when the module is planned). */
 export function phraseRowModule(row, modules = knownModules()) {
   if (row.overlay) return row.overlay;
@@ -875,7 +944,7 @@ function directionContractLines({ lane } = {}) {
   return [
     `schema: "${DIRECTION_SCHEMA}" (exactly); profile: the cadence profile id (given).`,
     'sections: [{id ("s1"…), title, layout?, lines: [...]}]: topics in order (story beats for a character story). A section holds one footage layout: ' + DIRECTION_LAYOUTS.map((name) => `"${name}"`).join(', ') + ' (footage-led only; "full" is today\'s overlays-over-the-recording).',
-    'lines: [{words: [first, last], intent, treatment, scenes?, why?}]. words are inclusive indexes into the narration words, so the map survives re-timing. Every word belongs to exactly one line, in order.',
+    'lines: [{words: [first, last], intent, treatment, scenes?, why?, subject?}]. subject is the fact the line shows (tooling writes it from the script\'s points). words are inclusive indexes into the narration words, so the map survives re-timing. Every word belongs to exactly one line, in order.',
     `intent: one of ${DIRECTION_INTENTS.join(', ')} (see the intent rules).`,
     `treatment: dress (a visual alongside the presenter), insert (a full-frame visual over the voice), face (hold on the presenter on purpose), camera (a punch-in or camera move only).${motion ? ' This story has no presenter: every line is dress or insert.' : ''}`,
     'dress and insert lines name the scene ids that will show them ("scenes": ["s3"]); face and camera lines give a short why ("the turn lands on his face").',
@@ -1000,6 +1069,7 @@ export function directionMapReference() {
     ]),
     ...section('Contract', directionContractLines().map((line) => `- ${line}`)),
     ...section('Intent rules (first match wins)', intentRuleLines()),
+    ...section('Subjects', ['A line may carry `subject`: the fact of the script point it says (SCRIPT.json `points`; make writes it). `routeSubjects(map, {media, points})` in `scripts/planning-prompt.mjs` says where each one resolves, the same function `launchclip make` uses, so follow its answer.', '', ...subjectResolutionLines().map((line) => `- ${line}`)]),
     ...section('Treatment', ['`treatment` sits beside `sections`: the film\'s idea and its rules, written before the storyboard (design: `docs/PLAN_AND_PACE_RFC.md` §1). `story validate` and the direction gate check every field against the storyboard. Optional on the structured and guided tiers; required on bespoke.', '', ...treatmentLines().map((line) => `- ${line}`)]),
     ...section('Narrative maps', [
       `A story told by characters uses story beats as sections (\`beat\`: ${NARRATIVE_BEATS.join(', ')}), and each line says who acts: \`cast: [{id, pose, expression, at: "word:<text>"}]\` and a \`set\`. Cast cues name characters from the story's cast and poses, expressions and sets from the character kit; validation checks them when the kit is present.`,
@@ -1066,7 +1136,7 @@ export function profilesReference(profiles = []) {
  * fixed inputs (copied into the prompt); words: optional measured narration
  * (NARRATION.json words) for word anchors.
  */
-export function planningPrompt({ tier = 'structured', lane, format, brand, words, style, artDirection, subject, profile = null, direction = null, clipLed = null, explainer = null } = {}) {
+export function planningPrompt({ tier = 'structured', lane, format, brand, words, style, artDirection, subject, profile = null, direction = null, clipLed = null, explainer = null, subjects = null } = {}) {
   if (!PLANNER_TIERS.includes(tier)) throw new Error(`tier must be one of ${PLANNER_TIERS.join(', ')}`);
   if (lane !== undefined && !STORY_LANES.includes(lane)) throw new Error(`lane must be one of ${STORY_LANES.join(', ')}`);
   // Subject modules are offered only to a footage-led story whose presenter can be cut out.
@@ -1089,6 +1159,8 @@ export function planningPrompt({ tier = 'structured', lane, format, brand, words
     // clipLed: the clip-led rule in force (kit/core/clip-led.mjs clipLedPlan), when footage and a low density dial call for it.
     ...(clipLedLines(clipLed).length ? section('Footage and graphics (density)', clipLedLines(clipLed).map((line) => `- ${line}`)) : []),
     ...(direction ? section('Direction map (plan the storyboard against it)', directionPlanLines(direction)) : []),
+    // subjects: routeSubjects() for the map's lines with a subject (docs/EXPLAINER_CLAIMS_RFC.md §3.2).
+    ...(subjects?.length ? section('Subjects (show the fact the line says)', subjectRouteLines(subjects)) : []),
     // explainer: {cast, roles}, a character-led explainer (kit/core/explainer.mjs).
     ...(explainer?.cast ? section('Characters carry the explainer', explainerStoryboardLines(explainer).map((line) => `- ${line}`)) : []),
     ...section('Script beats', scriptBeatLines().map((line) => `- ${line}`)),
