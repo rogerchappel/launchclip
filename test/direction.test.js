@@ -283,3 +283,17 @@ test("the shot list works without a map or a script, and the CLI prints text or 
   assert.match(await run([]), /^Test the rollback: a two-character dialogue: 5 shots/);
   assert.equal(JSON.parse(await run(["--json"])).shots.length, 5);
 });
+
+test("withSubjects: a line that says a script point's words carries its fact as subject, and validates", async () => {
+  const { withSubjects } = await import("@launchclip/core/direction.mjs");
+  const words = "Pine is soft but chair legs dent it. Try it today.".split(" ").map((text, i) => ({ text, start: i * 0.4, end: i * 0.4 + 0.3 }));
+  const map = { schema: DIRECTION_SCHEMA, sections: [{ id: "s1", lines: [{ words: [0, 7], intent: "claim", treatment: "insert", scenes: ["a"] }, { words: [8, 10], intent: "cta", treatment: "insert", scenes: ["a"] }] }] };
+  const out = withSubjects(map, words, [{ item: "pine", fact: "chair legs dent it", kind: "consequence", words: "chair legs dent it" }]);
+  assert.equal(out.sections[0].lines[0].subject, "chair legs dent it");
+  assert.equal(out.sections[0].lines[1].subject, undefined);
+  assert.equal(withSubjects(map, words, undefined), map);
+  const lines = (subject) => ({ schema: DIRECTION_SCHEMA, sections: [{ id: "s1", start: 0, end: 4.3, layout: "full", lines: [{ ...out.sections[0].lines[0], subject }] }] });
+  const errs = (subject) => validateDirection(lines(subject), { words }).errors.filter((e) => /subject|unknown field/.test(e));
+  assert.deepEqual(errs("chair legs dent it"), []);
+  assert.equal(errs("").length, 1);
+});
