@@ -127,7 +127,7 @@ function crackPaths(box, seed) {
 }
 
 // A material's full-bleed ground: canvas-sized SVG of seeded strokes over the tone, with a vignette.
-function materialNodes(material, tone, W, H, u, seed) {
+function materialNodes(gid, material, tone, W, H, u, seed) {
   const rand = seededRandom(hashString(`${material}|${seed}`));
   const light = mixColor('#ffffff', tone, 0.1), dark = mixColor('#000000', tone, 0.28);
   const kids = [el('rect', null, null, [], {x: 0, y: 0, width: W, height: H, fill: tone})];
@@ -162,12 +162,12 @@ function materialNodes(material, tone, W, H, u, seed) {
   } else {
     // Brushed metal: fine horizontal lines and one broad sheen.
     for (let y = 0; y < H; y += 5 * u) kids.push(line(`M0 ${r2(y)} H${W}`, rand() < 0.5 ? light : dark, 1.5 * u, 0.08 + rand() * 0.14));
-    kids.push(el('rect', null, null, [], {x: 0, y: 0, width: W, height: H, fill: 'url(#sheen)'}));
+    kids.push(el('rect', null, null, [], {x: 0, y: 0, width: W, height: H, fill: `url(#${gid}-sheen)`}));
   }
-  kids.push(el('rect', null, null, [], {x: 0, y: 0, width: W, height: H, fill: 'url(#vignette)'}));
+  kids.push(el('rect', null, null, [], {x: 0, y: 0, width: W, height: H, fill: `url(#${gid}-vignette)`}));
   const defs = el('defs', null, null, [
-    el('radialGradient', 'vignette', null, [el('stop', null, null, [], {offset: '55%', stopColor: '#000000', stopOpacity: 0}), el('stop', null, null, [], {offset: '100%', stopColor: '#000000', stopOpacity: 0.45})], {cx: '50%', cy: '50%', r: '75%'}),
-    el('linearGradient', 'sheen', null, [el('stop', null, null, [], {offset: '30%', stopColor: '#ffffff', stopOpacity: 0}), el('stop', null, null, [], {offset: '50%', stopColor: '#ffffff', stopOpacity: 0.14}), el('stop', null, null, [], {offset: '70%', stopColor: '#ffffff', stopOpacity: 0})], {x1: '0%', y1: '0%', x2: '100%', y2: '100%'})
+    el('radialGradient', `${gid}-vignette`, null, [el('stop', null, null, [], {offset: '55%', stopColor: '#000000', stopOpacity: 0}), el('stop', null, null, [], {offset: '100%', stopColor: '#000000', stopOpacity: 0.45})], {cx: '50%', cy: '50%', r: '75%'}),
+    el('linearGradient', `${gid}-sheen`, null, [el('stop', null, null, [], {offset: '30%', stopColor: '#ffffff', stopOpacity: 0}), el('stop', null, null, [], {offset: '50%', stopColor: '#ffffff', stopOpacity: 0.14}), el('stop', null, null, [], {offset: '70%', stopColor: '#ffffff', stopOpacity: 0})], {x1: '0%', y1: '0%', x2: '100%', y2: '100%'})
   ]);
   return [defs, ...kids];
 }
@@ -252,7 +252,7 @@ function view(model) {
   const kids = [];
   if (c.tone) {
     const G = c.ground, svg = (gid, worn) => el('div', gid, {...abs(G.x, G.y, G.width, G.height), transformOrigin: '50% 50%', ...(worn ? {filter: WORN, opacity: 0} : {})},
-      [svgRoot(G.width, G.height, materialNodes(c.plate, c.tone, G.width, G.height, u, c.seed))]);
+      [svgRoot(G.width, G.height, materialNodes(gid, c.plate, c.tone, G.width, G.height, u, c.seed))]);
     kids.push(svg(`${id}-ground`, false));
     if (['wear', 'cause'].includes(c.change)) kids.push(svg(`${id}-ground-worn`, true));
   }
