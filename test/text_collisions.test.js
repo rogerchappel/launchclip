@@ -49,8 +49,7 @@ test("soft-card draws the line on a card in the plate colour; weight, letter spa
 test("a box-less preset is helped to read with a scrim, not a box", () => {
   assert.equal(CAPTION_PRESETS["kinetic-hierarchy"].plateStyle, "scrim");
   const plan = captionPlan(chunkWords(timed("over a bright sky")), { type: "captions", preset: "kinetic-hierarchy", plates: "all" }, { brand: BRAND, format: FORMAT });
-  assert.match(plan.css, /\.lc-cap-legible \{ background: radial-gradient/);
-  assert.doesNotMatch(plan.css, /\.lc-cap-legible \{[^}]*border-radius/);
+  assert.match(plan.css, /\.lc-cap-scrim \{[^}]*background: linear-gradient/);
   const boxed = captionPlan(chunkWords(timed("over a bright sky")), { type: "captions", preset: "word-highlight", plates: "all" }, { brand: BRAND, format: FORMAT });
   assert.match(boxed.css, /\.lc-cap-legible \{ background: #[0-9a-f]{6}eb;/);
 });
