@@ -359,7 +359,7 @@ export const CAPTION_PRESETS = Object.freeze({
   // Motion-graphics captions: the line builds up word by word and stays;
   // connecting words are small, one hero word per line is large and glows
   // in the active colour (captionHierarchy). No box: a line that needs help
-  // to read gets a soft scrim, not a plate.
+  // to read gets a scrim band across the frame, not a box.
   'kinetic-hierarchy': preset({ description: 'The line builds up word by word; small connecting words, one large hero word per line glowing in the active colour.', weight: 900, size: 60, lineHeight: 1.05, case: 'as-is', letterSpacing: '-0.022em', gap: 0.24, stroke: 1, strokeColor: 'rgba(0,0,0,.38)', shadow: SHADOW_LIFT, word: 'hierarchy', maxWords: 3, maxChars: 24, entrance: 'none', exit: 'fade', plateStyle: 'scrim' }),
   'soft-card': preset({ description: 'The whole line sits on a rounded card in the plate colour (the brand primary), in bold ink type.', colors: { idle: 'ink', plate: 'primary' }, font: 'body', weight: 900, size: 60, case: 'as-is', letterSpacing: '0em', gap: 0.26, stroke: 0, shadow: 'none', word: 'none', maxWords: 4, maxChars: 24, entrance: 'pop', exit: 'fade', plate: 'card' }),
   // The satisfying-motion captions: the sentence builds word by word and
@@ -596,7 +596,8 @@ export function captionOptions(given = {}, { brand, format, fonts, story } = {})
     plate: p.plate,
     punctuation: p.punctuation ?? true,
     // How a line that does not read on what is behind it is helped: a solid
-    // box (the default) or a soft scrim that keeps a box-less look.
+    // box (the default) or a scrim: a band across the frame, feathered top
+    // and bottom, that keeps a box-less look.
     plateStyle: CAPTION_PLATE_STYLES.includes(overlay?.plate_style) ? overlay.plate_style : p.plateStyle ?? 'box',
     emphasis,
     accents: p.accents ?? null,
@@ -673,6 +674,9 @@ export function captionLegiblePlate(idle, brandColors = {}) {
   const options = [...brand, '#0b0d12', '#ffffff'];
   return options.reduce((best, color) => (captionContrast(idle, color) > captionContrast(idle, best) + 1e-9 ? color : best), options[0]);
 }
+
+/** The scrim plate's band (em): solid behind the words for `solid` above and below the line, then feathered out over `feather`. */
+export const CAPTION_SCRIM_BAND = Object.freeze({ solid: 0.2, feather: 0.3 });
 
 /** Is this caption line plated (the preset's plate, or a legibility plate)? */
 export const captionLinePlated = (o, id) => Boolean(o.plate) || o.plates === 'all' || Boolean(o.plates?.has?.(id));
@@ -1088,8 +1092,11 @@ export function captionPlanCss(o, { zones = [], format } = {}) {
   if (o.plate === 'card') lines.push(`.lc-cap-plate { background: ${C.plate}; padding: 0.3em 0.55em 0.38em; border-radius: 0.3em; box-shadow: 0 12px 28px rgba(0,0,0,.28); }`);
   else if (o.plate) lines.push(`.lc-cap-plate { background: ${C.plate}d9; padding: 0.32em 0.6em; border-radius: 0.3em; }`);
   // A legibility plate: nearly opaque, so the line reads on anything behind
-  // it; or, for a box-less preset, a scrim that fades out at its edges.
-  if (o.legible && o.plateStyle === 'scrim') lines.push(`.lc-cap-legible { background: radial-gradient(closest-side, ${o.legiblePlate}d0, ${o.legiblePlate}a6 60%, ${o.legiblePlate}00); padding: 0.45em 1.1em; }`);
+  // it; or, for a box-less preset, a band across the frame, solid behind the
+  // words and feathered top and bottom (a blurred spot read as a smudge). A
+  // line in a zone keeps the zone's width, with rounded ends.
+  const cw = 1 - b.left - b.right;
+  if (o.legible && o.plateStyle === 'scrim') lines.push(`.lc-cap-legible { left: ${pct(-b.left / cw)}; right: ${pct(-b.right / cw)}; padding: ${CAPTION_SCRIM_BAND.solid + CAPTION_SCRIM_BAND.feather}em 0.5em; border-radius: 0.32em; background: linear-gradient(to bottom, ${o.legiblePlate}00, ${o.legiblePlate}eb ${CAPTION_SCRIM_BAND.feather}em, ${o.legiblePlate}eb calc(100% - ${CAPTION_SCRIM_BAND.feather}em), ${o.legiblePlate}00); }`, '.lc-cap-legible .lc-cap-w { text-shadow: none; }');
   else if (o.legible) lines.push(`.lc-cap-legible { background: ${o.legiblePlate}eb; padding: 0.18em 0.5em 0.22em; border-radius: 0.32em; }`, '.lc-cap-legible .lc-cap-w { text-shadow: none; }');
   switch (o.word) {
     case 'fill': lines.push(`.lc-cap-fill { position: absolute; left: 0; top: 0; width: 0%; overflow: hidden; white-space: nowrap; color: ${C.active}; }`); break;

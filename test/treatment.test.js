@@ -75,6 +75,12 @@ test('guardrails: no forbidden phrase in scene text or narration', () => {
   const said = words[2].text.replace(/[^\p{L}\p{N}]/gu, '');
   assert.match(errors({guardrails: [{claim: 'scope', forbid: [said]}]}), /overstates scope/);
   assert.match(errors({guardrails: [{claim: 'x'}]}), /must be \{claim, forbid/);
+  // "#1" is a ranking claim, not any lone "1": it matches only as written.
+  const sayOn = (text) => ({...story, scenes: story.scenes.map((scene, i) => (i === 0 ? {...scene, params: {...scene.params, headline: text}} : scene))});
+  const rail = {guardrails: [{claim: 'market leadership', forbid: ['#1']}]};
+  assert.equal(validateTreatment(rail, {sections, story: sayOn('Coming up: 1 question'), words}).errors.join('\n'), '');
+  assert.equal(validateTreatment(rail, {sections, story: sayOn('Rated #10 in town'), words}).errors.join('\n'), '');
+  assert.match(validateTreatment(rail, {sections, story: sayOn('The #1 deck oil'), words}).errors.join('\n'), /overstates market leadership/);
 });
 
 test('locked example: the scene numbers equal the fixed values', () => {
