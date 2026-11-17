@@ -622,6 +622,15 @@ test("placeholderScenes covers custom modules in HyperFrames and compiler fallba
   assert.deepEqual(fallback, [{ id: "s2", module: story.scenes[1].module, kind: "compile", reason: `HyperFrames emitter for "${story.scenes[1].module}" failed (boom)` }]);
 });
 
+test("placeholderScenes reads a scene at the length the renderers draw it, through the next scene's transition", async () => {
+  const story = (await runStoryCommand("resolve", path.join(MINIMAL, "storyboard.json"), { narration: path.join(MINIMAL, "NARRATION.json") })).story_resolved;
+  // A 1.78 s photo-scene (minimum 2 s) whose next scene fades in over 0.4 s is drawn for 2.18 s: no card.
+  const short = (incoming) => ({ ...story, scenes: [{ id: "hardwood-title", module: "photo-scene", start: 0, end: 1.78, params: { media: { src: "assets/hardwood.jpg", kind: "image" }, title: "2 · Hardwood" } }, { ...story.scenes[1], start: 1.78, in: incoming }] });
+  assert.deepEqual(placeholderScenes(short({ type: "fade", dur: 0.4 }), { renderer: "remotion" }), []);
+  // On a hard cut it really is 1.78 s on screen, and really renders the card.
+  assert.match(placeholderScenes(short(undefined), { renderer: "remotion" })[0]?.reason ?? "", /duration must be between 2 and 3600, got 1\.78/);
+});
+
 test("a custom module with no form for the renderer stops the run before anything renders", async () => {
   const custom = (source) => (story) => { story.scenes[1] = { id: story.scenes[1].id, module: "custom", source, start: story.scenes[1].start, end: story.scenes[1].end, params: { component: "Hero" } }; };
   const project = await narratedProject({ mutate: custom("remotion/Hero.tsx") });
