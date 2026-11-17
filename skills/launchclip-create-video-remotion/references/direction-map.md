@@ -16,7 +16,7 @@ Write `DIRECTION.json` (launchclip.direction-map.v1) beside `storyboard.json` be
 
 - schema: "launchclip.direction-map.v1" (exactly); profile: the cadence profile id (given).
 - sections: [{id ("s1"…), title, layout?, lines: [...]}]: topics in order (story beats for a character story). A section holds one footage layout: "full", "split-left", "split-right", "framed", "stacked", "insert" (footage-led only; "full" is today's overlays-over-the-recording).
-- lines: [{words: [first, last], intent, treatment, scenes?, why?}]. words are inclusive indexes into the narration words, so the map survives re-timing. Every word belongs to exactly one line, in order.
+- lines: [{words: [first, last], intent, treatment, scenes?, why?, subject?}]. subject is the fact the line shows (tooling writes it from the script's points). words are inclusive indexes into the narration words, so the map survives re-timing. Every word belongs to exactly one line, in order.
 - intent: one of hook, claim, problem, turn, proof, number, list, process, product, personal, quote, cta (see the intent rules).
 - treatment: dress (a visual alongside the presenter), insert (a full-frame visual over the voice), face (hold on the presenter on purpose), camera (a punch-in or camera move only).
 - dress and insert lines name the scene ids that will show them ("scenes": ["s3"]); face and camera lines give a short why ("the turn lands on his face").
@@ -40,6 +40,14 @@ Write `DIRECTION.json` (launchclip.direction-map.v1) beside `storyboard.json` be
 | personal | the speaker about themselves: a personal story or feeling |
 | hook | is the first line (unless it is a call to action) |
 | claim | matches none of the above |
+
+## Subjects
+
+A line may carry `subject`: the fact of the script point it says (SCRIPT.json `points`; make writes it). `routeSubjects(map, {media, points})` in `scripts/planning-prompt.mjs` says where each one resolves, the same function `launchclip make` uses, so follow its answer.
+
+- A line with a subject (the fact it says) shows that subject. Resolve it in this order: (1) footage that shows it, from the asset descriptions; (2) when no shot shows it, an illustration scene of the subject (its drawn object, and one change landing on the stressed word); (3) last, full-bleed hero type (kinetic-words). A number keeps its data module (metric, stat-card).
+- Choose the illustration's change from what the fact says: wear for decay: it greys, fades, cracks or dents; measure for an amount: a heat, a cost, a level, a weight; count for a duration: days, weeks, a season, an hour; compare for options side by side; cause for a force acting on it: sun, a foot, rain, heat; before-after for a transformation: what it was, then what it is.
+- Never show a subject on a flat brand panel, a small boxed photo (object-card, or a photo-scene under half the frame on a plain plate) or a gradient-only plate: the plan check flags it.
 
 ## Treatment
 

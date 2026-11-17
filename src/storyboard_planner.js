@@ -20,13 +20,13 @@
 import { STORY_LANES, resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { validateModuleParams } from "@launchclip/core/module-schemas.mjs";
 import { isEditorialKind, knownModules, formatAspect, resolveModule, sceneRenderEnd, subjectDensityWarnings } from "@launchclip/core/modules.mjs";
-import { DIRECTION_LANES, directionMeasures, draftDirectionMap, validateDirection } from "@launchclip/core/direction.mjs";
+import { DIRECTION_LANES, directionMeasures, draftDirectionMap, validateDirection, withSubjects } from "@launchclip/core/direction.mjs";
 import { isLongForm, structureLongForm } from "@launchclip/core/long-form.mjs";
 import { compareMeasures } from "@launchclip/core/profiles.mjs";
 import { captionBandAt, checkLayout, elementsFromEditorialLayout, elementsFromStory, layoutExtras } from "@launchclip/core/layout-check.mjs";
 import { captionsOverlayOf } from "@launchclip/core/captions.mjs";
 import { layoutCaptionZones } from "@launchclip/core/cast-captions.mjs";
-import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, directionPrompt, planningPrompt, suggestModules } from "@launchclip/core/planning-prompt.mjs";
+import { DEFAULT_BRAND, PLANNER_TIERS, TUNING_PARAMS, directionPrompt, planningPrompt, routeSubjects, suggestModules } from "@launchclip/core/planning-prompt.mjs";
 import { applyStyle, packCaptionsForStory } from "@launchclip/core/style.mjs";
 import { clipLedFindings, clipLedPlan } from "@launchclip/core/clip-led.mjs";
 import { validateCastCues } from "@launchclip/core/characters/cues.mjs";
@@ -60,6 +60,7 @@ import { abstractErrors, castFromDirection, characterErrors, characterShare, def
 import { readingFindings } from "./direction_guardrails.js";
 import { storyboardOrderErrors } from "./list_order.js";
 import { visualDensityErrors } from "./visual_density.js";
+import { SUBJECT_FALLBACK_IS_ERROR, subjectFallbackNotes } from "./subject_fallback.js";
 import { textBlockFindings } from "./text_blocks.js";
 import { fitCastCuts } from "./cast_cut_fit.js";
 import { normalisePlan } from "./plan_normalise.js";
@@ -194,6 +195,11 @@ export async function planStoryboard(options = {}) {
     directionPlan.warnings.push(...fit.warnings);
     if (fit.bound.length) boundCast = fit.cast;
   }
+  // points: SCRIPT.json's points ({item, fact, kind, words}): each map line that says one carries its fact as its
+  // subject, and the subjects are routed to footage, an illustration or hero type (docs/EXPLAINER_CLAIMS_RFC.md §3.2).
+  const points = Array.isArray(options.points) ? options.points : [];
+  if (direction && points.length) direction = withSubjects(direction, wordList, points);
+  const subjects = direction ? routeSubjects(direction, { media, points }) : [];
   // A bound cast is written into the storyboard (pinned like the brand), so
   // the style never re-applies its own roster; the prompt names it too.
   let planStyle = style;
@@ -245,7 +251,7 @@ export async function planStoryboard(options = {}) {
   // there is footage to ask for; "off" keeps the stock plates.
   const footageBackdrops = Boolean(assets) && (options.cardBackdrops ?? "footage") === "footage" && lane !== "footage-led";
   if (!assets && options.cardBackdrops === "footage") shotWarnings.push("backdrops: card backdrops ignored: there is no asset provider to ask for footage");
-  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style: planStyle, artDirection: brief, subject, profile, direction, clipLed, explainer }), ...(layout ? [layout.prompt()] : []), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : []), ...(featured?.length ? [featuredPrompt(featured)] : []), ...(bible ? [biblePrompt(bible)] : [])].join("\n\n");
+  const instructions = [planningPrompt({ tier, lane, format: fixed.format, brand: fixed.brand, words: wordList.length ? wordList : undefined, style: planStyle, artDirection: brief, subject, profile, direction, clipLed, explainer, subjects }), ...(layout ? [layout.prompt()] : []), ...(assets ? [shotPrompt({ min: minShots, max: shotLimit })] : []), ...(footageBackdrops ? [backdropPrompt()] : []), ...(constraints ? [constraintsPrompt(constraints, { words: wordList, mediaLines: mediaNoteMap(media) })] : []), ...(featured?.length ? [featuredPrompt(featured)] : []), ...(bible ? [biblePrompt(bible)] : [])].join("\n\n");
   // shotCache: answers already asked for (a fast draft plans twice against one set of shots); shotFallback: {scene id: the drawn scene a missed shot becomes}.
   const shotCache = options.shotCache instanceof Map ? options.shotCache : new Map();
   let shots = [];
@@ -604,7 +610,7 @@ export async function planStoryboard(options = {}) {
   if (wantsMap && !direction && last?.ok && last.storyboard) {
     try {
       const resolved = resolveStory(JSON.parse(JSON.stringify(last.storyboard)), { words: wordList, beats });
-      direction = pinMap(draftDirectionMap(resolved, wordList, { profile: profile?.id ?? null }));
+      direction = pinMap(withSubjects(draftDirectionMap(resolved, wordList, { profile: profile?.id ?? null }), wordList, points));
       if (constraints) direction = reconcileMap(direction, resolved, constraints, wordList);
       directionSource = "drafted";
       last.warnings = [...last.warnings, "direction: the model returned no valid direction map; DIRECTION.json was drafted from the storyboard (check its treatments)"];
@@ -938,6 +944,8 @@ export function checkStoryboard(raw, { words = [], beats = null, track = null, t
     const report = checkLayout({ canvas, elements, duration: Number(resolved.resolved?.duration) || undefined });
     // Footage or full-bleed type to the last second (src/visual_density.js), as finish gates it: repair notes the planner loop adds.
     layout.density = visualDensityErrors(resolved, elements);
+    // A line's subject shown on a flat panel, a boxed photo or a bare gradient (src/subject_fallback.js): repair notes once they are errors.
+    (SUBJECT_FALLBACK_IS_ERROR ? errors : warnings).push(...subjectFallbackNotes(resolved, elements, { direction, words }));
     // One idea per frame (src/text_blocks.js), as the finish layout check reports it.
     layout.findings = [...report.findings, ...textBlockFindings(resolved, elements)];
     layout.errors = layout.findings.filter((finding) => finding.severity === "error").length;
