@@ -1,16 +1,116 @@
 {
   "schema": "launchclip.story.v1",
   "title": "Three claims, drawn (golden, 9:16 illustration)",
-  "notes": "Golden story for the illustration module (docs/EXPLAINER_CLAIMS_RFC.md §3.2): three businesses' claims with no footage to show them. A decking company's 'the sun greys it in a summer' is a bench on wood boards that wears; a clinic's 'back on your feet in two weeks' is a calendar whose fourteen days fill; a software team's 'reports take an hour' is a clock whose ring sweeps to the hour. Each change lands on its stressed word (at) while the stage drifts. No narration and no paid calls.",
+  "notes": "Golden story for the illustration module (docs/EXPLAINER_CLAIMS_RFC.md \u00a73.2): three businesses' claims with no footage to show them. A decking company's 'the sun greys it in a summer' is a bench on wood boards that wears; a clinic's 'back on your feet in two weeks' is a calendar whose fourteen days fill; a software team's 'reports take an hour' is a clock whose ring sweeps to the hour. Each change lands on its stressed word (at) while the stage drifts. No narration and no paid calls.",
   "lane": "motion",
-  "format": {"width": 1080, "height": 1920, "fps": 30, "duration": 15, "platform": "youtube-shorts"},
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 15,
+    "platform": "youtube-shorts"
+  },
   "brand": {
-    "colors": {"bg": "#0e1116", "primary": "#f2b84b", "accent": "#5fd3c6", "ink": "#0e1116", "paper": "#f4efe6"},
-    "fonts": {"display": "anton", "body": "space-grotesk", "meta": "jetbrains-mono"}
+    "colors": {
+      "bg": "#0e1116",
+      "primary": "#f2b84b",
+      "accent": "#5fd3c6",
+      "ink": "#0e1116",
+      "paper": "#f4efe6"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "motion": {
+    "feel": {
+      "preset": "kinetic",
+      "ambient": {
+        "shift": 0.014,
+        "period": [
+          2.5,
+          4
+        ]
+      }
+    }
+  },
+  "camera": {
+    "mode": "cuts",
+    "kicks": [
+      {
+        "at": 0.25
+      },
+      {
+        "at": 1.2
+      },
+      {
+        "at": 2.4
+      },
+      {
+        "at": 5.25
+      },
+      {
+        "at": 7.4
+      },
+      {
+        "at": 10.25
+      },
+      {
+        "at": 12.4
+      }
+    ]
   },
   "scenes": [
-    {"id": "deck", "module": "illustration", "start": 0, "end": 5, "params": {"subject": {"object": "bench"}, "change": "wear", "plate": "wood", "text": "One summer, no oil", "at": 2.4}},
-    {"id": "clinic", "module": "illustration", "start": 5, "end": 10, "params": {"subject": {"object": "calendar"}, "change": "count", "count": 14, "unit": "days", "plate": "paper", "text": "Back on your feet", "at": 2.4}},
-    {"id": "reports", "module": "illustration", "start": 10, "end": 15, "params": {"subject": {"object": "clock"}, "change": "measure", "value": 100, "reading": "1 hr", "plate": "metal", "text": "Every weekly report", "at": 2.4}}
+    {
+      "id": "deck",
+      "module": "illustration",
+      "start": 0,
+      "end": 5,
+      "params": {
+        "subject": {
+          "object": "bench"
+        },
+        "change": "wear",
+        "plate": "wood",
+        "text": "One summer, no oil",
+        "at": 2.4
+      }
+    },
+    {
+      "id": "clinic",
+      "module": "illustration",
+      "start": 5,
+      "end": 10,
+      "params": {
+        "subject": {
+          "object": "calendar"
+        },
+        "change": "count",
+        "count": 14,
+        "unit": "days",
+        "plate": "paper",
+        "text": "Back on your feet",
+        "at": 2.4
+      }
+    },
+    {
+      "id": "reports",
+      "module": "illustration",
+      "start": 10,
+      "end": 15,
+      "params": {
+        "subject": {
+          "object": "clock"
+        },
+        "change": "measure",
+        "value": 100,
+        "reading": "1 hr",
+        "plate": "metal",
+        "text": "Every weekly report",
+        "at": 2.4
+      }
+    }
   ]
 }

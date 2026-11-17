@@ -46,7 +46,8 @@ const MATERIAL_HUE = {wood: '#9a6a43', stone: '#8a8780', fabric: '#5f6f86', pape
 const CHANGE_TIME = {wear: 1.4, measure: 1.4, count: 1.6, compare: 0.8, cause: 1.0, 'before-after': 1.2};
 const CUE = {wear: 'whoosh-soft', measure: 'whoosh', count: 'tally', compare: 'pop', cause: 'hit-soft', 'before-after': 'whoosh'};
 // Slow → fast → slow, never past the target.
-const EASE = 'power2.inOut', DRIFT = 'sine.inOut';
+// The camera drift runs at an even speed: an eased drift stalls at the scene's ends, which reads as a frozen frame.
+const EASE = 'power2.inOut', DRIFT = 'none';
 const WORN = 'grayscale(1) brightness(0.86) contrast(0.88)';
 
 const OBJECT_PARAM = '{object (a world-kit prop: clock, calendar, bench, mug, … or an icon name), icon? (the icon drawn when object is neither), label? ≤ 16 (compare only)}';
@@ -110,19 +111,23 @@ export function illustrationGeometry({width: W, height: H}, {change, instrument 
   } else if (change === 'measure') {
     boxes.push(square(cx, cy, m * 0.62));
   } else {
-    boxes.push(square(cx, cy, m * 0.86));
+    // The stage's own shape, so a wide prop (a bench) fills it; an icon takes the square inside.
+    const w = stage.width * 0.9, h = stage.height * 0.88;
+    boxes.push({x: r2(cx - w / 2), y: r2(cy - h / 2), width: r2(w), height: r2(h)});
   }
   return {stacked, stage, rows, boxes, ring: change === 'measure' && instrument === 'gauge' ? {cx: r2(cx), cy: r2(cy), r: r2(m * 0.43)} : null};
 }
 
-// Seeded jagged cracks across a box: 3 lines from near the top, falling and wandering.
-function crackPaths(box, seed) {
+// Seeded jagged cracks across a box: 3 lines that wander down it, or along it (a split in wood runs with the grain).
+function crackPaths(box, seed, {along = false} = {}) {
   const rand = seededRandom(hashString(seed));
-  return [0.3, 0.52, 0.72].map(fx => {
-    let x = box.x + box.width * (fx + (rand() - 0.5) * 0.08), y = box.y + box.height * (0.12 + rand() * 0.1);
-    const pts = [[x, y]];
-    for (let i = 0; i < 6; i++) { x += box.width * (rand() - 0.5) * 0.14; y += box.height * (0.07 + rand() * 0.05); pts.push([x, y]); }
-    return `M${pts.map(([a, b]) => `${r2(a)} ${r2(b)}`).join(' L')}`;
+  // Worked in (across, travel) fractions of the box, then laid down or along.
+  const at = (a, t) => along ? [box.x + box.width * t, box.y + box.height * a] : [box.x + box.width * a, box.y + box.height * t];
+  return [0.3, 0.52, 0.72].map(fa => {
+    let a = fa + (rand() - 0.5) * 0.08, t = 0.12 + rand() * 0.1;
+    const pts = [at(a, t)];
+    for (let i = 0; i < 6; i++) { a += (rand() - 0.5) * (along ? 0.05 : 0.14); t += 0.07 + rand() * 0.05; pts.push(at(a, t)); }
+    return `M${pts.map(([x, y]) => `${r2(x)} ${r2(y)}`).join(' L')}`;
   });
 }
 
@@ -221,7 +226,7 @@ function resolve(params, ctx) {
 
   const canvas = b.canvas;
   const content = {colors: b.colors, change, subject, second, plate, tone, text: textFit ? {text, size: textFit.size, lines: textFit.lines} : null, value, instrument, reading, count, unit, force, pick,
-    readingSize, unitSize, geo, buildAt, buildEnd, changeAt, moveAt, span, ground: {x: r2(-rect.x), y: r2(-rect.y), width: canvas.width, height: canvas.height},
+    readingSize, unitSize, geo, buildAt, buildEnd, changeAt, moveAt, span, splitPlate: Boolean(tone && subject.prop && ['wear', 'cause'].includes(change)), ground: {x: r2(-rect.x), y: r2(-rect.y), width: canvas.width, height: canvas.height},
     fg, muted: b.theme.muted, accent: b.colors.accent, primary: b.colors.primary, bg: b.colors.bg, crack: mixColor('#000000', tone ?? b.colors.bg, 0.55), seed: `${subject.object}|${change}`};
   // A fade, not a rise: the plate is full-bleed and must not slide.
   b.motion.enterFrom = {opacity: 0, x: 0, y: 0, scale: 1};
@@ -237,10 +242,14 @@ function objectNodes(model, spec, box, key, {worn = false} = {}) {
   const u = model.unit, c = model.content;
   const style = worn ? {filter: WORN} : {};
   if (spec.prop) {
-    const nodes = graphicNodes({kind: 'prop', prop: spec.prop, state: null, label: null, icon: null}, box.width, box.height,
+    // drawProp fits a prop to 80% of its box: draw into a box 1.25× as big so the prop fills this one.
+    const W = r2(box.width * 1.25), H = r2(box.height * 1.25);
+    const nodes = graphicNodes({kind: 'prop', prop: spec.prop, state: null, label: null, icon: null}, W, H,
       {color: c.accent, ink: c.bg, fg: c.fg, panel: model.theme.panel, fonts: model.fonts, unit: u, icon: 0, labelSize: 0, colors: c.colors, canvas: model.canvas, key: `${model.id}-${key}`});
-    return el('div', null, {...abs(box.x, box.y, box.width, box.height), ...style}, nodes);
+    return el('div', null, {...abs(r2(box.x - (W - box.width) / 2), r2(box.y - (H - box.height) / 2), W, H), ...style}, nodes);
   }
+  const side = Math.min(box.width, box.height);
+  box = {x: r2(box.x + (box.width - side) / 2), y: r2(box.y + (box.height - side) / 2), width: side, height: side};
   // Line weight at hero scale: about 16 px whatever the size (ICON_STROKE is for 24 px icons).
   const stroke = r2(16 * u * ICON_BOX / box.width);
   return el('div', null, {...abs(box.x, box.y, box.width, box.height), ...style}, [iconNode(spec.icon, {x: 0, y: 0, size: box.width, color: worn ? c.muted : c.primary, stroke, mode: 'duotone', tintOpacity: 0.22})]);
@@ -251,8 +260,10 @@ function view(model) {
   const c = model.content, g = c.geo;
   const kids = [];
   if (c.tone) {
+    // A prop wearing on a material splits the plate under it, not the air between its parts.
+    const split = c.splitPlate ? crackPaths({x: model.rect.x, y: r2(model.rect.y + g.stage.y), width: model.rect.width, height: g.stage.height}, c.seed, {along: true}).map((d, i) => strokePath(`${id}-cracks-${i}`, d, c.crack, r2(7 * u))) : [];
     const G = c.ground, svg = (gid, worn) => el('div', gid, {...abs(G.x, G.y, G.width, G.height), transformOrigin: '50% 50%', ...(worn ? {filter: WORN, opacity: 0} : {})},
-      [svgRoot(G.width, G.height, materialNodes(gid, c.plate, c.tone, G.width, G.height, u, c.seed))]);
+      [svgRoot(G.width, G.height, [...materialNodes(gid, c.plate, c.tone, G.width, G.height, u, c.seed), ...(worn ? split : [])])]);
     kids.push(svg(`${id}-ground`, false));
     if (['wear', 'cause'].includes(c.change)) kids.push(svg(`${id}-ground-worn`, true));
   }
@@ -273,7 +284,7 @@ function view(model) {
   }
   if (['wear', 'cause'].includes(c.change)) {
     stage.push(el('div', `${id}-worn`, {...abs(0, 0, model.rect.width, model.rect.height), opacity: 0}, [objectNodes(model, c.subject, box, 'w', {worn: true})]));
-    stage.push(cracks(`${id}-cracks`, box));
+    if (!c.splitPlate) stage.push(cracks(`${id}-cracks`, box));
   }
   if (c.change === 'cause') {
     const s = r2(box.width * 0.42);
@@ -343,18 +354,19 @@ function timeline(model, ops) {
   const c = model.content, g = c.geo;
   const at = c.moveAt, D = c.span;
   const fadeIn = (target, time, dur = 0.5, to = 1) => { set(ops, target, start, {opacity: 0}); tw(ops, target, time, dur, EASE, {opacity: 0}, {opacity: to}); };
-  // The camera: the plate drifts one way, the stage pushes in through the hold.
+  // The camera: the plate drifts one way, the stage pushes in through the hold. The plate keeps
+  // (scale − 1) / 2 of the frame in overhang, more than its travel, so no edge ever shows.
   if (c.tone) {
-    set(ops, `${id}-ground`, start, {x: 0, y: 0, scaleX: 1.06, scaleY: 1.06});
-    tw(ops, `${id}-ground`, start, rt(end - start), DRIFT, {x: 0, y: 0, scaleX: 1.06, scaleY: 1.06}, {x: r2(-24 * u), y: 0, scaleX: 1.01, scaleY: 1.01});
+    set(ops, `${id}-ground`, start, {x: 0, y: 0, scaleX: 1.16, scaleY: 1.16});
+    tw(ops, `${id}-ground`, start, rt(end - start), DRIFT, {x: 0, y: 0, scaleX: 1.16, scaleY: 1.16}, {x: r2(-50 * u), y: r2(30 * u), scaleX: 1.1, scaleY: 1.1});
     if (['wear', 'cause'].includes(c.change)) {
-      set(ops, `${id}-ground-worn`, start, {opacity: 0, x: 0, y: 0, scaleX: 1.06, scaleY: 1.06});
-      tw(ops, `${id}-ground-worn`, start, rt(end - start), DRIFT, {x: 0, y: 0, scaleX: 1.06, scaleY: 1.06}, {x: r2(-24 * u), y: 0, scaleX: 1.01, scaleY: 1.01});
+      set(ops, `${id}-ground-worn`, start, {opacity: 0, x: 0, y: 0, scaleX: 1.16, scaleY: 1.16});
+      tw(ops, `${id}-ground-worn`, start, rt(end - start), DRIFT, {x: 0, y: 0, scaleX: 1.16, scaleY: 1.16}, {x: r2(-50 * u), y: r2(30 * u), scaleX: 1.1, scaleY: 1.1});
       tw(ops, `${id}-ground-worn`, c.change === 'cause' ? c.changeAt : at, D, EASE, {opacity: 0}, {opacity: 0.85});
     }
   }
-  set(ops, `${id}-cam`, start, {x: 0, y: 0, scaleX: 0.97, scaleY: 0.97});
-  tw(ops, `${id}-cam`, start, rt(end - start), DRIFT, {x: 0, y: 0, scaleX: 0.97, scaleY: 0.97}, {x: 0, y: r2(-14 * u), scaleX: 1.04, scaleY: 1.04});
+  set(ops, `${id}-cam`, start, {x: 0, y: 0, scaleX: 0.94, scaleY: 0.94});
+  tw(ops, `${id}-cam`, start, rt(end - start), DRIFT, {x: 0, y: 0, scaleX: 0.94, scaleY: 0.94}, {x: 0, y: r2(-30 * u), scaleX: 1.08, scaleY: 1.08});
   // The object lands.
   set(ops, `${id}-obj`, start, {opacity: 0, x: 0, y: r2(40 * u)});
   tw(ops, `${id}-obj`, c.buildAt, 0.7, EASE, {opacity: 0, y: r2(40 * u)}, {opacity: 1, y: 0});
