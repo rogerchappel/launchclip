@@ -289,7 +289,7 @@ function resolve(params, ctx) {
   const drawnGauge = subject.drawn === 'clock' && instrument === 'gauge', drawnCount = subject.drawn === 'calendar';
   const geo = illustrationGeometry(rect, {change, instrument, unit: b.unit, text: Boolean(text), type: Boolean(number), aspect: aspectOf(subject), aspect2: second ? aspectOf(second) : 1, drawnGauge, drawnCount});
   // Type: the line at display size, the number at hero size beside the object, its unit under it.
-  const textFit = text ? fitText(check, 'params.text', text, {family: 'display', width: geo.text.width, preferred: r2(Math.min(u(96), geo.text.height * (geo.stacked ? 0.72 : 0.3))), min: b.min.key, maxLines: geo.stacked || compare ? 1 : 2}) : null;
+  const textFit = text ? fitText(check, 'params.text', text, {family: 'display', width: geo.text.width, preferred: r2(Math.min(u(geo.stacked ? 96 : 110), geo.text.height * (geo.stacked ? 0.72 : 0.45))), min: b.min.key, maxLines: geo.stacked || compare ? 1 : 2}) : null;
   const numberFit = number ? fitText(check, reading ? 'params.reading' : 'params.count', number, {family: 'display', width: geo.type.width, preferred: r2(Math.min(u(300), geo.type.height * 0.55)), min: b.min.key}) : null;
   const unitFit = number && unit ? fitText(check, 'params.unit', unit.toUpperCase(), {family: 'body', width: geo.type.width, preferred: r2(Math.max(b.min.key, Math.min(u(64), numberFit.size * 0.3))), min: b.min.key, spacing: 0.08}) : null;
   const labelFits = compare ? [subject, second].map((spec, i) => spec.label ? fitText(check, `params.${i ? 'second' : 'subject'}.label`, spec.label, {family: 'display', width: geo.labels[i].width, preferred: r2(Math.min(u(84), geo.labels[i].height * 0.8)), min: b.min.key}) : null) : [];
@@ -297,7 +297,8 @@ function resolve(params, ctx) {
   const tone = plate === 'style' ? null : materialTone(plate, b.colors, fg);
 
   // Timing: the object lands, then its line, then the change, centred on `at` (the stressed word).
-  const buildAt = b.timeOf('build', undefined, 'build', 0.5);
+  // Spaced so the opening reads as separate steps (the plate's pan, the object, its line, the change).
+  const buildAt = b.timeOf('build', undefined, 'build', 0.7);
   const buildEnd = rt(buildAt + 0.7);
   b.events.push({id: `${b.id}-build`, name: 'build', time: buildAt, endTime: buildEnd, role: 'emphasis', cue: 'whoosh-soft'});
   const span = change === 'count' ? Math.min(CHANGE_TIME.count, 0.1 * count + 0.6) : CHANGE_TIME[change];
@@ -369,7 +370,8 @@ const solePath = (x, y, w, h) => {
 // Where a cause's force acts: the sun over the object's far corner, a foot's dent on it.
 function forceGeometry(c) {
   const box = c.geo.boxes[0];
-  const sun = {cx: r2(box.x + box.width * 0.86), cy: r2(box.y + box.height * 0.04), r: r2(box.width * 0.1)};
+  // Low enough that its rays stay below the line above the object.
+  const r = box.width * 0.08, sun = {cx: r2(box.x + box.width * 0.86), cy: r2(box.y + r * 2.15), r: r2(r)};
   const dent = c.subject.drawn === 'deck' ? deckDent(c.objGeo) : {cx: box.x + box.width * 0.5, cy: box.y + box.height * 0.5, w: box.width * 0.18, h: box.width * 0.34};
   return {sun, dent: {x: r2(dent.cx - dent.w / 2), y: r2(dent.cy - dent.h / 2), width: r2(dent.w), height: r2(dent.h)}};
 }
@@ -398,20 +400,22 @@ function view(model) {
   const days = c.change === 'count' && c.subject.drawn === 'calendar' ? c.count : 0, sweep = c.change === 'measure' && c.subject.drawn === 'clock' && c.instrument === 'gauge';
   if (c.splitPlate) stage.push(splits(`${sid}-split`, splitPaths(c, box)));
   const force = c.change === 'cause' ? forceGeometry(c) : null;
+  let beam = null;
   if (c.change === 'cause' && c.force === 'sun') {
     // The beam: a long wedge of light from the sun, swept across the object as it greys.
     const {cx, cy} = force.sun, reach = Math.hypot(W, H);
     const wedge = [[cx, cy], [cx - reach * Math.cos(1.0), cy + reach * Math.sin(1.0)], [cx - reach * Math.cos(1.45), cy + reach * Math.sin(1.45)]];
-    stage.push(svgLayer(`${sid}-beam`, [el('defs', null, null, [el('radialGradient', `${sid}-beam-g`, null, [el('stop', null, null, [], {offset: '0%', stopColor: c.primary, stopOpacity: 0.55}), el('stop', null, null, [], {offset: '100%', stopColor: c.primary, stopOpacity: 0})],
+    beam = svgLayer(`${sid}-beam`, [el('defs', null, null, [el('radialGradient', `${sid}-beam-g`, null, [el('stop', null, null, [], {offset: '0%', stopColor: c.primary, stopOpacity: 0.32}), el('stop', null, null, [], {offset: '100%', stopColor: c.primary, stopOpacity: 0})],
       {cx: r2(cx), cy: r2(cy), r: r2(reach * 0.75), gradientUnits: 'userSpaceOnUse'})]), el('path', null, null, [], {d: `M${wedge.map(([x, y]) => `${r2(x)} ${r2(y)}`).join(' L')} Z`, fill: `url(#${sid}-beam-g)`})],
-    {transformOrigin: `${cx}px ${cy}px`, opacity: 0}));
+    {transformOrigin: `${cx}px ${cy}px`, opacity: 0});
   }
   if (c.change === 'before-after') {
     stage.push(layer(`${sid}-obj`, subjectNodes(model, c.subject, c.objGeo, box, `${sid}`)));
     stage.push(layer(`${sid}-after`, [layer(null, subjectNodes(model, c.subject, c.objGeo, box, `${sid}-a`, {worn: true}), {filter: WORN}), splits(`${sid}-ba-split`, splitPaths(c, box))], {clipPath: `inset(0% 0% 0% ${r2(box.x / W * 100)}%)`}));
     stage.push(el('div', `${sid}-wipe`, abs(r2(box.x - 3 * u), r2(box.y - 20 * u), r2(6 * u), r2(box.height + 40 * u), {background: c.fg, borderRadius: 999, opacity: 0})));
     const tagSize = r2(Math.max(model.minTextPx, 44 * u));
-    const tag = (tid, x, text, align) => label(tid, x, r2(Math.max(0, box.y - tagSize * 1.6)), r2(box.width / 2), text, {size: tagSize, family: fonts.meta, color: c.fg, align, spacing: '0.12em', extra: {opacity: 0}});
+    // Under the object's front edge, clear of the line above and of the object itself.
+    const tag = (tid, x, text, align) => label(tid, x, r2(Math.min(model.rect.height - tagSize * 1.25, box.y + box.height * 0.9)), r2(box.width / 2), text, {size: tagSize, family: fonts.meta, color: c.fg, align, spacing: '0.12em', extra: {opacity: 0}});
     stage.push(tag(`${sid}-before`, box.x, 'BEFORE', 'left'), tag(`${sid}-after-tag`, r2(box.x + box.width / 2), 'AFTER', 'right'));
   } else {
     stage.push(layer(`${sid}-obj`, subjectNodes(model, c.subject, c.objGeo, box, `${sid}`, {days, sweep})));
@@ -420,6 +424,8 @@ function view(model) {
     if (greys(c)) stage.push(layer(`${sid}-worn`, subjectNodes(model, c.subject, c.objGeo, box, `${sid}-w`, {worn: true}), {filter: WORN, opacity: 0}));
     if (!c.splitPlate) stage.push(splits(`${sid}-split`, splitPaths(c, box).slice(0, c.force === 'foot' ? 2 : 4)));
   }
+  // The beam falls on the object, over it.
+  if (beam) stage.push(beam);
   if (c.change === 'cause' && c.force === 'foot') {
     // The dent the foot leaves, then the foot itself above it.
     const d = force.dent;
@@ -512,7 +518,7 @@ function timeline(model, ops) {
     // It travels the loop's way (leftward), so the speed hands over without a stall.
     const from = {x: r2(PLATE_OPEN * u), y: 0, scaleX: 1.08, scaleY: 1.08};
     set(ops, `${sid}-plate`, start, from);
-    tw(ops, `${sid}-plate`, start, 1.2, 'power2.out', from, {x: 0, y: 0, scaleX: 1, scaleY: 1});
+    tw(ops, `${sid}-plate`, start, 0.5, 'power2.out', from, {x: 0, y: 0, scaleX: 1, scaleY: 1});
     const cycle = rt(c.strip / (PLATE_SPEED * u)), repeats = Math.ceil((end - start) / cycle) + 1;
     for (const target of [`${sid}-ground`, ...(greys(c) ? [`${sid}-ground-worn`] : [])]) {
       set(ops, target, start, {x: 0, y: 0, scaleX: 1, scaleY: 1});
@@ -526,11 +532,12 @@ function timeline(model, ops) {
   set(ops, `${sid}-cam`, start, {x: 0, y: 0, scaleX: 0.94, scaleY: 0.94});
   tw(ops, `${sid}-cam`, start, rt(end - start), DRIFT, {x: 0, y: 0, scaleX: 0.94, scaleY: 0.94}, {x: 0, y: r2(-30 * u), scaleX: 1.08, scaleY: 1.08});
   // A build the eye (and the render's pace check) reads as a step: it rises and settles in scale.
-  const rise = {opacity: 0, x: 0, y: r2(90 * u), scaleX: 0.9, scaleY: 0.9};
+  // Short and with real travel: the render's pace check counts a step only when it moves the frame sharply.
+  const rise = {opacity: 0, x: 0, y: r2(160 * u), scaleX: 0.84, scaleY: 0.84};
   set(ops, `${sid}-obj`, start, rise);
-  tw(ops, `${sid}-obj`, c.buildAt, 0.7, EASE, rise, {opacity: 1, x: 0, y: 0, scaleX: 1, scaleY: 1});
+  tw(ops, `${sid}-obj`, c.buildAt, 0.45, EASE, rise, {opacity: 1, x: 0, y: 0, scaleX: 1, scaleY: 1});
   // The hook builds in steps: the object, then its line, then the change.
-  if (c.text) riseIn(`${sid}-text`, rt(c.buildAt + 0.7), 36);
+  if (c.text) riseIn(`${sid}-text`, rt(c.buildAt + 0.8), 90, 0.35);
   // The kick: punch in 10% over 0.25 s centred on the word, then ease back; never past either end.
   set(ops, `${sid}-kick`, start, {x: 0, y: 0, scaleX: 1, scaleY: 1});
   tw(ops, `${sid}-kick`, rt(c.changeAt - 0.125), 0.25, EASE, {scaleX: 1, scaleY: 1}, {scaleX: 1.1, scaleY: 1.1});
@@ -636,6 +643,6 @@ export const illustration = {
     value: 'measure: 1–100, how far it rises (a clock: the share of the hour its hand sweeps)', instrument: 'measure: gauge (a clock sweeps its own face; anything else gets a ring, default) | thermometer', reading: 'measure: string ≤ 10, the number set at hero size as it lands ("1", "48°C")',
     count: 'count: integer 2–31, the days crossed off (a calendar\'s own grid) or cells filled', unit: 'count or measure: string ≤ 10 under the number ("days", "hour")', force: `cause: ${Object.keys(FORCES).join(' | ')}`, pick: 'compare: subject | second, underlined after the change',
     at: `when the change lands (the stressed word): ${AT}`},
-  events: ['build', 'change'], timing: timingRules({rules: ['the object lands 0.5 s in, its line 0.7 s later; the change is centred on at (or the change hit) and takes 1–2.2 s, slow → fast → slow, under a 10% kick', 'the plate travels and the stage pushes in through the hold']}), variants: ['default'],
+  events: ['build', 'change'], timing: timingRules({rules: ['the object lands 0.7 s in, its line 0.8 s later; the change is centred on at (or the change hit) and takes 1–2.2 s, slow → fast → slow, under a 10% kick', 'the plate travels and the stage pushes in through the hold']}), variants: ['default'],
   resolve, view, timeline
 };

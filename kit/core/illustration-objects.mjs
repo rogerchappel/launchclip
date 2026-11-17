@@ -76,7 +76,8 @@ function deckNodes(geo, look, pid, rand, {worn}) {
   // The joists' dark under the gaps.
   nodes.push(el('path', null, null, [], {d: `M${pts(geo.outline)} Z`, fill: mixColor('#000000', look.wood, 0.62)}));
   geo.boards.forEach((b, i) => {
-    const tone = mixColor(rand() < 0.5 ? '#ffffff' : '#000000', look.wood, 0.86 + rand() * 0.1);
+    // mixColor(a, b, k) is k of a over b: each board is the wood a few percent lighter or darker.
+    const tone = mixColor(rand() < 0.5 ? '#ffffff' : '#000000', look.wood, 0.03 + rand() * 0.09);
     const top = [[b.b0, b.back], [b.b1, b.back], [b.f1, b.front], [b.f0, b.front]];
     nodes.push(el('path', null, null, [], {d: `M${pts(top)} Z`, fill: tone, stroke: ink, strokeWidth: r2(line * 0.6), strokeLinejoin: 'round'}));
     // Grain: long wavy lines running back to front, and one cathedral arch.
@@ -96,7 +97,7 @@ function deckNodes(geo, look, pid, rand, {worn}) {
     }
     // End grain: the board's front face, darker, with growth rings.
     const end = [[b.f0, b.front], [b.f1, b.front], [b.f1, b.front + b.thick], [b.f0, b.front + b.thick]];
-    const face = mixColor('#000000', tone, 0.78);
+    const face = mixColor('#000000', tone, 0.28);
     nodes.push(el('path', null, null, [], {d: `M${pts(end)} Z`, fill: face, stroke: ink, strokeWidth: r2(line * 0.6), strokeLinejoin: 'round'}));
     const mid = (b.f0 + b.f1) / 2, w = b.f1 - b.f0;
     for (let k = 1; k <= 3; k++) {
@@ -139,7 +140,7 @@ function calendarNodes(geo, look, pid, rand, {worn, days = 0}) {
   const rect = (b, fill, extra = {}) => el('rect', null, null, [], {x: r2(b.x), y: r2(b.y), width: r2(b.width), height: r2(b.height), rx: R, fill, ...extra});
   const nodes = [rect({...body, x: body.x + look.shadowAt.x, y: body.y + look.shadowAt.y}, look.shadow)];
   // The page stack under the sheet: two edges, offset down and right.
-  for (const k of [2, 1]) nodes.push(rect({...body, x: body.x + k * 5 * u, y: body.y + k * 7 * u}, mixColor('#000000', look.paper, 0.8 - k * 0.04), {stroke: ink, strokeWidth: r2(line * 0.6)}));
+  for (const k of [2, 1]) nodes.push(rect({...body, x: body.x + k * 5 * u, y: body.y + k * 7 * u}, mixColor('#000000', look.paper, 0.08 + k * 0.06), {stroke: ink, strokeWidth: r2(line * 0.6)}));
   nodes.push(rect(body, look.paper, {stroke: ink, strokeWidth: line}));
   nodes.push(el('path', null, null, [], {d: `M${r2(head.x)} ${r2(head.y + head.height)} V${r2(head.y + R)} Q${r2(head.x)} ${r2(head.y)} ${r2(head.x + R)} ${r2(head.y)} H${r2(head.x + head.width - R)} Q${r2(head.x + head.width)} ${r2(head.y)} ${r2(head.x + head.width)} ${r2(head.y + R)} V${r2(head.y + head.height)} Z`,
     fill: look.primary, stroke: ink, strokeWidth: line, strokeLinejoin: 'round'}));
@@ -180,16 +181,16 @@ function clockNodes(geo, look, pid, rand, {worn, sweep = false}) {
   const {u, ink, line} = look;
   const {cx, cy, r, face} = geo;
   const circle = (dx, dy, rr, fill, extra = {}) => el('circle', null, null, [], {cx: r2(cx + dx), cy: r2(cy + dy), r: r2(rr), fill, ...extra});
-  const rim = mixColor('#000000', look.primary, 0.75);
+  const rim = mixColor('#000000', look.primary, 0.42);
   const nodes = [circle(look.shadowAt.x * 1.3, look.shadowAt.y * 1.3, r, look.shadow),
     // The rim's depth: its edge seen below and right.
     circle(7 * u, 10 * u, r, mixColor('#000000', rim, 0.6), {stroke: ink, strokeWidth: line}),
     circle(0, 0, r, rim, {stroke: ink, strokeWidth: line}),
-    circle(0, 0, r * 0.93, mixColor('#ffffff', rim, 0.82)),
+    circle(0, 0, r * 0.93, mixColor('#ffffff', rim, 0.22)),
     circle(0, 0, face, look.paper, {stroke: ink, strokeWidth: r2(line * 0.8)})];
   if (sweep) {
     const s = clockSweep(geo);
-    nodes.push(el('path', `${pid}-sweep`, {strokeDasharray: 1, strokeDashoffset: 1}, [], {d: s.d, stroke: look.accent, strokeOpacity: 0.55, strokeWidth: s.width, fill: 'none', pathLength: 1}));
+    nodes.push(el('path', `${pid}-sweep`, {strokeDasharray: 1, strokeDashoffset: 1}, [], {d: s.d, stroke: look.accent, strokeOpacity: 0.35, strokeWidth: s.width, fill: 'none', pathLength: 1}));
   }
   for (let k = 0; k < 60; k++) {
     const a = k * Math.PI / 30, hour = k % 5 === 0, r0 = face * (hour ? 0.8 : 0.9), r1 = face * 0.96;
