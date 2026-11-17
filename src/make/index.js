@@ -1665,6 +1665,8 @@ async function planStage(ctx) {
     ...(constraints ? { constraints } : {}),
     ...(media.length ? { media } : {}),
     ...(featured.length ? { featured } : {}),
+    // The script's points: each map line that says one shows its fact (docs/EXPLAINER_CLAIMS_RFC.md §3.2).
+    ...(ctx.script?.points?.length ? { points: ctx.script.points } : {}),
     ...(laidOut ? { layout: laidOut } : {}),
     // The recording keeps moving: punch-ins where the take would sit still (the overlay layout's take is calmer).
     // …and a card shows over it, never alone on the frame (src/plan_normalise.js).
