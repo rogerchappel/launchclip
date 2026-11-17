@@ -44,7 +44,7 @@ export const VISUAL_DENSITY = Object.freeze({
 });
 
 const FILLING = new Set(["media", "text", "hero"]);
-const DRAWN_MODULES = [...CHARACTER_SCENE_MODULES, "ui-scene"];
+const DRAWN_MODULES = [...CHARACTER_SCENE_MODULES, "ui-scene", "illustration"];
 const FOOTAGE = new Set(["video", "image"]);
 const round = (value, digits = 3) => Math.round(value * 10 ** digits) / 10 ** digits;
 

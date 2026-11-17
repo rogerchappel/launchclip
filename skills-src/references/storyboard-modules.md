@@ -2497,6 +2497,24 @@ params:
 - rect: {x, y, width, height} canvas px inside the safe zone (optional) [guided and bespoke tiers only]
 events: build, branch-<id>
 
+### illustration (keeps captions)
+An editorial illustration of the line's claim when no shot shows it: one drawn object (a world-kit prop, or an icon at hero scale) on a full-bleed material plate (wood boards, stone, fabric, paper, brushed metal) or the style's plate, and one change landing on the stressed word: it wears (greys and cracks), a value rises on a gauge or thermometer, a day count fills, a second object lands beside it, a force (sun, foot, rain, heat) acts on it, or a wipe shows it before and after. A deck that greys in one summer, a clinic's two-week recovery, a report that takes an hour.
+params:
+- subject: {object (a world-kit prop: clock, calendar, bench, mug, … or an icon name), icon? (the icon drawn when object is neither), label? ≤ 16 (compare only)} the object the line is about
+- change: one of wear | measure | count | compare | cause | before-after
+- second: {object (a world-kit prop: clock, calendar, bench, mug, … or an icon name), icon? (the icon drawn when object is neither), label? ≤ 16 (compare only)} compare only: the object beside it
+- plate: wood | stone | fabric | paper | metal | style (default paper): a material drawn full-bleed in the style's colours, or style for the scene's own plate
+- text: string ≤ 32, one line of free type (optional; the caption usually says it)
+- value: measure: 1–100, how far the gauge or thermometer rises
+- instrument: measure: gauge (a ring round the object, default) | thermometer
+- reading: measure: string ≤ 10 shown as it lands ("1 hr", "48°C")
+- count: count: integer 2–31, the cells that fill (days, visits)
+- unit: count: string ≤ 10 under the number ("days")
+- force: cause: sun | foot | rain | heat
+- pick: compare: subject | second, underlined after the change
+- at: when the change lands (the stressed word): seconds from scene start (optional; else a matching hit, else a default)
+events: build, change
+
 ### drop-grid (keeps captions)
 Things pile up as they are said: 1–40 cards, coins or tiles drop into a grid one by one ("10 times a day": ten cards land), each with a weighted fall, a squash on contact, a contact shadow and a puff of dust, over faint empty slots; an optional counter climbs with every landing, and confetti bursts and the grid ripples when it fills. Landed items rock gently on their base. Time each drop to its word with params.times.
 params:
@@ -2791,6 +2809,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | line-diagram | 2 s | 0.5 s | scene − 0.65 s | strokes draw in 0.6 s, 0.5 s apart from at; both compress so every label stays up 1 s plus 0.3 s a word before the exit, and a label the scene still has no time for is dropped (keep labels few and short, or lengthen the scene); an explicit line at must leave its label that read |
 | node-graph | 2 s | 0.5 s | scene − 0.65 s | the hub pops on the first beat after 0.5 s; nodes flock out from the middle of the fan outwards a quarter beat apart; a pulse lands on every beat once the wires are drawn; converge falls on the first bar line two beats after the last wire, or the last beat before the exit |
 | sprout | 2 s | 0.5 s | scene − 0.65 s | wires leave half a beat after the anchor lands, nearest first, a quarter beat apart; each label lands 0.4 s after its wire leaves; a pulse reaches one label per beat once all have landed |
+| illustration | 2 s | 0.5 s | scene − 0.65 s | the object lands 0.5 s in; the change is centred on at (or the change hit) and takes 0.8–1.6 s, slow → fast → slow; the stage drifts through the hold |
 | drop-grid | 2 s | 0.5 s | scene − 0.65 s | each item lands TACTILE.fall s after its drop time; time drops to the words that count them; the last item lands before the exit |
 | live-counter | 2 s | 0.5 s | scene − 0.65 s | the count runs from at until just before the exit, so the figure is moving whenever it is on screen |
 | live-bars | 2 s | 0.5 s | scene − 0.65 s | the bars climb from at until just before the exit |

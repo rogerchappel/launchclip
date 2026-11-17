@@ -114,7 +114,9 @@ export const SAMPLES = Object.freeze({
   'drop-grid': {items: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue', 'Wed'], counter: {suffix: '×', label: 'trial reels a day'}, title: 'Ten tries, every day'},
   'live-counter': {from: 1251, to: 48210, label: 'views today', format: {separator: true}, milestones: [10000, 25000], delta: '+2,312 this hour'},
   'live-bars': {title: 'Views per trial reel', rows: [{label: 'Hook A', from: 1251, to: 5029}, {label: 'Hook B', from: 1043, to: 4529}, {label: 'Hook C', from: 857, to: 3803}, {label: 'Hook D', from: 637, to: 3376}], format: {separator: true}},
-  'comparison-table': {title: 'How LaunchClip compares', columns: ['LaunchClip', 'Editor', 'Templates'], rows: [{label: 'One prompt to video', values: [true, false, false]}, {label: 'Your brand, every scene', values: [true, true, false]}, {label: 'Captions from the voice', values: [true, false, true]}, {label: 'Time to first cut', values: ['12 min', '2 days', '3 h']}, {label: 'Open source', values: [true, false, null]}], highlight: 0}
+  'comparison-table': {title: 'How LaunchClip compares', columns: ['LaunchClip', 'Editor', 'Templates'], rows: [{label: 'One prompt to video', values: [true, false, false]}, {label: 'Your brand, every scene', values: [true, true, false]}, {label: 'Captions from the voice', values: [true, false, true]}, {label: 'Time to first cut', values: ['12 min', '2 days', '3 h']}, {label: 'Open source', values: [true, false, null]}], highlight: 0},
+  // One change kind per fixture: wear here, the rest in EXTRA_SAMPLES.
+  'illustration': {subject: {object: 'bench'}, change: 'wear', plate: 'wood', text: 'One summer of sun'},
 });
 
 /** Scene length (s) for a module whose sample cannot fit the default 4 s scene. */
@@ -124,6 +126,12 @@ export const SAMPLE_DURATIONS = Object.freeze({'layer-stack': 10});
 const JOURNEY = {pins: [{lon: -0.13, lat: 51.5, label: 'London'}, {lon: 31.24, lat: 30.04, label: 'Cairo'}, {lon: 72.88, lat: 19.08, label: 'Mumbai'}, {lon: 100.5, lat: 13.75, label: 'Bangkok', sub: 'Day 40'}],
   highlight: ['UK', 'Egypt', 'India', 'Thailand'], route: {head: true}, camera: 'follow', title: 'Forty days overland'};
 export const EXTRA_SAMPLES = Object.freeze([
+  {name: 'illustration-measure', module: 'illustration', variant: 'default', shape: 'portrait', params: {subject: {object: 'clock'}, change: 'measure', value: 100, reading: '1 hr', plate: 'metal', text: 'Every weekly report'}},
+  {name: 'illustration-measure-thermometer', module: 'illustration', variant: 'default', shape: 'landscape', params: {subject: {object: 'mug'}, change: 'measure', instrument: 'thermometer', value: 82, reading: '82°C', plate: 'stone'}},
+  {name: 'illustration-count', module: 'illustration', variant: 'default', shape: 'portrait', params: {subject: {object: 'calendar'}, change: 'count', count: 14, unit: 'days', plate: 'paper', text: 'Back on your feet'}},
+  {name: 'illustration-compare', module: 'illustration', variant: 'default', shape: 'landscape', params: {subject: {object: 'mug', label: 'Filter'}, second: {object: 'coffee-cup', label: 'Espresso'}, change: 'compare', pick: 'second', plate: 'fabric'}},
+  {name: 'illustration-cause', module: 'illustration', variant: 'default', shape: 'portrait', params: {subject: {object: 'bench'}, change: 'cause', force: 'sun', plate: 'wood'}},
+  {name: 'illustration-before-after', module: 'illustration', variant: 'default', shape: 'portrait', params: {subject: {object: 'deck', icon: 'fence'}, change: 'before-after', plate: 'style', text: 'Skip the oil'}},
   {name: 'map-highlight-journey', module: 'map-highlight', variant: 'glow', shape: 'landscape', duration: 14, params: JOURNEY},
   {name: 'map-highlight-journey-portrait', module: 'map-highlight', variant: 'outline', shape: 'portrait', duration: 14, params: JOURNEY},
   {name: 'map-highlight-camera', module: 'map-highlight', variant: 'fill', shape: 'landscape', duration: 8, params: {highlight: ['Kenya', 'Tanzania', 'Uganda'], camera: [{at: 3, centre: [37, -1], zoom: 3.5}, {at: 6, centre: [32.5, 1.5]}], title: 'East Africa'}},
