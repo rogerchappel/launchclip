@@ -678,6 +678,9 @@ export function captionLegiblePlate(idle, brandColors = {}) {
 /** The scrim plate's band (em): solid behind the words for `solid` above and below the line, then feathered out over `feather`. */
 export const CAPTION_SCRIM_BAND = Object.freeze({ solid: 0.2, feather: 0.3 });
 
+/** Caption lines whose speech is closer than this (s) are one run: a legibility plate is decided per run and a scrim's band stays up through its gaps. */
+export const CAPTION_RUN_GAP = 0.6;
+
 /** Is this caption line plated (the preset's plate, or a legibility plate)? */
 export const captionLinePlated = (o, id) => Boolean(o.plate) || o.plates === 'all' || Boolean(o.plates?.has?.(id));
 
@@ -877,19 +880,56 @@ export function captionPlan(chunks, overlay = {}, ctx = {}) {
     });
   }
 
+  // Legibility plates are decided per run of lines, not per line: a run (speech
+  // gaps under CAPTION_RUN_GAP, one zone) takes a plate over a track-0 scene if any
+  // of its lines there needs one. A scrim's band is one node per plated
+  // stretch of a run, held through the gaps so only the words change.
+  const plated = new Set();
+  if (!o.plate) {
+    const plateScenes = (ctx.story?.scenes ?? []).filter((scene) => (scene?.track ?? 0) === 0 && Number.isFinite(Number(scene.start)) && Number.isFinite(Number(scene.end)));
+    const sceneOf = (start, end) => plateScenes.findIndex((scene) => (start + end) / 2 >= Number(scene.start) && (start + end) / 2 < Number(scene.end));
+    const groups = [];
+    let prev = null;
+    for (const chunk of list) {
+      const zone = zoneOf(...spoken(chunk)), scene = sceneOf(...spoken(chunk));
+      const joined = prev && chunk.start - prev.end < CAPTION_RUN_GAP && prev.zone === zone;
+      if (joined && prev.scene === scene) groups.at(-1).chunks.push(chunk);
+      else groups.push({ chunks: [chunk], zone, joined });
+      prev = { end: spoken(chunk)[1], zone, scene };
+    }
+    const bands = [];
+    for (const group of groups) {
+      if (!group.chunks.some((chunk) => captionLinePlated(o, chunk.id))) continue;
+      for (const chunk of group.chunks) plated.add(chunk.id);
+      if (o.plateStyle !== 'scrim' || group.zone >= 0) continue;
+      const last = bands.at(-1);
+      if (group.joined && last?.last === groups[groups.indexOf(group) - 1]) { last.end = group.chunks.at(-1).end; last.last = group; }
+      else bands.push({ start: group.chunks[0].start, end: group.chunks.at(-1).end, last: group });
+    }
+    bands.forEach((band, index) => {
+      const id = `capscrim-${String(index + 1).padStart(3, '0')}`;
+      nodes.push({ tag: 'div', id, cls: 'lc-cap-scrim' });
+      tw(id, band.start - 0.12, 0.18, 'power1.out', { opacity: 1 }, { opacity: 0 }, false);
+      tw(id, Math.max(band.start + 0.1, band.end - 0.06), 0.2, 'power1.in', { opacity: 0 });
+    });
+    o.scrimRuns = bands.length > 0;
+  }
+
   const heroScales = new Set();
   const heroWords = o.word === 'hierarchy' ? (o.emphasis ? emphasis : captionEmphasis(ctx.story, overlay)) : null;
   for (const chunk of list) {
     const accented = o.accents ? accentWords(chunk.words, emphasis, o.accents) : null;
     const roles = heroWords ? captionHierarchy(chunk.words, heroWords) : null;
     // A legibility plate holds the preset's own colours, so it takes no world tone.
-    const legible = !o.plate && captionLinePlated(o, chunk.id);
+    const legible = plated.has(chunk.id);
     const tone = o.plate || legible || !o.worldTone ? null : toneOf(...spoken(chunk)) ?? (captionLineOnSurface(o, chunk.id) ? 'surface' : null);
     const toned = tone === 'surface' ? captionColorsOn(o.colors, o.surfaceUnder, ctx.brand?.colors) : tone ? captionToneColors(o.colors, tone, ctx.brand?.colors) : null;
     if (toned) o.tones[tone] = { idle: toned.idle, accent: toned.accent, active: toned.active, swapped: toned.swapped };
     if (legible) o.legible = true;
     const toneCls = toned ? ` lc-cap-on-${tone}` : '';
-    const line = { tag: 'div', id: chunk.id, cls: `${o.plate ? 'lc-cap lc-cap-plate' : legible ? 'lc-cap lc-cap-legible' : 'lc-cap'}${zoneCls(zoneOf(...spoken(chunk)))}${toneCls}`, children: [] };
+    const lineZone = zoneOf(...spoken(chunk));
+    const held = legible && o.plateStyle === 'scrim' && lineZone < 0 ? ' lc-cap-held' : '';
+    const line = { tag: 'div', id: chunk.id, cls: `${o.plate ? 'lc-cap lc-cap-plate' : legible ? 'lc-cap lc-cap-legible' : 'lc-cap'}${held}${zoneCls(lineZone)}${toneCls}`, children: [] };
     nodes.push(line);
     const C = toned?.swapped ? { ...o.colors, idle: toned.idle, accent: toned.accent, active: toned.active, spoken: toned.spoken } : o.colors;
     const inTo = Object.fromEntries(Object.keys(entrance.from).map((key) => [key, key === 'opacity' || key === 'scale' ? 1 : 0]));
@@ -1098,6 +1138,8 @@ export function captionPlanCss(o, { zones = [], format } = {}) {
   const cw = 1 - b.left - b.right;
   if (o.legible && o.plateStyle === 'scrim') lines.push(`.lc-cap-legible { left: ${pct(-b.left / cw)}; right: ${pct(-b.right / cw)}; padding: ${CAPTION_SCRIM_BAND.solid + CAPTION_SCRIM_BAND.feather}em 0.5em; border-radius: 0.32em; background: linear-gradient(to bottom, ${o.legiblePlate}00, ${o.legiblePlate}eb ${CAPTION_SCRIM_BAND.feather}em, ${o.legiblePlate}eb calc(100% - ${CAPTION_SCRIM_BAND.feather}em), ${o.legiblePlate}00); }`, '.lc-cap-legible .lc-cap-w { text-shadow: none; }');
   else if (o.legible) lines.push(`.lc-cap-legible { background: ${o.legiblePlate}eb; padding: 0.18em 0.5em 0.22em; border-radius: 0.32em; }`, '.lc-cap-legible .lc-cap-w { text-shadow: none; }');
+  // A held scrim: the band is its own node per run (captionPlan), so the line carries none.
+  if (o.scrimRuns) lines.push(`.lc-cap-scrim { position: absolute; left: ${pct(-b.left / cw)}; right: ${pct(-b.right / cw)}; top: 0; bottom: 0; margin: auto 0; font-size: ${o.size}px; height: ${round(2 * o.lineHeight + 2 * (CAPTION_SCRIM_BAND.solid + CAPTION_SCRIM_BAND.feather))}em; border-radius: 0.32em; opacity: 0; background: linear-gradient(to bottom, ${o.legiblePlate}00, ${o.legiblePlate}eb ${CAPTION_SCRIM_BAND.feather}em, ${o.legiblePlate}eb calc(100% - ${CAPTION_SCRIM_BAND.feather}em), ${o.legiblePlate}00); }`, '.lc-cap-held { background: none; }');
   switch (o.word) {
     case 'fill': lines.push(`.lc-cap-fill { position: absolute; left: 0; top: 0; width: 0%; overflow: hidden; white-space: nowrap; color: ${C.active}; }`); break;
     case 'pop': lines.push('.lc-cap { display: grid; place-items: center; }', '.lc-cap > .lc-cap-w { grid-area: 1 / 1; opacity: 0; transform-origin: 50% 50%; }'); break;

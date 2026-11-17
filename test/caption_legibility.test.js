@@ -2,7 +2,7 @@
 // the measurement on rendered pixels, predicted plates, and the style rule.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { captionLegiblePlate, captionPlan, captionPresetName } from "@launchclip/core/captions.mjs";
+import { CAPTION_RUN_GAP, captionElementStateAt, captionLegiblePlate, captionPlan, captionPresetName, indexCaptionTweens } from "@launchclip/core/captions.mjs";
 import { CAPTION_LEGIBILITY, backdropOf, captionBandRect, captionLines, lineLegibility, measureCaptionLegibility, predictCaptionPlates, predictCaptionSurfaces } from "../src/caption_legibility.js";
 
 const brand = { colors: { bg: "#101820", primary: "#2a9d8f", accent: "#e9c46a", ink: "#101820", paper: "#f4f1ea" }, fonts: { display: "anton", body: "space-grotesk", meta: "jetbrains-mono" } };
@@ -27,7 +27,8 @@ const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 
 test("plates: named lines get a legibility plate that holds the preset's own text colour", () => {
   const plan = captionPlan(chunks, { type: "captions", plates: ["cap-002"] }, { brand, format: { width: 1080, height: 1920 } });
-  assert.deepEqual(plan.nodes.map((node) => node.cls), ["lc-cap", "lc-cap lc-cap-legible"]);
+  // cap-001 is 0.3 s before it, so it is in the same run and takes the plate too.
+  assert.deepEqual(plan.nodes.map((node) => node.cls), ["lc-cap lc-cap-legible", "lc-cap lc-cap-legible"]);
   assert.match(plan.css, /\.lc-cap-legible \{ background: #[0-9a-f]{6}eb;/);
   // The first brand colour that reaches 7:1, so the plate stays in the palette.
   assert.equal(captionLegiblePlate("#f4f1ea", brand.colors), "#101820");
@@ -267,4 +268,31 @@ test("a box-less preset's plate is a clean band across the frame, feathered top 
   const on = (under) => lineLegibility(image({ bg: CREAM, text: rgb(options.colors.idle), rect: words, under }), rect, lines[0].colors, { size: options.size, chars: 12, plate: lines[0].backing.color, plateAlpha: lines[0].backing.alpha, plateLine: lines[0].backing.line });
   assert.equal(on(band).legible, true, JSON.stringify(on(band)));
   assert.equal(on(null).legible, false, "without the band the line does not read on cream");
+});
+
+test("a scrim's band is decided per run and held through its short gaps; a long gap or a new plate drops it", () => {
+  const line = (n, start) => ({ id: `cap-${String(n).padStart(3, "0")}`, start, end: start + 0.9, words: [{ text: "deck", start, end: start + 0.45 }, { text: "boards", start: start + 0.45, end: start + 0.9 }] });
+  // Run A: lines 1-3, 0.3 s apart. Run B: line 4, after a 1.6 s pause, 0.3 s before run C: lines 5-6 on a new plate (scene) at 6 s, so the plate change splits them.
+  const lines = [line(1, 0), line(2, 1.2), line(3, 2.4), line(4, 4.9), line(5, 6.1), line(6, 7.3)];
+  assert.ok(1.2 - 0.9 < CAPTION_RUN_GAP && 4.9 - 3.3 > CAPTION_RUN_GAP && 6.1 - 5.8 < CAPTION_RUN_GAP);
+  const scenes = [{ id: "a", track: 0, start: 0, end: 6 }, { id: "b", track: 0, start: 6, end: 9 }];
+  const s = story({ preset: "kinetic-hierarchy", plates: ["cap-002", "cap-006"] }, scenes);
+  const plan = captionPlan(lines, s.overlays[0], { brand, format: s.format, story: s });
+  const cls = Object.fromEntries(plan.nodes.map((node) => [node.id, node.cls]));
+  // One plated line plates its whole run on that plate: cap-001..003 and cap-005..006, never cap-004.
+  for (const id of ["cap-001", "cap-002", "cap-003", "cap-005", "cap-006"]) assert.match(cls[id], /lc-cap-legible lc-cap-held/, id);
+  assert.doesNotMatch(cls["cap-004"], /legible/);
+  // The band is its own node per plated run, drawn behind the lines.
+  assert.deepEqual(plan.nodes.filter((node) => node.cls === "lc-cap-scrim").map((node) => node.id), ["capscrim-001", "capscrim-002"]);
+  assert.ok(plan.nodes.findIndex((node) => node.id === "capscrim-001") < plan.nodes.findIndex((node) => node.id === "cap-001"));
+  assert.match(plan.css, /\.lc-cap-scrim \{ position: absolute;[^}]*opacity: 0; background: linear-gradient/);
+  assert.match(plan.css, /\.lc-cap-held \{ background: none; \}/);
+  const index = indexCaptionTweens(plan.tweens);
+  const at = (id, t) => captionElementStateAt(index, id, t).opacity ?? 0;
+  // Held at full opacity through the 0.3 s gaps of run A, while the words swap.
+  for (const t of [0.5, 0.95, 1.05, 2.0, 2.2, 3.0]) assert.equal(at("capscrim-001", t), 1, `run A band at ${t}`);
+  // Gone over the long pause and the unplated run (line 3 is held to 3.9 s); back for run C.
+  for (const t of [4.3, 4.6, 5.6]) assert.equal(at("capscrim-001", t), 0, `run A band at ${t}`);
+  assert.equal(at("capscrim-002", 5.6), 0);
+  for (const t of [6.6, 7.25, 7.9]) assert.equal(at("capscrim-002", t), 1, `run C band at ${t}`);
 });
