@@ -857,7 +857,7 @@ export function defaultAdapters() {
  * workers for the render; default: the cores split across render slots,
  * src/capacity.js), voice: provider name, music:
  * "synth"|"elevenlabs"|"none", musicVolume (the bed's gain, 0–1;
- * --music-volume), musicFallback (make: ElevenLabs music that is missing
+ * --music-volume), musicFallback (make and the finish CLI: ElevenLabs music that is missing
  * its key or fails falls back to the synth bed with a warning), musicDuck (the bed's level under speech as a share of
  * its level in pauses, 0–1; --music-duck), musicPrompt (the ElevenLabs
  * music style prompt, over audio.music.prompt; --music-prompt), musicHints (style-pack sound.music hints for
