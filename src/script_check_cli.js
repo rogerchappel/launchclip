@@ -50,7 +50,7 @@ export async function runScriptCheck(file, flags = {}) {
     const report = checkScreenplay({ ...options, script: input.script, wpm, problemLandsSeconds });
     return { ...report, source: String(file), input: input.kind, brief_files: briefFiles, profile: profile?.id ?? null };
   }
-  const report = checkScript({ ...options, narration: input.narration });
+  const report = checkScript({ ...options, narration: input.narration, points: input.points });
   return { ...report, source: String(file), input: input.kind, brief_files: briefFiles };
 }
 
@@ -71,7 +71,7 @@ export function parseScriptFile(file, text) {
   }
   if (typeof value?.narration === "string") {
     const plan = value.plan && typeof value.plan === "object" ? { format: value.plan.format, goal: value.plan.goal, awareness: value.plan.awareness, ...(value.plan.pace ? { pace: value.plan.pace } : {}), ...(value.plan.cta ? { cta: value.plan.cta } : {}), ...(value.plan.series ? { series: value.plan.series } : {}) } : null;
-    return { kind: "script", narration: value.narration, duration: positive(value.take?.seconds ?? value.duration), ...(plan ? { plan } : {}) };
+    return { kind: "script", narration: value.narration, duration: positive(value.take?.seconds ?? value.duration), ...(plan ? { plan } : {}), ...(Array.isArray(value.points) ? { points: value.points } : {}) };
   }
   if (typeof value?.text === "string") return { kind: "narration", narration: value.text, duration: positive(value.duration_seconds ?? value.duration) };
   throw new Error(`${file} has no narration: expected storyboard.json (audio.narration.text), NARRATION.json (text), SCRIPT.json (narration) or a .txt file`);

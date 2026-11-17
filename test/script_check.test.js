@@ -353,3 +353,35 @@ test("loop-order: a later list item said bare before item one is an error; marke
   const teaser = check(`Your deck's real cost shows up after it's built. Stay for number three: it catches bare feet in the sun. ${list}`);
   assert.ok(!ids(teaser).includes("loop-order"), formatScriptCheck(teaser));
 });
+
+// point-fact (docs/EXPLAINER_CLAIMS_RFC.md §3.1)
+const DECKING = "Three deck materials, three trade-offs. Treated pine, hardwood and composite are the options. Treated pine is soft, but chair legs dent it. Hardwood needs oil: skip the oil and the sun greys it. Composite never needs oil, but it runs hot underfoot. Save this before you choose.";
+const DECKING_POINTS = [
+  { item: "treated pine", fact: "chair legs dent it", kind: "consequence", words: "but chair legs dent it" },
+  { item: "hardwood", fact: "the sun greys it in a summer", kind: "consequence", words: "skip the oil and the sun greys it" },
+  { item: "composite", fact: "hot underfoot", kind: "consequence", words: "hot underfoot" }
+];
+const pointFacts = (report) => [...report.errors, ...report.warnings].filter((item) => item.id === "point-fact");
+
+test("point-fact: a comparison whose points have facts said in the narration passes", () => {
+  assert.deepEqual(pointFacts(checkScript({ narration: DECKING, points: DECKING_POINTS })), []);
+});
+
+test("point-fact: a point that is only a category word warns", () => {
+  const points = [...DECKING_POINTS.slice(0, 2), { item: "composite", fact: "the cheapest option", kind: "object", words: "hot underfoot" }];
+  const found = pointFacts(checkScript({ narration: DECKING, points }));
+  assert.equal(found.length, 1);
+  assert.match(found[0].message, /composite.*only names a category/);
+});
+
+test("point-fact: a declared fact missing from the narration is flagged (a warning this release)", () => {
+  const points = [...DECKING_POINTS.slice(0, 2), { item: "composite", fact: "it fades in a year", kind: "consequence", words: "it fades in a year" }];
+  const report = checkScript({ narration: DECKING, points });
+  assert.ok(report.warnings.some((item) => item.id === "point-fact" && /composite.*not in the narration/.test(item.message)));
+  assert.ok(!report.errors.some((item) => item.id === "point-fact"));
+});
+
+test("point-fact: a list with no points warns; a script with no list is unaffected", () => {
+  assert.equal(pointFacts(checkScript({ narration: DECKING })).length, 1);
+  assert.deepEqual(pointFacts(checkScript({ narration: "Your invoices pile up every Friday. This tool sends them for you. Try it free today." })), []);
+});

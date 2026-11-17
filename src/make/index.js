@@ -26,7 +26,7 @@ import { mediaNotesLine } from "../inventory_notes.js";
 import { checkStoryboard, fixedInputs, planStoryboard, resolveChecked, styleBrand } from "../storyboard_planner.js";
 import { captionBandWarnings, settleCaptionBand } from "../caption_band_fit.js";
 import { markProvided } from "../provided_files.js";
-import { directionJson } from "@launchclip/core/direction.mjs";
+import { directionJson, withSubjects } from "@launchclip/core/direction.mjs";
 import { profileForStory, resolveProfile } from "../profile_store.js";
 import { resolveStyleV2 } from "../style_store.js";
 import { generateProjectStyle, projectSeedStyle, promptConstraints, promptTone, adoptStyleLook } from "../style_seed_store.js";
@@ -794,7 +794,7 @@ async function prepareMotion(ctx) {
     const written = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, skeleton, ...(conceptStory ? { story: conceptStory } : {}) });
     addCost(report, "script", ctx.model, written);
     script = { ...written, passes: [{ kind: "write", words: written.word_count, cost_usd: written.cost_usd }] };
-    const first = checkScript({ narration: script.narration, duration: target, brief: { prompt: ctx.text, notes, assets: assetLines }, ...planChecks });
+    const first = checkScript({ narration: script.narration, points: script.points, duration: target, brief: { prompt: ctx.text, notes, assets: assetLines }, ...planChecks });
     if (!first.ok) {
       ctx.say(`script: ${first.errors.length} script check error(s) (${[...new Set(first.errors.map((error) => error.id))].join(", ")}); one repair pass (PAID call to ${ctx.model.provider} ${ctx.model.model})`);
       const repaired = await writeScript({ client: ctx.model.client, model: ctx.model.model, provider: ctx.model.provider, prompt: ctx.text, notes, rules, assets: assetLines, duration: target, plan, skeleton, angle: script.angle, ...(conceptStory ? { story: conceptStory } : {}), repair: { previous: script.narration, errors: first.errors } });
@@ -820,7 +820,7 @@ async function prepareMotion(ctx) {
   // The final narration's check is the receipt; errors left after the repair pass warn, they do not stop the render.
   // A short take is checked at the length it runs, and the take itself is the proof it fits that clock: a voice that
   // reads faster than the plan's pace (Kokoro at 1.2×) is never reported as words that "cannot be read" in the time it read them.
-  script.check = checkScript({ narration: script.narration, ...takeClock({ narration: script.narration, seconds: take.duration, target, pace: plan.pace }), brief: { prompt: ctx.text, notes, assets: assetLines }, ...planChecks });
+  script.check = checkScript({ narration: script.narration, points: script.points, ...takeClock({ narration: script.narration, seconds: take.duration, target, pace: plan.pace }), brief: { prompt: ctx.text, notes, assets: assetLines }, ...planChecks });
   if (script.fit?.cut?.length) report.notices.push(`script: ${script.fit.cut.length} sentence(s) cut to fit the ${plan.word_ceiling}-word ceiling (${script.fit.words_before} → ${script.word_count} words)`);
   if (script.fit?.call_to_action_added) report.notices.push(`script: the narration had no call to action; it ends on "${script.fit.call_to_action_added}"`);
   auditNarration(ctx, research, script.narration);
@@ -929,7 +929,7 @@ async function prepareDraftMotion(ctx) {
   const short = runsShort(take.duration, target);
   if (short) script.take.short_of_target_seconds = round1(target - take.duration);
   // The checks are the receipt: a draft has no repair pass, so what fails is a warning the refined script (or an edit) answers.
-  script.check = checkScript({ narration: script.narration, ...takeClock({ narration: script.narration, seconds: take.duration, target, pace: plan.pace }), brief: { prompt: ctx.text, notes, assets: assetLines }, ...planChecks });
+  script.check = checkScript({ narration: script.narration, points: script.points, ...takeClock({ narration: script.narration, seconds: take.duration, target, pace: plan.pace }), brief: { prompt: ctx.text, notes, assets: assetLines }, ...planChecks });
   if (script.fit?.cut?.length) report.notices.push(`script: ${script.fit.cut.length} sentence(s) cut to fit the ${plan.word_ceiling}-word ceiling (${script.fit.words_before} → ${script.word_count} words)`);
   if (script.fit?.call_to_action_added) report.notices.push(`script: the narration had no call to action; it ends on "${script.fit.call_to_action_added}"`);
   if (!script.check.ok) report.warnings.push(`the draft script fails ${script.check.errors.length} script check(s): ${script.check.errors.map((error) => `${error.id}: ${error.message}`).join("; ")} (a draft has no repair pass; launchclip script check ${MAKE_PATHS.script})`);
@@ -1727,7 +1727,8 @@ async function planStage(ctx) {
   if (pinned && plan.direction) ctx.storyTidy = (candidate) => placeActions(candidate, { direction: plan.direction, words: ctx.words }).storyboard;
   if (!recheck.ok) throw new Error(`the storyboard failed its checks after make filled in audio:\n- ${recheck.errors.slice(0, 10).join("\n- ")}`);
   await writeJson(storyFile, story);
-  if (plan.direction) await writeFile(directionFile, directionJson(plan.direction));
+  // Each line that says a script point carries its fact as the line's subject (docs/EXPLAINER_CLAIMS_RFC.md §3.1).
+  if (plan.direction) await writeFile(directionFile, directionJson(withSubjects(plan.direction, ctx.words, ctx.script?.points)));
   if (history) await lintVariety(ctx, story, style, history, varied);
   report.direction = plan.direction ? { file: MAKE_PATHS.direction, source: plan.direction_source, ...(plan.cadence ? { coverage: plan.cadence.coverage, face_time: plan.cadence.face_time, longest_undressed_seconds: plan.cadence.longest_undressed_seconds } : {}) } : null;
   state.plan = { hash: planHash, repairs: report.repairs, direction: Boolean(plan.direction), ...(report.shot_counts ? { shot_counts: report.shot_counts } : {}), ...(history ? { variety: varied } : {}), ...(drafting ? { draft: report.draft.storyboard } : {}) };

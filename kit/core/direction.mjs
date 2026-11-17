@@ -14,6 +14,8 @@
 //   segmentLines(words)              → [{words: [a, b], text, start, end}]
 //   classifyIntent(text, {index, count}) → intent (the shared intent rules)
 //   draftDirectionMap(story, words)  → a map drafted from an existing storyboard
+//   withSubjects(map, words, points) → the map with each line's subject: the
+//                                      fact of the script point it says
 //
 // Pure ESM; imports only kit/core siblings. Canonical copy: kit/core/direction.mjs.
 
@@ -208,7 +210,7 @@ export function validateDirection(map, options = {}) {
 
 function checkLine(line, where, { err, warnings, words, footage, scenes, story, options, script = null }) {
   if (!isObject(line)) { err(`${where} must be an object`); return; }
-  for (const key of Object.keys(line)) if (!['words', 'intent', 'treatment', 'scenes', 'why', 'cast', 'set', 'text', 'action', 'line'].includes(key)) err(`${where} has unknown field "${key}"`);
+  for (const key of Object.keys(line)) if (!['words', 'intent', 'treatment', 'scenes', 'why', 'cast', 'set', 'text', 'action', 'line', 'subject'].includes(key)) err(`${where} has unknown field "${key}"`);
   const range = line.words;
   const rangeOk = Array.isArray(range) && range.length === 2 && range.every(Number.isInteger) && range[0] >= 0 && range[1] >= range[0];
   if (!rangeOk) err(`${where}.words must be [first, last] word indexes (inclusive, first ≤ last)`);
@@ -239,6 +241,8 @@ function checkLine(line, where, { err, warnings, words, footage, scenes, story, 
   if (line.treatment === 'face' && !footage) err(`${where} is "face", but this story has no presenter; dress or insert it`);
   if (line.cast !== undefined && !Array.isArray(line.cast)) err(`${where}.cast must be a list of cues`);
   if (line.set !== undefined && !nonEmpty(line.set)) err(`${where}.set must be a set name`);
+  // subject: the fact, object or consequence the line shows (docs/EXPLAINER_CLAIMS_RFC.md §3.1, §3.2).
+  if (line.subject !== undefined && !nonEmpty(line.subject)) err(`${where}.subject must be the fact the line shows ("chair legs dent it")`);
   if (line.action !== undefined) {
     const action = line.action;
     if (!isObject(action)) err(`${where}.action must be {verb, who, target?}`);
@@ -392,6 +396,29 @@ function sectionRange(section, words) {
   const start = finite(section.start) ? section.start : all.length ? words[all[0].words[0]].start : 0;
   const end = finite(section.end) ? section.end : all.length ? words[all.at(-1).words[1]].end : start;
   return { start, end };
+}
+
+/**
+ * The map with a subject on each line that says a script point's words
+ * (SCRIPT.json points: [{item, fact, kind, words}]): the point's fact. A line
+ * that already has a subject keeps it. words: the narration's timed words.
+ */
+export function withSubjects(map, words, points) {
+  const wanted = (Array.isArray(points) ? points : []).filter((point) => nonEmpty(point?.fact) && plain(point?.words));
+  if (!wanted.length || !isObject(map) || !Array.isArray(map.sections)) return map;
+  const list = narrationWords(words);
+  return {
+    ...map,
+    sections: map.sections.map((section) => (!Array.isArray(section?.lines) ? section : {
+      ...section,
+      lines: section.lines.map((line) => {
+        if (!isObject(line) || nonEmpty(line.subject) || !Array.isArray(line.words)) return line;
+        const said = ` ${plain(list.slice(line.words[0], line.words[1] + 1).map((word) => word.text).join(' '))} `;
+        const point = wanted.find((entry) => said.includes(` ${plain(entry.words)} `));
+        return point ? { ...line, subject: point.fact.trim() } : line;
+      })
+    }))
+  };
 }
 
 // ---------------------------------------------------------------------------
