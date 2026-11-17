@@ -246,7 +246,6 @@
        "change": "swap",
        "params": {
         "text": "4 thousand",
-        "icon": "key",
         "sub": "projects that called the new model: reported, not verified"
        },
        "evidence": {
@@ -296,7 +295,7 @@
        "change": "swap",
        "params": {
         "text": "build with it",
-        "icon": "target"
+        "icon": "hammer"
        },
        "why": "concept: nothing specific draws it; the line itself (\"build with it\")"
       }
@@ -348,8 +347,7 @@
        "module": "concept-card",
        "change": "swap",
        "params": {
-        "text": "the first week",
-        "icon": "clock"
+        "text": "the first week"
        },
        "why": "list: nothing specific draws it; the line itself (\"the first week\")"
       },
@@ -401,8 +399,7 @@
        "module": "concept-card",
        "change": "enter",
        "params": {
-        "text": "actually announced",
-        "icon": "database"
+        "text": "actually announced"
        },
        "why": "concept: nothing specific draws it; the line itself (\"actually announced\")"
       }
@@ -560,8 +557,7 @@
        "module": "concept-card",
        "change": "enter",
        "params": {
-        "text": "Halcyon 1.5",
-        "icon": "zap"
+        "text": "Halcyon 1.5"
        },
        "why": "code: nothing specific draws it; the line itself (\"Halcyon 1.5\")"
       },
@@ -664,8 +660,7 @@
        "module": "concept-card",
        "change": "enter",
        "params": {
-        "text": "No new models",
-        "icon": "target"
+        "text": "No new models"
        },
        "why": "date: nothing specific draws it; the line itself (\"No new models\")"
       },
@@ -1241,8 +1236,7 @@
        "module": "concept-card",
        "change": "enter",
        "params": {
-        "text": "The system card",
-        "icon": "zap"
+        "text": "The system card"
        },
        "why": "documents: nothing specific draws it; the line itself (\"The system card\")"
       },
@@ -1561,7 +1555,7 @@
        "change": "swap",
        "params": {
         "text": "8 dollars",
-        "icon": "rocket"
+        "icon": "dollar-sign"
        },
        "evidence": {
         "claim": "c-price",
@@ -1666,8 +1660,7 @@
        "module": "concept-card",
        "change": "swap",
        "params": {
-        "text": "the previous model",
-        "icon": "brain"
+        "text": "the previous model"
        },
        "evidence": {
         "claim": "c-swe",
@@ -1950,7 +1943,7 @@
        "change": "swap",
        "params": {
         "text": "most people noticed",
-        "icon": "scale"
+        "icon": "users"
        },
        "why": "list: nothing specific draws it; the line itself (\"most people noticed\")"
       }
@@ -2469,8 +2462,7 @@
        "module": "concept-card",
        "change": "swap",
        "params": {
-        "text": "changes behaviour most",
-        "icon": "code"
+        "text": "changes behaviour most"
        },
        "why": "concept: nothing specific draws it; the line itself (\"changes behaviour most\")"
       }
@@ -2585,8 +2577,7 @@
        "module": "concept-card",
        "change": "swap",
        "params": {
-        "text": "Halcyon 2",
-        "icon": "zap"
+        "text": "Halcyon 2"
        },
        "evidence": {
         "claim": "c-context",
@@ -3066,8 +3057,7 @@
        "module": "concept-card",
        "change": "swap",
        "params": {
-        "text": "come from somewhere",
-        "icon": "code"
+        "text": "come from somewhere"
        },
        "why": "money: nothing specific draws it; the line itself (\"come from somewhere\")"
       },
@@ -3323,8 +3313,7 @@
        "module": "concept-card",
        "change": "swap",
        "params": {
-        "text": "cheaper model",
-        "icon": "lightbulb"
+        "text": "cheaper model"
        },
        "why": "money: nothing specific draws it; the line itself (\"cheaper model\")"
       },
@@ -3493,8 +3482,7 @@
        "module": "concept-card",
        "change": "enter",
        "params": {
-        "text": "most labs report",
-        "icon": "sparkles"
+        "text": "most labs report"
        },
        "why": "documents: nothing specific draws it; the line itself (\"most labs report\")"
       },
@@ -3955,8 +3943,7 @@
        "module": "concept-card",
        "change": "swap",
        "params": {
-        "text": "Some were celebrations",
-        "icon": "layers"
+        "text": "Some were celebrations"
        },
        "why": "concept: nothing specific draws it; the line itself (\"Some were celebrations\")"
       },
@@ -4179,8 +4166,7 @@
        "module": "concept-card",
        "change": "swap",
        "params": {
-        "text": "a single prompt",
-        "icon": "clock"
+        "text": "a single prompt"
        },
        "why": "process: nothing specific draws it; the line itself (\"a single prompt\")"
       },
@@ -4298,8 +4284,7 @@
        "module": "concept-card",
        "change": "swap",
        "params": {
-        "text": "exactly right",
-        "icon": "scale"
+        "text": "exactly right"
        },
        "why": "concept: nothing specific draws it; the line itself (\"exactly right\")"
       }
@@ -5021,8 +5006,7 @@
        "module": "concept-card",
        "change": "swap",
        "params": {
-        "text": "Halcyon 1.5",
-        "icon": "zap"
+        "text": "Halcyon 1.5"
        },
        "why": "concept: nothing specific draws it; the line itself (\"Halcyon 1.5\")"
       },
@@ -5121,8 +5105,7 @@
        "module": "concept-card",
        "change": "swap",
        "params": {
-        "text": "has ever been",
-        "icon": "scale"
+        "text": "has ever been"
        },
        "evidence": {
         "claim": "c-leaderboard",
@@ -5473,8 +5456,7 @@
        "module": "concept-card",
        "change": "swap",
        "params": {
-        "text": "Looking ahead",
-        "icon": "gauge"
+        "text": "Looking ahead"
        },
        "why": "concept: nothing specific draws it; the line itself (\"Looking ahead\")"
       }
@@ -5665,8 +5647,7 @@
        "module": "concept-card",
        "change": "swap",
        "params": {
-        "text": "the description",
-        "icon": "globe"
+        "text": "the description"
        },
        "why": "concept: nothing specific draws it; the line itself (\"the description\")"
       },
@@ -5710,7 +5691,7 @@
    ],
    "start": 0.3,
    "end": 71.663,
-   "key": "145223f1b1e69297",
+   "key": "2800c2d5ac989e7f",
    "shots": [
     "the-launch-nobody-saw-coming-1-sh1",
     "the-launch-nobody-saw-coming-1-sh2",
@@ -5759,7 +5740,7 @@
    ],
    "start": 73.327,
    "end": 157.404,
-   "key": "108756dace1d3008",
+   "key": "69eabb4e87deb560",
    "shots": [
     "a-short-history-of-halcyon-1-sh1",
     "a-short-history-of-halcyon-1-sh2",
@@ -5819,7 +5800,7 @@
    ],
    "start": 159.059,
    "end": 241.355,
-   "key": "4e34f0b4eae29a1e",
+   "key": "d1c23b10c3c844e6",
    "shots": [
     "inside-the-training-run-1-sh1",
     "inside-the-training-run-1-sh2",
@@ -5889,7 +5870,7 @@
    ],
    "start": 242.999,
    "end": 321.23,
-   "key": "29bc903ea702aba8",
+   "key": "e8599da214ffc600",
    "shots": [
     "what-northlight-actually-announced-1-sh1",
     "what-northlight-actually-announced-1-sh2",
@@ -5966,7 +5947,7 @@
    ],
    "start": 322.888,
    "end": 407.015,
-   "key": "defa57941233f3d2",
+   "key": "c6d902900562167a",
    "shots": [
     "why-speed-changed-everything-1-sh1",
     "why-speed-changed-everything-1-sh2",
@@ -6050,7 +6031,7 @@
    ],
    "start": 408.665,
    "end": 489.154,
-   "key": "46073a54bc85e70e",
+   "key": "e7a596f8b767b426",
    "shots": [
     "the-context-window-doubled-1-sh1",
     "the-context-window-doubled-1-sh2",
@@ -6140,7 +6121,7 @@
    ],
    "start": 490.818,
    "end": 569.226,
-   "key": "afea458e1b779ecc",
+   "key": "ac29060269222654",
    "shots": [
     "the-price-cut-and-who-pays-for-it-1-sh1",
     "the-price-cut-and-who-pays-for-it-1-sh2",
@@ -6235,7 +6216,7 @@
    ],
    "start": 570.872,
    "end": 652.654,
-   "key": "f3f36ae124c3a3d3",
+   "key": "2aa28fedb888f12b",
    "shots": [
     "reading-the-benchmarks-honestly-1-sh1",
     "reading-the-benchmarks-honestly-1-sh2",
@@ -6335,7 +6316,7 @@
    ],
    "start": 654.3,
    "end": 734.708,
-   "key": "ba905c5f874045c5",
+   "key": "9ee1775bd40eaafd",
    "shots": [
     "what-developers-found-in-week-one-1-sh1",
     "what-developers-found-in-week-one-1-sh2",
@@ -6442,7 +6423,7 @@
    ],
    "start": 736.36,
    "end": 812.706,
-   "key": "72ffe335f116d763",
+   "key": "62bb2479813c9dfb",
    "shots": [
     "the-failure-table-and-what-it-admits-1-sh1",
     "the-failure-table-and-what-it-admits-1-sh2",
@@ -6555,7 +6536,7 @@
    ],
    "start": 814.355,
    "end": 894.442,
-   "key": "b840952c0476ef66",
+   "key": "e01cade0ba6fcb9e",
    "shots": [
     "how-the-rivals-answered-1-sh1",
     "how-the-rivals-answered-1-sh2",
@@ -6674,7 +6655,7 @@
    ],
    "start": 896.088,
    "end": 975.877,
-   "key": "8ccb723608b91dc0",
+   "key": "ad8f0fbaab2c5628",
    "shots": [
     "what-this-means-for-the-next-year-1-sh1",
     "what-this-means-for-the-next-year-1-sh2",
