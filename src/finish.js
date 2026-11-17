@@ -28,7 +28,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { chunkWords, narrationWords } from "@launchclip/core/captions.mjs";
-import { knownModules, resolveModule } from "@launchclip/core/modules.mjs";
+import { knownModules, resolveModule, sceneRenderEnd } from "@launchclip/core/modules.mjs";
 import { customModuleGaps } from "@launchclip/core/custom-modules.mjs";
 import { audioFeatureNeeds, pickAudioFeatures } from "@launchclip/core/audio-react.mjs";
 import { customModuleProblems } from "../kit/hyperframes/custom-module.mjs";
@@ -2333,7 +2333,8 @@ export function placeholderScenes(resolved, { renderer, compileWarnings = [] } =
       continue;
     }
     if (!known.has(scene?.module)) { scenes.push({ id: scene?.id, module: scene?.module ?? null, kind: "unknown-module", reason: `module "${scene?.module}" is not a known module` }); continue; }
-    try { resolveModule(scene, resolved); }
+    // The end both renderers resolve with: a scene held through the next one's transition is that long on screen.
+    try { resolveModule(scene, resolved, { end: sceneRenderEnd(resolved, scene) }); }
     catch (error) { scenes.push({ id: scene.id, module: scene.module, kind: "params", reason: error.message }); }
   }
   for (const message of compileWarnings) {
