@@ -35,14 +35,33 @@ export const RESIZE_TOLERANCE = 0.15;
 // when the narration has none, tooling ends the script on this sentence.
 const CALL_TO_ACTION_SCHEMA = Object.freeze({ type: "string", description: "The one spoken sentence that asks the viewer to act, word for word as the narration ends on it. It starts with the verb (\"Save this before your next bake.\", \"Follow for the next one.\", \"Try it free at example.com.\", \"Comment DECK and I'll send you the checklist.\"). Empty only when the plan says a call to action is optional and the script has none." });
 
+// One concrete fact per item of a list or comparison (docs/EXPLAINER_CLAIMS_RFC.md §3.1); checkScript's point-fact reads it.
+export const POINT_KINDS = Object.freeze(["number", "object", "consequence"]);
+const POINTS_SCHEMA = Object.freeze({
+  type: "array",
+  description: "One entry for each item of every list or comparison of two or more items the narration makes; [] when it makes none.",
+  items: {
+    type: "object",
+    additionalProperties: false,
+    required: ["item", "fact", "kind", "words"],
+    properties: {
+      item: { type: "string", description: "The item as the narration names it (\"treated pine\")." },
+      fact: { type: "string", description: "The one concrete fact said about it: a number, an object or a consequence the viewer could see (\"chair legs dent it\"), never a category word (\"the cheapest\", \"low maintenance\")." },
+      kind: { type: "string", enum: POINT_KINDS, description: "number, object or consequence." },
+      words: { type: "string", description: "The narration's words that say the fact, copied exactly (\"but chair legs dent it\")." }
+    }
+  }
+});
+
 // title and narration are all an older response carries; title_options and
 // beats came with the planning pass and are optional when parsing.
 export const SCRIPT_SCHEMA = Object.freeze({
   type: "object",
   additionalProperties: false,
-  required: ["title", "narration", "title_options", "beats", "call_to_action"],
+  required: ["title", "narration", "title_options", "beats", "call_to_action", "points"],
   properties: {
     call_to_action: CALL_TO_ACTION_SCHEMA,
+    points: POINTS_SCHEMA,
     title: { type: "string", description: "A short working title (≤ 60 characters)." },
     narration: { type: "string", description: "The complete voiceover text, plain sentences, no stage directions: the beats' text joined in order." },
     title_options: {
@@ -184,11 +203,13 @@ const ROLE = `You write voiceover scripts for short product, explainer and story
 Write narration that will be read aloud by a text-to-speech voice:
 - Plain spoken sentences. No headings, bullet points, emoji, stage directions, sound cues or speaker labels.
 - Each sentence can own a scene: make every one concrete, and keep product names exactly as given.
-- Teach something: for every option, step or item you name, say at least one thing about it the viewer can use (what it is good at, its trade-off, what it needs). Naming options and moving on says nothing.`;
+- Teach something: for every option, step or item you name, say at least one thing about it the viewer can use (what it is good at, its trade-off, what it needs). Naming options and moving on says nothing.
+- One concrete fact per point: each item of a list or comparison gets a number, an object or a consequence the viewer could picture ("chair legs dent it", "the sun greys it in a summer"), never only a category word ("the cheapest", "low maintenance", "premium").`;
 
 const output = (titles, plan) => `Output:
 - narration: the whole script. beats: the same sentences split by beat id, in the plan's order; their text joined is the narration.
 - call_to_action: the sentence the narration ends on that asks the viewer to act, word for word. A script without one is not finished: tooling adds a plain one.
+- points: for each item of every list or comparison of two or more items, {item, fact, kind: number|object|consequence, words}; words are the narration's own words for the fact, copied exactly. [] when the script lists nothing.
 - title: a short working title. title_options: ${titles} publish-ready titles the video pays off.
 - Length is a hard limit: ${plan?.word_ceiling ? `${plan.word_ceiling} words at most, about ${plan.word_target} is right` : "the plan's ceiling"}. Count the words of the narration before you answer and cut until it fits; tooling cuts whole sentences from a script that is over, and it will not choose as well as you.
 - Return only the JSON object.`;
@@ -387,6 +408,7 @@ export async function writeScript(options = {}) {
   }
   const angle = parseAngle(value?.angle);
   const postCaption = cleanCaption(value?.post_caption);
+  const points = parsePoints(value?.points);
   return {
     schema_version: SCRIPT_VERSION,
     title,
@@ -396,6 +418,7 @@ export async function writeScript(options = {}) {
     ...(postCaption ? { description: postCaption } : {}),
     narration,
     beats,
+    ...(points.length ? { points } : {}),
     ...(fit ? { fit } : {}),
     plan: { format: plan.format, goal: plan.goal, awareness: plan.awareness, skeleton: plan.skeleton, pace: plan.pace, voice_speed: plan.voice_speed, ...(plan.cta ? { cta: plan.cta } : {}), ...(plan.series ? { series: plan.series } : {}), wpm: plan.wpm, word_target: plan.word_target, word_ceiling: plan.word_ceiling, reasons: given.schema ? given.reasons : plan.reasons, ...(plan.structure ? { structure: { id: plan.structure.id, version: plan.structure.version } } : {}) },
     word_target: words,
@@ -405,6 +428,15 @@ export async function writeScript(options = {}) {
     model: result?.model ?? model,
     response_id: result?.response_id ?? null
   };
+}
+
+/** The points a model returned, cleaned; [] for a response without them. */
+function parsePoints(value) {
+  if (!Array.isArray(value)) return [];
+  const text = (item) => String(item ?? "").trim();
+  return value
+    .map((entry) => ({ item: text(entry?.item), fact: text(entry?.fact), kind: POINT_KINDS.includes(entry?.kind) ? entry.kind : "consequence", words: text(entry?.words) }))
+    .filter((entry) => entry.item && entry.fact);
 }
 
 /** The beats a model returned, cleaned; [] for a response without them. */

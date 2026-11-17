@@ -42,11 +42,25 @@ test("the script pass prompt is driven by the plan: format, skeleton, goal, awar
 });
 
 test("SCRIPT_SCHEMA keeps title and narration and adds title_options, beats and the call to action (strict: every property required)", () => {
-  assert.deepEqual(SCRIPT_SCHEMA.required, ["title", "narration", "title_options", "beats", "call_to_action"]);
+  assert.deepEqual(SCRIPT_SCHEMA.required, ["title", "narration", "title_options", "beats", "call_to_action", "points"]);
+  assert.deepEqual(SCRIPT_SCHEMA.properties.points.items.required, ["item", "fact", "kind", "words"]);
+  assert.deepEqual(SCRIPT_SCHEMA.properties.points.items.properties.kind.enum, ["number", "object", "consequence"]);
   assert.match(SCRIPT_SCHEMA.properties.call_to_action.description, /word for word as the narration ends on it/);
   assert.equal(SCRIPT_SCHEMA.properties.title.type, "string");
   assert.equal(SCRIPT_SCHEMA.properties.narration.type, "string");
   assert.deepEqual(SCRIPT_SCHEMA.properties.beats.items.required, ["beat", "text"]);
+});
+
+test("the script pass asks for points and stores them beside the narration (none when it lists nothing)", async () => {
+  const points = [{ item: "Ledgerly", fact: "every payout to its invoices", kind: "object", words: "matches every payout to its invoices" }, { item: "", fact: "dropped", kind: "object", words: "x" }];
+  const { requests, client } = scriptClient({ title: "Ledgerly", narration: NARRATION, title_options: ["A", "B", "C"], beats: [], points });
+  const plan = chooseScriptPlan({ prompt: "A 30-second launch video for Ledgerly", duration: 30, aspect: "16:9" });
+  const script = await writeScript({ client, prompt: "A 30-second launch video for Ledgerly", duration: 30, plan });
+  assert.match(requests[0].instructions, /One concrete fact per point/);
+  assert.match(requests[0].instructions, /- points: for each item/);
+  assert.deepEqual(script.points, [points[0]]);
+  const none = await writeScript({ client: scriptClient({ title: "L", narration: NARRATION }).client, prompt: "x", duration: 30, plan });
+  assert.equal(none.points, undefined);
 });
 
 test("an older {title, narration} response still parses, from a value or from text", async () => {
