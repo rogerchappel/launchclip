@@ -33,11 +33,11 @@
         "end": 4,
         "params": {
           "subject": {
-            "object": "bench"
+            "object": "deck"
           },
           "change": "wear",
-          "plate": "wood",
-          "text": "One summer of sun",
+          "plate": "stone",
+          "text": "One summer, no oil",
           "variant": "default"
         }
       }

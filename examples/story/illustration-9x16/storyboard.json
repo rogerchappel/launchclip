@@ -1,7 +1,7 @@
 {
   "schema": "launchclip.story.v1",
   "title": "Three claims, drawn (golden, 9:16 illustration)",
-  "notes": "Golden story for the illustration module (docs/EXPLAINER_CLAIMS_RFC.md \u00a73.2): three businesses' claims with no footage to show them. A decking company's 'the sun greys it in a summer' is a bench on wood boards that wears; a clinic's 'back on your feet in two weeks' is a calendar whose fourteen days fill; a software team's 'reports take an hour' is a clock whose ring sweeps to the hour. Each change lands on its stressed word (at) while the stage drifts. No narration and no paid calls.",
+  "notes": "Golden story for the illustration module (docs/EXPLAINER_CLAIMS_RFC.md \u00a73.2): three businesses' claims with no footage to show them. A decking company's 'the sun greys it in a summer' is a drawn deck on flagstones that greys and splits; a clinic's 'back on your feet in two weeks' is a calendar on a desk whose fourteen days are crossed off; a software team's 'reports take an hour' is a clock whose hand sweeps the hour across its face. Each change lands on its stressed word (at) while the stage drifts. No narration and no paid calls.",
   "lane": "motion",
   "format": {
     "width": 1080,
@@ -44,10 +44,10 @@
       "end": 5,
       "params": {
         "subject": {
-          "object": "bench"
+          "object": "deck"
         },
         "change": "wear",
-        "plate": "wood",
+        "plate": "stone",
         "text": "One summer, no oil",
         "at": 2.4
       }
@@ -64,7 +64,7 @@
         "change": "count",
         "count": 14,
         "unit": "days",
-        "plate": "paper",
+        "plate": "wood",
         "text": "Back on your feet",
         "at": 2.4
       }
@@ -80,7 +80,8 @@
         },
         "change": "measure",
         "value": 100,
-        "reading": "1 hr",
+        "reading": "1",
+        "unit": "hour",
         "plate": "metal",
         "text": "Every weekly report",
         "at": 2.4

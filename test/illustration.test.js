@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {MODULES, catalogHTimeline, catalogHView} from '@launchclip/core/catalog-h.mjs';
 import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {sceneMotionFindings} from '@launchclip/core/motion-check.mjs';
-import {CHANGES, STAGE_SHARE} from '@launchclip/core/illustration.mjs';
+import {CHANGES, SEEN_SHARE} from '@launchclip/core/illustration.mjs';
 import {EXTRA_SAMPLES, SAMPLES} from '../scripts/element-samples.mjs';
 import {elementFixtures} from '../scripts/element-parity.mjs';
 
@@ -28,26 +28,37 @@ test('illustration: the change list is closed and every kind has a sample and a 
   assert.throws(() => resolve({subject: {object: 'clock'}, change: 'wear', colour: 'red'}), /colour/);
 });
 
-test('illustration: a prop draws as the prop, an icon as the icon, and an object the kit lacks as its fallback icon', () => {
-  assert.deepEqual(resolve(SAMPLES.illustration).content.subject, {object: 'bench', prop: 'bench', icon: null, label: null});
+test('illustration: a drawn object draws in detail, a prop as the prop, an icon as the icon, and an object the kit lacks as its fallback icon', () => {
+  assert.deepEqual(resolve(SAMPLES.illustration).content.subject, {object: 'deck', drawn: 'deck', prop: null, icon: null, label: null});
+  assert.equal(resolve({subject: {object: 'bench'}, change: 'wear'}).content.subject.prop, 'bench');
   assert.equal(resolve({subject: {object: 'stethoscope'}, change: 'wear'}).content.subject.icon, 'stethoscope');
-  const deck = resolve({subject: {object: 'deck', icon: 'fence'}, change: 'wear'});
-  assert.deepEqual([deck.content.subject.prop, deck.content.subject.icon], [null, 'fence']);
-  assert.ok(JSON.stringify(catalogHView(deck)).includes('"tag":"svg"'), 'the icon is drawn, never a placeholder');
-  assert.throws(() => resolve({subject: {object: 'deck'}, change: 'wear'}), /"deck" is neither a world-kit prop .* nor an icon.*give icon/);
-  assert.throws(() => resolve({subject: {object: 'deck', icon: 'decking'}, change: 'wear'}), /params\.subject\.icon must be an icon name/);
+  const pergola = resolve({subject: {object: 'pergola', icon: 'fence'}, change: 'wear'});
+  assert.deepEqual([pergola.content.subject.drawn, pergola.content.subject.prop, pergola.content.subject.icon], [null, null, 'fence']);
+  assert.ok(JSON.stringify(catalogHView(pergola)).includes('"tag":"svg"'), 'the icon is drawn, never a placeholder');
+  assert.throws(() => resolve({subject: {object: 'pergola'}, change: 'wear'}), /"pergola" is not a drawn object \(deck, calendar, clock\), a world-kit prop .* or an icon.*give icon/);
+  assert.throws(() => resolve({subject: {object: 'pergola', icon: 'decking'}, change: 'wear'}), /params\.subject\.icon must be an icon name/);
   assert.throws(() => resolve({subject: {object: 'clock', label: 'Clock'}, change: 'wear'}), /only drawn on a compare/);
+  // A calendar counts on its own grid; a clock measures on its own face.
+  const cal = resolve(EXTRA_SAMPLES.find(e => e.name === 'illustration-count').params);
+  const ids = JSON.stringify(catalogHView(cal));
+  assert.ok(ids.includes('scene-calendar-day-13') && ids.includes('scene-calendar-cross-13') && !ids.includes('scene-calendar-day-14'));
+  assert.equal(cal.content.geo.tray, null);
+  const clock = resolve(EXTRA_SAMPLES.find(e => e.name === 'illustration-measure').params);
+  assert.ok(JSON.stringify(catalogHView(clock)).includes('scene-clock-sweep'));
+  assert.equal(clock.content.geo.ring, null);
 });
 
-test('illustration: the stage fills 50–80% of the safe area, on a full-bleed plate', () => {
+test('illustration: what is seen fills 50–80% of the safe area, sits low, and the plate is full-bleed', () => {
   for (const {name, shape, params} of SAMPLE_LIST) {
     const model = resolve(params, shape);
-    const {stage, boxes} = model.content.geo;
-    const share = (stage.width * stage.height) / (model.safe.width * model.safe.height);
-    assert.ok(share >= 0.5 && share <= 0.8, `${name} ${shape}: ${share}`);
-    assert.ok(Math.abs(share - STAGE_SHARE) < 0.01);
-    for (const box of boxes) assert.ok(box.x >= stage.x - 0.01 && box.y >= stage.y - 0.01 && box.x + box.width <= stage.x + stage.width + 0.01 && box.y + box.height <= stage.y + stage.height + 0.01, `${name}: object inside its stage`);
+    const {seen, boxes, stage} = model.content.geo;
+    assert.ok(seen >= SEEN_SHARE.min && seen <= SEEN_SHARE.max, `${name} ${shape}: ${seen}`);
+    // The object stands on the bottom of the rect (just above the caption band), not floating mid-frame.
+    const low = Math.max(...boxes.map(b => b.y + b.height));
+    assert.ok(stage.y + stage.height - low < 0.2 * model.rect.height, `${name} ${shape}: sits low`);
+    for (const box of boxes) assert.ok(box.x >= -0.01 && box.y >= -0.01 && box.x + box.width <= model.rect.width + 0.01 && box.y + box.height <= model.rect.height + 0.01, `${name}: object inside the rect`);
     assert.deepEqual(model.rect, model.safe, 'the module takes the whole safe area');
+    if (model.content.number) assert.ok(model.content.number.size >= 100, `${name}: the number is set at hero size (${model.content.number.size})`);
     if (params.plate !== 'style') {
       const g = model.content.ground;
       assert.deepEqual([model.rect.x + g.x, model.rect.y + g.y, g.width, g.height], [0, 0, FORMATS[shape].width, FORMATS[shape].height], `${name}: plate is full-bleed`);
@@ -69,7 +80,7 @@ test('illustration: the change lands on its word, slow → fast → slow, and th
   const change = model.events.find(e => e.name === 'change');
   assert.equal(change.time, 4);
   assert.equal(model.content.moveAt + model.content.span / 2, 4);
-  const worn = t => frameState(catalogHTimeline(model), t).get('scene-bench-worn').opacity;
+  const worn = t => frameState(catalogHTimeline(model), t).get('scene-deck-worn').opacity;
   assert.equal(worn(model.content.moveAt - 0.05), 0);
   assert.ok(worn(4) > 0.4 && worn(4) < 0.6, 'halfway on the word');
   assert.equal(worn(model.motion.exitStart - 0.01), 1);

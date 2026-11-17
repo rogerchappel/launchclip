@@ -37,7 +37,8 @@
           },
           "change": "measure",
           "value": 100,
-          "reading": "1 hr",
+          "reading": "1",
+          "unit": "hour",
           "plate": "metal",
           "text": "Every weekly report",
           "variant": "default"
