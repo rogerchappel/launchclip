@@ -14,8 +14,10 @@
 //
 // The change is the motion: it lands on `at` (the stressed word, or the
 // `change` hit), centred there with a slow → fast → slow ease and no
-// overshoot, while the stage drifts through the hold (a slow push) and the
-// plate drifts the other way. One renderer-neutral model on catalogue H's
+// overshoot, under a 10% camera kick that eases back. Through the hold the
+// stage pushes in while the plate's texture travels sideways in a seamless
+// loop (parallax), each scene opening on a short pan that hands over to it;
+// the hook builds in steps (object, line, change). One renderer-neutral model on catalogue H's
 // view tree and op list, so both renderers draw it from this file
 // (registered through kit/core/catalog-i-explain.mjs).
 //
@@ -43,7 +45,8 @@ export const STAGE_SHARE = 0.62;
 // The hue each material is mixed from; the style's bg sets how dark it sits.
 const MATERIAL_HUE = {wood: '#9a6a43', stone: '#8a8780', fabric: '#5f6f86', paper: '#d8d0bf', metal: '#9aa3ad'};
 // Each kind's change: how long the move takes (s), its cue.
-const CHANGE_TIME = {wear: 1.4, measure: 1.4, count: 1.6, compare: 0.8, cause: 1.0, 'before-after': 1.2};
+// Long enough that the change keeps moving through the hold, not just past the word.
+const CHANGE_TIME = {wear: 2.0, measure: 1.8, count: 2.2, compare: 1.0, cause: 1.4, 'before-after': 1.6};
 const CUE = {wear: 'whoosh-soft', measure: 'whoosh', count: 'tally', compare: 'pop', cause: 'hit-soft', 'before-after': 'whoosh'};
 // Slow → fast → slow, never past the target.
 // The camera drift runs at an even speed: an eased drift stalls at the scene's ends, which reads as a frozen frame.
@@ -131,50 +134,78 @@ function crackPaths(box, seed, {along = false} = {}) {
   });
 }
 
-// A material's full-bleed ground: canvas-sized SVG of seeded strokes over the tone, with a vignette.
-function materialNodes(gid, material, tone, W, H, u, seed) {
+// A material's ground: one seamless strip, P wide (a whole number of its boards or tiles, at
+// least the frame), drawn at −P, 0, P and 2P so it loops sideways with no seam. Every
+// material runs across the loop (vertical boards, brush lines, bands) and has texture at a
+// coarse scale too, so its travel reads on screen and in the render's stillness check.
+export const PLATE_SPEED = 75, PLATE_OPEN = 160;
+const PLATE_CELL = {wood: 150, stone: 260, fabric: 240, paper: 120, metal: 120};
+export function plateStrip(material, W, u) {
+  const cell = PLATE_CELL[material] * u;
+  return r2(Math.ceil(W / cell) * cell);
+}
+function materialNodes(gid, material, tone, P, H, u, seed) {
   const rand = seededRandom(hashString(`${material}|${seed}`));
   const light = mixColor('#ffffff', tone, 0.1), dark = mixColor('#000000', tone, 0.28);
-  const kids = [el('rect', null, null, [], {x: 0, y: 0, width: W, height: H, fill: tone})];
-  const line = (d, stroke, width, opacity) => el('path', null, null, [], {d, stroke, strokeWidth: r2(width), strokeOpacity: opacity, strokeLinecap: 'round', fill: 'none'});
+  const kids = [];
+  const rect = (x, y, w, h, fill, extra = {}) => kids.push(el('rect', null, null, [], {x: r2(x), y: r2(y), width: r2(w), height: r2(h), fill, ...extra}));
+  const line = (d, stroke, width, opacity) => kids.push(el('path', null, null, [], {d, stroke, strokeWidth: r2(width), strokeOpacity: opacity, strokeLinecap: 'round', fill: 'none'}));
+  const shade = k => mixColor(rand() < 0.5 ? light : dark, tone, k);
   if (material === 'wood') {
-    // Deck boards: planks with gaps, each with wavy grain.
-    const board = r2(150 * u);
-    for (let y = 0; y < H; y += board) {
-      kids.push(el('rect', null, null, [], {x: 0, y: r2(y), width: W, height: r2(board), fill: mixColor(rand() < 0.5 ? light : dark, tone, 0.75 + rand() * 0.2)}));
+    // Deck boards seen from above: planks with gaps, each with wavy grain.
+    const board = 150 * u;
+    for (let x = 0; x < P - 1; x += board) {
+      rect(x, 0, board, H, shade(0.7 + rand() * 0.25));
       for (let g = 0; g < 5; g++) {
-        const gy = y + board * (0.15 + g * 0.17), a = board * 0.06 * (0.5 + rand()), f = 0.002 + rand() * 0.003, p = rand() * 6;
-        let d = `M0 ${r2(gy)}`;
-        for (let x = 60; x <= W + 60; x += 60) d += ` L${x} ${r2(gy + a * Math.sin(x * f + p))}`;
-        kids.push(line(d, dark, 2.5 * u, 0.35 + rand() * 0.25));
+        const gx = x + board * (0.15 + g * 0.17), a = board * 0.06 * (0.5 + rand()), f = 0.002 + rand() * 0.003, ph = rand() * 6;
+        let d = `M${r2(gx)} 0`;
+        for (let y = 60; y <= H + 60; y += 60) d += ` L${r2(gx + a * Math.sin(y * f + ph))} ${y}`;
+        line(d, dark, 2.5 * u, 0.35 + rand() * 0.25);
       }
-      kids.push(el('rect', null, null, [], {x: 0, y: r2(y + board - 6 * u), width: W, height: r2(6 * u), fill: mixColor('#000000', tone, 0.5)}));
+      rect(x + board - 6 * u, 0, 6 * u, H, mixColor('#000000', tone, 0.5));
     }
   } else if (material === 'stone') {
-    const s = r2(260 * u);
-    for (let y = -s / 2; y < H; y += s) for (let x = -s / 2 + (Math.round(y / s) % 2) * s / 2; x < W; x += s) {
-      kids.push(el('rect', null, null, [], {x: r2(x + 5 * u), y: r2(y + 5 * u), width: r2(s - 10 * u), height: r2(s - 10 * u), rx: r2(18 * u), fill: mixColor(rand() < 0.5 ? light : dark, tone, 0.7 + rand() * 0.25)}));
+    const t = 260 * u;
+    rect(0, 0, P, H, mixColor('#000000', tone, 0.35));
+    for (let x = 0; x < P - 1; x += t) for (let y = -t, row = 0; y < H; y += t, row++) {
+      rect(x + (row % 2) * t / 2 + 5 * u, y + 5 * u, t - 10 * u, t - 10 * u, shade(0.6 + rand() * 0.3), {rx: r2(18 * u)});
     }
   } else if (material === 'fabric') {
-    const step = r2(14 * u);
-    for (let y = 0; y < H; y += step) kids.push(line(`M0 ${r2(y)} H${W}`, light, 3 * u, 0.12 + rand() * 0.1));
-    for (let x = 0; x < W; x += step) kids.push(line(`M${r2(x)} 0 V${H}`, dark, 3 * u, 0.12 + rand() * 0.1));
+    // A woven ticking: broad stripes under a fine weave.
+    for (let x = 0; x < P - 1; x += 120 * u) rect(x, 0, 120 * u, H, mixColor(Math.round(x / (120 * u)) % 2 ? light : dark, tone, 0.8));
+    const step = 14 * u;
+    for (let y = 0; y < H; y += step) line(`M0 ${r2(y)} H${P}`, light, 3 * u, 0.12 + rand() * 0.1);
+    for (let x = 0; x < P - 1; x += step) line(`M${r2(x)} 0 V${H}`, dark, 3 * u, 0.12 + rand() * 0.1);
   } else if (material === 'paper') {
-    for (let i = 0; i < 70; i++) {
-      const x = rand() * W, y = rand() * H, l = (40 + rand() * 120) * u, a = rand() * Math.PI;
-      kids.push(line(`M${r2(x)} ${r2(y)} q${r2(l / 2 * Math.cos(a + 0.4))} ${r2(l / 2 * Math.sin(a + 0.4))} ${r2(l * Math.cos(a))} ${r2(l * Math.sin(a))}`, dark, 1.5 * u, 0.18));
+    // Laid paper: chain lines down the sheet (the coarse texture the travel crosses), soft mottle, then fibres.
+    for (let x = 60 * u; x < P; x += 120 * u) { line(`M${r2(x)} 0 V${H}`, dark, 5 * u, 0.3); line(`M${r2(x + 7 * u)} 0 V${H}`, light, 3 * u, 0.25); }
+    for (let i = 0; i < Math.round(P * H / (90000 * u * u)); i++) {
+      const r = (90 + rand() * 150) * u;
+      kids.push(el('circle', null, null, [], {cx: r2(rand() * P), cy: r2(rand() * H), r: r2(r), fill: `url(#${gid}-${rand() < 0.5 ? 'lo' : 'hi'})`}));
+    }
+    for (let i = 0; i < Math.round(P * H / 30000); i++) {
+      const x = rand() * P, y = rand() * H, l = (40 + rand() * 120) * u, a = rand() * Math.PI;
+      line(`M${r2(x)} ${r2(y)} q${r2(l / 2 * Math.cos(a + 0.4))} ${r2(l / 2 * Math.sin(a + 0.4))} ${r2(l * Math.cos(a))} ${r2(l * Math.sin(a))}`, dark, 1.5 * u, 0.2);
     }
   } else {
-    // Brushed metal: fine horizontal lines and one broad sheen.
-    for (let y = 0; y < H; y += 5 * u) kids.push(line(`M0 ${r2(y)} H${W}`, rand() < 0.5 ? light : dark, 1.5 * u, 0.08 + rand() * 0.14));
-    kids.push(el('rect', null, null, [], {x: 0, y: 0, width: W, height: H, fill: `url(#${gid}-sheen)`}));
+    // Brushed metal: broad bands of sheen and shade, fine brush lines down them.
+    for (let x = 0; x < P - 1;) { const w = Math.min(P - x, (30 + rand() * 90) * u); rect(x, 0, w, H, shade(0.75 + rand() * 0.2)); x += w; }
+    for (let x = 0; x < P - 1; x += 5 * u) line(`M${r2(x)} 0 V${H}`, rand() < 0.5 ? light : dark, 1.5 * u, 0.08 + rand() * 0.14);
   }
-  kids.push(el('rect', null, null, [], {x: 0, y: 0, width: W, height: H, fill: `url(#${gid}-vignette)`}));
-  const defs = el('defs', null, null, [
-    el('radialGradient', `${gid}-vignette`, null, [el('stop', null, null, [], {offset: '55%', stopColor: '#000000', stopOpacity: 0}), el('stop', null, null, [], {offset: '100%', stopColor: '#000000', stopOpacity: 0.45})], {cx: '50%', cy: '50%', r: '75%'}),
-    el('linearGradient', `${gid}-sheen`, null, [el('stop', null, null, [], {offset: '30%', stopColor: '#ffffff', stopOpacity: 0}), el('stop', null, null, [], {offset: '50%', stopColor: '#ffffff', stopOpacity: 0.14}), el('stop', null, null, [], {offset: '70%', stopColor: '#ffffff', stopOpacity: 0})], {x1: '0%', y1: '0%', x2: '100%', y2: '100%'})
-  ]);
-  return [defs, ...kids];
+  const bloom = (key, color) => el('radialGradient', `${gid}-${key}`, null, [el('stop', null, null, [], {offset: '0%', stopColor: color, stopOpacity: 0.12}), el('stop', null, null, [], {offset: '100%', stopColor: color, stopOpacity: 0})]);
+  const defs = el('defs', null, null, material === 'paper' ? [bloom('hi', '#ffffff'), bloom('lo', '#000000')] : []);
+  const copy = dx => el('g', null, null, kids, {transform: `translate(${r2(dx)} 0)`});
+  return [defs, el('rect', null, null, [], {x: r2(-P), y: 0, width: r2(4 * P), height: H, fill: tone}), copy(-P), copy(0), copy(P), copy(2 * P)];
+}
+
+// The light over the plate: a still vignette and, on metal, one broad sheen. It stays put while the texture travels.
+function lightNodes(gid, material, W, H) {
+  const stops = list => list.map(([offset, color, opacity]) => el('stop', null, null, [], {offset, stopColor: color, stopOpacity: opacity}));
+  return [el('defs', null, null, [
+    el('radialGradient', `${gid}-vignette`, null, stops([['55%', '#000000', 0], ['100%', '#000000', 0.45]]), {cx: '50%', cy: '50%', r: '75%'}),
+    el('linearGradient', `${gid}-sheen`, null, stops([['30%', '#ffffff', 0], ['50%', '#ffffff', 0.14], ['70%', '#ffffff', 0]]), {x1: '0%', y1: '0%', x2: '100%', y2: '100%'})
+  ]), ...(material === 'metal' ? [el('rect', null, null, [], {x: 0, y: 0, width: W, height: H, fill: `url(#${gid}-sheen)`})] : []),
+  el('rect', null, null, [], {x: 0, y: 0, width: W, height: H, fill: `url(#${gid}-vignette)`})];
 }
 
 function resolve(params, ctx) {
@@ -218,7 +249,7 @@ function resolve(params, ctx) {
   const buildAt = b.timeOf('build', undefined, 'build', 0.5);
   const buildEnd = rt(buildAt + 0.7);
   b.events.push({id: `${b.id}-build`, name: 'build', time: buildAt, endTime: buildEnd, role: 'emphasis', cue: 'whoosh-soft'});
-  const span = change === 'count' ? Math.min(CHANGE_TIME.count, 0.08 * count + 0.4) : CHANGE_TIME[change];
+  const span = change === 'count' ? Math.min(CHANGE_TIME.count, 0.1 * count + 0.6) : CHANGE_TIME[change];
   const changeAt = b.timeOf('change', p.at, 'params.at', Math.min(b.lastEvent, Math.max(buildEnd - b.start + span / 2 + 0.3, b.duration * 0.45)),
     {min: buildEnd - b.start + span / 2 - 0.05});
   const moveAt = rt(changeAt - span / 2);
@@ -226,7 +257,7 @@ function resolve(params, ctx) {
 
   const canvas = b.canvas;
   const content = {colors: b.colors, change, subject, second, plate, tone, text: textFit ? {text, size: textFit.size, lines: textFit.lines} : null, value, instrument, reading, count, unit, force, pick,
-    readingSize, unitSize, geo, buildAt, buildEnd, changeAt, moveAt, span, splitPlate: Boolean(tone && subject.prop && ['wear', 'cause'].includes(change)), ground: {x: r2(-rect.x), y: r2(-rect.y), width: canvas.width, height: canvas.height},
+    readingSize, unitSize, geo, buildAt, buildEnd, changeAt, moveAt, span, splitPlate: Boolean(tone && subject.prop && ['wear', 'cause'].includes(change)), strip: tone ? plateStrip(plate, canvas.width, b.unit) : null, ground: {x: r2(-rect.x), y: r2(-rect.y), width: canvas.width, height: canvas.height},
     fg, muted: b.theme.muted, accent: b.colors.accent, primary: b.colors.primary, bg: b.colors.bg, crack: mixColor('#000000', tone ?? b.colors.bg, 0.55), seed: `${subject.object}|${change}`};
   // A fade, not a rise: the plate is full-bleed and must not slide.
   b.motion.enterFrom = {opacity: 0, x: 0, y: 0, scale: 1};
@@ -258,49 +289,55 @@ function objectNodes(model, spec, box, key, {worn = false} = {}) {
 function view(model) {
   const {id, fonts, unit: u} = model;
   const c = model.content, g = c.geo;
+  // Every part is named after the subject, so flow's automatic carry pairs a scene's parts only with the same object's.
+  const sid = `${id}-${c.subject.object}`;
   const kids = [];
   if (c.tone) {
-    // A prop wearing on a material splits the plate under it, not the air between its parts.
-    const split = c.splitPlate ? crackPaths({x: model.rect.x, y: r2(model.rect.y + g.stage.y), width: model.rect.width, height: g.stage.height}, c.seed, {along: true}).map((d, i) => strokePath(`${id}-cracks-${i}`, d, c.crack, r2(7 * u))) : [];
-    const G = c.ground, svg = (gid, worn) => el('div', gid, {...abs(G.x, G.y, G.width, G.height), transformOrigin: '50% 50%', ...(worn ? {filter: WORN, opacity: 0} : {})},
-      [svgRoot(G.width, G.height, [...materialNodes(gid, c.plate, c.tone, G.width, G.height, u, c.seed), ...(worn ? split : [])])]);
-    kids.push(svg(`${id}-ground`, false));
-    if (['wear', 'cause'].includes(c.change)) kids.push(svg(`${id}-ground-worn`, true));
+    const G = c.ground, P = c.strip;
+    // The strip scales about the frame's centre, not its own.
+    const svg = (gid, worn) => el('div', gid, {...abs(0, 0, r2(3 * P), G.height), ...(worn ? {filter: WORN, opacity: 0} : {})},
+      [svgRoot(r2(3 * P), G.height, materialNodes(gid, c.plate, c.tone, P, G.height, u, c.seed))]);
+    // The plate's opening move lives on a wrapper, so the loop inside it keeps an even speed.
+    kids.push(el('div', `${sid}-plate`, abs(G.x, G.y, G.width, G.height, {transformOrigin: '50% 50%'}),
+      [svg(`${sid}-ground`, false), ...(['wear', 'cause'].includes(c.change) ? [svg(`${sid}-ground-worn`, true)] : [])]));
+    kids.push(el('div', null, abs(G.x, G.y, G.width, G.height), [svgRoot(G.width, G.height, lightNodes(`${sid}-light`, c.plate, G.width, G.height))]));
   }
   const stage = [];
   const box = g.boxes[0];
   const shadow = b => el('div', null, {...abs(r2(b.x + b.width * 0.12), r2(b.y + b.height * 0.86), r2(b.width * 0.76), r2(b.height * 0.1)), borderRadius: '50%', background: `radial-gradient(closest-side, ${hex2('#000000', 0.38)}, ${hex2('#000000', 0)})`});
-  const cracks = (cid, b) => el('div', cid, abs(0, 0, g.stage.x + g.stage.width, g.stage.y + g.stage.height), [svgRoot(g.stage.x + g.stage.width, g.stage.y + g.stage.height,
-    crackPaths(b, c.seed).map((d, i) => strokePath(`${cid}-${i}`, d, c.crack, r2(6 * u))))]);
+  const cracks = (cid, b, along = false) => el('div', cid, abs(0, 0, g.stage.x + g.stage.width, g.stage.y + g.stage.height), [svgRoot(g.stage.x + g.stage.width, g.stage.y + g.stage.height,
+    crackPaths(b, c.seed, {along}).map((d, i) => strokePath(`${cid}-${i}`, d, c.crack, r2((along ? 7 : 6) * u))))]);
+  // A prop wearing on a material splits the boards under it, not the air between its parts.
+  if (c.splitPlate) stage.push(cracks(`${sid}-cracks`, {x: g.stage.x, y: g.stage.y, width: g.stage.width, height: g.stage.height}, true));
   stage.push(shadow(box));
   if (c.change === 'before-after') {
-    stage.push(el('div', `${id}-obj`, abs(0, 0, model.rect.width, model.rect.height), [objectNodes(model, c.subject, box, 'a')]));
-    stage.push(el('div', `${id}-after`, abs(0, 0, model.rect.width, model.rect.height, {clipPath: `inset(0% 0% 0% ${r2(box.x / model.rect.width * 100)}%)`}), [objectNodes(model, c.subject, box, 'b', {worn: true}), cracks(`${id}-ba-cracks`, box)]));
-    stage.push(el('div', `${id}-wipe`, abs(r2(box.x - 3 * u), r2(box.y - 20 * u), r2(6 * u), r2(box.height + 40 * u), {background: c.fg, borderRadius: 999, opacity: 0})));
+    stage.push(el('div', `${sid}-obj`, abs(0, 0, model.rect.width, model.rect.height), [objectNodes(model, c.subject, box, 'a')]));
+    stage.push(el('div', `${sid}-after`, abs(0, 0, model.rect.width, model.rect.height, {clipPath: `inset(0% 0% 0% ${r2(box.x / model.rect.width * 100)}%)`}), [objectNodes(model, c.subject, box, 'b', {worn: true}), cracks(`${sid}-ba-cracks`, box)]));
+    stage.push(el('div', `${sid}-wipe`, abs(r2(box.x - 3 * u), r2(box.y - 20 * u), r2(6 * u), r2(box.height + 40 * u), {background: c.fg, borderRadius: 999, opacity: 0})));
     const tag = (tid, x, text, align) => label(tid, x, r2(box.y - 70 * u), r2(box.width / 2), text, {size: c.unitSize, family: fonts.meta, color: c.muted, align, spacing: '0.1em', extra: {opacity: 0}});
-    stage.push(tag(`${id}-before`, box.x, 'BEFORE', 'left'), tag(`${id}-after-tag`, r2(box.x + box.width / 2), 'AFTER', 'right'));
+    stage.push(tag(`${sid}-before`, box.x, 'BEFORE', 'left'), tag(`${sid}-after-tag`, r2(box.x + box.width / 2), 'AFTER', 'right'));
   } else {
-    stage.push(el('div', `${id}-obj`, abs(0, 0, model.rect.width, model.rect.height), [objectNodes(model, c.subject, box, 'a')]));
+    stage.push(el('div', `${sid}-obj`, abs(0, 0, model.rect.width, model.rect.height), [objectNodes(model, c.subject, box, 'a')]));
   }
   if (['wear', 'cause'].includes(c.change)) {
-    stage.push(el('div', `${id}-worn`, {...abs(0, 0, model.rect.width, model.rect.height), opacity: 0}, [objectNodes(model, c.subject, box, 'w', {worn: true})]));
-    if (!c.splitPlate) stage.push(cracks(`${id}-cracks`, box));
+    stage.push(el('div', `${sid}-worn`, {...abs(0, 0, model.rect.width, model.rect.height), opacity: 0}, [objectNodes(model, c.subject, box, 'w', {worn: true})]));
+    if (!c.splitPlate) stage.push(cracks(`${sid}-cracks`, box));
   }
   if (c.change === 'cause') {
     const s = r2(box.width * 0.42);
-    stage.push(el('div', `${id}-force`, {...abs(r2(box.x + box.width - s * 0.7), r2(box.y - s * 0.45), s, s), opacity: 0}, [iconNode(FORCES[c.force], {x: 0, y: 0, size: s, color: c.accent, stroke: r2(14 * u * ICON_BOX / s), mode: 'duotone', tintOpacity: 0.3})]));
+    stage.push(el('div', `${sid}-force`, {...abs(r2(box.x + box.width - s * 0.7), r2(box.y - s * 0.45), s, s), opacity: 0}, [iconNode(FORCES[c.force], {x: 0, y: 0, size: s, color: c.accent, stroke: r2(14 * u * ICON_BOX / s), mode: 'duotone', tintOpacity: 0.3})]));
   }
   if (c.change === 'compare') {
     const b2 = g.boxes[1];
     stage[0] = shadow(g.boxes[0]);
-    stage[1] = el('div', `${id}-obj`, abs(0, 0, model.rect.width, model.rect.height), [objectNodes(model, c.subject, g.boxes[0], 'a')]);
-    stage.push(el('div', `${id}-obj2`, abs(0, 0, model.rect.width, model.rect.height), [shadow(b2), objectNodes(model, c.second, b2, 'b')]));
+    stage[1] = el('div', `${sid}-obj`, abs(0, 0, model.rect.width, model.rect.height), [objectNodes(model, c.subject, g.boxes[0], 'a')]);
+    stage.push(el('div', `${sid}-obj2`, abs(0, 0, model.rect.width, model.rect.height), [shadow(b2), objectNodes(model, c.second, b2, 'b')]));
     [[c.subject, g.boxes[0], 'l1'], [c.second, b2, 'l2']].forEach(([spec, bx, lid]) => {
-      if (spec.label) stage.push(label(`${id}-${lid}`, bx.x, r2(bx.y + bx.height + 18 * u), bx.width, spec.label, {size: c.unitSize, family: fonts.body, color: c.fg, align: 'center', weight: 700, extra: {opacity: 0}}));
+      if (spec.label) stage.push(label(`${sid}-${lid}`, bx.x, r2(bx.y + bx.height + 18 * u), bx.width, spec.label, {size: c.unitSize, family: fonts.body, color: c.fg, align: 'center', weight: 700, extra: {opacity: 0}}));
     });
     if (c.pick) {
       const bx = c.pick === 'subject' ? g.boxes[0] : b2, y = r2(bx.y + bx.height + 18 * u + c.unitSize * 1.35);
-      stage.push(svgRoot(model.rect.width, model.rect.height, [strokePath(`${id}-pick`, `M${r2(bx.x + bx.width * 0.2)} ${y} L${r2(bx.x + bx.width * 0.8)} ${y}`, c.accent, r2(10 * u))]));
+      stage.push(svgRoot(model.rect.width, model.rect.height, [strokePath(`${sid}-pick`, `M${r2(bx.x + bx.width * 0.2)} ${y} L${r2(bx.x + bx.width * 0.8)} ${y}`, c.accent, r2(10 * u))]));
     }
   }
   if (c.change === 'measure' && c.instrument === 'gauge') {
@@ -308,16 +345,16 @@ function view(model) {
     const arc = (from, to) => { const p = d => `${r2(cx + r * Math.cos(d * Math.PI / 180))} ${r2(cy + r * Math.sin(d * Math.PI / 180))}`; return `M${p(from)} A${r} ${r} 0 ${to - from > 180 ? 1 : 0} 1 ${p(to)}`; };
     stage.push(svgRoot(model.rect.width, model.rect.height, [
       el('path', null, null, [], {d: arc(135, 405), stroke: hex2(c.fg, 0.18), strokeWidth: r2(22 * u), strokeLinecap: 'round', fill: 'none'}),
-      strokePath(`${id}-fill`, arc(a0, a1), c.accent, r2(22 * u))
+      strokePath(`${sid}-fill`, arc(a0, a1), c.accent, r2(22 * u))
     ]));
     const d = r2(46 * u);
-    stage.push(el('div', `${id}-tip`, abs(r2(cx - r), r2(cy - r), r2(2 * r), r2(2 * r), {transformOrigin: '50% 50%', transform: `rotate(${a0}deg)`}), [
+    stage.push(el('div', `${sid}-tip`, abs(r2(cx - r), r2(cy - r), r2(2 * r), r2(2 * r), {transformOrigin: '50% 50%', transform: `rotate(${a0}deg)`}), [
       el('div', null, {...abs(r2(2 * r - d / 2), r2(r - d / 2), d, d), borderRadius: '50%', background: c.fg, boxShadow: `0 0 ${r2(24 * u)}px ${hex2(c.accent, 0.8)}`})]));
   }
   if (c.change === 'measure' && c.instrument === 'thermometer') {
     const tw_ = r2(56 * u), x = r2(g.stage.x + g.stage.width - tw_ - 40 * u), top = r2(box.y), h = r2(box.height * 0.82), bulb = r2(tw_ * 1.7);
     stage.push(el('div', null, {...abs(x, top, tw_, h), borderRadius: 999, background: hex2(c.fg, 0.16)}));
-    stage.push(el('div', `${id}-fill`, {...abs(r2(x + 12 * u), r2(top + h * (1 - c.value)), r2(tw_ - 24 * u), r2(h * c.value + bulb * 0.3)), borderRadius: 999, background: c.accent, transformOrigin: '50% 100%'}));
+    stage.push(el('div', `${sid}-fill`, {...abs(r2(x + 12 * u), r2(top + h * (1 - c.value)), r2(tw_ - 24 * u), r2(h * c.value + bulb * 0.3)), borderRadius: 999, background: c.accent, transformOrigin: '50% 100%'}));
     stage.push(el('div', null, {...abs(r2(x + tw_ / 2 - bulb / 2), r2(top + h - bulb * 0.2), bulb, bulb), borderRadius: '50%', background: c.accent, boxShadow: `0 0 ${r2(30 * u)}px ${hex2(c.accent, 0.6)}`}));
   }
   if (c.change === 'count') {
@@ -328,101 +365,120 @@ function view(model) {
     for (let i = 0; i < n; i++) {
       const x = r2(x0 + (i % cols) * (cell + gap)), y = r2(area.y + Math.floor(i / cols) * (cell + gap));
       stage.push(el('div', null, {...abs(x, y, cell, cell), boxSizing: 'border-box', borderRadius: r2(cell * 0.22), border: `${r2(3 * u)}px solid ${hex2(c.fg, 0.28)}`}));
-      stage.push(el('div', `${id}-cell-${i}`, {...abs(x, y, cell, cell), borderRadius: r2(cell * 0.22), background: c.accent, opacity: 0}));
+      stage.push(el('div', `${sid}-cell-${i}`, {...abs(x, y, cell, cell), borderRadius: r2(cell * 0.22), background: c.accent, opacity: 0}));
     }
   }
-  kids.push(el('div', `${id}-cam`, abs(0, 0, model.rect.width, model.rect.height, {transformOrigin: '50% 50%'}), stage));
+  kids.push(el('div', `${sid}-cam`, abs(0, 0, model.rect.width, model.rect.height, {transformOrigin: '50% 50%'}), stage));
 
   // Free type on the plate: the line above (stacked) or beside the stage, and the reading.
   const align = g.stacked ? 'center' : 'left';
   if (c.text) {
     const row = g.rows.text;
-    kids.push(label(`${id}-text`, row.x, r2(row.y + (row.height - c.text.size * 1.1 * c.text.lines) / 2), row.width, c.text.text, {size: c.text.size, family: fonts.display, color: c.fg, align, lineHeight: 1.1, wrap: c.text.lines > 1, extra: {opacity: 0}}));
+    kids.push(label(`${sid}-text`, row.x, r2(row.y + (row.height - c.text.size * 1.1 * c.text.lines) / 2), row.width, c.text.text, {size: c.text.size, family: fonts.display, color: c.fg, align, lineHeight: 1.1, wrap: c.text.lines > 1, extra: {opacity: 0}}));
   }
   const readingText = c.change === 'count' ? '1' : c.reading;
   if (readingText) {
     const row = g.rows.reading;
     const y = r2(row.y + (row.height - c.readingSize * 1.05 - (c.unit ? c.unitSize * 1.3 : 0)) / 2);
-    kids.push(label(`${id}-reading`, row.x, y, row.width, readingText, {size: c.readingSize, family: fonts.display, color: c.accent, align, lineHeight: 1.05, extra: {opacity: 0}}));
-    if (c.unit) kids.push(label(`${id}-unit`, row.x, r2(y + c.readingSize * 1.05), row.width, c.unit.toUpperCase(), {size: c.unitSize, family: fonts.meta, color: c.muted, align, spacing: '0.1em', extra: {opacity: 0}}));
+    kids.push(label(`${sid}-reading`, row.x, y, row.width, readingText, {size: c.readingSize, family: fonts.display, color: c.accent, align, lineHeight: 1.05, extra: {opacity: 0}}));
+    if (c.unit) kids.push(label(`${sid}-unit`, row.x, r2(y + c.readingSize * 1.05), row.width, c.unit.toUpperCase(), {size: c.unitSize, family: fonts.meta, color: c.muted, align, spacing: '0.1em', extra: {opacity: 0}}));
   }
-  return kids;
+  // The camera kick on the change punches in on everything, so it wraps the whole frame.
+  return [el('div', `${sid}-kick`, abs(0, 0, model.rect.width, model.rect.height, {transformOrigin: '50% 50%'}), kids)];
 }
 
 function timeline(model, ops) {
   const {id, start, end, unit: u} = model;
   const c = model.content, g = c.geo;
+  const sid = `${id}-${c.subject.object}`;
   const at = c.moveAt, D = c.span;
   const fadeIn = (target, time, dur = 0.5, to = 1) => { set(ops, target, start, {opacity: 0}); tw(ops, target, time, dur, EASE, {opacity: 0}, {opacity: to}); };
-  // The camera: the plate drifts one way, the stage pushes in through the hold. The plate keeps
-  // (scale − 1) / 2 of the frame in overhang, more than its travel, so no edge ever shows.
+  // The camera: the plate's texture travels sideways at an even speed (a seamless loop, never
+  // scaled, so the wrap has no seam) while the stage pushes in: parallax through the hold.
   if (c.tone) {
-    set(ops, `${id}-ground`, start, {x: 0, y: 0, scaleX: 1.16, scaleY: 1.16});
-    tw(ops, `${id}-ground`, start, rt(end - start), DRIFT, {x: 0, y: 0, scaleX: 1.16, scaleY: 1.16}, {x: r2(-50 * u), y: r2(30 * u), scaleX: 1.1, scaleY: 1.1});
+    // Each scene opens on a short pan and settle that hands over to the loop: decelerating, never past its rest.
+    // It travels the loop's way (leftward), so the speed hands over without a stall.
+    const from = {x: r2(PLATE_OPEN * u), y: 0, scaleX: 1.08, scaleY: 1.08};
+    set(ops, `${sid}-plate`, start, from);
+    tw(ops, `${sid}-plate`, start, 1.2, 'power2.out', from, {x: 0, y: 0, scaleX: 1, scaleY: 1});
+    const cycle = rt(c.strip / (PLATE_SPEED * u)), repeats = Math.ceil((end - start) / cycle) + 1;
+    for (const target of [`${sid}-ground`, ...(['wear', 'cause'].includes(c.change) ? [`${sid}-ground-worn`] : [])]) {
+      set(ops, target, start, {x: 0, y: 0, scaleX: 1, scaleY: 1});
+      ops.push({type: 'loop', target, start, cycle, repeats, from: {x: 0}, to: {x: r2(-c.strip)}});
+    }
     if (['wear', 'cause'].includes(c.change)) {
-      set(ops, `${id}-ground-worn`, start, {opacity: 0, x: 0, y: 0, scaleX: 1.16, scaleY: 1.16});
-      tw(ops, `${id}-ground-worn`, start, rt(end - start), DRIFT, {x: 0, y: 0, scaleX: 1.16, scaleY: 1.16}, {x: r2(-50 * u), y: r2(30 * u), scaleX: 1.1, scaleY: 1.1});
-      tw(ops, `${id}-ground-worn`, c.change === 'cause' ? c.changeAt : at, D, EASE, {opacity: 0}, {opacity: 0.85});
+      set(ops, `${sid}-ground-worn`, start, {opacity: 0});
+      tw(ops, `${sid}-ground-worn`, c.change === 'cause' ? c.changeAt : at, D, EASE, {opacity: 0}, {opacity: 0.85});
     }
   }
-  set(ops, `${id}-cam`, start, {x: 0, y: 0, scaleX: 0.94, scaleY: 0.94});
-  tw(ops, `${id}-cam`, start, rt(end - start), DRIFT, {x: 0, y: 0, scaleX: 0.94, scaleY: 0.94}, {x: 0, y: r2(-30 * u), scaleX: 1.08, scaleY: 1.08});
+  set(ops, `${sid}-cam`, start, {x: 0, y: 0, scaleX: 0.94, scaleY: 0.94});
+  tw(ops, `${sid}-cam`, start, rt(end - start), DRIFT, {x: 0, y: 0, scaleX: 0.94, scaleY: 0.94}, {x: 0, y: r2(-30 * u), scaleX: 1.08, scaleY: 1.08});
   // The object lands.
-  set(ops, `${id}-obj`, start, {opacity: 0, x: 0, y: r2(40 * u)});
-  tw(ops, `${id}-obj`, c.buildAt, 0.7, EASE, {opacity: 0, y: r2(40 * u)}, {opacity: 1, y: 0});
-  if (c.text) fadeIn(`${id}-text`, rt(c.buildAt + 0.15), 0.6);
+  // A build the eye (and the render's pace check) reads as a step: it rises and settles in scale.
+  const rise = {opacity: 0, x: 0, y: r2(90 * u), scaleX: 0.9, scaleY: 0.9};
+  set(ops, `${sid}-obj`, start, rise);
+  tw(ops, `${sid}-obj`, c.buildAt, 0.7, EASE, rise, {opacity: 1, x: 0, y: 0, scaleX: 1, scaleY: 1});
+  // The hook builds in steps: the object, then its line, then the change.
+  if (c.text) {
+    set(ops, `${sid}-text`, start, {opacity: 0, x: 0, y: r2(36 * u)});
+    tw(ops, `${sid}-text`, rt(c.buildAt + 0.7), 0.6, EASE, {opacity: 0, y: r2(36 * u)}, {opacity: 1, y: 0});
+  }
+  // The kick: punch in 10% over 0.25 s centred on the word, then ease back; never past either end.
+  set(ops, `${sid}-kick`, start, {x: 0, y: 0, scaleX: 1, scaleY: 1});
+  tw(ops, `${sid}-kick`, rt(c.changeAt - 0.125), 0.25, EASE, {scaleX: 1, scaleY: 1}, {scaleX: 1.1, scaleY: 1.1});
+  tw(ops, `${sid}-kick`, rt(c.changeAt + 0.125), 0.9, EASE, {scaleX: 1.1, scaleY: 1.1}, {scaleX: 1, scaleY: 1});
 
   if (c.change === 'wear' || c.change === 'cause') {
     const wearAt = c.change === 'cause' ? c.changeAt : at;
     if (c.change === 'cause') {
       // The force comes in from off its side, blurred at its fastest, and lands on the word.
       const from = {sun: {x: 160, y: -160}, rain: {x: 0, y: -220}, foot: {x: 0, y: -260}, heat: {x: 0, y: 260}}[c.force];
-      set(ops, `${id}-force`, start, {opacity: 0, x: r2(from.x * u), y: r2(from.y * u), blur: 0});
-      tw(ops, `${id}-force`, at, D, EASE, {opacity: 0, x: r2(from.x * u), y: r2(from.y * u)}, {opacity: 1, x: 0, y: 0});
-      tw(ops, `${id}-force`, at, rt(D / 2), 'power2.in', {blur: 0}, {blur: r2(8 * u)});
-      tw(ops, `${id}-force`, rt(at + D / 2), rt(D / 2), 'power2.out', {blur: r2(8 * u)}, {blur: 0});
+      set(ops, `${sid}-force`, start, {opacity: 0, x: r2(from.x * u), y: r2(from.y * u), blur: 0});
+      tw(ops, `${sid}-force`, at, D, EASE, {opacity: 0, x: r2(from.x * u), y: r2(from.y * u)}, {opacity: 1, x: 0, y: 0});
+      tw(ops, `${sid}-force`, at, rt(D / 2), 'power2.in', {blur: 0}, {blur: r2(8 * u)});
+      tw(ops, `${sid}-force`, rt(at + D / 2), rt(D / 2), 'power2.out', {blur: r2(8 * u)}, {blur: 0});
     }
-    fadeIn(`${id}-worn`, wearAt, D);
-    crackPaths(g.boxes[0], c.seed).forEach((_, i) => drawOps(ops, `${id}-cracks-${i}`, start, rt(wearAt + D * 0.3 + i * 0.12), rt(D * 0.7), EASE));
+    fadeIn(`${sid}-worn`, wearAt, D);
+    crackPaths(g.boxes[0], c.seed).forEach((_, i) => drawOps(ops, `${sid}-cracks-${i}`, start, rt(wearAt + D * 0.3 + i * 0.12), rt(D * 0.7), EASE));
   }
   if (c.change === 'before-after') {
     const box = g.boxes[0], W = model.rect.width, left = r2(box.x / W * 100), right = r2(100 - (box.x + box.width) / W * 100);
-    set(ops, `${id}-after`, start, {clipT: 0, clipR: 0, clipB: 0, clipL: r2(100 - right)});
-    tw(ops, `${id}-after`, at, D, EASE, {clipT: 0, clipR: 0, clipB: 0, clipL: r2(100 - right)}, {clipT: 0, clipR: 0, clipB: 0, clipL: left});
-    set(ops, `${id}-wipe`, start, {opacity: 0, x: r2(box.width), y: 0});
-    tw(ops, `${id}-wipe`, rt(at - 0.2), 0.2, EASE, {opacity: 0}, {opacity: 1});
-    tw(ops, `${id}-wipe`, at, D, EASE, {x: r2(box.width)}, {x: 0});
-    tw(ops, `${id}-wipe`, rt(at + D), 0.3, EASE, {opacity: 1}, {opacity: 0});
-    crackPaths(box, c.seed).forEach((_, i) => drawOps(ops, `${id}-ba-cracks-${i}`, start, rt(at + D * 0.4 + i * 0.1), rt(D * 0.6), EASE));
-    fadeIn(`${id}-before`, rt(c.buildAt + 0.3), 0.5);
-    fadeIn(`${id}-after-tag`, rt(at + D * 0.5), 0.5);
+    set(ops, `${sid}-after`, start, {clipT: 0, clipR: 0, clipB: 0, clipL: r2(100 - right)});
+    tw(ops, `${sid}-after`, at, D, EASE, {clipT: 0, clipR: 0, clipB: 0, clipL: r2(100 - right)}, {clipT: 0, clipR: 0, clipB: 0, clipL: left});
+    set(ops, `${sid}-wipe`, start, {opacity: 0, x: r2(box.width), y: 0});
+    tw(ops, `${sid}-wipe`, rt(at - 0.2), 0.2, EASE, {opacity: 0}, {opacity: 1});
+    tw(ops, `${sid}-wipe`, at, D, EASE, {x: r2(box.width)}, {x: 0});
+    tw(ops, `${sid}-wipe`, rt(at + D), 0.3, EASE, {opacity: 1}, {opacity: 0});
+    crackPaths(box, c.seed).forEach((_, i) => drawOps(ops, `${sid}-ba-cracks-${i}`, start, rt(at + D * 0.4 + i * 0.1), rt(D * 0.6), EASE));
+    fadeIn(`${sid}-before`, rt(c.buildAt + 0.3), 0.5);
+    fadeIn(`${sid}-after-tag`, rt(at + D * 0.5), 0.5);
   }
   if (c.change === 'measure') {
     if (c.instrument === 'gauge') {
-      drawOps(ops, `${id}-fill`, start, at, D, EASE);
-      set(ops, `${id}-tip`, start, {rotation: 135});
-      tw(ops, `${id}-tip`, at, D, EASE, {rotation: 135}, {rotation: r2(135 + 270 * c.value)});
+      drawOps(ops, `${sid}-fill`, start, at, D, EASE);
+      set(ops, `${sid}-tip`, start, {rotation: 135});
+      tw(ops, `${sid}-tip`, at, D, EASE, {rotation: 135}, {rotation: r2(135 + 270 * c.value)});
     } else {
-      set(ops, `${id}-fill`, start, {scaleX: 1, scaleY: 0});
-      tw(ops, `${id}-fill`, at, D, EASE, {scaleY: 0}, {scaleY: 1});
+      set(ops, `${sid}-fill`, start, {scaleX: 1, scaleY: 0});
+      tw(ops, `${sid}-fill`, at, D, EASE, {scaleY: 0}, {scaleY: 1});
     }
   }
   if (c.change === 'count') {
     const step = c.count > 1 ? (D - 0.3) / (c.count - 1) : 0;
-    for (let i = 0; i < c.count; i++) fadeIn(`${id}-cell-${i}`, rt(at + i * step), 0.3);
-    countOps(ops, `${id}-reading`, start, '1', countSamples(model, at, rt(D - 0.3), 'none', 1, c.count, v => String(Math.round(v))));
+    for (let i = 0; i < c.count; i++) fadeIn(`${sid}-cell-${i}`, rt(at + i * step), 0.3);
+    countOps(ops, `${sid}-reading`, start, '1', countSamples(model, at, rt(D - 0.3), 'none', 1, c.count, v => String(Math.round(v))));
   }
   if (c.change === 'compare') {
-    set(ops, `${id}-obj2`, start, {opacity: 0, x: r2(60 * u), y: 0});
-    tw(ops, `${id}-obj2`, at, D, EASE, {opacity: 0, x: r2(60 * u)}, {opacity: 1, x: 0});
-    if (c.subject.label) fadeIn(`${id}-l1`, rt(c.buildAt + 0.3));
-    if (c.second.label) fadeIn(`${id}-l2`, rt(at + D * 0.5));
-    if (c.pick) drawOps(ops, `${id}-pick`, start, rt(at + D + 0.2), 0.6, EASE);
+    set(ops, `${sid}-obj2`, start, {opacity: 0, x: r2(60 * u), y: 0});
+    tw(ops, `${sid}-obj2`, at, D, EASE, {opacity: 0, x: r2(60 * u)}, {opacity: 1, x: 0});
+    if (c.subject.label) fadeIn(`${sid}-l1`, rt(c.buildAt + 0.3));
+    if (c.second.label) fadeIn(`${sid}-l2`, rt(at + D * 0.5));
+    if (c.pick) drawOps(ops, `${sid}-pick`, start, rt(at + D + 0.2), 0.6, EASE);
   }
   // The reading lands with the change.
-  if (c.change === 'measure' && c.reading) fadeIn(`${id}-reading`, rt(at + D * 0.6), 0.5);
-  if (c.change === 'count') fadeIn(`${id}-reading`, at, 0.3);
-  if (c.unit) fadeIn(`${id}-unit`, rt(at + 0.1), 0.4);
+  if (c.change === 'measure' && c.reading) fadeIn(`${sid}-reading`, rt(at + D * 0.6), 0.5);
+  if (c.change === 'count') fadeIn(`${sid}-reading`, at, 0.3);
+  if (c.unit) fadeIn(`${sid}-unit`, rt(at + 0.1), 0.4);
 }
 
 export const illustration = {

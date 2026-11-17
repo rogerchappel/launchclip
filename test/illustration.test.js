@@ -69,7 +69,7 @@ test('illustration: the change lands on its word, slow → fast → slow, and th
   const change = model.events.find(e => e.name === 'change');
   assert.equal(change.time, 4);
   assert.equal(model.content.moveAt + model.content.span / 2, 4);
-  const worn = t => frameState(catalogHTimeline(model), t).get('scene-worn').opacity;
+  const worn = t => frameState(catalogHTimeline(model), t).get('scene-bench-worn').opacity;
   assert.equal(worn(model.content.moveAt - 0.05), 0);
   assert.ok(worn(4) > 0.4 && worn(4) < 0.6, 'halfway on the word');
   assert.equal(worn(model.motion.exitStart - 0.01), 1);
@@ -98,4 +98,12 @@ test('illustration: the density gate counts the scene as filled', async () => {
   } finally {
     await rm(dir, {recursive: true, force: true});
   }
+});
+
+test('illustration: a kinetic story never carries one object\'s stage into the next object\'s scene', async () => {
+  const {resolveModule} = await import('@launchclip/core/modules.mjs');
+  const {resolveStory} = await import('@launchclip/core/story.mjs');
+  const {readFile} = await import('node:fs/promises');
+  const story = resolveStory(JSON.parse(await readFile(new URL('../examples/story/illustration-9x16/storyboard.json', import.meta.url), 'utf8')));
+  for (const scene of story.scenes.slice(1)) assert.equal(resolveModule(scene, story).carry ?? null, null, `${scene.id} builds its own object`);
 });
