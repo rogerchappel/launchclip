@@ -33,11 +33,12 @@
         "end": 4,
         "params": {
           "subject": {
-            "object": "bench"
+            "object": "deck"
           },
           "change": "cause",
           "force": "sun",
-          "plate": "wood",
+          "plate": "paper",
+          "text": "One summer of sun",
           "variant": "default"
         }
       }

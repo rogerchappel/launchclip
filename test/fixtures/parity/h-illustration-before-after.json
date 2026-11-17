@@ -33,8 +33,7 @@
         "end": 4,
         "params": {
           "subject": {
-            "object": "deck",
-            "icon": "fence"
+            "object": "deck"
           },
           "change": "before-after",
           "plate": "style",
