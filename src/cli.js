@@ -256,6 +256,8 @@ export async function runCli(argv, io = {}) {
         concurrency: flags.concurrency,
         force: Boolean(flags.force),
         musicRegenerate: Boolean(flags["music-regenerate"]),
+        // A failed ElevenLabs track (quota, network) leaves the video on the synth bed, as make does.
+        musicFallback: true,
         scenes: flags.scene,
         previewScene: flags["preview-scene"],
         chapter: flags.chapter,
