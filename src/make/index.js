@@ -525,6 +525,24 @@ async function stageRoute(ctx) {
 }
 
 async function stagePrepare(ctx) {
+  try {
+    return await prepareLane(ctx);
+  } catch (error) {
+    // An ElevenLabs voice that cannot be had (quota, the network) does not end
+    // the video: it is voiced with the free local Kokoro voice instead, all of
+    // it, so one take never mixes two voices. The next run asks ElevenLabs again.
+    if (ctx.voiceProvider !== "elevenlabs" || !/ElevenLabs/i.test(String(error?.message ?? error))) throw error;
+    ctx.report.warnings.push(`voice: ElevenLabs could not voice the narration (${String(error?.message ?? error).split("\n")[0].slice(0, 200)}); it uses the local Kokoro voice instead`);
+    ctx.voiceProvider = "kokoro";
+    ctx.options = { ...ctx.options, voiceId: undefined };
+    // The ElevenLabs voice id and settings mean nothing to Kokoro; the pronunciation and speed still apply.
+    const { voice: _voice, settings: _settings, ...kept } = ctx.voiceInputs ?? {};
+    ctx.voiceInputs = kept;
+    return prepareLane(ctx);
+  }
+}
+
+async function prepareLane(ctx) {
   const lane = ctx.routing.lane;
   if (lane === "footage-led") return prepareFootage(ctx);
   if (lane === "voiceover-motion") return prepareVoiceover(ctx);

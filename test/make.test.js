@@ -270,6 +270,31 @@ test("pronunciation.json and voice.json in --assets shape the narration take, no
   }
 });
 
+test("an ElevenLabs voice that fails (out of credits) voices the narration with Kokoro instead, with a warning", async () => {
+  const assets = await assetsDir();
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-voice-fallback-"));
+  try {
+    const { model } = fakeModel();
+    const asked = [];
+    const testVoice = (await import("../src/voice/index.js")).createTestVoiceProvider();
+    const voiceProvider = (name) => ({ name, async synthesize(request) {
+      asked.push(name);
+      if (name === "elevenlabs") throw new Error('ElevenLabs with-timestamps request failed (401): {"detail":{"code":"quota_exceeded"}}');
+      return testVoice.synthesize(request);
+    } });
+    const report = await runMake(PROMPT, { assets, voice: "elevenlabs", voiceId: "eleven-voice", music: "synth", cwd }, { env: { ELEVENLABS_API_KEY: "key" }, client: model, inventory: fakeInventory, finish: fakeFinish([]), voiceProvider, notice() {} });
+    assert.equal(report.status, "ready-for-review", JSON.stringify(report.stages));
+    assert.ok(asked.includes("elevenlabs") && asked.at(-1) === "kokoro", asked.join(","));
+    assert.ok(report.warnings.some((line) => /ElevenLabs could not voice the narration .*quota_exceeded.*local Kokoro voice/.test(line)), report.warnings.join("\n"));
+    const narration = JSON.parse(await readFile(path.join(cwd, `launchclip-${slugify(PROMPT)}`, "NARRATION.json"), "utf8"));
+    assert.equal(narration.provider, "kokoro");
+    assert.notEqual(narration.voice, "eleven-voice");
+  } finally {
+    await rm(assets, { recursive: true, force: true });
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test("voiceover lane: --base-transcript supplies the words and --base-edited keeps the take as edited", async () => {
   const assets = await assetsDir();
   const cwd = await mkdtemp(path.join(os.tmpdir(), "launchclip-make-vo-"));
