@@ -61,12 +61,14 @@ const sha = (value) => createHash("sha256").update(value).digest("hex");
 // (lc-base-media samples); nothing else changed.
 // All six re-pinned when the default body face moved from Inter to Manrope
 // (Inter stays second in the stack): font stacks and @font-face lines only.
+// Re-pinned after #695 (loops): ambient tweens fit whole half-cycles and a loop
+// hand-back lands on the last frame; nothing else in the HTML moved.
 const PRE_GRAMMAR_HTML_SHA256 = {
-  cooling: "0b4ab88a4855504dc7631e0d3c825d71be8c8ce663b436dc57c6b2c57e3a7ddf",
-  minimal: "6800a10989c206d7ed761faa3251bdcc606d150da1c81bde2307c374c061463e",
-  "promo-16x9": "ea6059e90363e9301b6180d6aa27805794ebf22092baa0dca377b345e575e31d",
-  "explainer-9x16": "ee69a5bdf5f287ccdd670c5dc7f69382ba7f0916b4bd11cc9129dcc264449a4e",
-  "data-story-9x16": "2abcc1e359cecf29e3c6a447efe79e619b935dfe85c8f1c157aabc324318a98f",
+  cooling: "7841fbe9c4e14896ecad0f5953030528feb97565fdd19969fa5dfc685b713802",
+  minimal: "8a26e48a1521e442db1686296eeccf6dd8e9e02216959f822b4a6d7e8fd35570",
+  "promo-16x9": "cf7b58cd098b77ad6105a4808d3a6a8aba589385038014a34c72746d980bf2d3",
+  "explainer-9x16": "cdc0f0a0372ec2f9abae03c3eb8379a9bcfb19a57f6858624f24ade5a4ccfbf2",
+  "data-story-9x16": "da3956f2b8ea56c2ff8d0a7411f1f732809179fa49f47c15814e0bd1c2bec1da",
   footage: "b4730f4b3d838d2daa12830c6d7335e6bffb14d420bb27ee65131d5d64f308df"
 };
 // test/editorial_core.test.js: the explicit-rect 16:9 corpus subset (re-pinned

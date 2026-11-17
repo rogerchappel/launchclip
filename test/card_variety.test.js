@@ -12,13 +12,15 @@ const variants = (board) => board.scenes.map((scene) => scene.params.variant);
 
 test("the first use keeps the style's variant; later uses rotate through the others", () => {
   const names = moduleVariants()["concept-card"];
-  const { storyboard, changed } = varyCards(story(["a", "b", "c", "d", "e"].map((id) => card(id))), { style: { variants: { "concept-card": "banner" } } });
+  // One card per variant and one more, so the rotation covers every other variant and wraps.
+  const ids = Array.from({ length: names.length + 1 }, (_, i) => `c${i}`);
+  const { storyboard, changed } = varyCards(story(ids.map((id) => card(id))), { style: { variants: { "concept-card": "banner" } } });
   const got = variants(storyboard);
   assert.equal(got[0], undefined);
   const rest = got.slice(1, names.length);
   assert.deepEqual([...rest].sort(), names.filter((name) => name !== "banner").sort());
   assert.equal(got[names.length], got[1]); // wraps round
-  assert.equal(changed.length, 4);
+  assert.equal(changed.length, names.length);
 });
 
 test("the rotation is deterministic per story and differs between seeds", () => {

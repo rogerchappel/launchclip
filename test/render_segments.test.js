@@ -63,8 +63,9 @@ test("planSegments cuts at layer changes: scene bodies and whole transition over
   assert.deepEqual([s1.from, s1.to], [0, 150]);
   const pan = plan.segments[1];
   assert.deepEqual([pan.startFrame, pan.endFrame, pan.scenes], [132, 150, ["s1", "s2"]]);
-  // The fade loop ending overlaps s5 for its last 0.4 s.
-  assert.deepEqual([plan.segments.at(-1).startFrame, plan.segments.at(-1).scenes], [768, ["s5", "s1"]]);
+  // The fade loop ending overlaps s5 for its last 0.4 s and lands on the last
+  // frame (story-loop.mjs), so it starts a frame earlier than 0.4 s before the end.
+  assert.deepEqual([plan.segments.at(-1).startFrame, plan.segments.at(-1).scenes], [767, ["s5", "s1"]]);
   assert.deepEqual(segmentsForScenes(plan.segments, ["s3"]).map((segment) => segment.label), ["s2+s3", "s3", "s3+s4"]);
 });
 
@@ -321,7 +322,7 @@ test("renderWithSegments renders missing segments, reuses cached ones, forces --
     assert.equal(fake.calls[0].length, 10);
     const joined = await readFile(options.output, "utf8");
     assert.match(joined, /^encoded\n0-132\n132-150\n/);
-    assert.match(joined, /768-780\n$/);
+    assert.match(joined, /767-780\n$/);
     assert.deepEqual(log.find((entry) => entry[0] === "encodeAudio"), ["encodeAudio", "mix.m4a", 1, 26]);
     assert.deepEqual(log.find((entry) => entry[0] === "mux"), ["mux", ".m4a", 0, undefined]);
     assert.ok(existsSync(path.join(project, first.cache, "index.json")));
