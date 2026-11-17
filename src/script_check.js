@@ -2,7 +2,7 @@
 // deterministic (no I/O, no model), so `launchclip script check`, the make
 // script pass and the tests all run the same rules.
 //
-//   checkScript({narration, duration?, brief?, format?, goal?, awareness?, pace?, cta?, ctaKeyword?, choices?, product?, audience?, limits?})
+//   checkScript({narration, duration?, brief?, format?, goal?, awareness?, pace?, cta?, ctaKeyword?, choices?, product?, audience?, limits?, points?})
 //   → {schema_version, ok, errors: [{id, message, fix, span?}], warnings: [...], stats}
 //   checkScreenplay({script, duration?, wpm?, problemLandsSeconds?, brief?, ...})
 //   → the same report for a SCRIPT.json with speakers and silent lines
@@ -40,7 +40,15 @@
 //   options-unexplained  a list of three or more options ("timber, composite
 //                     and aluminium") whose items no other sentence comes back
 //                     to: the script names them and teaches nothing (derived)
+//   point-fact        (shipped as a warning for now; see POINT_FACT_IS_ERROR)
+//                     a declared point's words ({item, fact, kind, words},
+//                     the script pass's points) are not in the narration
+//                     (docs/EXPLAINER_CLAIMS_RFC.md §3.1). A number in a fact
+//                     is traced by fact-trace like any other.
 // Warnings:
+//   point-fact        a point whose fact is only a category word
+//                     (CATEGORY_WORDS: "the cheapest option"), or a list of
+//                     options in the script with no points declared at all
 //   mean-sentence, reading-grade, additive-transitions, brand-first,
 //   superlative, numbers-per-sentence, number-precision, hook-payoff,
 //   wpm-band, no-brief, no-duration, hedge (one hedge in a short video),
@@ -93,6 +101,15 @@ export const SENTENCE_MAX_WORDS = 25;
 // CTAs belong in the final quarter (long-form may add one soft CTA after 15%).
 export const CTA_FINAL_SHARE = 0.25;
 export const GRADE_LIMITS = Object.freeze({ consumer: 7, b2b: 9 });
+
+// Words that name a category, not a fact (docs/EXPLAINER_CLAIMS_RFC.md §3.1):
+// a point whose fact is only these (and FACT_FILLER) shows nothing. Grow it as runs show more.
+export const CATEGORY_WORDS = Object.freeze(["cheapest", "cheaper", "cheap", "best", "better", "easy", "easier", "easiest", "simple", "low maintenance", "no maintenance", "premium", "durable", "affordable", "quality", "high quality", "good value", "value", "popular", "reliable", "versatile", "convenient", "fast", "great", "good", "nice", "strong", "modern", "classic", "stylish", "beautiful", "flexible", "efficient", "natural", "eco friendly", "sustainable", "budget", "budget friendly", "lowest upfront cost", "low cost", "expensive", "long lasting"]);
+const FACT_FILLER = new Set("the a an it it's its is are was be most more very really option options choice choices one pick of all for you your and or by far".split(" "));
+// point-fact's missing-words finding ships as a warning for one release (RFC §6).
+// It becomes an error (flip this to true) once the golden samples and real runs show the planner meets it in most runs.
+export const POINT_FACT_IS_ERROR = false;
+const plainWords = (value) => String(value ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
 const SMALL_COUNT = 10;
 const MEASURE_NOUNS = /^(?:seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?|months?|years?|clicks?|taps?|customers?|users?|teams?|companies|company|businesses|people|developers?|devs?|engineers?|stars?|reviews?|ratings?|downloads?|installs?|members?|subscribers?|followers?|countries|languages|integrations?|seats?|spots?|lines?)$/i;
@@ -300,6 +317,24 @@ export function checkScript(input = {}) {
       add(errors, "options-unexplained", `"${sentence.text}" names ${items.join(", ")}, but no other sentence says anything about ${silent.join(" or ")}.`, "Give each option its own sentence with one concrete, generally true point the viewer can use: what it is good at, its trade-off, or the care it needs.", spanOf(sentence));
       break;
     }
+  }
+
+  // --- Points (RFC §3.1): each declared point's fact is said, and is more than a category word.
+  const points = Array.isArray(input.points) ? input.points.filter((point) => point && typeof point === "object") : [];
+  // The loose match locked_copy uses (kit/core/treatment.mjs): case and punctuation folded, whole words.
+  const said = ` ${plainWords(narration)} `;
+  for (const point of points) {
+    const item = String(point.item ?? "").trim() || "a point";
+    const spoken = plainWords(point.words);
+    if (!spoken || !said.includes(` ${spoken} `)) add(POINT_FACT_IS_ERROR ? errors : warnings, "point-fact", `The fact for ${item} ("${String(point.words ?? point.fact ?? "").trim()}") is not in the narration.`, "Say the point's words exactly as declared, or declare the words the narration says.");
+    let rest = ` ${plainWords(point.fact).split(" ").filter((word) => !FACT_FILLER.has(word)).join(" ")} `;
+    for (const phrase of [...CATEGORY_WORDS].sort((a, b) => b.length - a.length)) rest = rest.split(` ${phrase} `).join(" ");
+    if (plainWords(point.fact) && !rest.trim()) add(warnings, "point-fact", `The fact for ${item} ("${String(point.fact).trim()}") only names a category.`, "Give a fact the viewer can see: a number, an object, or a consequence (\"chair legs dent it\", not \"the cheapest option\").");
+  }
+  // shortcut: a list is listItems' three-or-more series; a two-item comparison ("X vs Y") is not detected yet.
+  if (!points.length) {
+    const listed = sentences.find((sentence) => listItems(sentence.text).length >= 2);
+    if (listed) add(warnings, "point-fact", `"${listed.text}" lists options, but the script declares no points.`, "Return points beside the narration: one {item, fact, kind, words} per item, each fact a number, an object or a consequence.", spanOf(listed));
   }
 
   // --- CTA (hard).
