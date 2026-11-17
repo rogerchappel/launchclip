@@ -856,6 +856,12 @@ export function validateStory(story, { modules, moduleParams } = {}) {
       err(`${path}.energy must be 0, 1, 2, 3 or "build"`);
     }
 
+    // One idea per frame (src/text_blocks.js): a scene may hold a second text block, and says why.
+    if (scene.allow_text !== undefined) {
+      if (scene.allow_text !== 2) err(`${path}.allow_text must be 2 (this scene may share the frame with one other text block)`);
+      else if (typeof scene.why !== "string" || !scene.why.trim()) err(`${path}.allow_text needs a short why (what the second text block adds that the captions do not)`);
+    }
+
     validateAmbient(scene.ambient, `${path}.ambient`, err);
 
     // Sound directing (kit/core/sound/directing.mjs): first, last and the tail before count among track-0 scenes, in order.
