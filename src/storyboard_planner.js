@@ -60,6 +60,7 @@ import { abstractErrors, castFromDirection, characterErrors, characterShare, def
 import { readingFindings } from "./direction_guardrails.js";
 import { storyboardOrderErrors } from "./list_order.js";
 import { visualDensityErrors } from "./visual_density.js";
+import { textBlockFindings } from "./text_blocks.js";
 import { fitCastCuts } from "./cast_cut_fit.js";
 import { normalisePlan } from "./plan_normalise.js";
 import { keepUnnamed, repairScope } from "./repair_scope.js";
@@ -937,10 +938,11 @@ export function checkStoryboard(raw, { words = [], beats = null, track = null, t
     const report = checkLayout({ canvas, elements, duration: Number(resolved.resolved?.duration) || undefined });
     // Footage or full-bleed type to the last second (src/visual_density.js), as finish gates it: repair notes the planner loop adds.
     layout.density = visualDensityErrors(resolved, elements);
-    layout.findings = report.findings;
-    layout.errors = report.findings.filter((finding) => finding.severity === "error").length;
-    layout.warnings = report.findings.filter((finding) => finding.severity !== "error").length;
-    for (const finding of report.findings) {
+    // One idea per frame (src/text_blocks.js), as the finish layout check reports it.
+    layout.findings = [...report.findings, ...textBlockFindings(resolved, elements)];
+    layout.errors = layout.findings.filter((finding) => finding.severity === "error").length;
+    layout.warnings = layout.findings.filter((finding) => finding.severity !== "error").length;
+    for (const finding of layout.findings) {
       const line = `${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail}`;
       if (finding.severity === "error") errors.push(`layout: ${line}`);
       else warnings.push(`layout: ${line}`);

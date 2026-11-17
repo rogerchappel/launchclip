@@ -19,6 +19,7 @@ import { checkBehindText, checkSubjectFace, sceneLayerOf, subjectCameraAt, subje
 import { layoutCaptionZones } from "@launchclip/core/cast-captions.mjs";
 import { layoutPlan, layoutStateAt, withLayoutCameras } from "@launchclip/core/footage-layout.mjs";
 import { probeFullFrameMedia } from "./media_presence.js";
+import { textBlockFindings } from "./text_blocks.js";
 
 // A scene stays on screen through the next scene's transition, so it is drawn
 // to its render end, not its cut. Every check here measures that length, as
@@ -202,7 +203,9 @@ export async function checkLayoutProject(projectDir, options = {}, adapters = {}
   // Palette (kit/core/palette.mjs): a warning when most of the frame sits bare on a pale ground.
   const footage = elements.filter((element) => element.role === "media" && element.rect).map((element) => ({ start: Number(element.start), end: Number(element.end), area: (element.rect.width * element.rect.height) / (canvas.width * canvas.height) }));
   const paletteFindings = paleSurfaceFindings({ colors: resolved.brand?.colors, duration: Number(resolved.resolved?.duration) || 0, media: footage });
-  const findings = [...specFindings, ...report.findings, ...plateFindings, ...sweepFindings, ...faceFindings, ...textFindings, ...densityFindings, ...frameFindings, ...backgroundFindings, ...paletteFindings].sort((a, b) => a.at - b.at);
+  // One idea per frame (src/text_blocks.js): the planner runs the same check on the same rects.
+  const blockFindings = textBlockFindings(resolved, elements);
+  const findings = [...specFindings, ...report.findings, ...blockFindings, ...plateFindings, ...sweepFindings, ...faceFindings, ...textFindings, ...densityFindings, ...frameFindings, ...backgroundFindings, ...paletteFindings].sort((a, b) => a.at - b.at);
   return {
     stage: "layout-check",
     project,
