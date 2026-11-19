@@ -14,30 +14,51 @@ what the call cost. Map the brief onto whatever parameters yours has.
 
 1. **Ask before spending.** Generation is usually paid. Tell the user which
    shots you would generate, with which tool and model, and the cost if the
-   tool can quote one (or that it cannot), and wait for a yes. Never generate
+   tool can quote one (or that it cannot), and wait for a yes. What they
+   agree to becomes `--budget` (an amount, e.g. `2usd`), or, when the tool
+   gives no price, `--max-generations` (a number of calls). Never generate
    more than they agreed to.
 2. **Read the brief.** `launchclip generate brief <project> --json` prints
    `{request, brief, reason}` for each request. A `brief` of `null` is
    refused (`reason` says why): do not generate it, design the scene without
-   footage. Story shots and plates (`request.role` `story` or `plate`) are
-   handed in through `HANDIN.json` instead; leave them to the animation
-   branch.
-3. **Make the keyframe.** Call your image tool with `brief.image.prompt` word
+   footage. A brief with `accepted` already has those steps made for the
+   current brief: reuse them, do not pay again. Story shots and plates
+   (`request.role` `story` or `plate`, in a project with a frozen bible and
+   an animatic) follow the same steps; `generate record` hands them into
+   `HANDIN.json`, and `launchclip handin check` decides whether they are used.
+3. **Before every paid call, ask LaunchClip.** This is the same gate
+   `make --generate` runs; do not call your tool when it refuses:
+
+   ```bash
+   launchclip generate allow <project> --shot <request.id> --step image|video \
+     --quote <0.04usd|20credits|unknown> --budget <what the user agreed> \
+     [--max-generations <n>]
+   ```
+
+   It exits 1 with the reason when the budget would be passed, when the
+   step is already accepted, after three attempts, or when an unpriced tool
+   has no `--max-generations` left.
+4. **Make the keyframe.** Call your image tool with `brief.image.prompt` word
    for word, `brief.image.negative` as the negative prompt (or appended as
    "Avoid: …" when the tool has none), and `brief.image.width` ×
    `brief.image.height` (or the nearest aspect it offers).
-4. **Check it against the brief** before anything else is paid for: it must
-   clearly show `request.shows`, with no text, lettering, logo, user
+5. **Check it** before anything else is paid for, with the same check
+   `make --generate` runs: `launchclip generate check <project> --shot
+   <request.id> --file <still> --model <provider:model that takes images>`
+   (a footage shot against `request.shows`; a story shot or plate against
+   the bible). With no such model, judge it yourself by the same rule: it
+   must clearly show `request.shows`, with no text, lettering, logo, user
    interface or recognisable real person, and a calm lower third. A failed
    keyframe is recorded `--verdict rejected --reason "…"`, then retried with
-   one changed line added to the prompt. Three attempts per shot and step at
-   most; after that, design the scene without footage.
-5. **Animate only if `brief.steps` includes `video`.** Call your video tool
+   the check's `change` line (or your own one changed line) added to the
+   prompt. Three attempts per shot and step at most; after that, design the
+   scene without footage.
+6. **Animate only if `brief.steps` includes `video`.** Call your video tool
    with the accepted keyframe as the start frame, `brief.video.prompt` as the
    motion prompt, and a length of `brief.video.seconds + 2 ×
    brief.video.pad_seconds` (LaunchClip trims the padding back). A brief with
    steps `["image"]` stops at the keyframe.
-6. **Record every attempt**, accepted or rejected:
+7. **Record every attempt**, accepted or rejected:
 
    ```bash
    launchclip generate record <project> --shot <request.id> --step image \
@@ -49,7 +70,8 @@ what the call cost. Map the brief onto whatever parameters yours has.
    It copies the file into `assets/shots/generated/`, logs one line in
    `qa/generation-log.jsonl`, and, for the accepted last step (the keyframe of
    a still, the clip of a video), points the storyboard's request at the file
-   with `source.generated: true`. Pass `--cost` only when the tool reported
+   with `source.generated: true` (a story shot or plate goes into
+   `HANDIN.json` instead). Pass `--cost` only when the tool reported
    one; without it the line says `cost_unknown`, which is the truth, not
    zero. `--licence` is what the tool's terms say, never a guess. A brief
    hash that no longer matches (the storyboard or narration changed) is

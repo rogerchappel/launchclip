@@ -1448,13 +1448,25 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip handin check <project> [--look mixed] [--model provider:model] [--json] # check HANDIN.json art against the story and the bible; writes qa/hand-in.json
   ```
 
-- `generate brief`: Print the generation brief for every footage shot request ({kind: "shot"}) in a project's storyboard, without calling any provider, so it can be pasted into any image or video tool by hand. Each brief has the keyframe (image) prompt and negative, the motion (video) prompt with its length padded at each end, and a hash; a still or an image request stops at the keyframe. A request that names a real product, person, place or event is refused, with the reason. --shot <id> prints one (a request id or its scene id); --json prints {request, brief, reason} for each.
+- `generate brief`: Print the generation brief for every footage shot request ({kind: "shot"}) in a project's storyboard, without calling any provider, so it can be pasted into any image or video tool by hand. Each brief has the keyframe (image) prompt and negative, the motion (video) prompt with its length padded at each end, and a hash; a still or an image request stops at the keyframe. A request that names a real product, person, place or event is refused, with the reason. --shot <id> prints one (a request id or its scene id); --json prints {request, brief, reason} for each, plus accepted ({image, video} files) for steps already made for the current brief, which a re-run reuses instead of paying again.
 
   ```text
   launchclip generate brief <project> [--shot <id>] [--json] # the generation brief for each footage shot request; calls no provider
   ```
 
-- `generate record`: Hand in a footage shot made with the agent's own image or video tool (the skill path): copies --file under assets/shots/generated/<id>/, appends one line to qa/generation-log.jsonl (provider agent; no --cost records cost_unknown: true, not zero), and for an accepted shot whose brief needs no further step points the storyboard's request at the file with source.generated. A --brief-hash that is not the current brief's is refused; three attempts per shot and step at most. Story shots and plates are not recorded yet.
+- `generate allow`: Before each paid call on the skill path, run the same spend gate make --generate runs in-process: refused when the step is already accepted for the current brief (reuse it), after three attempts, when a priced --quote has no --budget (the amount the user agreed to), when recorded spend plus the quote passes --budget or --budget-daily, or when the tool gives no price (--quote unknown) and --max-generations is missing or reached (counted across runs from cost_unknown ledger lines). Exits 1 when refused; --json prints {ok, shot, step, attempt, quote, reasons}.
+
+  ```text
+  launchclip generate allow <project> --shot <id> --step image|video [--quote <n>usd|credits|unknown] [--budget <n>[usd|credits]] [--budget-daily <n>[usd|credits]] [--max-generations <n>] [--json] # before each paid call on the skill path: make --generate's spend gate; exits 1 when refused
+  ```
+
+- `generate check`: Run make --generate's keyframe check on a still the agent made: a footage shot against its shows (no text, logo, UI or real person), a story shot or plate against the frozen bible with the hand-in judge. --model names a provider:model route that takes images. Exits 1 when rejected; --json prints {ok, shot, reason, change}, where change is the one line to add to the prompt on the retry.
+
+  ```text
+  launchclip generate check <project> --shot <id> --file <still> --model <provider:model> [--json] # make --generate's keyframe check on a still the agent made; exits 1 when rejected
+  ```
+
+- `generate record`: Hand in a footage shot made with the agent's own image or video tool (the skill path): copies --file under assets/shots/generated/<id>/, appends one line to qa/generation-log.jsonl (provider agent; no --cost records cost_unknown: true, not zero), and for an accepted shot whose brief needs no further step points the storyboard's request at the file with source.generated. A story shot's accepted clip or a plate's accepted still is written into HANDIN.json (source.generated), as finish --generate writes it, so handin check and finish use it. A --brief-hash that is not the current brief's is refused; three attempts per shot and step at most.
 
   ```text
   launchclip generate record <project> --shot <id> --step image|video --file <path> --made-with <tool/model> --licence <text> [--cost <n>usd|credits] [--seed <n>] [--brief-hash sha256:...] [--verdict accepted|rejected] [--reason "..."] [--json] # hand in a shot made with the agent's own generation tool
