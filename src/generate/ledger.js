@@ -148,6 +148,8 @@ export async function ledgerCosts(project) {
   const line_items = entries.map((entry) => {
     const { amount, unit } = entry.cost;
     const item = { provider: entry.provider ?? "unknown", product: `generation-${entry.step ?? "unknown"}`, model: entry.model ?? null, request_id: null, usage: { [unit]: amount, attempts: 1 } };
+    // Unknown spend is not free spend: the agent's tool or the provider reported no cost.
+    if (entry.cost_unknown) return { ...item, estimated_usd: null, fallback: false, pricing: null, warning: `${entry.provider} reported no cost for this generation; check its own billing` };
     if (unit === "usd") return { ...item, estimated_usd: amount, fallback: false, pricing: { unit: "USD recorded in the generation ledger", source: LEDGER_FILE } };
     if (FREE_UNITS.has(unit)) return { ...item, estimated_usd: 0, fallback: false, pricing: { unit: "local generation, no money spent", source: LEDGER_FILE } };
     return { ...item, estimated_usd: null, fallback: false, pricing: null, warning: `${entry.provider} generation is billed in ${unit}, which has no USD rate` };

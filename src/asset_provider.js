@@ -200,7 +200,7 @@ export function minShotsError(requested, min) {
 
 const isRequest = (media) => media && typeof media === "object" && media.kind === SHOT_REQUEST;
 
-const pathValue = (params, slot) => slot.split(".").reduce((value, key) => (value && typeof value === "object" ? value[key] : undefined), params);
+export const pathValue = (params, slot) => slot.split(".").reduce((value, key) => (value && typeof value === "object" ? value[key] : undefined), params);
 // A card's slot without its value (and without an object left empty by it).
 const withoutPath = (params, slot) => {
   const [key, ...rest] = slot.split(".");
@@ -211,7 +211,7 @@ const withoutPath = (params, slot) => {
   else delete copy[key];
   return copy;
 };
-const withPath = (params, slot, value) => {
+export const withPath = (params, slot, value) => {
   const [key, ...rest] = slot.split(".");
   const inner = rest.length ? withPath(params?.[key] ?? {}, rest.join("."), value) : value;
   if (Array.isArray(params)) return params.map((item, i) => (String(i) === key ? inner : item));

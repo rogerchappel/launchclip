@@ -13,6 +13,7 @@ step comes up.
 - [Resolve music and sound effects deliberately](#resolve-music-and-sound-effects-deliberately)
 - [Freeze the brief and evidence](#freeze-the-brief-and-evidence)
 - [Analyze supplied media before designing](#analyze-supplied-media-before-designing)
+- [Generate footage with your own tools](#generate-footage-with-your-own-tools)
 - [Design the video](#design-the-video)
 - [Author and repair](#author-and-repair)
 - [Obtain review and render](#obtain-review-and-render)
@@ -32,6 +33,8 @@ step comes up.
 <!-- include: shared/demo-autopilot.md -->
 
 <!-- include: shared/media-analysis.md -->
+
+<!-- include: shared/generated-footage.md -->
 
 <!-- include: shared/design.md -->
 
