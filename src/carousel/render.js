@@ -13,7 +13,7 @@ import { getRenderer } from "../renderers/index.js";
 import { captureCommand, runCommand } from "../renderers/command.js";
 import { hyperframesInvocation } from "../toolchain.js";
 import { hyperframesEnv } from "../renderers/hyperframes_env.js";
-import { encodeRemotionDelivery, renderRemotionSegments, renderRemotionStills } from "../renderers/remotion_segments.js";
+import { encodeRemotionDelivery, remotionBrowserExecutable, renderRemotionSegments, renderRemotionStills } from "../renderers/remotion_segments.js";
 import { snapshotTime } from "../scripts/build-evidence.mjs";
 
 const RENDERERS = new Set(["remotion", "hyperframes"]);
@@ -80,6 +80,34 @@ export function reframe(story, id) {
   return { story: framed, reframed, errors: errors.map((message) => reframed ? `at ${dest.width}x${dest.height}: ${message}` : message) };
 }
 
+/**
+ * A motion slide as a video story of its own: its scene alone, from 0,
+ * looping onto itself (ending.loop_to). Layers on story time (the ambient
+ * blobs, a background's drift) then fit whole cycles into the clip, so its
+ * last frame leads into its first (kit/core/story-loop.mjs); in the full
+ * story they drift on across the cut. Its clip is the whole story.
+ */
+export function motionStory(story, id) {
+  const scene = story.scenes.find((entry) => entry.id === id);
+  const length = scene.end - scene.start;
+  const fps = Number(story.format.fps) || 30;
+  const { kind: _kind, ...format } = story.format;
+  const { carousel: _carousel, ...rest } = story;
+  // Other tracks over the slide (an overlay) come along, shifted with it. No
+  // slide fields: one scene is not a carousel, and nothing renders them.
+  const scenes = story.scenes.filter((entry) => entry.start >= scene.start && entry.end <= scene.end).map(({ slide: _slide, ...entry }) => ({ ...entry, start: entry.start - scene.start, end: entry.end - scene.start }));
+  // A typed in: a plate at frame 0 with none enters fully visible (kit/core/modules.mjs
+  // openingSettled), and the loop's exit fades out, so the seam would blink.
+  scenes[scenes.findIndex((entry) => entry.id === id)].in = scene.in ?? { type: "cut", dur: Math.round(1e4 / fps) / 1e4 };
+  return {
+    ...rest,
+    format: { ...format, duration: length },
+    ...(story.resolved ? { resolved: { ...story.resolved, duration: length, frames: Math.round(length * fps) } } : {}),
+    scenes,
+    ending: { loop_to: id }
+  };
+}
+
 async function renderDestination({ story, id, project, out, renderer, adapters = {} }) {
   const dest = CAROUSEL_DESTINATIONS[id];
   const stills = slideStills(story);
@@ -89,7 +117,7 @@ async function renderDestination({ story, id, project, out, renderer, adapters =
     const stem = slideStem(still.index, stills.length);
     const scene = scenes.get(still.id);
     const motion = dest.motion && still.medium === "motion";
-    return { ...still, alt: scene.slide?.alt ?? null, png: path.join(out, `${stem}.png`), jpg: dest.exports.includes("jpg") ? path.join(out, `${stem}.jpg`) : null, mp4: motion ? path.join(out, `${stem}.mp4`) : null, startFrame: Math.round(scene.start * fps), endFrame: Math.round(scene.end * fps) };
+    return { ...still, story: still.medium === "motion" ? motionStory(story, still.id) : null, alt: scene.slide?.alt ?? null, png: path.join(out, `${stem}.png`), jpg: dest.exports.includes("jpg") ? path.join(out, `${stem}.jpg`) : null, mp4: motion ? path.join(out, `${stem}.mp4`) : null, startFrame: Math.round(scene.start * fps), endFrame: Math.round(scene.end * fps) };
   });
   await mkdir(out, { recursive: true });
   // Slide files from an earlier render with more slides would be shipped by export.
@@ -107,47 +135,66 @@ async function renderDestination({ story, id, project, out, renderer, adapters =
   }));
 }
 
-// One bundle for every destination (its key ignores the props) and one browser for the stills.
+// One bundle for every destination (its key ignores the props) and one browser
+// for every still and clip. A motion slide's still and clip come from its own
+// story (motionStory), so the still is a frame of the clip.
 async function remotionDestination(story, project, slides, { remotion = {} } = {}) {
   const entry = remotion.entry ?? getRenderer("remotion").resolveEntry(project, {});
   const kitHash = remotion.kitHash ?? await (await import("../render_segments.js")).kitFingerprint("remotion", { project });
-  const common = { entry, project, props: story, kitHash, bundleRoot: remotion.bundleRoot, renderer: remotion.renderer ?? null };
-  await renderRemotionStills({ ...common, stills: slides.map((slide) => ({ frame: slide.frame, output: slide.png })) });
-  const clips = slides.filter((slide) => slide.mp4);
-  if (!clips.length) return;
-  // shortcut: the clips open a second browser (renderRemotionSegments opens its own); share one if motion-heavy carousels get slow.
-  await renderRemotionSegments({ ...common, concurrency: 2, segments: clips.map((slide) => ({ startFrame: slide.startFrame, endFrame: slide.endFrame, output: `${slide.mp4}.mezzanine.mp4` })) });
+  const { openBrowser } = remotion.renderer ?? await import("@remotion/renderer");
+  const browser = await openBrowser("chrome", { logLevel: "error", browserExecutable: remotionBrowserExecutable() });
+  const common = { entry, project, kitHash, bundleRoot: remotion.bundleRoot, renderer: remotion.renderer ?? null, browser };
   const encode = remotion.encode ?? encodeRemotionDelivery;
-  for (const slide of clips) {
-    await encode(`${slide.mp4}.mezzanine.mp4`, slide.mp4, { quality: "high" });
-    await rm(`${slide.mp4}.mezzanine.mp4`, { force: true });
+  try {
+    await renderRemotionStills({ ...common, props: story, stills: slides.filter((slide) => !slide.story).map((slide) => ({ frame: slide.frame, output: slide.png })) });
+    for (const slide of slides.filter((slide) => slide.story)) {
+      await renderRemotionStills({ ...common, props: slide.story, stills: [{ frame: slide.frame - slide.startFrame, output: slide.png }] });
+      if (!slide.mp4) continue;
+      await renderRemotionSegments({ ...common, props: slide.story, concurrency: 2, segments: [{ startFrame: 0, endFrame: slide.endFrame - slide.startFrame, output: `${slide.mp4}.mezzanine.mp4` }] });
+      await encode(`${slide.mp4}.mezzanine.mp4`, slide.mp4, { quality: "high" });
+      await rm(`${slide.mp4}.mezzanine.mp4`, { force: true });
+    }
+  } finally {
+    await browser.close({ silent: true }).catch(() => {});
   }
 }
 
+// One snapshot call for the still slides: one browser for every still, files
+// back in request order. Each motion slide compiles its own story
+// (motionStory) and renders it whole: hyperframes render has no frame range,
+// and the whole of that story is exactly the clip, so nothing is trimmed.
 async function hyperframesDestination(story, project, slides, fps, { run = runCommand } = {}) {
   await mkdir(path.join(project, ".launchclip"), { recursive: true });
   const work = await mkdtemp(path.join(project, ".launchclip", "carousel-hf-"));
   try {
-    const compiled = path.join(work, "project");
-    await compileStoryToHyperFrames(story, { projectDir: compiled, sourceDir: project });
-    const hf = async (args, label) => {
-      const invocation = hyperframesInvocation(args);
+    let n = 0;
+    const compile = async (props) => {
+      const dir = path.join(work, `project-${n++}`);
+      await compileStoryToHyperFrames(props, { projectDir: dir, sourceDir: project });
+      return dir;
+    };
+    const hf = async (compiled, args, label) => {
+      const invocation = hyperframesInvocation([...args, compiled]);
       const result = await captureCommand(run, invocation.command, invocation.args, { cwd: compiled, env: hyperframesEnv() });
       if (!result.ok) throw new Error(`HyperFrames ${label} failed (exit ${result.exit_code}): ${String(result.stderr).trim().split("\n").slice(-6).join("\n")}`);
     };
-    // One snapshot call: one browser for every still. Files come back in request order.
-    const frames = path.join(work, "frames");
-    await hf(["snapshot", "--at", slides.map((slide) => snapshotTime(slide.frame, fps)).join(","), "--no-end", "--output", frames, "--describe", "false", compiled], "snapshot");
-    const files = (await readdir(frames)).filter((name) => /^frame-\d+.*\.png$/i.test(name)).sort();
-    if (files.length < slides.length) throw new Error(`HyperFrames snapshot wrote ${files.length} frames for ${slides.length} slides`);
-    for (const [i, slide] of slides.entries()) await copyFile(path.join(frames, files[i]), slide.png);
-    const clips = slides.filter((slide) => slide.mp4);
-    if (!clips.length) return;
-    // shortcut: hyperframes render has no frame range, so the whole story renders once and each clip is cut from it; render per scene if carousels grow long.
-    const full = path.join(work, "full.mp4");
-    await hf(["render", "--output", full, "--quality", "high", "--workers", "2", compiled], "render");
-    for (const slide of clips) {
-      await run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", full, "-vf", `trim=start_frame=${slide.startFrame}:end_frame=${slide.endFrame},setpts=PTS-STARTPTS`, "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", slide.mp4]);
+    const snapshot = async (compiled, shots) => {
+      const frames = path.join(work, `frames-${n++}`);
+      await hf(compiled, ["snapshot", "--at", shots.map((shot) => snapshotTime(shot.frame, fps)).join(","), "--no-end", "--output", frames, "--describe", "false"], "snapshot");
+      const files = (await readdir(frames)).filter((name) => /^frame-\d+.*\.png$/i.test(name)).sort();
+      if (files.length < shots.length) throw new Error(`HyperFrames snapshot wrote ${files.length} frames for ${shots.length} slides`);
+      for (const [i, shot] of shots.entries()) await copyFile(path.join(frames, files[i]), shot.output);
+    };
+    const flat = slides.filter((slide) => !slide.story);
+    if (flat.length) await snapshot(await compile(story), flat.map((slide) => ({ frame: slide.frame, output: slide.png })));
+    for (const slide of slides.filter((slide) => slide.story)) {
+      const compiled = await compile(slide.story);
+      await snapshot(compiled, [{ frame: slide.frame - slide.startFrame, output: slide.png }]);
+      if (!slide.mp4) continue;
+      const full = path.join(work, `clip-${n++}.mp4`);
+      await hf(compiled, ["render", "--output", full, "--quality", "high", "--workers", "2"], "render");
+      // Silent: the video stream only, as rendered.
+      await run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", full, "-map", "0:v:0", "-an", "-c:v", "copy", "-movflags", "+faststart", slide.mp4]);
     }
   } finally {
     await rm(work, { recursive: true, force: true });
