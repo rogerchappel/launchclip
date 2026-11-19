@@ -26,8 +26,8 @@ import { MODEL_ROLES } from "./make/models.js";
 export { ANIMATION_PROFILE };
 /** The drawing style a new cast gets unless the brief asks for another. */
 export const ANIMATION_DRAWING_STYLE = "chibi";
-/** The two places a run stops for a person: `make --stop-after <point>` / `--approve <point>`, and the skill's two stops. */
-export const APPROVAL_POINTS = Object.freeze(["bible", "animatic"]);
+/** Where a run stops for a person: `make --stop-after <point>` / `--approve <point>`, and the skill's stops. drafts only when the story's shots are generated (docs/GENERATED_FOOTAGE_RFC.md §6). */
+export const APPROVAL_POINTS = Object.freeze(["bible", "animatic", "drafts"]);
 /** The categories a staging review of the animatic may use. */
 export const STAGING_REVIEW_CATEGORIES = Object.freeze(["narrative", "composition", "timing", "acting", "character-consistency", "lip-sync"]);
 /** The retake steps the skill path uses, cheapest first. */
