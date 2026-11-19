@@ -3,6 +3,8 @@
 // the slide fields, the arcs, the destinations and when each slide's still is
 // taken. It has no I/O.
 
+import { CAROUSEL_TEMPLATE_IDS } from "./carousel-templates.mjs";
+
 export const CAROUSEL_ROLES = Object.freeze(["cover", "body", "payoff", "cta"]);
 export const CAROUSEL_MEDIA = Object.freeze(["still", "motion"]);
 export const CAROUSEL_GOALS = Object.freeze(["save", "comment", "follow", "visit", "install"]);
@@ -58,10 +60,10 @@ export function carouselProblems(story) {
   const err = (message) => errors.push(message);
   if (story.format.kind !== "carousel") { err('format.kind must be "carousel" or left out (a video)'); return errors; }
   const carousel = story.carousel;
-  if (!isObject(carousel)) err("carousel must be {arc, goal?, caption?, destinations?}");
+  if (!isObject(carousel)) err("carousel must be {arc, goal?, caption?, destinations?, template?}");
   const arc = isObject(carousel) ? carousel.arc : undefined;
   if (isObject(carousel)) {
-    for (const key of Object.keys(carousel)) if (!["arc", "goal", "caption", "destinations"].includes(key)) err(`carousel.${key} is not a carousel field (arc, goal, caption, destinations)`);
+    for (const key of Object.keys(carousel)) if (!["arc", "goal", "caption", "destinations", "template"].includes(key)) err(`carousel.${key} is not a carousel field (arc, goal, caption, destinations, template)`);
     if (!CAROUSEL_ARC_IDS.includes(arc)) err(`carousel.arc must be one of ${CAROUSEL_ARC_IDS.join(", ")}`);
     if (carousel.goal !== undefined && !CAROUSEL_GOALS.includes(carousel.goal)) err(`carousel.goal must be one of ${CAROUSEL_GOALS.join(", ")}`);
     if (carousel.caption !== undefined) {
@@ -72,6 +74,7 @@ export function carouselProblems(story) {
         if (carousel.caption.tags !== undefined && !(Array.isArray(carousel.caption.tags) && carousel.caption.tags.every(nonEmpty))) err("carousel.caption.tags must be a list of non-empty strings");
       }
     }
+    if (carousel.template !== undefined && !CAROUSEL_TEMPLATE_IDS.includes(carousel.template)) err(`carousel.template must be one of ${CAROUSEL_TEMPLATE_IDS.join(", ")}`);
     if (carousel.destinations !== undefined && !(Array.isArray(carousel.destinations) && carousel.destinations.length && carousel.destinations.every((id) => CAROUSEL_DESTINATION_IDS.includes(id)))) err(`carousel.destinations must be a non-empty list of ${CAROUSEL_DESTINATION_IDS.join(", ")}`);
   }
   const slides = carouselSlides(story);
