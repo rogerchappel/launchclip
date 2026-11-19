@@ -77,13 +77,15 @@ test("payoff: required for a listicle, best second-to-last", () => {
 });
 
 test("cta-match: the cta slide's wording matches the goal", () => {
-  const [finding] = rules(carouselPlanFindings(sample()), "cta-match");
+  assert.deepEqual(rules(carouselPlanFindings(sample()), "cta-match"), [], "the sample's cta asks for the save its goal names");
+  const mismatch = sample();
+  mismatch.scenes[4].params.action = "Follow for a habit a week";
+  mismatch.carousel.caption.cta = "Follow for more";
+  const [finding] = rules(carouselPlanFindings(mismatch), "cta-match");
   assert.equal(finding.slide, 5);
   assert.equal(finding.level, "fail");
-  const follow = sample();
-  follow.carousel.goal = "follow";
-  follow.carousel.caption.cta = "Follow for more";
-  assert.deepEqual(rules(carouselPlanFindings(follow), "cta-match"), []);
+  mismatch.carousel.goal = "follow";
+  assert.deepEqual(rules(carouselPlanFindings(mismatch), "cta-match"), []);
 });
 
 test("alt-text: present, not a file name, long enough to describe", () => {
