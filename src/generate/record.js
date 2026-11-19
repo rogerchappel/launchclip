@@ -1,29 +1,37 @@
-// Recording a shot an agent generated with its own tool (docs/GENERATED_FOOTAGE_RFC.md
-// §5 provider class 4, the skill path). LaunchClip never sees the agent's
-// connection: the agent reads `generate brief --json`, makes the file, and
-// hands it in here.
+// The skill path (docs/GENERATED_FOOTAGE_RFC.md §5 provider class 4): an
+// agent generates with its own tool, and LaunchClip never sees the connection.
+// The agent reads `generate brief --json` and, per call, runs the same gates
+// make --generate runs in-process:
 //
+//   allowCall(project, {shot, step, quote?, budget?, daily?, maxGenerations?})
+//     → {ok, reasons, attempt}: the shared spend gate (ledger.js spendGate), the
+//     attempt cap and the reuse of an accepted file, before any paid call.
+//   checkKeyframe(project, {shot, file, model}) → {ok, reason, change}: the same
+//     keyframe check (footage: visionKeyframeCheck; story shot or plate: the
+//     hand-in judge against the bible).
 //   recordShot(project, {shot, step, file, madeWith, licence, cost?, seed?, briefHash?, verdict?, reason?})
-//   → {entry (the ledger line), shot (the asset-provider answer, accepted footage only), placed}
+//     → {entry (the ledger line), shot, placed}
 //
-// The file is copied under assets/shots/generated/<request id>/, one ledger line
-// is appended (no cost → cost_unknown: true), and an accepted footage shot whose
-// brief needs no further step is written into storyboard.json by resolveShots,
-// as make --generate places it. A brief hash that is not the current brief's is refused.
+// recordShot copies the file under assets/shots/generated/<request id>/ and
+// appends a ledger line (no cost → cost_unknown: true). An accepted last step
+// is placed as make --generate places it: a footage shot into storyboard.json
+// (resolveShots), a story shot or plate into HANDIN.json (story.js
+// writeHandIn), so the hand-in path checks it. A brief hash that is not the
+// current brief's is refused.
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { backdropRequests, pathValue, resolveShots, shotRequests, withPath } from "../asset_provider.js";
 import { loadWords } from "../finish.js";
 import { projectBriefs } from "./brief.js";
-import { GENERATED_DIR, parseBudget } from "./generator.js";
-import { MAX_ATTEMPTS, appendLedger, nextAttempt } from "./ledger.js";
+import { GENERATED_DIR, parseBudget, visionKeyframeCheck } from "./generator.js";
+import { MAX_ATTEMPTS, appendLedger, nextAttempt, readLedger, spendGate } from "./ledger.js";
+import { keyframeCheck, writeHandIn } from "./story.js";
 
 export const AGENT_PROVIDER = "agent";
 const EXTENSIONS = { image: /\.(jpe?g|png|webp)$/i, video: /\.(mp4|webm|mov)$/i };
 
-export async function recordShot(project, { shot, step, file, madeWith, licence, cost = null, seed = null, briefHash = null, verdict = "accepted", reason = null }) {
-  if (!shot) throw new Error("generate record needs --shot <id> (a request id from generate brief, or its scene id)");
+export async function recordShot(project, { shot, step, file, madeWith, licence, cost = null, seed = null, briefHash = null, verdict = "accepted", reason = null }, hooks = {}) {
   if (!EXTENSIONS[step]) throw new Error(`generate record needs --step image or --step video; got ${step}`);
   if (!file || !existsSync(file)) throw new Error(`generate record needs --file <path> that exists; got ${file}`);
   if (!EXTENSIONS[step].test(file)) throw new Error(`--file for the ${step} step must be ${step === "image" ? ".jpg, .png or .webp" : ".mp4, .webm or .mov"}; got ${path.basename(file)}`);
@@ -34,14 +42,9 @@ export async function recordShot(project, { shot, step, file, madeWith, licence,
   const spent = cost == null ? null : parseBudget(cost, "--cost");
   if (spent && Object.keys(spent).length !== 1) throw new Error(`--cost is one amount in one unit (0.4usd or 20credits); got ${cost}`);
 
-  const matches = (await projectBriefs(project)).filter(({ request }) => request.id === shot || request.scene_id === shot);
-  if (!matches.length) throw new Error(`generate record: no shot request ${shot} in ${project}`);
-  if (matches.length > 1) throw new Error(`generate record: scene ${shot} has ${matches.length} shot requests; pass the request id (${matches.map(({ request }) => request.id).join(", ")})`);
-  const [{ request, brief, reason: refused }] = matches;
-  if (request.role === "story" || request.role === "plate") throw new Error(`generate record: ${request.id} is a story ${request.role === "plate" ? "plate" : "shot"}; story shots are handed in through HANDIN.json, which generate record does not write yet`);
-  if (!brief) throw new Error(`generate record: ${request.id} is not generated (${refused})`);
+  const found = await findBrief(project, shot, step, "generate record", hooks);
+  const { request, brief } = found;
   if (briefHash && briefHash !== brief.brief_hash) throw new Error(`generate record: --brief-hash ${briefHash} is not the current brief for ${request.id} (${brief.brief_hash}); the storyboard or narration changed since, so run generate brief again and regenerate`);
-  if (!brief.steps.includes(step)) throw new Error(`generate record: ${request.id} is a still; its brief has no ${step} step`);
 
   const attempt = await nextAttempt(project, request.id, step);
   if (attempt == null) throw new Error(`generate record: ${request.id} already has ${MAX_ATTEMPTS} ${step} attempts; the shot needs simplifying, not another try`);
@@ -65,8 +68,99 @@ export async function recordShot(project, { shot, step, file, madeWith, licence,
     source: { made_with: madeWith, licence, generated: true, provider: AGENT_PROVIDER, model: madeWith, brief_hash: brief.brief_hash },
     ...(step === "video" ? { sourceStart: brief.video.pad_seconds } : {})
   };
-  await placeInStoryboard(project, request.id, answer);
+  if (request.role === "story" || request.role === "plate") await placeInHandIn(project, found, answer);
+  else await placeInStoryboard(project, request.id, answer);
   return { entry, shot: answer, placed: true };
+}
+
+/**
+ * Before a paid call: may the agent make this one? The same gate as make
+ * --generate (spendGate), with the agent's quote: "unknown" (or none) when its
+ * tool gives no price, which then needs maxGenerations, as an unpriced provider
+ * does in make. A priced call needs a budget: the amount the user agreed to.
+ * A step already accepted for the current brief is refused, so a re-run
+ * reuses it instead of paying again.
+ */
+export async function allowCall(project, { shot, step, quote = null, budget = null, daily = null, maxGenerations = null } = {}, hooks = {}) {
+  const { request, brief } = await findBrief(project, shot, step, "generate allow", hooks);
+  const done = (await acceptedSteps(project, brief))[step];
+  if (done) return { ok: false, shot: request.id, step, reasons: [`${step} is already accepted for this brief (${done.file}); reuse it`], accepted: done.file };
+  const attempt = await nextAttempt(project, request.id, step);
+  if (attempt == null) return { ok: false, shot: request.id, step, reasons: [`${MAX_ATTEMPTS} ${step} attempts were made; the shot needs simplifying, not another try`] };
+  const asked = parseQuote(quote);
+  const limits = parseBudget(budget);
+  if (asked.amount != null && !limits) return { ok: false, shot: request.id, step, attempt, reasons: ["a priced call needs --budget: the amount the user agreed to spend"] };
+  const { parseMaxGenerations } = await import("../make/generate.js");
+  const gate = await spendGate({ project, provider: AGENT_PROVIDER, quote: asked, budget: limits ?? {}, daily: parseBudget(daily, "--budget-daily"), maxCalls: parseMaxGenerations(maxGenerations) });
+  return { ok: gate.ok, shot: request.id, step, attempt, quote: asked, reasons: gate.reasons };
+}
+
+/**
+ * The keyframe check make --generate runs, on a still the agent made: a
+ * footage shot against its `shows`, a story shot or plate against the bible.
+ * model is a provider:model route that takes images; hooks.client stands in
+ * for it, hooks.frame for ffmpeg (as in projectBriefs).
+ */
+export async function checkKeyframe(project, { shot, file, model = null } = {}, hooks = {}) {
+  if (!file || !existsSync(file)) throw new Error(`generate check needs --file <path> that exists; got ${file}`);
+  const found = await findBrief(project, shot, "image", "generate check", hooks);
+  let client = hooks.client ?? null;
+  if (!client) {
+    if (typeof model !== "string") throw new Error("generate check needs --model <provider:model>, a model that takes images");
+    const { createMakeClient } = await import("../make/models.js");
+    const made = createMakeClient(model);
+    if (!made.vision) throw new Error(`--model ${model} does not take images, so it cannot check a keyframe`);
+    client = made.client;
+  }
+  const { request, brief } = found;
+  if (request.role !== "story" && request.role !== "plate") return { shot: request.id, ...(await visionKeyframeCheck(client)({ file, brief, request })) };
+  const { visionHandInJudge } = await import("../hand_in.js");
+  const root = path.resolve(project);
+  const bible = await readBible(root);
+  const verdict = await keyframeCheck(visionHandInJudge(client), bible, root)({ file, request: { role: request.role, who: found.shot?.who ?? [] } });
+  return { shot: request.id, reason: null, change: null, ...verdict };
+}
+
+/** The steps already accepted for this brief, any provider, whose file is still there: {image, video}. */
+export async function acceptedSteps(project, brief) {
+  const entries = (await readLedger(project)).reverse();
+  const find = (step) => entries.find((entry) => entry.verdict === "accepted" && entry.step === step && entry.brief_hash === brief.brief_hash && entry.file && existsSync(path.resolve(project, entry.file))) ?? null;
+  return { image: find("image"), video: brief.video ? find("video") : null };
+}
+
+// One request by id (or its scene id), with a brief that has this step.
+async function findBrief(project, shot, step, command, hooks = {}) {
+  if (!shot) throw new Error(`${command} needs --shot <id> (a request id from generate brief, or its scene id)`);
+  if (!EXTENSIONS[step]) throw new Error(`${command} needs --step image or --step video; got ${step}`);
+  const matches = (await projectBriefs(project, hooks)).filter(({ request }) => request.id === shot || request.scene_id === shot);
+  if (!matches.length) throw new Error(`${command}: no shot request ${shot} in ${project}`);
+  if (matches.length > 1) throw new Error(`${command}: scene ${shot} has ${matches.length} shot requests; pass the request id (${matches.map(({ request }) => request.id).join(", ")})`);
+  const [found] = matches;
+  if (!found.brief) throw new Error(`${command}: ${found.request.id} is not generated (${found.reason})`);
+  if (!found.brief.steps.includes(step)) throw new Error(`${command}: ${found.request.id} is a still; its brief has no ${step} step`);
+  return found;
+}
+
+// "0.4usd", "20credits", "unknown" or nothing → {amount, unit}; amount null is no price known.
+function parseQuote(value) {
+  if (value == null || value === "" || String(value).toLowerCase() === "unknown") return { amount: null, unit: "usd" };
+  const parsed = parseBudget(value, "--quote");
+  if (Object.keys(parsed).length !== 1) throw new Error(`--quote is one amount in one unit (0.4usd or 20credits) or unknown; got ${value}`);
+  const [[unit, amount]] = Object.entries(parsed);
+  return { amount, unit };
+}
+
+async function readBible(root) {
+  const { BIBLE_FILE } = await import("@launchclip/core/bible.mjs");
+  return JSON.parse(await readFile(path.join(root, BIBLE_FILE), "utf8"));
+}
+
+// A story shot's clip or a plate's still into HANDIN.json, as finish --generate writes it.
+async function placeInHandIn(project, found, answer) {
+  const root = path.resolve(project);
+  const made = { file: path.join(root, answer.src), source: answer.source, sourceStart: answer.sourceStart ?? 0 };
+  const plate = found.request.role === "plate";
+  await writeHandIn(root, await readBible(root), { plates: plate ? [[found, made]] : [], shots: plate ? [] : [[found, made]], attempted: [found] });
 }
 
 // resolveShots answers the one request and leaves every other request as it was

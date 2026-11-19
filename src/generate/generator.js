@@ -25,7 +25,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { MAX_ASSET_PROVIDER_CONCURRENCY, createCommandAssetProvider } from "../asset_provider_cmd.js";
 import { footageBrief, lookParagraph, refusalReason } from "./brief.js";
-import { FREE_UNITS, MAX_ATTEMPTS, appendLedger, beforeCall, checkBudget, nextAttempt, quoteBatch, readLedger, spentTotal } from "./ledger.js";
+import { FREE_UNITS, MAX_ATTEMPTS, appendLedger, checkBudget, nextAttempt, quoteBatch, readLedger, spendGate, spentTotal } from "./ledger.js";
 
 export const GENERATED_DIR = path.join("assets", "shots", "generated");
 // Poll pace (the ElevenLabs docs ask for no more than every 2 s for images, 10 s for video).
@@ -156,18 +156,10 @@ export function createGenerator({ project, image, video = null, budget = null, d
       const attempt = await nextAttempt(project, job.request.id, name);
       if (attempt == null) { say(`${job.request.id}: ${name} not generated after ${MAX_ATTEMPTS} attempts; the shot needs simplifying`); return null; }
       const quote = await provider.quote(brief, name, tier);
-      const priced = quote?.amount != null;
-      if (!priced && !FREE_UNITS.has(quote?.unit)) {
-        const made = (await readLedger(project)).filter((entry) => entry.cost_unknown && entry.provider === provider.id).length;
-        if (!(maxCalls > 0) || made >= maxCalls) {
-          stopped = maxCalls > 0 ? `the cap of ${maxCalls} unpriced call(s) is reached (--max-generations)` : "the provider gave no price and no call cap is set (--max-generations)";
-          say(`${job.request.id}: not generated, ${stopped}`);
-          return null;
-        }
-      }
-      const gate = await beforeCall({ project, budget: limit ?? {}, daily, nextQuote: priced ? quote : { amount: 0, unit: quote.unit } });
+      const gate = await spendGate({ project, provider: provider.id, quote, budget: limit ?? {}, daily, maxCalls });
+      const { priced } = gate;
       if (!gate.ok) {
-        stopped = `the budget is reached (${gate.reasons.join("; ")})`;
+        stopped = gate.reasons.join("; ");
         say(`${job.request.id}: not generated, ${stopped}`);
         return null;
       }

@@ -94,8 +94,8 @@ test("both routes check a contract with the same code: the validator behind the 
   if (missing.length) t.diagnostic(`make has no ${missing.join(" or ")} stage in this checkout yet`);
 });
 
-test("the two approval points are make's stop points", async (t) => {
-  assert.deepEqual([...APPROVAL_POINTS], ["bible", "animatic"]);
+test("the approval points are make's stop points", async (t) => {
+  assert.deepEqual([...APPROVAL_POINTS], ["bible", "animatic", "drafts"]);
   if (!has("src/make/options.js")) return;
   // The character story's stops: make's other stop (storyboard, plan-only mode) is any video's, not a skill approval.
   const options = await load("src/make/options.js");

@@ -132,6 +132,24 @@ export async function beforeCall({ project, budget = {}, daily = null, nextQuote
   return { ok: total.ok && today.ok, reasons: [...total.reasons, ...today.reasons.map((reason) => `today: ${reason}`)], spent, remaining: total.remaining };
 }
 
+/**
+ * The per-call spend gate, shared by make --generate and the skill path
+ * (generate allow), so both stop at the same point. quote is {amount, unit};
+ * amount null is "no price known": that provider reports no cost either, so
+ * only maxCalls (its unknown-cost calls in the ledger) bounds it. Local time
+ * (FREE_UNITS) passes. → {ok, reasons, priced}
+ */
+export async function spendGate({ project, provider, quote, budget = {}, daily = null, maxCalls = null, now }) {
+  const priced = quote?.amount != null;
+  if (!priced && !FREE_UNITS.has(quote?.unit)) {
+    const made = (await readLedger(project)).filter((entry) => entry.cost_unknown && entry.provider === provider).length;
+    if (!(maxCalls > 0)) return { ok: false, priced, reasons: ["the provider gave no price and no call cap is set (--max-generations)"] };
+    if (made >= maxCalls) return { ok: false, priced, reasons: [`the cap of ${maxCalls} unpriced call(s) is reached (--max-generations)`] };
+  }
+  const gate = await beforeCall({ project, budget: budget ?? {}, daily, nextQuote: priced ? quote : { amount: 0, unit: quote.unit }, now });
+  return gate.ok ? { ok: true, priced, reasons: [] } : { ok: false, priced, reasons: [`the budget is reached (${gate.reasons.join("; ")})`] };
+}
+
 /** Attempts count per shot and step, across tiers. */
 export async function nextAttempt(project, shot, step) {
   const made = (await readLedger(project)).filter((entry) => entry.shot === shot && entry.step === step);

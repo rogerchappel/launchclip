@@ -47,8 +47,8 @@ A `cmd:` provider is started once and speaks one JSON line per call on stdin and
 
 If you make videos with the LaunchClip skill and your agent has an image or video generation tool connected (for example through MCP), the agent can generate the footage itself. LaunchClip never sees that tool or its account: it writes the brief, and the agent hands the file back.
 
-1. The agent asks you before spending, naming the shots, the tool and the cost if the tool can say.
-2. `launchclip generate brief <project> --json` gives each shot's brief. The agent makes the keyframe from `image.prompt`, `image.negative` and the size, checks it against what the shot must show, and animates it only when `steps` includes `video` (the keyframe as the start frame, `video.seconds + 2 × pad_seconds` long).
+1. The agent asks you before spending, naming the shots, the tool and the cost if the tool can say. What you agree to becomes `--budget` (or `--max-generations` when the tool gives no price).
+2. `launchclip generate brief <project> --json` gives each shot's brief; `accepted` marks steps already made for the current brief, which are reused, not paid for again. Before every paid call the agent runs `launchclip generate allow <project> --shot <id> --step image|video --quote <n>usd|unknown --budget <amount> [--max-generations <n>]`, the same spend gate `make --generate` runs; it exits 1 when refused. The agent makes the keyframe from `image.prompt`, `image.negative` and the size, checks it with `launchclip generate check <project> --shot <id> --file <still> --model <provider:model>` (make's keyframe check; the bible check for a story shot or plate), and animates it only when `steps` includes `video` (the keyframe as the start frame, `video.seconds + 2 × pad_seconds` long).
 3. Every attempt is handed in:
 
 ```bash
@@ -60,9 +60,9 @@ launchclip generate record <project> --shot <request id> --step image|video \
 
 It copies the file under `assets/shots/generated/`, logs one ledger line (provider `agent`), and for an accepted still, or an accepted clip, points the storyboard's request at the file with `source.generated: true`. A `--brief-hash` that no longer matches the brief (the storyboard or narration changed since) is refused. Three attempts per shot and step, as in `make`.
 
-**Cost.** Pass `--cost` when the tool reported what the call cost. Without it the line is logged with `cost_unknown`, and `MAKE.json` costs show that generation as unknown (no USD estimate, with a warning), not as free: check the tool's own billing. The budget flags are for `make --generate`; on the skill path, the agent asking you first is the money gate.
+**Cost.** Pass `--cost` when the tool reported what the call cost. Without it the line is logged with `cost_unknown`, and `MAKE.json` costs show that generation as unknown (no USD estimate, with a warning), not as free: check the tool's own billing. On the skill path LaunchClip cannot stop the agent's own tool, so the gate holds only if the agent runs `generate allow` before each call, as the skill tells it to; spend it records with `--cost` counts against the budget, and calls without a cost count against `--max-generations`.
 
-Story shots and plates are not recorded this way yet; they are handed in through the animation branch.
+Story shots and plates (a project with a frozen bible and an animatic) go the same way: `generate record` writes an accepted clip or plate into `HANDIN.json`, and `launchclip handin check` decides whether it is used.
 
 ## Budgets
 
