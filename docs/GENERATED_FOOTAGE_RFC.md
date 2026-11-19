@@ -1,10 +1,12 @@
 # RFC: Generating handed-in footage with a model
 
 Status: draft for review; nothing here is scheduled
-Date: 2026-11-16
+Date: 2026-11-16 (revised 2026-11-20: footage requests, two-step flow,
+providers)
 Builds on: [ANIMATION_PIPELINE_RFC.md](ANIMATION_PIPELINE_RFC.md) (the show
 bible §4.2, the animatic §4.4, the hand-in contract §5, approval §6.3),
-[KIT_CONTRACTS.md](KIT_CONTRACTS.md)
+[KIT_CONTRACTS.md](KIT_CONTRACTS.md), the asset-provider hook
+(`src/asset_provider.js`)
 
 ## 1. Summary
 
@@ -21,6 +23,22 @@ into the hand-in contract as if the user had handed it in. Everything after
 that (validation, the bible check, fallback, one look per video, caching)
 is the existing hand-in path, unchanged.
 
+It answers two kinds of request:
+
+- **Story shots**: plates and whole character shots in an animated story,
+  fixed by the bible and the animatic. Holding the character is the hard
+  part.
+- **Footage shots**: the B-roll a motion-graphics story already asks for
+  with `{kind: "shot", shows, type}` (clip, photo-scene and media-window
+  scenes, media layouts, card image slots, card backdrops). Today only an
+  app's media library answers these; the generator can answer them too.
+  No character to hold, so this is the easier and wider case.
+
+Both use the same two steps: **text to image** makes a keyframe, and
+**image to video** animates it only when the request wants video. The
+keyframe is the cheap draft a person or the check approves before any
+video is paid for.
+
 The idea comes from how AI animation series are made by hand: direct
 everything on paper and in stills first, lock the character, render cheap
 drafts, and pay for a final only once a draft is approved. LaunchClip
@@ -36,8 +54,8 @@ the second half without making it the engine's job to host, queue or bill.
 - Every generated asset passes through the same checks as a handed-in one
   (§5.4), and a failure falls back to the code-drawn shot (§5.5).
 - No money is spent without a quote, a budget and an approval.
-- Drafts before finals: a cheap low-resolution pass for every shot, a full
-  resolution pass only for approved drafts.
+- Drafts before finals: a keyframe (and, for video, a cheap low-resolution
+  clip) for every shot, a full resolution pass only for approved drafts.
 - A generated shot can be made again: every attempt is logged with its
   brief, provider, model, seed, cost and verdict.
 - Providers are adapters. Swapping one is a flag, not a code change.
@@ -58,30 +76,60 @@ the second half without making it the engine's job to host, queue or bill.
 ## 3. Where it plugs in
 
 ```
+Story shots:
 script → bible (frozen) → shot list → animatic ─┬─ hand-in (files or provider hook) ─┐
                                                 └─ generate (this RFC) ──────────────┤
                                                                                      ▼
                                                        handin check → finish → gates
+
+Footage shots:
+script → storyboard with {kind: "shot"} requests ─┬─ media library (findShot) ─┐
+                                                  └─ generate (this RFC) ──────┤
+                                                                               ▼
+                                                     storyboard check → render
 ```
 
 The generator is an asset provider. It answers the same requests the
 asset-provider hook answers today (`findShot(request) → shot | null`,
 `src/asset_provider.js`, `--asset-provider-cmd`), extended for character
-shots and plates as §5.3 already plans, and it writes `HANDIN.json` with
-`source: {made_with, licence, generated: true}`. `null` still means "draw
-it in code".
+shots and plates as §5.3 already plans. A story shot is written into
+`HANDIN.json` with `source: {made_with, licence, generated: true}`; a
+footage shot comes back as a `shot` with `file` and the same `source`.
+`null` still means "draw it in code" for a story shot, and "design the
+scene without footage" for a footage shot, as it does today.
+
+A generator can sit behind a library: ask the library first, generate
+only what it has no match for.
 
 So the generator adds no new render path, no new look rules and no new
 gate. It adds a brief, a ledger, a money gate and provider adapters.
 
 ## 4. The generation brief
 
+Every shot is made in two steps, each with its own half of the brief:
+
+1. **Keyframe (text to image).** Who, where, the light, the look and the
+   composition. The output is a still at the story's size.
+2. **Motion (image to video).** Only when the request wants video. The
+   keyframe is the start frame, and the prompt describes only motion and
+   camera.
+
+The keyframe is checked before step 2 (the bible check for a story shot,
+the vision check against `shows` for a footage shot). A rejected keyframe
+is retried as a still, which costs a fraction of a clip. A request for an
+image, or a card slot that shows a still, stops after step 1.
+
+### 4.1 Story shots
+
 The brief is built from what the project already has after the animatic,
-so the model is told exactly what the animatic shows.
+so the model is told exactly what the animatic shows. The animatic frame
+is a layout reference for the keyframe, not the start frame itself: a
+code-drawn frame animated as is would keep the code-drawn look.
 
 | Field | From |
 |---|---|
-| Start frame | the shot's first frame from the animatic, rendered at the provider's size; the image-to-video first frame |
+| Layout reference | the shot's first frame from the animatic, passed as a composition reference to the keyframe step where the provider accepts one, otherwise described in words (shot size, who is where) |
+| Start frame | the approved keyframe; the image-to-video first frame |
 | Character description | the bible's character entry, written out once as a fixed paragraph (silhouette, proportions, colours as hex, signature item, gesture, `must_keep`, the fixed imperfection), pasted word for word, never shortened |
 | Reference images | the bible's sheets for every character in frame, the crop the provider accepts |
 | Place | the bible's world entry and its light; for a plate, the place alone with nobody in it |
@@ -96,11 +144,37 @@ Rules for the brief, enforced when it is written:
   split before generation, or generated as code-drawn.
 - **The scene lives in the frame, the motion in the prompt.** The motion
   prompt describes only motion and camera; who, where and the light come
-  from the start frame and the references.
+  from the keyframe and the references.
 - **The description is the bible's, not the model's.** The planner never
   paraphrases a character inside a prompt. A variant (a character covered in
   flour) is its own bible entry with its own sheet.
 - **Plates are per place**, generated once and reused in every shot there.
+
+### 4.2 Footage shots
+
+The request already carries most of the brief (`src/asset_provider.js`):
+`shows`, `type`, the narration `line`, `duration`, `format` and whether
+the slot shows a still.
+
+| Field | From |
+|---|---|
+| Subject | `shows`, word for word: the planner already writes it concretely |
+| Context | the narration `line` the shot sits under, as context only, never as text to show |
+| Look | the story's brand palette and look, written once per story as a fixed paragraph so every footage shot in a video matches |
+| Composition | where captions and cards sit in that scene, so the keyframe leaves that area calm; a backdrop request asks for low motion and no strong subject |
+| Motion | for video, one slow camera move or one action; a backdrop gets a slow pan or push only |
+| Length, size | `duration` plus edge padding (§6), `format` |
+| Never | no text, lettering, logos or UI; no real, named people; no shot the scenes either side already show |
+
+Rules:
+
+- **Not evidence.** A generated shot illustrates; it never stands in for
+  a product, a screen, a person or an event the video makes a claim
+  about. Requests that name a real product, person or place are left to
+  the library or come back `null`.
+- **One look per story.** Every generated footage shot in a video uses
+  the same look paragraph and, where the provider allows, the same image
+  model.
 
 `launchclip generate brief <project> [--shot s3] [--json]` prints the brief
 without calling anything, so a person can paste it into any tool by hand.
@@ -113,7 +187,7 @@ A provider is an adapter with four calls:
 ```js
 {
   id: 'name',
-  kinds: ['plate', 'shot'],               // what it can make
+  steps: ['image', 'video'],              // text to image, image to video
   quote(brief, tier) → {cost, currency | 'credits', seconds?},
   submit(brief, tier) → job,
   poll(job) → {state, progress?},
@@ -139,6 +213,36 @@ Choosing: `--generate <provider>[:<model>]`, with separate choices allowed
 for stills and video (`--generate-image`, `--generate-video`). Draft and
 final can name different models.
 
+### 5.1 Hosted providers to look at first
+
+Aggregators come first: one adapter reaches many models, so the choice
+of model becomes a flag and we can compare models on our own fixtures
+before writing anything model-specific. Both hosted options below are
+asynchronous (submit, then fetch), which matches the four calls above.
+
+| Provider | What it is | Notes |
+|---|---|---|
+| fal.ai | aggregator: many image and video models behind one API and key | the first adapter; covers most of the models below |
+| ElevenLabs Image & Video API | aggregator: models from Google, OpenAI, ByteDance and others, at the same prices as its app | needs a Pro plan or above; ByteDance models are off by default over the API and need approval; some models are unavailable in the US; a natural second adapter for users who already use it for voice |
+| Replicate | aggregator, similar to fal.ai | a fallback if a model is only there |
+
+Models to compare through them (names as of 2026-11; versions and prices
+move, so the adapter reads them from the provider, never from a table in
+code):
+
+- **Text to image, holding a character or a look across shots:** Google's
+  Gemini image models and Imagen, OpenAI's image models, Black Forest
+  Labs' Flux (Kontext takes reference images), Ideogram.
+- **Image to video:** Google Veo, ByteDance Seedance, Kling, Runway (takes
+  reference images), Luma, MiniMax Hailuo, OpenAI Sora.
+- **Local, macOS first (provider class 2):** Flux for stills through MLX,
+  Draw Things or ComfyUI; Wan, LTX-Video or HunyuanVideo for video, if any
+  is good enough on Apple silicon (§11).
+
+The table is a starting list, not a choice. Phase 4 (§9) picks by price
+per second of final video, how well a model holds a character or a look
+from a keyframe, and its output licence.
+
 ## 6. Money, drafts and approval
 
 - **Quote first.** Before any paid call, the generator quotes the whole
@@ -147,9 +251,11 @@ final can name different models.
   it.
 - **A running budget.** Spend is counted per project and per day; the
   generator stops when the next call would pass the budget, and the rest of
-  the shots fall back to code-drawn, with the reason in the report.
-- **Drafts, then finals.** Tier `draft` renders every shot at low
-  resolution. The animatic-style review (§6.3) is shown again with the
+  the shots fall back (story shots to code-drawn, footage shots to no
+  footage), with the reason in the report.
+- **Keyframes, then drafts, then finals.** Every shot's keyframe is made
+  and checked first; only an approved keyframe is animated. Tier `draft`
+  then renders every video shot at low resolution. The animatic-style review (§6.3) is shown again with the
   drafts in place. Only approved drafts get a `final`, generated from the
   same brief and seed where the provider allows it. `--stop-after drafts`
   and `--approve drafts` work like the existing approval points.
@@ -166,7 +272,7 @@ final can name different models.
 Every attempt is one line in `qa/generation-log.jsonl`:
 
 ```json
-{ "shot": "s3", "tier": "draft", "attempt": 2,
+{ "shot": "s3", "step": "video", "tier": "draft", "attempt": 2,
   "provider": "name", "model": "model-id", "seed": 1234,
   "brief_hash": "sha256:…", "bible_hash": "sha256:…",
   "changed": "the antenna bends right, not left",
@@ -189,7 +295,7 @@ paste. The bible already has `must_keep`, a sheet and a fingerprint (§4.2).
 The generator needs two additions, both useful without it:
 
 - **A written description** per character, generated once from the rig
-  params and frozen with the bible, in the fixed order of §4.
+  params and frozen with the bible, in the fixed order of §4.1.
 - **A fixed imperfection**: one small deliberate flaw kept in `must_keep`,
   so the vision check and a person can spot drift at a glance.
 
@@ -212,11 +318,17 @@ has not: the sheet still shows the poses and expressions.
    approval, retries with one changed line, edge padding. Done when a fake
    provider (a fixture command) drives a whole story through drafts and
    finals, with spend stopped at the budget and the rest code-drawn.
-3. **One local provider.** Done when a Short renders on one Mac with no
+3. **Footage shots through an aggregator.** The fal.ai adapter answering
+   `{kind: "shot"}` requests (§4.2), behind the library when there is one.
+   Done when a motion-graphics fixture story gets every footage shot
+   generated in one look, inside the budget, with no text in any frame.
+   This comes before the local and story-shot work because it has no
+   character to hold and every motion-graphics story can use it.
+4. **One local provider.** Done when a Short renders on one Mac with no
    network and no key.
-4. **One hosted provider, and the skill path.** Chosen after phase 3, by
-   price per second of final video and how well it holds a character from a
-   start frame.
+5. **Story shots on a hosted provider, and the skill path.** The model is
+   chosen by price per second of final video and how well it holds a
+   character from a keyframe, compared through the aggregator adapters.
 
 ## 10. Risks
 
@@ -227,6 +339,10 @@ has not: the sheet still shows the poses and expressions.
 - **Cost surprises.** Provider prices change and quotes can be wrong. The
   budget is enforced on spend recorded after each call, not only on the
   quote.
+- **Footage that reads as evidence.** A realistic generated clip can look
+  like a recording of something that happened. The not-evidence rule
+  (§4.2) keeps named products, people and events out, and
+  `source.generated` stays on the shot so a host can label it.
 - **Licensing.** Generated output terms differ by provider. `source.licence`
   is required and comes from the adapter, never guessed.
 - **Scope creep into hosting.** Queues, accounts and billing stay out; the
@@ -236,8 +352,12 @@ has not: the sheet still shows the poses and expressions.
 
 - Which local video model is good enough on Apple silicon to be the
   default local provider, if any is yet.
-- Which hosted provider to write first, and whether one adapter can cover
-  aggregators that front many models.
+- Whether the fal.ai and ElevenLabs adapters can share one shape (both are
+  submit-then-fetch over many models), or need one each.
+- Which image and video model pair to default to inside an aggregator, for
+  footage and for characters (likely not the same pair).
+- Whether the footage look paragraph comes from the brand frame alone, or
+  needs its own entry in the story.
 - Whether sprite casts (pose, talk and blink sprites) are worth generating,
   or whether plates and whole shots cover the useful cases.
 - Whether the draft review should be the animatic with drafts swapped in,
