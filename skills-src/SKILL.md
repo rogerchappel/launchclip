@@ -13,7 +13,8 @@ Read a reference when its step comes up, not all at once.
 - [references/workflow.md](references/workflow.md): the full workflow behind
   the quick path: cost boundary, intake defaults, style packs, reference
   mimicry, HeyGen avatars, music and SFX decisions, the planning artifacts,
-  media analysis, the design and retention floor, the step-by-step author and
+  media analysis, generating footage with your own image or video tool, the
+  design and retention floor, the step-by-step author and
   repair order, review, approval and the final render.
 - [references/cinematic-production.md](references/cinematic-production.md):
   the creative funnel (concept tournament, retention story, candidates,
