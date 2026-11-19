@@ -575,7 +575,11 @@ what the call cost. Map the brief onto whatever parameters yours has.
    It exits 1 with the reason when the budget would be passed, when the
    step is already accepted, after three attempts, or when an unpriced tool
    has no `--max-generations` left.
-4. **Make the keyframe.** Call your image tool with `brief.image.prompt` word
+4. **Make the keyframe.** Stills are cheap next to a clip, so when the user
+   agrees, make a few candidates (two to four) in one round: one
+   `generate allow` with `--quote` for the whole round, every candidate
+   recorded with that round's `--attempt` and its own `--candidate <n>`.
+   Call your image tool with `brief.image.prompt` word
    for word, `brief.image.negative` as the negative prompt (or appended as
    "Avoid: …" when the tool has none), and `brief.image.width` ×
    `brief.image.height` (or the nearest aspect it offers).
@@ -583,7 +587,10 @@ what the call cost. Map the brief onto whatever parameters yours has.
    `make --generate` runs: `launchclip generate check <project> --shot
    <request.id> --file <still> --model <provider:model that takes images>`
    (a footage shot against `request.shows`; a story shot or plate against
-   the bible). With no such model, judge it yourself by the same rule: it
+   the bible). For candidates, pass them all, `--file a.png,b.png,c.png`:
+   it ranks them in one look and names the `chosen` one; record that one
+   accepted and the others rejected with their reason. Only the chosen still
+   is animated. With no such model, judge it yourself by the same rule: it
    must clearly show `request.shows`, with no text, lettering, logo, user
    interface or recognisable real person, and a calm lower third. A failed
    keyframe is recorded `--verdict rejected --reason "…"`, then retried with

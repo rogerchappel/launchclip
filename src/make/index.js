@@ -2421,7 +2421,7 @@ async function finishInputs(ctx, stage = "finish") {
 
 // make's --generate flags as finish takes them; --stop-after drafts and --approve drafts pass through.
 function storyGenerateOptions(options) {
-  const keys = ["generate", "generateImage", "generateVideo", "generateDraftVideo", "budget", "budgetDaily", "maxGenerations"];
+  const keys = ["generate", "generateImage", "generateVideo", "generateDraftVideo", "budget", "budgetDaily", "maxGenerations", "keyframeCandidates"];
   return {
     ...Object.fromEntries(keys.filter((key) => options[key] != null).map((key) => [key, options[key]])),
     ...(String(options.stopAfter ?? "").toLowerCase() === "drafts" ? { stopAfter: "drafts" } : {}),

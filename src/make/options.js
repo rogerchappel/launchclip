@@ -14,7 +14,7 @@ import { candidatesMode } from "./candidates.js";
 import { compChoice } from "./comps.js";
 import { explainerMode } from "./visual_explainer.js";
 import { makeGenerateSpecs, parseMaxGenerations } from "./generate.js";
-import { parseBudget } from "../generate/generator.js";
+import { parseBudget, parseKeyframeCandidates } from "../generate/generator.js";
 import { parseSfxMode } from "../sfx/event_sounds.js";
 import { talkingHeadLayoutError } from "../talking_head_layout.js";
 
@@ -139,6 +139,7 @@ export const MAKE_FLAGS = Object.freeze([
   ["budget", {}],
   ["budget-daily", {}],
   ["max-generations", {}],
+  ["keyframe-candidates", {}],
   // The fewest shots the plan must ask the asset provider for (0, the default, leaves them optional).
   ["min-shots", {}],
   // Full-screen cards on the app's footage (off, the default, keeps the stock plates).
@@ -199,6 +200,7 @@ export function makeOptionsFromFlags(flags = {}) {
     budget: flags.budget,
     budgetDaily: flags["budget-daily"],
     maxGenerations: flags["max-generations"],
+    keyframeCandidates: flags["keyframe-candidates"],
     minShots: flags["min-shots"],
     cardBackdrops: flags["card-backdrops"],
     assetDescriptions: flags["asset-descriptions"],
@@ -298,6 +300,7 @@ export function validateMakeOptions(options = {}) {
   if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);
   makeGenerateSpecs(options);
   parseMaxGenerations(options.maxGenerations);
+  parseKeyframeCandidates(options.keyframeCandidates);
   parseBudget(options.budget);
   parseBudget(options.budgetDaily, "--budget-daily");
   if (options.explainer != null) explainerMode(options.explainer);
