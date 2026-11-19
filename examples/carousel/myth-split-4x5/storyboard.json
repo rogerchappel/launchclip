@@ -61,11 +61,12 @@
       "slide": {
         "role": "cover",
         "medium": "still",
-        "alt": "Remote work myths, busted"
+        "alt": "Two myths. Remote work myths, busted"
       },
       "params": {
         "headline": "Remote work myths, busted",
         "emphasis": "busted",
+        "eyebrow": "Two myths →",
         "variant": "centered"
       }
     },
@@ -140,11 +141,12 @@
       "slide": {
         "role": "cta",
         "medium": "still",
-        "alt": "Which myth did you believe?"
+        "alt": "Comment the myth you believed. One word is enough"
       },
       "params": {
-        "action": "Which myth did you believe?",
-        "emphasis": "myth",
+        "action": "Comment the myth you believed",
+        "emphasis": "Comment",
+        "detail": "One word is enough",
         "handle": "remotely.test",
         "variant": "centered"
       }

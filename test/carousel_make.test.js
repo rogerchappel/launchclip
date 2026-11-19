@@ -15,7 +15,7 @@ const listicle = (extra = {}) => ({
   goal: "save",
   caption: { hook: "Most teams are not slow. They wait.", body: "Where the waiting hides in a week.", cta: "Save this for planning.", tags: ["productivity"] },
   slides: [
-    slide("cover", "cover", "hook-title", { headline: "3 habits that make teams ship faster", emphasis: "ship faster" }),
+    slide("cover", "cover", "hook-title", { headline: "3 habits that make teams ship faster", emphasis: "ship faster", kicker: "Swipe" }),
     slide("one", "body", "hook-title", { headline: "Decide in the thread" }),
     slide("two", "body", "motion-title", { text: "Ship the smallest change that works" }),
     slide("summary", "payoff", "item-list", { title: "Save this", items: ["Decide in thread", "Ship small"] }),
@@ -86,6 +86,20 @@ test("repair round: the errors go back in one call; a second failure fails clear
   assert.match(model.requests[1].input, /needs a payoff slide/);
   assert.deepEqual(report.plan_attempts.map((entry) => entry.ok), [false, true]);
   await assert.rejects(make("fast teams", { arc: "listicle" }, fakeModel(noPayoff, noPayoff)), /could not be planned[\s\S]*payoff/);
+});
+
+test("repair round: the check's plan rules that fail go to the repair call", async () => {
+  const leaky = listicle({ slides: listicle().slides.map((entry) => entry.id === "one" ? { ...entry, params: { headline: "Slide 2: Decide in the thread" } } : entry) });
+  const model = fakeModel(leaky, listicle());
+  const { report } = await make("fast teams", { arc: "listicle" }, model);
+  assert.equal(model.requests.length, 2);
+  assert.match(model.requests[1].input, /- scaffold-leak \(slide 2\): "Slide 2:" is a planning label/);
+  assert.deepEqual(report.plan_attempts.map((entry) => entry.ok), [false, true]);
+  // A rule story validation already reports (payoff) is said once.
+  const noPayoff = listicle({ slides: listicle().slides.filter((entry) => entry.role !== "payoff") });
+  const once = fakeModel(noPayoff, listicle());
+  const second = await make("fast teams", { arc: "listicle" }, once);
+  assert.equal(second.report.plan_attempts[0].errors.filter((line) => line.includes("needs a payoff slide")).length, 1);
 });
 
 test("caption and alt text are required and written", async () => {

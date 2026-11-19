@@ -9,6 +9,7 @@ import { resolveModule, sceneRenderEnd } from "@launchclip/core/modules.mjs";
 import { dropParam } from "../storyboard_planner.js";
 import { moduleCatalogue } from "@launchclip/core/planning-prompt.mjs";
 import { CAROUSEL_GRAMMARS, CAROUSEL_TEMPLATES, layoutCarousel, pickTemplate, templateCopyProblems } from "@launchclip/core/carousel-templates.mjs";
+import { carouselPlanFindings } from "@launchclip/core/carousel-check.mjs";
 
 // Modules that need what a carousel does not have (footage, a presenter, a
 // cast, a logo file, audio, live data) or that only read in motion.
@@ -134,6 +135,9 @@ export function storyErrors(story, { modules, range, warnings = [] }) {
   if (!story.carousel.caption.hook.trim()) errors.push("caption.hook is empty: write the post's first line");
   if (!story.carousel.caption.cta.trim()) errors.push("caption.cta is empty: ask the reader to do the goal");
   for (const id of story.carousel.destinations) errors.push(...destinationProblems(story, id).errors);
+  // The check's plan rules (cover, copy, cta …): what `carousel check` would fail goes to the repair now.
+  // Story validation already says some (payoff), so a reason it gave is not repeated.
+  for (const finding of carouselPlanFindings(story)) if (finding.level === "fail" && !errors.some((line) => line.includes(finding.reason))) errors.push(`${finding.rule}${finding.slide ? ` (slide ${finding.slide})` : ""}: ${finding.reason}`);
   // Module fit: every slide lays out on this canvas (the `launchclip module fit` check), in the same round, so one repair sees every error.
   let resolved;
   try { resolved = resolveStory(JSON.parse(JSON.stringify(story))); } catch (error) { return errors.length ? errors : [`the story does not resolve: ${message(error)}`]; }

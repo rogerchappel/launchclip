@@ -28,7 +28,7 @@ launchclip carousel export ./my-carousel
 |---|---|
 | `make "<brief>"` | Picks the arc and a template (`listicle`, `how-to`, `myth-fact`, `before-after`, `story`, `data`, `ad`, `quote`, `single`), writes the slides, the caption and the alt text, then renders and checks |
 | `render <project>` | Each slide's still, and an MP4 loop for each motion slide, into `carousel/<dest>/` as `01.png`, `02.png` … |
-| `check <project>` | The slide rules: a cover that reads at thumbnail size, type large enough for the feed, one idea per slide, contrast, safe zones, a payoff where the arc promises one, alt text. Exits 1 on a failure |
+| `check <project>` | The slide rules: a cover that reads at thumbnail size, type large enough for the feed, one idea per slide, contrast, safe zones, a payoff where the arc promises one, alt text, and copy that is not filler, cut off, repeated or a leaked planning label. Exits 1 on a failure |
 | `export <project>` | Packages each destination's files, ready to upload |
 
 ## Templates
@@ -93,6 +93,8 @@ These limits come from public guidance as of November 2026. Check each platform'
 
 Where a destination takes images only, a motion slide is sent as its still, and the export says so.
 
+A motion slide is a scene of 3 to 8 seconds with `loop: true`. Its clip is silent and exactly the scene's length, and its last frame leads back into its first, background included. Its still is a frame of that clip and doubles as the poster. See `examples/carousel/motion-ad-1x1` for an ad whose second slide moves.
+
 ## What export writes
 
 For each destination, in `carousel/<dest>/`:
@@ -101,10 +103,36 @@ For each destination, in `carousel/<dest>/`:
 |---|---|
 | `01.png` … | The slides in order (`.jpg` for TikTok), and `NN.mp4` for each motion slide where motion is shown |
 | `slides.pdf` | LinkedIn: one page per slide at the slide's size |
-| `cards.json` | Meta ads: each card's file, headline, description and link, cut to Meta's recommended lengths (32 and 18 characters). Pass `--link <url>` for the link |
+| `cards.json` | Meta ads: each card's file (the MP4 for a motion slide, with its still as `thumbnail`), headline, description and link, cut to Meta's recommended lengths (32 and 18 characters). Pass `--link <url>` for the link |
 | `caption.md` | The post caption: the hook, the body, the call to action, and tags where the platform uses them (Instagram, TikTok). It flags a hook longer than the platform shows before "… more", and ends with a plain version to paste |
 | `alt.json` | Alt text for each slide file |
 
 `carousel/CAROUSEL.json` lists the plan, every destination's files, its warnings and errors, and the check results when `check` has run.
 
 A destination whose renders are missing is reported and skipped; the others still export. `--json` prints the whole report.
+
+## Swipe continuity
+
+Two treatments pull the eye to the next slide. Both work in Remotion and HyperFrames, on still and motion slides, and either one counts as the swipe cue when it touches the cover or slide 2. A sample is in [`examples/carousel/seam-panorama-4x5`](../../examples/carousel/seam-panorama-4x5/storyboard.json).
+
+**Across the seam.** An element is laid across the seam between two slides, so half of it sits at the right edge of one and the rest at the left edge of the next. List them in `carousel.seams`:
+
+```json
+{ "after": "summit", "kind": "word", "text": "KEEP CLIMBING →", "x": -0.36, "y": 0.8, "w": 0.72, "h": 0.07, "color": "ink" }
+```
+
+| Field | What it means |
+|---|---|
+| `after` | The id of the slide on the left of the seam |
+| `kind` | `word` (text `h` tall), `rule` (a bar; a thin one is a line), `card` (a rounded bar) or `circle` |
+| `x`, `w` | In slide widths from the seam. The element must cross it: `x < 0 < x + w` |
+| `y`, `h` | In slide heights from the top |
+| `color` | A brand colour role (`primary`, `accent`, `ink` …) or `#rrggbb` |
+
+**The panorama.** One plate laid over several slides, each taking its slice, with type set per slide:
+
+```json
+"panorama": { "src": "assets/panorama.jpg", "slides": [1, 4] }
+```
+
+`slides` is the first and last slide it covers (1-based). The plate is scaled once to cover that many slide widths by the slide height, centred, and each slide shows its own width of it, so the slides line up pixel for pixel side by side. A plate already that size (here 4 × 1080 by 1350) is drawn unscaled. Keep the type on each slide clear of the busiest parts of the plate; `check` measures contrast on the rendered slides.

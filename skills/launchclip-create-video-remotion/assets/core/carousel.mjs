@@ -4,6 +4,7 @@
 // taken. It has no I/O.
 
 import { CAROUSEL_TEMPLATE_IDS } from "./carousel-templates.mjs";
+import { continuityProblems } from "./carousel-continuity.mjs";
 
 export const CAROUSEL_ROLES = Object.freeze(["cover", "body", "payoff", "cta"]);
 export const CAROUSEL_MEDIA = Object.freeze(["still", "motion"]);
@@ -26,16 +27,18 @@ export const CAROUSEL_ARC_IDS = Object.freeze(Object.keys(CAROUSEL_ARCS));
 
 // shortcut: platform limits and safe zones are from public guidance as of
 // 2026-11 (RFC §8, §14), not the platforms' own docs; check them before relying
-// on a figure. safe: fractions of the canvas each side keeps clear of text.
+// on a figure. safe: px each side keeps clear of text at the canvas size, as a
+// production carousel system sets them (4:5 feeds 96/72/96/72, 1:1 72 all
+// round, TikTok 180 top and 240 bottom over its caption and buttons).
 // captionPreview: characters shown before the caption is cut ("… more").
 export const CAROUSEL_DESTINATIONS = Object.freeze({
-  instagram: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 20], motion: true, exports: ["png", "mp4"], captionPreview: 125, tags: true, safe: { top: 0.05, bottom: 0.08, left: 0.05, right: 0.05 } },
-  tiktok: { aspect: "9:16", width: 1080, height: 1920, slides: [1, 35], motion: false, exports: ["jpg"], captionPreview: 90, tags: true, safe: { top: 0.1, bottom: 0.22, left: 0.05, right: 0.15 } },
-  linkedin: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 300], motion: false, exports: ["pdf", "png"], captionPreview: 210, tags: false, safe: { top: 0.05, bottom: 0.05, left: 0.05, right: 0.05 } },
-  facebook: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 10], motion: true, exports: ["png", "mp4"], captionPreview: 125, tags: false, safe: { top: 0.05, bottom: 0.08, left: 0.05, right: 0.05 } },
-  "meta-ads": { aspect: "1:1", width: 1080, height: 1080, slides: [2, 10], motion: true, exports: ["png", "mp4", "cards"], captionPreview: 125, tags: false, safe: { top: 0.05, bottom: 0.05, left: 0.05, right: 0.05 } },
-  x: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 4], motion: true, exports: ["png", "mp4"], captionPreview: 280, tags: false, safe: { top: 0.05, bottom: 0.05, left: 0.05, right: 0.05 } },
-  threads: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 20], motion: true, exports: ["png", "mp4"], captionPreview: 150, tags: false, safe: { top: 0.05, bottom: 0.05, left: 0.05, right: 0.05 } }
+  instagram: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 20], motion: true, exports: ["png", "mp4"], captionPreview: 125, tags: true, safe: { top: 96, right: 72, bottom: 96, left: 72 } },
+  tiktok: { aspect: "9:16", width: 1080, height: 1920, slides: [1, 35], motion: false, exports: ["jpg"], captionPreview: 90, tags: true, safe: { top: 180, right: 72, bottom: 240, left: 72 } },
+  linkedin: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 300], motion: false, exports: ["pdf", "png"], captionPreview: 210, tags: false, safe: { top: 96, right: 72, bottom: 96, left: 72 } },
+  facebook: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 10], motion: true, exports: ["png", "mp4"], captionPreview: 125, tags: false, safe: { top: 96, right: 72, bottom: 96, left: 72 } },
+  "meta-ads": { aspect: "1:1", width: 1080, height: 1080, slides: [2, 10], motion: true, exports: ["png", "mp4", "cards"], captionPreview: 125, tags: false, safe: { top: 72, right: 72, bottom: 72, left: 72 } },
+  x: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 4], motion: true, exports: ["png", "mp4"], captionPreview: 280, tags: false, safe: { top: 96, right: 72, bottom: 96, left: 72 } },
+  threads: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 20], motion: true, exports: ["png", "mp4"], captionPreview: 150, tags: false, safe: { top: 96, right: 72, bottom: 96, left: 72 } }
 });
 export const CAROUSEL_DESTINATION_IDS = Object.freeze(Object.keys(CAROUSEL_DESTINATIONS));
 
@@ -60,10 +63,10 @@ export function carouselProblems(story) {
   const err = (message) => errors.push(message);
   if (story.format.kind !== "carousel") { err('format.kind must be "carousel" or left out (a video)'); return errors; }
   const carousel = story.carousel;
-  if (!isObject(carousel)) err("carousel must be {arc, goal?, caption?, destinations?, template?}");
+  if (!isObject(carousel)) err("carousel must be {arc, goal?, caption?, destinations?, seams?, panorama?, template?}");
   const arc = isObject(carousel) ? carousel.arc : undefined;
   if (isObject(carousel)) {
-    for (const key of Object.keys(carousel)) if (!["arc", "goal", "caption", "destinations", "template"].includes(key)) err(`carousel.${key} is not a carousel field (arc, goal, caption, destinations, template)`);
+    for (const key of Object.keys(carousel)) if (!["arc", "goal", "caption", "destinations", "seams", "panorama", "template"].includes(key)) err(`carousel.${key} is not a carousel field (arc, goal, caption, destinations, seams, panorama, template)`);
     if (!CAROUSEL_ARC_IDS.includes(arc)) err(`carousel.arc must be one of ${CAROUSEL_ARC_IDS.join(", ")}`);
     if (carousel.goal !== undefined && !CAROUSEL_GOALS.includes(carousel.goal)) err(`carousel.goal must be one of ${CAROUSEL_GOALS.join(", ")}`);
     if (carousel.caption !== undefined) {
@@ -104,6 +107,8 @@ export function carouselProblems(story) {
     if (slides.length < min || slides.length > max) err(`a ${arc} carousel has ${min === max ? min : `${min} to ${max}`} slide${max === 1 ? "" : "s"}; this one has ${slides.length}`);
     if (CAROUSEL_ARCS[arc].payoff && slides.length > 2 && !roles.includes("payoff")) err(`a ${arc} carousel promises a list, steps or data, so it needs a payoff slide (slide.role "payoff")`);
   }
+  // Swipe continuity: seams and the panorama (kit/core/carousel-continuity.mjs, RFC §6.1).
+  errors.push(...continuityProblems(story));
   return errors;
 }
 

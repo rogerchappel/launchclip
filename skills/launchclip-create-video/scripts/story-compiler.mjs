@@ -47,6 +47,7 @@ import { profileGeometry } from './layout-check.mjs';
 import { CAPTION_DEFAULT_COLORS, blurSnappedChunks, captionBlurGuard, captionChunksFrom, captionDipTweens, captionMoveHide, captionPlan, captionPlanRuntime, captionsOverlayOf, chunkWords, narrationWords } from './captions.mjs';
 import { brandFramePlan, brandFrameRuntime } from './brand-frame.mjs';
 import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumFilterAt, mediumPlan, mediumSteps } from './medium.mjs';
+import { cssText, slideContinuity } from './carousel-continuity.mjs';
 import { LOOK_Z, lookCss, lookFurnitureMarkup, lookGradeMarkup, lookPlan, lookSelector, lookStageCss, lookStepEase, lookStepped, lookSteps, lookUnderMarkup } from './look.mjs';
 import { brandFontStacks, fontFaceRule, fontSlug, frozenFontFaces, projectFontFamilies, registryFontFaces } from './fonts.mjs';
 import { EMITTERS as EDITORIAL_EMITTERS } from './editorial-ui-modules.mjs';
@@ -387,7 +388,11 @@ export async function compileStoryToHyperFrames(story, options = {}) {
     if (zoom?.warnings.length) warnings.push(...zoom.warnings);
     const zooming = zoomOps(zoom?.keys, { width: W, height: H });
     if (zooming.length && media.elements.length) warnings.push(`${entry.scene.id}: root media stays on the root and does not follow the shot's zooms`);
-    const plain = `<div id="${inner}" class="lc-layer">${ambient.html}${content}</div>`;
+    // Carousel swipe continuity (kit/core/carousel-continuity.mjs), outside the drift, as the Remotion SceneLayer.
+    const flow = slideContinuity(story, entry.scene.id);
+    const pano = flow?.panorama ? `<div class="lc-pano" style="position:absolute;inset:0;overflow:hidden;pointer-events:none" aria-hidden="true"><img src="${attr(flow.panorama.src)}" alt="" style="position:absolute;left:${flow.panorama.left}px;top:0;width:${flow.panorama.width}px;height:${flow.panorama.height}px;max-width:none;object-fit:cover;object-position:50% 50%"></div>` : '';
+    const seams = flow?.seams.length ? `<div class="lc-seam" style="position:absolute;inset:0;overflow:hidden;pointer-events:none" aria-hidden="true">${flow.seams.map((seam) => `<div style="${attr(cssText(seam.style))}">${seam.text ? attr(seam.text) : ''}</div>`).join('')}</div>` : '';
+    const plain = `<div id="${inner}" class="lc-layer">${ambient.html}${pano}${content}${seams}</div>`;
     const layer = zooming.length ? `<div id="lc-zs-${id}" class="lc-zoom"><div id="lc-zp-${id}" class="lc-zoom">${plain}</div></div>` : plain;
     const body = parallax.length ? `<div id="lc-par-${id}" class="lc-parallax">${layer}</div>` : layer;
     const smear = smearLayer(entry.tweens, id, `#${outer}`);

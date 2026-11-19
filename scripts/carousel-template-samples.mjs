@@ -12,7 +12,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PHOTOS = { ridge: "examples/carousel/_photos/ridge.jpg", dashboard: "examples/carousel/_photos/dashboard.jpg" };
 
 const fonts = (display, body, meta = "jetbrains-mono") => ({ display, body, meta });
-const s = (id, role, fields) => ({ id, role, alt: fields.alt ?? [fields.eyebrow, fields.headline, fields.body, ...(fields.items ?? []), fields.quote && `“${fields.quote.text}” ${fields.quote.author}`].filter(Boolean).join(". "), ...fields });
+const s = (id, role, fields) => ({ id, role, alt: fields.alt ?? [fields.eyebrow, fields.headline, fields.body, ...(fields.items ?? []), fields.stat && `${fields.stat.value} ${fields.stat.label}`, fields.quote && `“${fields.quote.text}” ${fields.quote.author}`].filter(Boolean).join(". "), ...fields });
 
 const studyNotes = {
   arc: "listicle", goal: "save",
@@ -34,7 +34,7 @@ export const SAMPLES = {
     brand: { colors: { bg: "#0b1020", primary: "#5b84ff", accent: "#22d3a6", ink: "#0b1020", paper: "#f4f6fb" }, fonts: fonts("sora", "inter") },
     caption: { hook: "Release day should be boring.", body: "Every check, review and rollout in one place.", cta: "Install it free.", tags: [] },
     slides: [
-      s("cover", "cover", { headline: "Ship releases without the panic", body: "Now on iOS and web", photo: "dashboard" }),
+      s("cover", "cover", { headline: "Ship releases without the panic", photo: "dashboard" }),
       s("one-view", "body", { headline: "Every check in one view", body: "Builds, reviews and rollouts on one screen, live.", photo: "dashboard" }),
       s("roll-back", "body", { eyebrow: "When it breaks", headline: "Roll back in one tap", body: "Undo a release before your users notice.", photo: "dashboard" }),
       s("proof", "payoff", { headline: "Less prep, more shipping", stat: { value: "80%", label: "less time on release prep", source: "Beta teams, 2026 (illustrative)" } }),
@@ -60,7 +60,7 @@ export const SAMPLES = {
     brand: { colors: { bg: "#101418", primary: "#f2a65a", accent: "#8fb8de", ink: "#101418", paper: "#f6f1ea" }, fonts: fonts("dm-serif-display", "manrope") },
     caption: { hook: "I am not a morning person. I tried anyway.", body: "A year of running before work, in five pictures.", cta: "Follow for the next twelve months.", tags: ["running", "habits", "mornings"] },
     slides: [
-      s("cover", "cover", { headline: "The year I ran before work", body: "and what it changed", photo: "ridge" }),
+      s("cover", "cover", { headline: "The year I ran before work", photo: "ridge" }),
       s("week-one", "body", { headline: "Week one was mostly walking", body: "Out at six every day", photo: "ridge" }),
       s("spring", "body", { headline: "By spring the hills felt shorter", body: "Mornings got easier", photo: "ridge" }),
       s("lesson", "payoff", { eyebrow: "The lesson", headline: "Start smaller than feels useful", body: "Ten minutes you keep beat an hour you skip." }),
@@ -94,10 +94,10 @@ export const SAMPLES = {
     brand: { colors: { bg: "#160c0c", primary: "#ff5a48", accent: "#ffd166", ink: "#160c0c", paper: "#fff4ec" }, fonts: fonts("anton", "inter") },
     caption: { hook: "Remote work is not what the headlines say.", body: "Two beliefs worth dropping.", cta: "Comment the myth you used to believe.", tags: [] },
     slides: [
-      s("cover", "cover", { headline: "Remote work myths, busted", emphasis: "busted" }),
+      s("cover", "cover", { headline: "Remote work myths, busted", emphasis: "busted", eyebrow: "Two myths" }),
       s("talk", "body", { headline: "Myth: remote teams talk less", body: "Fact: they write more, and it lasts" }),
       s("meetings", "body", { headline: "Myth: meetings keep teams aligned", body: "Fact: written decisions do it faster" }),
-      s("cta", "cta", { headline: "Which myth did you believe?", emphasis: "myth", handle: "remotely.test" })
+      s("cta", "cta", { headline: "Comment the myth you believed", emphasis: "Comment", body: "One word is enough", handle: "remotely.test" })
     ]
   },
   "then-now": {
@@ -105,7 +105,7 @@ export const SAMPLES = {
     brand: { colors: { bg: "#0f1512", primary: "#7ddc6f", accent: "#ff8a4c", ink: "#0f1512", paper: "#f1f5ee" }, fonts: fonts("syne", "plus-jakarta-sans") },
     caption: { hook: "We used to lose two days to every release.", body: "What we changed, and what it gave back.", cta: "Follow for the playbook.", tags: [] },
     slides: [
-      s("cover", "cover", { headline: "Release prep: from days to hours", body: "Swipe for the change", photo: "dashboard" }),
+      s("cover", "cover", { headline: "Release prep: from days to hours", photo: "dashboard" }),
       s("train", "body", { headline: "Before: a release train every week", body: "After: every merge ships on its own" }),
       s("checks", "body", { headline: "Before: a checklist in a doc", body: "After: checks that run themselves" }),
       s("result", "payoff", { headline: "The result", stat: { value: "80%", label: "less time on release prep", source: "Sample team, 2026 (illustrative)" } }),

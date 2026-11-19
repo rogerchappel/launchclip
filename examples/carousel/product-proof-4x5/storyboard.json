@@ -55,7 +55,7 @@
       "slide": {
         "role": "cover",
         "medium": "still",
-        "alt": "Ship releases without the panic. Now on iOS and web"
+        "alt": "Ship releases without the panic"
       },
       "params": {
         "media": "assets/photos/dashboard.jpg",
@@ -64,17 +64,15 @@
             "text": "Ship releases without"
           },
           {
-            "text": "the panic",
+            "text": "the panic →",
             "emphasis": true
-          },
-          {
-            "text": "Now on iOS and web"
           }
         ],
         "align": "left",
         "scrim": "bottom",
         "move": "push-in",
-        "zoom": 0.04
+        "zoom": 0.04,
+        "title": "Ship releases without the panic"
       }
     },
     {
@@ -133,7 +131,7 @@
       "slide": {
         "role": "payoff",
         "medium": "still",
-        "alt": "Less prep, more shipping"
+        "alt": "Less prep, more shipping. 80% less time on release prep"
       },
       "params": {
         "value": "80%",

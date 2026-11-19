@@ -324,17 +324,21 @@ const emphasisOf = (slide, headline) => { const e = words(slide?.emphasis); retu
 const drop = (params) => Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ""));
 
 /** The module and params that draw one slide in a grammar → {module, params}. */
-export function drawSlide(slide, grammar, template, { aspect = "4:5" } = {}) {
+// cue: the cover of a carousel with more slides asks for the swipe (an arrow on its small label, or a last line on a photo).
+export function drawSlide(slide, grammar, template, { aspect = "4:5", cue = false } = {}) {
   const type = template.type;
   const headline = words(slide.headline);
   const body = words(slide.body);
   const image = words(slide.photo) || null;
-  const eyebrow = words(slide.eyebrow) || undefined;
+  const asks = cue && !/\bswipe\b|→/i.test(`${headline} ${body} ${words(slide.eyebrow)}`);
+  const eyebrow = asks ? (words(slide.eyebrow) ? `${cut(slide.eyebrow, 28)} →` : "Swipe →") : words(slide.eyebrow) || undefined;
   if (grammar === "full-bleed") {
     const width = aspect === "1:1" ? 24 : 22;
     const head = lines(headline, width, body ? 2 : 3).map((text, i, all) => ({ text, ...(i === all.length - 1 ? { emphasis: true } : {}) }));
     const rest = body ? lines(body, width, 3 - head.length).map((text) => ({ text })) : [];
-    return { module: "photo-scene", params: { media: image, lines: [...head, ...rest].slice(0, 3), align: type.align, scrim: type.align === "center" ? "full" : "bottom", move: "push-in", zoom: 0.04 } };
+    const all = [...head, ...rest].slice(0, 3);
+    if (asks) { const last = all.at(-1); if (last.text.length + 2 <= width) last.text += " →"; else if (all.length < 3) all.push({ text: "Swipe →" }); }
+    return { module: "photo-scene", params: { media: image, lines: all, align: type.align, scrim: type.align === "center" ? "full" : "bottom", move: "push-in", zoom: 0.04, title: cut(headline, 60) } };
   }
   if (grammar === "image-panel") {
     const items = slideItems(slide);
@@ -414,7 +418,7 @@ export function layoutCarousel(templateId, slides, { aspect = "4:5", brand = nul
   const scenes = (Array.isArray(slides) ? slides : []).map((slide, i) => {
     const grammar = slideGrammar(slide, template);
     const surface = template.surface[slide.role] ?? template.ground;
-    const { module, params } = drawSlide(slide, grammar, template, { aspect });
+    const { module, params } = drawSlide(slide, grammar, template, { aspect, cue: i === 0 && slides.length > 1 });
     const plate = surfacePlate(template, surface, slide, grammar);
     return { id: words(slide.id) || `slide-${i + 1}`, grammar, surface, module, params, ...(plate ? { plate } : {}) };
   });

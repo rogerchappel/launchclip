@@ -59,7 +59,7 @@
       "slide": {
         "role": "cover",
         "medium": "still",
-        "alt": "The year I ran before work. and what it changed"
+        "alt": "The year I ran before work"
       },
       "params": {
         "media": "assets/photos/ridge.jpg",
@@ -68,17 +68,15 @@
             "text": "The year I ran before"
           },
           {
-            "text": "work",
+            "text": "work →",
             "emphasis": true
-          },
-          {
-            "text": "and what it changed"
           }
         ],
         "align": "left",
         "scrim": "bottom",
         "move": "push-in",
-        "zoom": 0.04
+        "zoom": 0.04,
+        "title": "The year I ran before work"
       }
     },
     {
@@ -109,7 +107,8 @@
         "align": "left",
         "scrim": "bottom",
         "move": "push-in",
-        "zoom": 0.04
+        "zoom": 0.04,
+        "title": "Week one was mostly walking"
       }
     },
     {
@@ -140,7 +139,8 @@
         "align": "left",
         "scrim": "bottom",
         "move": "push-in",
-        "zoom": 0.04
+        "zoom": 0.04,
+        "title": "By spring the hills felt shorter"
       }
     },
     {

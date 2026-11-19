@@ -55,7 +55,7 @@
       "slide": {
         "role": "cover",
         "medium": "still",
-        "alt": "Release prep: from days to hours. Swipe for the change"
+        "alt": "Release prep: from days to hours"
       },
       "params": {
         "media": "assets/photos/dashboard.jpg",
@@ -64,17 +64,15 @@
             "text": "Release prep: from"
           },
           {
-            "text": "days to hours",
+            "text": "days to hours →",
             "emphasis": true
-          },
-          {
-            "text": "Swipe for the change"
           }
         ],
         "align": "left",
         "scrim": "bottom",
         "move": "push-in",
-        "zoom": 0.04
+        "zoom": 0.04,
+        "title": "Release prep: from days to hours"
       }
     },
     {
@@ -148,7 +146,7 @@
       "slide": {
         "role": "payoff",
         "medium": "still",
-        "alt": "The result"
+        "alt": "The result. 80% less time on release prep"
       },
       "params": {
         "value": "80%",

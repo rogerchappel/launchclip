@@ -69,7 +69,7 @@
       "params": {
         "headline": "What a year of release notes taught us",
         "emphasis": "release notes",
-        "eyebrow": "Release report",
+        "eyebrow": "Release report →",
         "variant": "flush"
       }
     },
@@ -82,7 +82,7 @@
       "slide": {
         "role": "body",
         "medium": "still",
-        "alt": "Midweek wins"
+        "alt": "Midweek wins. 62% of releases shipped Tuesday or Wednesday"
       },
       "params": {
         "value": "62%",
@@ -100,7 +100,7 @@
       "slide": {
         "role": "body",
         "medium": "still",
-        "alt": "Fridays cost more"
+        "alt": "Fridays cost more. 3.4× more rollbacks on Friday releases"
       },
       "params": {
         "value": "3.4×",
