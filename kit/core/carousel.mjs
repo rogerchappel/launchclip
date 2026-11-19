@@ -3,6 +3,8 @@
 // the slide fields, the arcs, the destinations and when each slide's still is
 // taken. It has no I/O.
 
+import { continuityProblems } from "./carousel-continuity.mjs";
+
 export const CAROUSEL_ROLES = Object.freeze(["cover", "body", "payoff", "cta"]);
 export const CAROUSEL_MEDIA = Object.freeze(["still", "motion"]);
 export const CAROUSEL_GOALS = Object.freeze(["save", "comment", "follow", "visit", "install"]);
@@ -63,7 +65,7 @@ export function carouselProblems(story) {
   if (!isObject(carousel)) err("carousel must be {arc, goal?, caption?, destinations?}");
   const arc = isObject(carousel) ? carousel.arc : undefined;
   if (isObject(carousel)) {
-    for (const key of Object.keys(carousel)) if (!["arc", "goal", "caption", "destinations"].includes(key)) err(`carousel.${key} is not a carousel field (arc, goal, caption, destinations)`);
+    for (const key of Object.keys(carousel)) if (!["arc", "goal", "caption", "destinations", "seams", "panorama"].includes(key)) err(`carousel.${key} is not a carousel field (arc, goal, caption, destinations, seams, panorama)`);
     if (!CAROUSEL_ARC_IDS.includes(arc)) err(`carousel.arc must be one of ${CAROUSEL_ARC_IDS.join(", ")}`);
     if (carousel.goal !== undefined && !CAROUSEL_GOALS.includes(carousel.goal)) err(`carousel.goal must be one of ${CAROUSEL_GOALS.join(", ")}`);
     if (carousel.caption !== undefined) {
@@ -103,6 +105,8 @@ export function carouselProblems(story) {
     if (slides.length < min || slides.length > max) err(`a ${arc} carousel has ${min === max ? min : `${min} to ${max}`} slide${max === 1 ? "" : "s"}; this one has ${slides.length}`);
     if (CAROUSEL_ARCS[arc].payoff && slides.length > 2 && !roles.includes("payoff")) err(`a ${arc} carousel promises a list, steps or data, so it needs a payoff slide (slide.role "payoff")`);
   }
+  // Swipe continuity: seams and the panorama (kit/core/carousel-continuity.mjs, RFC §6.1).
+  errors.push(...continuityProblems(story));
   return errors;
 }
 

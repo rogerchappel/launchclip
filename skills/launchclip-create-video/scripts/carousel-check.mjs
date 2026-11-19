@@ -5,6 +5,7 @@
 // Each finding: {rule, slide (1-based, null for the whole carousel), level: "fail" | "warn", reason}.
 
 import { CAROUSEL_ARCS, carouselSlides } from "./carousel.mjs";
+import { crossesSeam } from "./carousel-continuity.mjs";
 
 // Thresholds are the RFC's proposals (§6, §13): they need a pass against real feeds.
 export const COVER_WORDS = Object.freeze([3, 12]);
@@ -167,7 +168,7 @@ export function carouselPlanFindings(story) {
     const cued = [0, 1].some((i) => {
       const scene = slides[i];
       if (!scene) return false;
-      if (scene.carry !== undefined && scene.carry !== false) return true;
+      if ((scene.carry !== undefined && scene.carry !== false) || crossesSeam(story, i)) return true;
       if (SWIPE_TEXT.test(texts[i].all)) return true;
       return i === 1 && texts[i].meta.some((block) => COUNTER.test(block.text));
     });
