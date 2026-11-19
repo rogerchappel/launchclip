@@ -1,7 +1,7 @@
 # RFC: Carousels and single-image posts
 
 Status: draft for review; nothing here is scheduled
-Date: 2026-11-20
+Date: 2026-11-20 (revised 2026-11-20: video carousels are separate short clips, §5.3)
 Builds on: [KIT_CONTRACTS.md](KIT_CONTRACTS.md) (the scene modules),
 [COLLECTIONS_RFC.md](COLLECTIONS_RFC.md) §3.5 (destination presets),
 [GENERATED_FOOTAGE_RFC.md](GENERATED_FOOTAGE_RFC.md) (generated stills and
@@ -144,10 +144,36 @@ video. A first set:
 
 ### 5.3 Motion slides
 
-A motion slide is a scene rendered as a clip of 3 to 8 seconds that loops
-(`loop: true`, checked by `loop-seam`), silent by default. Its still, the
-settled frame, is always rendered too, as the fallback for destinations that
-take only images (§8) and as the poster frame.
+A motion slide is a scene rendered as its own short clip, silent by
+default. Its still, the settled frame, is always rendered too, as the
+fallback for destinations that take only images (§8) and as the poster frame.
+
+A video carousel is a set of separate videos: each card is its own clip, and
+swiping moves to the next one. It is not one video cut into slides. Most cards
+are short, usually 3 to 5 seconds. A card can be very short (about 2 seconds,
+a single beat) or run to 10 seconds when its motion needs the time.
+Platforms allow far longer cards, but a short card keeps the swipe going. So:
+
+- **Each motion slide is its own clip**, rendered as a one-scene story of its
+  own (shipped: `motionStory` in `src/carousel/render.js`), so its length,
+  timing and ambient motion never depend on the slides around it.
+- **Two kinds of motion slide.** A *drawn* one is a catalogue module that
+  animates (a node graph, a chart, kinetic type). A *footage* one is a short
+  clip under free type: B-roll the user hands in, a cut from a longer
+  recording, or a clip made by the generator (§10), where the keyframe still
+  is made and checked first and only then animated into a short clip.
+  Most video carousels are mostly footage cards.
+- **Looping is a choice, not a rule.** `loop: true` makes a seamless loop
+  (checked by `loop-seam`) for a card people may watch more than once. Without
+  it the card plays once and holds its last frame; feeds replay a card anyway,
+  so a hard cut back to the first frame is acceptable, but a held last frame
+  must be a settled one.
+- **Length**: 2 to 10 seconds per card (`MOTION_SLIDE_SECONDS`, today 3 to
+  8), 4 by default. The planner sizes each card to what happens in it.
+- **Defaults**: silent, text set by the engine over the clip (never
+  drawn into a generated clip), the settled frame as the poster.
+- **One sound bed across cards** is out of scope: each card is a separate file
+  and platforms play them on their own.
 
 ### 5.4 The settled frame
 
@@ -314,8 +340,10 @@ uses the same commands, as videos do.
    render in Remotion, the `listicle`, `quote` and `single` arcs, Instagram and
    LinkedIn PDF export, the type-size, contrast and one-idea checks.
 2. **Captions and alt text** per destination, and the remaining checks.
-3. **Motion slides**: loops as MP4, the still fallback, Facebook, X and
-   Threads.
+3. **Motion slides**: each card its own clip, the still fallback, Facebook,
+   X and Threads (shipped for drawn, looping cards). Still to do: footage and
+   generated-clip cards, cards that play once instead of looping, and the 2 to
+   10 second range.
 4. **HyperFrames parity** for stills (snapshot at the settled frame) and
    motion slides, with parity fixtures as for scenes.
 5. **Ads**: the `ad` arc, the card sheet, the `meta-ads` destination,
