@@ -29,7 +29,7 @@ import path from "node:path";
 export const LEDGER_FILE = path.join("qa", "generation-log.jsonl");
 export const MAX_ATTEMPTS = 3;
 // Units that measure time on this machine, not money: no budget is needed to spend them.
-const FREE_UNITS = new Set(["seconds", "local"]);
+export const FREE_UNITS = new Set(["seconds", "local"]);
 
 export function ledgerPath(project) {
   return path.join(project, LEDGER_FILE);
