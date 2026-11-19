@@ -5,6 +5,8 @@
 //   {id, kind: "footage", steps: ["image"] | ["image", "video"],
 //    image: {prompt, negative, width, height, references: [absolute paths]},
 //    video: {prompt, seconds, pad_seconds, fps} | null,
+//      (seconds is the shot's own length; adapters request
+//      seconds + 2 * pad_seconds and source_start trims the pad back),
 //    brief_hash: "sha256:…" (over the canonical JSON of everything else)}
 //
 // Step 1 (image) is the keyframe: subject, look and composition. Step 2
@@ -15,8 +17,8 @@ import { readFile } from "node:fs/promises";
 import { hashValue, loadWords } from "../finish.js";
 import { resolveShots } from "../asset_provider.js";
 
-// Generated clips drift at their ends, so each is asked for this much longer
-// at each end and source_start trims it back (§6). A constant to tune on fixtures.
+// Generated clips drift at their ends, so the adapter asks for this much
+// longer at each end and source_start trims it back (§6). A constant to tune on fixtures.
 export const EDGE_PAD_SECONDS = 0.3;
 // A request with no resolved length (no narration timings yet).
 export const DEFAULT_SHOT_SECONDS = 4;
@@ -83,7 +85,7 @@ export function footageBrief(request, { look = lookParagraph(null), fps = DEFAUL
       prompt: backdrop
         ? "Low motion: one slow, steady pan or push in. Nothing enters or leaves the frame."
         : "One slow camera move or one simple action. The subject, place and light stay as in the start frame.",
-      seconds: Math.round((seconds + 2 * EDGE_PAD_SECONDS) * 1000) / 1000,
+      seconds: Math.round(seconds * 1000) / 1000,
       pad_seconds: EDGE_PAD_SECONDS,
       fps
     }
@@ -117,7 +119,7 @@ export function formatBriefs(briefs) {
     const head = `# ${request.id} (scene ${request.scene_id ?? "?"}${request.role === "background" ? ", backdrop" : ""})`;
     if (!brief) return `${head}\nrefused: ${reason}\n`;
     const lines = [head, `steps: ${brief.steps.join(" → ")}`, `size: ${brief.image.width}×${brief.image.height}`, "", "image prompt:", brief.image.prompt, "", "negative:", brief.image.negative];
-    if (brief.video) lines.push("", `video prompt (${brief.video.seconds} s at ${brief.video.fps} fps, ${brief.video.pad_seconds} s padding each end):`, brief.video.prompt);
+    if (brief.video) lines.push("", `video prompt (${brief.video.seconds} s at ${brief.video.fps} fps; request ${Math.round((brief.video.seconds + 2 * brief.video.pad_seconds) * 1000) / 1000} s, ${brief.video.pad_seconds} s padding each end):`, brief.video.prompt);
     lines.push("", brief.brief_hash);
     return `${lines.join("\n")}\n`;
   }).join("\n");
