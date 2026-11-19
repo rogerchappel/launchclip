@@ -22,7 +22,7 @@
     "caption": {
       "hook": "Release notes, written while you merge.",
       "body": "Relay reads your merged pull requests and drafts the changelog, the blog post and the email.",
-      "cta": "Try Relay free today.",
+      "cta": "Install Relay free today.",
       "tags": [
         "devtools",
         "changelog"
@@ -59,7 +59,8 @@
       "params": {
         "eyebrow": "Relay for release notes",
         "headline": "Your release notes ship a week late",
-        "emphasis": "a week late"
+        "emphasis": "a week late",
+        "kicker": "Swipe"
       }
     },
     {
@@ -130,10 +131,10 @@
       "slide": {
         "role": "cta",
         "medium": "still",
-        "alt": "Try Relay free today, relay.example"
+        "alt": "Install Relay free today, relay.example"
       },
       "params": {
-        "action": "Try Relay free today",
+        "action": "Install Relay free today",
         "emphasis": "free",
         "detail": "Release notes on autopilot",
         "handle": "relay.example"
