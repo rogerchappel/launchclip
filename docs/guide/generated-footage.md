@@ -48,11 +48,11 @@ Before any paid call, each batch of shots is quoted and printed.
 
 - **In a terminal**, the run asks. A yes is a budget of that quote.
 - **Headless**, the run needs `--budget <n>[usd|credits]` (for example `--budget 3`, `--budget 200credits`, or both: `--budget 3usd,200credits`) and refuses a batch whose quote passes it. `--budget-daily` caps a day's spend the same way.
-- **A provider with no price** (ElevenLabs has no cost estimate; some fal models price in units the quote can't total) is allowed only with a budget in its unit.
+- **A provider with no price** (ElevenLabs has no cost estimate; some fal models price in units the quote can't total) reports no cost after a call either, so LaunchClip can't count its spend and `--budget` can't stop it. It is refused unless you cap its paid calls with `--max-generations <n>`. Spend for it is not tracked: check your provider's dashboard. The cap counts every unpriced attempt in the project's ledger, across runs, so a re-run doesn't reset it.
 
 The budget is also checked before every call against the spend already recorded, so a quote that was too low still stops at the budget. When it stops, the shots not yet made are designed without footage, and the run says why.
 
-Every attempt, accepted, rejected or failed, is one line in `qa/generation-log.jsonl`: the shot, step, attempt, provider, model, seed, cost, file, verdict and reason. A re-run of `make` reuses every accepted shot whose brief has not changed. `MAKE.json` adds the ledger to its costs (stage `generate`), so the spend per video is in one place. A provider that reports no cost is logged with `cost_unknown`, and its spend can't count toward the budget.
+Every attempt, accepted, rejected or failed, is one line in `qa/generation-log.jsonl`: the shot, step, attempt, provider, model, seed, cost, file, verdict and reason. A re-run of `make` reuses every accepted shot whose brief has not changed. `MAKE.json` adds the ledger to its costs (stage `generate`), so the spend per video is in one place. A provider that reports no cost is logged with `cost_unknown` and counts toward `--max-generations`, not the budget.
 
 ## Not evidence
 

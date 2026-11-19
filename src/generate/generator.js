@@ -17,7 +17,8 @@
 // ask them all at once) are quoted as one batch before any is generated. A
 // batch needs a budget it fits in, or, attended (approve given), a yes; the
 // approved quote then becomes the budget. A provider with no price (quote
-// amount null) is allowed only with a budget, which then counts recorded spend.
+// amount null) reports no cost either, so no budget can see its spend: it is
+// refused unless maxCalls caps its paid calls (counted across runs in the ledger).
 import { existsSync } from "node:fs";
 import { copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -30,7 +31,7 @@ export const GENERATED_DIR = path.join("assets", "shots", "generated");
 // Poll pace (the ElevenLabs docs ask for no more than every 2 s for images, 10 s for video).
 export const POLL_MS = Object.freeze({ image: 2000, video: 10_000 });
 
-export function createGenerator({ project, image, video = null, budget = null, daily = null, tier = "final", library = null, check = null, approve = null, look = lookParagraph(null), fps, pollMs = POLL_MS, notice = () => {} }) {
+export function createGenerator({ project, image, video = null, budget = null, daily = null, tier = "final", maxCalls = null, library = null, check = null, approve = null, look = lookParagraph(null), fps, pollMs = POLL_MS, notice = () => {} }) {
   if (!project) throw new Error("createGenerator needs a project");
   if (!image) throw new Error("createGenerator needs an image provider (the keyframe step)");
   const notes = [];
@@ -81,7 +82,7 @@ export function createGenerator({ project, image, video = null, budget = null, d
     for (const step of ["image", "video"]) {
       if (!items[step].length) continue;
       const provider = providerFor(step);
-      // A null amount is "no price known": counted as 0 here, and the batch then needs a budget in that unit.
+      // A null amount is "no price known": counted as 0 here, and the batch then needs a call cap (maxCalls).
       const quoted = await quoteBatch(items[step], { id: provider.id, quote: async (...args) => {
         const quote = await provider.quote(...args);
         if (quote?.amount == null && quote?.unit) { unpriced.add(quote.unit); return { amount: 0, unit: quote.unit }; }
@@ -92,13 +93,15 @@ export function createGenerator({ project, image, video = null, budget = null, d
     const text = `${todo.length} shot(s), ${Object.entries(totals).map(([unit, amount]) => `${unpriced.has(unit) ? "unknown" : round(amount)} ${unit}`).join(" + ") || "nothing to pay"}`;
     const spent = await spentTotal(project);
     quotes.push({ shots: todo.map((job) => job.request.id), totals, unpriced: [...unpriced] });
-    const noBudget = [...unpriced].filter((unit) => limit?.[unit] == null);
-    if (noBudget.length) { say(`quote: ${text}; refused: the provider gives no price in ${noBudget.join(", ")}, so a --budget in that unit is needed (spend is counted as it is recorded)`); return false; }
+    // An unpriced provider reports no cost either, so no budget can see its spend: only a cap on its calls bounds it.
+    if (unpriced.size && !(maxCalls > 0)) { say(`quote: ${text}; refused: the provider gives no price in ${[...unpriced].join(", ")} and reports no cost, so its spend can't be counted or held to --budget; pass --max-generations <n> to cap its paid calls`); return false; }
+    const pricedSpend = Object.entries(totals).some(([unit, amount]) => !unpriced.has(unit) && amount > 0);
     if (given) {
       const fits = checkBudget({ quote: totals, budget: limit, spent });
       if (!fits.ok) { say(`quote: ${text}; refused: ${fits.reasons.join("; ")}`); return false; }
       if (!approve) { say(`quote: ${text}; within the budget`); return true; }
     }
+    if (!approve && !pricedSpend && unpriced.size) { say(`quote: ${text}; spend not tracked, capped at ${maxCalls} unpriced call(s) (--max-generations)`); return true; }
     if (!approve) { say(`quote: ${text}; refused: generating without a person to ask needs --budget`); return false; }
     if (!(await approve(`generate: ${text}. Generate them?`))) { say(`quote: ${text}; not approved`); return false; }
     say(`quote: ${text}; approved`);
@@ -142,6 +145,14 @@ export function createGenerator({ project, image, video = null, budget = null, d
       if (attempt == null) { say(`${job.request.id}: ${name} not generated after ${MAX_ATTEMPTS} attempts; the shot needs simplifying`); return null; }
       const quote = await provider.quote(brief, name, tier);
       const priced = quote?.amount != null;
+      if (!priced) {
+        const made = (await readLedger(project)).filter((entry) => entry.cost_unknown).length;
+        if (!(maxCalls > 0) || made >= maxCalls) {
+          stopped = maxCalls > 0 ? `the cap of ${maxCalls} unpriced call(s) is reached (--max-generations)` : "the provider gave no price and no call cap is set (--max-generations)";
+          say(`${job.request.id}: not generated, ${stopped}`);
+          return null;
+        }
+      }
       const gate = await beforeCall({ project, budget: limit ?? {}, daily, nextQuote: priced ? quote : { amount: 0, unit: quote.unit } });
       if (!gate.ok) {
         stopped = `the budget is reached (${gate.reasons.join("; ")})`;
@@ -156,7 +167,7 @@ export function createGenerator({ project, image, video = null, budget = null, d
       } catch (error) {
         if (error?.name === "AbortError") throw error;
         // shortcut: a failed call is logged at its quote (or 0 when unpriced); providers that report a refund-free failure can return cost 0 from fetch later.
-        await appendLedger(project, { ...entry, model: error.model ?? null, cost: priced ? cost(quote) : { amount: 0, unit: quote.unit }, seconds: secondsSince(started), verdict: "failed", reason: String(error?.message ?? error).slice(0, 300) });
+        await appendLedger(project, { ...entry, model: error.model ?? null, cost: priced ? cost(quote) : { amount: 0, unit: quote.unit }, ...(priced ? {} : { cost_unknown: true }), seconds: secondsSince(started), verdict: "failed", reason: String(error?.message ?? error).slice(0, 300) });
         say(`${job.request.id}: ${name} attempt ${attempt} failed (${String(error?.message ?? error).split("\n")[0]})`);
         continue;
       }

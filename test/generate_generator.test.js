@@ -82,7 +82,7 @@ test("a batch is refused without a budget headless, over its budget, or unpriced
   for (const [options, reason] of [
     [{}, /needs --budget/],
     [{ budget: { usd: 0.05 } }, /would pass the budget of 0.05 usd/],
-    [{ budget: { usd: 10 }, unpriced: true }, /no price in credits/]
+    [{ budget: { credits: 1000 }, unpriced: true }, /no price in credits and reports no cost.*--max-generations/]
   ]) {
     const fake = createFakeProvider({ price: 0.05 });
     const provider = options.unpriced ? { ...fake, quote: async () => ({ amount: null, unit: "credits" }) } : fake;
@@ -190,4 +190,25 @@ test("the vision check passes a keyframe that shows the subject with no text, an
   assert.deepEqual(await check({ file: "k.png", request }), { ok: false, reason: "a sign with words", change: "No signs anywhere." });
   assert.match(seen[0].input, /a field of wheat at dawn/);
   assert.equal(seen[0].images[0].url, "data:image/png;base64,AA==");
+});
+
+test("an unpriced provider is held to its call cap, even with a budget, across runs", async (t) => {
+  const dir = await project(t);
+  const fake = createFakeProvider({ price: 0 });
+  // No price, no cost: the shape of a provider whose spend can't be counted.
+  const unpriced = { ...fake, quote: async () => ({ amount: null, unit: "credits" }), fetch: async (...args) => { const { cost: _cost, ...rest } = await fake.fetch(...args); return rest; } };
+  const notes = [];
+  const out = await plan(dir, createGenerator({ project: dir, image: unpriced, video: unpriced, budget: { credits: 1000 }, maxCalls: 3, pollMs: NO_POLL, notice: (line) => notes.push(line) }));
+  assert.deepEqual(submits(fake), ["s1:image", "s1:video", "s2:image"]);
+  assert.equal(out.shots.length, 2);
+  assert.match(notes.join("\n"), /cap of 3 unpriced call\(s\) is reached/);
+  const ledger = await readLedger(dir);
+  assert.equal(ledger.length, 3);
+  assert.ok(ledger.every((entry) => entry.cost_unknown === true));
+
+  // Headless with only the cap is allowed, and the cap is not reset by a re-run.
+  const again = createFakeProvider({ price: 0 });
+  const later = { ...again, quote: async () => ({ amount: null, unit: "credits" }) };
+  await plan(dir, createGenerator({ project: dir, image: later, video: later, maxCalls: 3, pollMs: NO_POLL }));
+  assert.deepEqual(submits(again), []);
 });
