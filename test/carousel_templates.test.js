@@ -10,26 +10,28 @@ import { validateModuleParams } from "@launchclip/core/module-schemas.mjs";
 import { declaredTextBoxes } from "../src/carousel/check.js";
 import { SAMPLE_PROJECTS, sampleStory } from "../scripts/carousel-template-samples.mjs";
 
-const studyNotes = CAROUSEL_TEMPLATES["study-notes"];
+const steps = CAROUSEL_TEMPLATES["numbered-steps"];
 
-test("every template is sound, and the eight cover the RFC's use cases", () => {
-  assert.equal(CAROUSEL_TEMPLATE_IDS.length, 8);
+test("every template is sound; the proven styles and LaunchClip's own cover the RFC's use cases", () => {
+  assert.equal(CAROUSEL_TEMPLATE_IDS.length, 11);
   for (const id of CAROUSEL_TEMPLATE_IDS) assert.deepEqual(templateProblems(id, undefined, { arcIds: CAROUSEL_ARC_IDS }), []);
   for (const arc of ["ad", "listicle", "how-to", "story", "quote", "data", "myth-fact", "before-after"]) assert.ok(CAROUSEL_TEMPLATE_IDS.some((id) => CAROUSEL_TEMPLATES[id].arcs.includes(arc)), `${arc} has a template`);
-  assert.ok(CAROUSEL_TEMPLATE_IDS.some((id) => CAROUSEL_TEMPLATES[id].ground === "light"), "a light template");
+  for (const ground of ["dark", "light", "brand"]) assert.ok(CAROUSEL_TEMPLATE_IDS.some((id) => CAROUSEL_TEMPLATES[id].ground === ground), `a ${ground} ground`);
   // No fixed colours: a template names the brand's roles, never a hex.
   assert.doesNotMatch(JSON.stringify(CAROUSEL_TEMPLATES), /#[0-9a-f]{3,6}\b/i);
 });
 
-test("template validation refuses a mixed ground, an unknown grammar and a brand surface without its plate", () => {
-  const broken = { ...studyNotes, surface: { ...studyNotes.surface, body: "light" }, grammar: { ...studyNotes.grammar, payoff: "mosaic" }, brandPlate: null };
+test("template validation refuses a mixed ground, an unknown grammar, a content-only grammar and a photo surface without a reading layer", () => {
+  const broken = { ...steps, surface: { ...steps.surface, body: "light", cover: "on-image" }, grammar: { ...steps.grammar, payoff: "mosaic", body: "proof-stat" }, reading: undefined };
   const errors = templateProblems("broken", broken).join("\n");
   assert.match(errors, /surface\.body is light on a dark ground/);
   assert.match(errors, /grammar\.payoff must be one of/);
-  assert.match(errors, /needs a brandPlate/);
+  assert.match(errors, /grammar\.body is proof-stat, which only content asks for/);
+  assert.match(errors, /surface\.cover is on-image, so the template needs a reading layer/);
+  assert.match(templateProblems("lit", { ...CAROUSEL_TEMPLATES["lit-window"], surface: { ...CAROUSEL_TEMPLATES["lit-window"].surface, cta: "brand" } }).join("\n"), /needs a brandPlate/);
 });
 
-test("grammar picking: a pair, a figure, a list, the cover, a photo", () => {
+test("grammar picking: a pair, a figure, a list, the cover, a photo, then the template's choice", () => {
   assert.equal(slideGrammar({ role: "body", headline: "Myth: remote teams talk less", body: "Fact: they write more" }), "two-region");
   assert.equal(slideGrammar({ role: "body", headline: "After: every merge ships", body: "Before: a weekly train" }), "two-region");
   assert.equal(slideGrammar({ role: "body", headline: "Don't: ship on Friday", body: "Do: ship midweek" }), "two-region");
@@ -46,8 +48,14 @@ test("grammar picking: a pair, a figure, a list, the cover, a photo", () => {
   assert.equal(slideGrammar({ role: "body", headline: "One view" }), "text-card");
   assert.equal(slideGrammar({ role: "cta", headline: "Save 50% today" }), "text-card", "the cta is the cta");
   // The template's choice for a role, when the slide has what it needs.
-  assert.equal(slideGrammar({ role: "body", headline: "Week one", photo: "assets/a.jpg" }, CAROUSEL_TEMPLATES["photo-diary"]), "full-bleed");
-  assert.equal(slideGrammar({ role: "cover", headline: "Release prep" }, CAROUSEL_TEMPLATES["then-now"]), "text-card", "full-bleed needs a photo");
+  assert.equal(slideGrammar({ role: "body", headline: "Name the problem" }, steps), "step");
+  assert.equal(slideGrammar({ role: "cover", headline: "Write the brief", photo: "assets/a.jpg" }, steps), "image-panel");
+  assert.equal(slideGrammar({ role: "cover", headline: "Write the brief" }, steps), "text-card", "image-panel needs a photo");
+  assert.equal(slideGrammar({ role: "body", headline: "One call", photo: "assets/a.jpg" }, CAROUSEL_TEMPLATES["paper-story"]), "framed-image");
+  // A short list with a photo stays in the template's photo panel; a long one becomes a list.
+  const block = CAROUSEL_TEMPLATES["caption-block"];
+  assert.equal(slideGrammar({ role: "payoff", headline: "Save", items: ["One", "Two", "Three"], photo: "assets/a.jpg" }, block), "image-panel");
+  assert.equal(slideGrammar({ role: "payoff", headline: "Save", items: ["1", "2", "3", "4", "5"], photo: "assets/a.jpg" }, block), "steps");
 });
 
 test("caps: a template's caps sit inside each grammar's, and copy over them is said for the repair", () => {
@@ -55,57 +63,69 @@ test("caps: a template's caps sit inside each grammar's, and copy over them is s
     const caps = slideCaps(CAROUSEL_TEMPLATES[id], grammar);
     assert.ok(caps.headline <= CAROUSEL_GRAMMARS[grammar].caps.headline && caps.body <= CAROUSEL_GRAMMARS[grammar].caps.body);
   }
-  const errors = templateCopyProblems("study-notes", [
-    { id: "a", role: "body", headline: "x".repeat(49) },
+  const errors = templateCopyProblems("numbered-steps", [
+    { id: "a", role: "cover", headline: "x".repeat(49) },
     { id: "b", role: "payoff", headline: "List", items: ["one", "two", "three", "four", "five", "six", "seven"] },
     { id: "c", role: "body", headline: "Myth: " + "y".repeat(41), body: "Fact: short" },
     { id: "d", role: "body", quote: { text: "Words" } },
-    { id: "e", role: "body", headline: "Fine", body: "Short enough" }
+    { id: "e", role: "body", headline: "Name the problem", body: "One sentence." },
+    { id: "f", role: "body", headline: "Fine" }
   ]).join("\n");
-  assert.match(errors, /slides\[0\] \(a\) headline is 49 characters; the study-notes template's text-card slide holds 48/);
+  assert.match(errors, /slides\[0\] \(a\) headline is 49 characters; the numbered-steps template's text-card slide holds 48/);
   assert.match(errors, /slides\[1\] \(b\) has 7 items; a list holds 6/);
   assert.match(errors, /"Myth" side is 41 characters; a two-region side holds 40/);
   assert.match(errors, /quote needs its exact words and the person/);
-  assert.doesNotMatch(errors, /\(e\)/);
+  assert.match(errors, /slides\[4\] \(e\) has a body; the numbered-steps template's step slide is the headline alone/);
+  assert.doesNotMatch(errors, /\(f\)/);
   assert.match(templateCopyProblems("nope", [])[0], /is not a template/);
 });
 
 test("auto-pick: the brief's words, the arc and photos lead; the seed varies the pick among close ones", () => {
   const best = (brief, arc, images = false) => templateScores({ brief, arc, images }).sort((a, b) => b.score - a.score)[0].id;
-  assert.equal(best("launch ad for our saas dashboard app, install today", "ad"), "product-proof");
-  assert.equal(best("myths about remote work, the truth", "myth-fact"), "myth-split");
-  assert.equal(best("survey report: release data and growth trends", "data"), "signal-report");
-  assert.equal(best("my year of running before work, a personal story", "story", true), "photo-diary");
-  assert.equal(best("a monday motivation quote", "quote"), "quiet-quote");
-  assert.equal(pickTemplate({ template: "then-now", brief: "myths" }), "then-now", "carousel.template wins");
+  assert.equal(best("five steps to write a brief, a numbered guide", "how-to"), "numbered-steps");
+  assert.equal(best("coaching advice on habits and discipline, with photos", "listicle", true), "cinematic-dark");
+  assert.equal(best("our values, a bold manifesto", "quote"), "bold-statement");
+  assert.equal(best("customer testimonial quotes", "quote"), "pull-quote");
+  assert.equal(best("a photo essay from our community trip", "story", true), "photo-essay");
+  assert.equal(best("launch our app feature with screenshots", "ad", true), "lit-window");
+  assert.equal(best("education checklist with photos", "listicle", true), "caption-block");
+  assert.equal(best("the story behind our product, founder craft", "story", true), "paper-story");
+  assert.equal(pickTemplate({ template: "photo-essay", brief: "myths" }), "photo-essay", "carousel.template wins");
   assert.throws(() => pickTemplate({ template: "glossy" }), /carousel.template must be one of/);
-  const seeds = Array.from({ length: 24 }, (_, i) => pickTemplate({ brief: "habits of fast teams", arc: "listicle", seed: `style-${i}` }));
+  const seeds = Array.from({ length: 24 }, (_, i) => pickTemplate({ brief: "a founder note, one observation", arc: "single", seed: `style-${i}` }));
   assert.ok(new Set(seeds).size >= 2, "different seeds pick different close templates");
-  assert.ok(seeds.every((id) => CAROUSEL_TEMPLATES[id].arcs.includes("listicle")), "only close ones");
-  assert.equal(pickTemplate({ brief: "habits of fast teams", arc: "listicle", seed: "style-3" }), seeds[3], "the same seed picks the same template");
+  assert.ok(seeds.every((id) => CAROUSEL_TEMPLATES[id].arcs.includes("single")), "only close ones");
+  assert.equal(pickTemplate({ brief: "a founder note, one observation", arc: "single", seed: "style-3" }), seeds[3], "the same seed picks the same template");
 });
 
 test("carousel.template is a carousel field, checked against the templates", async () => {
   const story = JSON.parse(await readFile(new URL("../examples/carousel/listicle-4x5/storyboard.json", import.meta.url), "utf8"));
-  assert.deepEqual(carouselProblems({ ...story, carousel: { ...story.carousel, template: "study-notes" } }), []);
+  assert.deepEqual(carouselProblems({ ...story, carousel: { ...story.carousel, template: "numbered-steps" } }), []);
   assert.match(carouselProblems({ ...story, carousel: { ...story.carousel, template: "glossy" } }).join("\n"), /carousel.template must be one of/);
 });
 
-test("layout: surfaces become plates; a light ground turns the brand over with readable type", () => {
-  const slides = [{ id: "c", role: "cover", headline: "Big promise" }, { id: "b", role: "body", headline: "Point", photo: "assets/p.jpg" }, { id: "x", role: "cta", headline: "Follow", photo: "assets/p.jpg" }];
-  const dark = layoutCarousel("photo-diary", slides);
-  assert.deepEqual(dark.story.plate, { kind: "grain", params: { tint: "neutral" } });
-  assert.equal(dark.scenes[1].module, "photo-scene");
-  assert.deepEqual(dark.scenes[2].plate, { kind: "image", params: { src: "assets/p.jpg", dim: 0.6, blur: 6 } }, "on-image under a type slide: the photo behind a 0.6 reading layer");
-  assert.equal(layoutCarousel("study-notes", slides).scenes[0].plate.params.tint, "primary", "brand surface: a plate lit in the brand's primary");
+test("layout: grounds turn the brand over with readable type; photo surfaces and steps", () => {
   const brand = { colors: { bg: "#13151a", primary: "#ffb020", accent: "#ff6b5f", ink: "#13151a", paper: "#f5f1e8" } };
-  const light = layoutCarousel("field-notes", slides, { brand }).story.brand;
-  assert.equal(light.palette, "as-given");
-  assert.equal(light.colors.bg, "#f5f1e8");
-  assert.equal(light.colors.paper, "#13151a");
-  for (const key of ["paper", "primary", "accent"]) assert.ok(contrastRatio(light.colors[key], light.colors.bg) >= 4.5, `${key} reads on the light ground`);
+  const slides = [{ id: "c", role: "cover", headline: "Big promise", photo: "assets/p.jpg" }, { id: "b", role: "body", headline: "Point one" }, { id: "b2", role: "body", headline: "Point two", photo: "assets/p.jpg" }, { id: "x", role: "cta", headline: "Follow", handle: "me.test", photo: "assets/p.jpg" }];
+  const cinematic = layoutCarousel("cinematic-dark", slides, { brand });
+  assert.deepEqual(cinematic.scenes[0].plate, { kind: "image", params: { src: "assets/p.jpg", dim: 0.6, blur: 0 } }, "the photo crisp under a 0.6 reading layer");
+  assert.equal(cinematic.scenes[1].plate, undefined, "no photo: the ground");
+  assert.deepEqual(cinematic.story.background, { kind: "flat" });
+  const numbered = layoutCarousel("numbered-steps", slides, { brand });
+  assert.deepEqual(numbered.scenes.map((scene) => scene.module), ["split-screen", "section-card", "section-card", "cta"]);
+  assert.deepEqual(numbered.scenes.slice(1, 3).map((scene) => scene.params.number), [1, 2], "steps are numbered in slide order");
+  assert.equal(numbered.scenes[0].params.kicker, "Swipe →", "the cover asks for the swipe");
+  const note = layoutCarousel("plain-note", slides, { brand });
+  assert.ok(note.scenes.slice(0, 3).every((scene) => JSON.stringify(scene.params).includes("me.test")), "the identity line on every slide");
+  for (const [id, ground] of [["paper-story", "light"], ["plain-note", "light"], ["bold-statement", "brand"], ["plain-note-dark", "dark"]]) {
+    const { colors } = layoutCarousel(id, slides, { brand }).story.brand;
+    assert.equal(layoutCarousel(id, slides, { brand }).story.brand.palette, "as-given", id);
+    for (const key of ["paper", "primary"]) assert.ok(contrastRatio(colors[key], colors.bg) >= 4.5, `${id} (${ground}): ${key} reads on the ground`);
+    assert.ok(contrastRatio(colors.ink, colors.primary) >= 3, `${id}: ink reads on a primary fill`);
+  }
+  assert.equal(layoutCarousel("bold-statement", slides, { brand }).story.brand.colors.bg, "#ffb020", "the primary is the page");
   assert.equal(lightBrand({ colors: {} }).colors.bg, undefined, "no colours, nothing to turn over");
-  assert.throws(() => layoutCarousel("study-notes", slides, { aspect: "16:9" }), /lays out at 4:5, 1:1, 9:16/);
+  assert.throws(() => layoutCarousel("numbered-steps", slides, { aspect: "16:9" }), /lays out at 4:5, 1:1, 9:16/);
 });
 
 test("samples: one per template, current with the templates, valid, and laid out at 4:5, 1:1 and 9:16 above the type floors", async () => {

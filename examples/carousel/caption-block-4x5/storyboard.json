@@ -1,0 +1,155 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "caption-block (sample carousel template, instagram)",
+  "lane": "motion",
+  "format": {
+    "kind": "carousel",
+    "width": 1080,
+    "height": 1350,
+    "fps": 30,
+    "duration": 20,
+    "platform": "instagram"
+  },
+  "carousel": {
+    "arc": "listicle",
+    "goal": "save",
+    "destinations": [
+      "instagram"
+    ],
+    "template": "caption-block",
+    "caption": {
+      "hook": "Most morning routines fail by Wednesday.",
+      "body": "Three that survive a busy week.",
+      "cta": "Save this for Monday.",
+      "tags": [
+        "habits",
+        "mornings"
+      ]
+    }
+  },
+  "background": {
+    "kind": "flat"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#3f1c22",
+      "primary": "#f06b4f",
+      "accent": "#f2c14e",
+      "ink": "#3f1c22",
+      "paper": "#fff1d8"
+    },
+    "fonts": {
+      "display": "big-shoulders-display",
+      "body": "dm-sans",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "audio": null,
+  "scenes": [
+    {
+      "id": "cover",
+      "module": "split-screen",
+      "start": 0,
+      "end": 4,
+      "energy": 2,
+      "slide": {
+        "role": "cover",
+        "medium": "still",
+        "alt": "Field guide. 3 morning habits that survive a busy week. over a photo"
+      },
+      "params": {
+        "media": "assets/photos/ridge-sun.jpg",
+        "variant": "top",
+        "share": 0.5,
+        "kicker": "Field guide →",
+        "title": "3 morning habits that survive a busy week",
+        "align": "left"
+      }
+    },
+    {
+      "id": "light",
+      "module": "split-screen",
+      "start": 4,
+      "end": 8,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "01. Get outside before the screen. Ten minutes of daylight sets the clock for the day.. over a photo"
+      },
+      "params": {
+        "media": "assets/photos/ridge.jpg",
+        "variant": "top",
+        "share": 0.45,
+        "kicker": "01",
+        "title": "Get outside before the screen",
+        "align": "left",
+        "body": "Ten minutes of daylight sets the clock for the day."
+      }
+    },
+    {
+      "id": "plan",
+      "module": "split-screen",
+      "start": 8,
+      "end": 12,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "02. Pick one task before the inbox. Write it on paper, not in the app.. over a photo"
+      },
+      "params": {
+        "media": "assets/photos/ridge-dusk.jpg",
+        "variant": "top",
+        "share": 0.45,
+        "kicker": "02",
+        "title": "Pick one task before the inbox",
+        "align": "left",
+        "body": "Write it on paper, not in the app."
+      }
+    },
+    {
+      "id": "list",
+      "module": "split-screen",
+      "start": 12,
+      "end": 16,
+      "energy": 1,
+      "slide": {
+        "role": "payoff",
+        "medium": "still",
+        "alt": "Save this checklist. Daylight first. One task on paper. Inbox after ten. over a photo"
+      },
+      "params": {
+        "media": "assets/photos/ridge-sun.jpg",
+        "variant": "top",
+        "share": 0.32,
+        "title": "Save this checklist",
+        "align": "left",
+        "items": [
+          "Daylight first",
+          "One task on paper",
+          "Inbox after ten"
+        ]
+      }
+    },
+    {
+      "id": "cta",
+      "module": "cta",
+      "start": 16,
+      "end": 20,
+      "energy": 2,
+      "slide": {
+        "role": "cta",
+        "medium": "still",
+        "alt": "Save it for Monday"
+      },
+      "params": {
+        "action": "Save it for Monday",
+        "emphasis": "Save",
+        "handle": "slowmornings.test",
+        "variant": "flush"
+      }
+    }
+  ],
+  "notes": "Sample for a carousel template (docs/guide/carousels.md, Templates), written by scripts/carousel-template-samples.mjs. Figures, names and handles are illustrative. Photos are stand-ins already in the repo."
+}

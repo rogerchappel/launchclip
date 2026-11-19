@@ -1,0 +1,168 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "numbered-steps (sample carousel template, tiktok)",
+  "lane": "motion",
+  "format": {
+    "kind": "carousel",
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 24,
+    "platform": "tiktok"
+  },
+  "carousel": {
+    "arc": "how-to",
+    "goal": "save",
+    "destinations": [
+      "tiktok"
+    ],
+    "template": "numbered-steps",
+    "caption": {
+      "hook": "A brief takes an hour. Skipping it costs a week.",
+      "body": "Four steps, one page, before the first commit.",
+      "cta": "Save this for your next kickoff.",
+      "tags": [
+        "product",
+        "writing",
+        "planning"
+      ]
+    }
+  },
+  "background": {
+    "kind": "flat"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#040405",
+      "primary": "#f2c14e",
+      "accent": "#f06b4f",
+      "ink": "#040405",
+      "paper": "#fbfbfb"
+    },
+    "fonts": {
+      "display": "oswald",
+      "body": "plus-jakarta-sans",
+      "meta": "jetbrains-mono"
+    },
+    "palette": "as-given"
+  },
+  "audio": null,
+  "scenes": [
+    {
+      "id": "cover",
+      "module": "split-screen",
+      "start": 0,
+      "end": 4,
+      "energy": 2,
+      "slide": {
+        "role": "cover",
+        "medium": "still",
+        "alt": "Write the brief before you build. Four steps, one page. over a photo"
+      },
+      "params": {
+        "media": "assets/photos/ridge-dusk.jpg",
+        "variant": "top",
+        "share": 0.5,
+        "kicker": "Swipe →",
+        "title": "Write the brief before you build",
+        "align": "center",
+        "body": "Four steps, one page"
+      }
+    },
+    {
+      "id": "step-1",
+      "module": "section-card",
+      "start": 4,
+      "end": 8,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Name the problem in one sentence"
+      },
+      "params": {
+        "title": "Name the problem in one sentence",
+        "kicker": "Step",
+        "number": 1,
+        "variant": "centered"
+      }
+    },
+    {
+      "id": "step-2",
+      "module": "section-card",
+      "start": 8,
+      "end": 12,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Say who it is for, by name"
+      },
+      "params": {
+        "title": "Say who it is for, by name",
+        "kicker": "Step",
+        "number": 2,
+        "variant": "centered"
+      }
+    },
+    {
+      "id": "step-3",
+      "module": "section-card",
+      "start": 12,
+      "end": 16,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Write what done looks like"
+      },
+      "params": {
+        "title": "Write what done looks like",
+        "kicker": "Step",
+        "number": 3,
+        "variant": "centered"
+      }
+    },
+    {
+      "id": "brief",
+      "module": "item-list",
+      "start": 16,
+      "end": 20,
+      "energy": 1,
+      "slide": {
+        "role": "payoff",
+        "medium": "still",
+        "alt": "The brief, in four lines. The problem. Who it is for. What done looks like. What is out of scope"
+      },
+      "params": {
+        "title": "The brief, in four lines",
+        "items": [
+          "The problem",
+          "Who it is for",
+          "What done looks like",
+          "What is out of scope"
+        ],
+        "variant": "stack"
+      }
+    },
+    {
+      "id": "cta",
+      "module": "cta",
+      "start": 20,
+      "end": 24,
+      "energy": 2,
+      "slide": {
+        "role": "cta",
+        "medium": "still",
+        "alt": "Save this for your next kickoff"
+      },
+      "params": {
+        "action": "Save this for your next kickoff",
+        "emphasis": "Save",
+        "handle": "notes.test",
+        "variant": "centered"
+      }
+    }
+  ],
+  "notes": "Sample for a carousel template (docs/guide/carousels.md, Templates), written by scripts/carousel-template-samples.mjs. Figures, names and handles are illustrative. Photos are stand-ins already in the repo."
+}

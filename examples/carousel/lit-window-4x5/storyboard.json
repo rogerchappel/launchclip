@@ -1,0 +1,123 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "lit-window (sample carousel template, instagram)",
+  "lane": "motion",
+  "format": {
+    "kind": "carousel",
+    "width": 1080,
+    "height": 1350,
+    "fps": 30,
+    "duration": 16,
+    "platform": "instagram"
+  },
+  "carousel": {
+    "arc": "ad",
+    "goal": "install",
+    "destinations": [
+      "instagram"
+    ],
+    "template": "lit-window",
+    "caption": {
+      "hook": "Release day should be boring.",
+      "body": "Every check, review and rollout in one place.",
+      "cta": "Install it free.",
+      "tags": []
+    }
+  },
+  "plate": {
+    "kind": "spotlight",
+    "params": {
+      "tint": "primary"
+    }
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0b1020",
+      "primary": "#5b84ff",
+      "accent": "#22d3a6",
+      "ink": "#0b1020",
+      "paper": "#f4f6fb"
+    },
+    "fonts": {
+      "display": "sora",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "audio": null,
+  "scenes": [
+    {
+      "id": "cover",
+      "module": "landscape-card",
+      "start": 0,
+      "end": 4,
+      "energy": 2,
+      "slide": {
+        "role": "cover",
+        "medium": "still",
+        "alt": "Ship releases without the panic. Every check, one screen. over a photo"
+      },
+      "params": {
+        "media": "assets/photos/dashboard.jpg",
+        "kicker": "Swipe →",
+        "title": "Ship releases without the panic",
+        "caption": "Every check, one screen"
+      }
+    },
+    {
+      "id": "one-view",
+      "module": "landscape-card",
+      "start": 4,
+      "end": 8,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Every check in one view. Builds, reviews and rollouts, live.. over a photo"
+      },
+      "params": {
+        "media": "assets/photos/dashboard.jpg",
+        "title": "Every check in one view",
+        "caption": "Builds, reviews and rollouts, live."
+      }
+    },
+    {
+      "id": "proof",
+      "module": "stat-card",
+      "start": 8,
+      "end": 12,
+      "energy": 1,
+      "slide": {
+        "role": "payoff",
+        "medium": "still",
+        "alt": "Less prep, more shipping. 80% less time on release prep"
+      },
+      "params": {
+        "value": "80%",
+        "label": "less time on release prep",
+        "source": "Beta teams, 2026 (illustrative)",
+        "variant": "giant"
+      }
+    },
+    {
+      "id": "cta",
+      "module": "cta",
+      "start": 12,
+      "end": 16,
+      "energy": 2,
+      "slide": {
+        "role": "cta",
+        "medium": "still",
+        "alt": "Install it free today. Free for teams of five"
+      },
+      "params": {
+        "action": "Install it free today",
+        "emphasis": "free",
+        "detail": "Free for teams of five",
+        "handle": "shipdeck.test",
+        "variant": "flush"
+      }
+    }
+  ],
+  "notes": "Sample for a carousel template (docs/guide/carousels.md, Templates), written by scripts/carousel-template-samples.mjs. Figures, names and handles are illustrative. Photos are stand-ins already in the repo."
+}

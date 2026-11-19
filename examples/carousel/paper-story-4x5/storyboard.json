@@ -1,0 +1,140 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "paper-story (sample carousel template, instagram)",
+  "lane": "motion",
+  "format": {
+    "kind": "carousel",
+    "width": 1080,
+    "height": 1350,
+    "fps": 30,
+    "duration": 20,
+    "platform": "instagram"
+  },
+  "carousel": {
+    "arc": "story",
+    "goal": "follow",
+    "destinations": [
+      "instagram"
+    ],
+    "template": "paper-story",
+    "caption": {
+      "hook": "We nearly shipped the wrong product.",
+      "body": "How one conversation changed the roadmap.",
+      "cta": "Follow for the next chapter.",
+      "tags": [
+        "founder",
+        "product"
+      ]
+    }
+  },
+  "background": {
+    "kind": "paper"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#f4ebdd",
+      "primary": "#ad4e33",
+      "accent": "#2f5d50",
+      "ink": "#f4ebdd",
+      "paper": "#57241d"
+    },
+    "fonts": {
+      "display": "playfair-display",
+      "body": "dm-sans",
+      "meta": "jetbrains-mono"
+    },
+    "palette": "as-given"
+  },
+  "audio": null,
+  "scenes": [
+    {
+      "id": "cover",
+      "module": "landscape-card",
+      "start": 0,
+      "end": 4,
+      "energy": 2,
+      "slide": {
+        "role": "cover",
+        "medium": "still",
+        "alt": "A product story. The week we nearly shipped the wrong thing. over a photo"
+      },
+      "params": {
+        "media": "assets/photos/ridge-dusk.jpg",
+        "kicker": "A product story →",
+        "title": "The week we nearly shipped the wrong thing"
+      }
+    },
+    {
+      "id": "call",
+      "module": "landscape-card",
+      "start": 4,
+      "end": 8,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "One customer call changed the roadmap. They never opened the feature we loved most.. over a photo"
+      },
+      "params": {
+        "media": "assets/photos/ridge.jpg",
+        "title": "One customer call changed the roadmap",
+        "caption": "They never opened the feature we loved most."
+      }
+    },
+    {
+      "id": "cut",
+      "module": "landscape-card",
+      "start": 8,
+      "end": 12,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "So we cut it, and shipped the boring part. Exports. Nobody tweets about exports.. over a photo"
+      },
+      "params": {
+        "media": "assets/photos/ridge-sun.jpg",
+        "title": "So we cut it, and shipped the boring part",
+        "caption": "Exports. Nobody tweets about exports."
+      }
+    },
+    {
+      "id": "lesson",
+      "module": "motion-title",
+      "start": 12,
+      "end": 16,
+      "energy": 1,
+      "slide": {
+        "role": "payoff",
+        "medium": "still",
+        "alt": "The lesson. Ask what they do on Monday morning. Not what they wish they did."
+      },
+      "params": {
+        "text": "Ask what they do on Monday morning",
+        "kicker": "The lesson",
+        "sub": "Not what they wish they did.",
+        "align": "left",
+        "variant": "mask-reveal-up"
+      }
+    },
+    {
+      "id": "cta",
+      "module": "cta",
+      "start": 16,
+      "end": 20,
+      "energy": 2,
+      "slide": {
+        "role": "cta",
+        "medium": "still",
+        "alt": "Follow for the next chapter"
+      },
+      "params": {
+        "action": "Follow for the next chapter",
+        "emphasis": "Follow",
+        "handle": "quietbuild.test",
+        "variant": "flush"
+      }
+    }
+  ],
+  "notes": "Sample for a carousel template (docs/guide/carousels.md, Templates), written by scripts/carousel-template-samples.mjs. Figures, names and handles are illustrative. Photos are stand-ins already in the repo."
+}

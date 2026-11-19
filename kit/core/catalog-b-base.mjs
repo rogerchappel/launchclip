@@ -369,6 +369,16 @@ function fontStack(name, role, check, path) {
   return registryStack(name, role);
 }
 
+// A carousel slide that is not 9:16 sits in a feed, not under a Shorts UI: its
+// modules lay out inside the feed's margins (the strictest 4:5 and 1:1
+// destination margins in carousel.mjs: 5% each side and the top, 8% the
+// bottom). A 9:16 slide keeps the Shorts zone.
+export const FEED_SAFE = Object.freeze({top: 0.05, bottom: 0.08, left: 0.05, right: 0.05});
+export function carouselZone(ctx, {width, height}) {
+  if (!ctx?.noCaptions || height / width >= 1.5) return null;
+  return {x: width * FEED_SAFE.left, y: height * FEED_SAFE.top, width: width * (1 - FEED_SAFE.left - FEED_SAFE.right), height: height * (1 - FEED_SAFE.top - FEED_SAFE.bottom)};
+}
+
 export function createBase(moduleId, params, ctx, {allowed, required = [], hidesCaptions = false, frameSafe = false}) {
   if (!ctx || typeof ctx !== 'object') throw new Error(`${moduleId}: ctx is required`);
   const id = ctx.id;
@@ -423,7 +433,7 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
   // Safe zone: Shorts (portrait) or title-safe (landscape). Modules that keep
   // captions stay above the caption band; a carousel slide has none (ctx.noCaptions).
   const geometry = profileGeometry(canvas, portrait ? 'shorts' : 'landscape');
-  const zone = geometry.safeZone, band = geometry.captionBand;
+  const zone = carouselZone(ctx, canvas) ?? geometry.safeZone, band = geometry.captionBand;
   const captionGap = 30 * unit;
   const bottom = hidesCaptions || ctx.noCaptions ? zone.y + zone.height : Math.min(zone.y + zone.height, band.y - captionGap);
   // Round inward to 0.01 px so the rect never pokes outside the zone.
