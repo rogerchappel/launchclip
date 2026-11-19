@@ -242,6 +242,15 @@ export async function projectBriefs(project, hooks = {}) {
   return [...footage, ...await storyEntries(project, story, hooks)];
 }
 
+/**
+ * Each story shot's brief (or why it is refused) and one plate brief per
+ * place, in a project with a show bible and an animatic; [] without them.
+ * → [{request: {id, scene_id, role: "story" | "plate"}, shot | place, brief, reason}]
+ */
+export async function storyBriefs(project, story, hooks = {}) {
+  return storyEntries(project, story, hooks);
+}
+
 async function storyEntries(project, story, { frame = grabFrame } = {}) {
   if (!existsSync(path.join(project, BIBLE_FILE))) return [];
   const { animatic: found, fresh } = await readAnimatic(project);

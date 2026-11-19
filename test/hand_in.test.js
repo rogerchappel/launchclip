@@ -4,42 +4,22 @@
 // through stand-ins; the last test decodes real files with ffmpeg.
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
-import { bibleCharacter, bibleHash, withBible } from "@launchclip/core/bible.mjs";
-import { resolveStoryCast } from "@launchclip/core/characters/cues.mjs";
 import { resolveModule } from "@launchclip/core/modules.mjs";
 import { charactersView } from "@launchclip/core/catalog-characters.mjs";
 import { runCli } from "../src/cli.js";
 import { HANDIN_REPORT, HANDIN_SCHEMA, applyHandIn, checkHandIn, visionHandInJudge } from "../src/hand_in.js";
 import { runFinish } from "../src/finish.js";
 import { shotList } from "../src/story_shots.js";
-import { readProjectStory } from "../src/story_loader.js";
 import { ffmpegMissing, mediaSkip } from "./helpers/media.js";
+import { PNG, probeFakes, storyProject } from "./helpers/hand_in_project.js";
 
-const FIXTURES = new URL("./fixtures/", import.meta.url);
-const PNG = new URL("parity/assets/testsrc.png", FIXTURES);
 const SOURCE = { made_with: "a test fixture", licence: "CC0-1.0", generated: false };
-
-// The fixture story pinned to its bible, with the bible's sheets on disk.
-async function project() {
-  const dir = await mkdtemp(path.join(tmpdir(), "hand-in-"));
-  await cp(new URL("animation-first-run/", FIXTURES), dir, { recursive: true });
-  const story = JSON.parse(await readFile(path.join(dir, "storyboard.json"), "utf8"));
-  // The fixture bible's world and rules; its cast frozen from the story's own rig params.
-  const draft = JSON.parse(await readFile(new URL("generate-story/BIBLE.json", FIXTURES), "utf8"));
-  const { members } = resolveStoryCast(story);
-  const frozen = { ...draft, cast: { style: story.cast.style, characters: story.cast.characters.map(({ id }) => bibleCharacter(members.get(id), { sheet: `bible/sheets/${id}.png` })) } };
-  const bible = { ...frozen, hash: bibleHash(frozen) };
-  await writeFile(path.join(dir, "BIBLE.json"), JSON.stringify(bible));
-  await mkdir(path.join(dir, "bible/sheets"), { recursive: true });
-  for (const member of bible.cast.characters) await cp(PNG, path.join(dir, member.sheet));
-  await writeFile(path.join(dir, "storyboard.json"), JSON.stringify({ ...withBible(story, bible), audio: { words: "NARRATION.json" } }));
-  return { dir, bible, story: (await readProjectStory(dir)).resolved };
-}
+const project = () => storyProject();
+const fakes = probeFakes;
 
 // Hand in the named assets: a whole shot per id (files only named; the probe stand-in sizes them), and plates.
 async function handIn(dir, bible, { shots = [], places = [], hash = bible.hash } = {}) {
@@ -54,13 +34,6 @@ async function handIn(dir, bible, { shots = [], places = [], hash = bible.hash }
     places: places.map((place) => ({ plate: `assets/plates/${place.place}.png`, source: SOURCE, ...place }))
   }));
 }
-
-// ffprobe/ffmpeg stand-ins: every clip is the story's size and rate and long enough; plates are 1920×1080.
-const fakes = (overrides = {}) => ({
-  probe: async (file) => (file.endsWith(".png") ? { width: 1920, height: 1080, fps: 25, frames: 1 } : { width: 1920, height: 1080, fps: 30, frames: 400, ...(overrides.clip?.(file) ?? {}) }),
-  measure: async (file) => ({ peak: 0.8, motion: overrides.frozen?.(file) ? 0 : 0.05, frames: 4 }),
-  still: async (_video, _at, target) => cp(PNG, target)
-});
 
 test("no HANDIN.json: nothing to check", async () => {
   const { dir, story } = await project();
