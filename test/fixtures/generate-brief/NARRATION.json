@@ -1,0 +1,11 @@
+{
+  "schema_version": "launchclip.narration.v1",
+  "words": [
+    { "text": "Good", "start": 0.1, "end": 0.4 },
+    { "text": "coffee", "start": 0.45, "end": 0.9 },
+    { "text": "starts", "start": 0.95, "end": 1.3 },
+    { "text": "slow.", "start": 1.35, "end": 1.8 },
+    { "text": "Brew", "start": 8.2, "end": 8.6 },
+    { "text": "better.", "start": 8.65, "end": 9.2 }
+  ]
+}
