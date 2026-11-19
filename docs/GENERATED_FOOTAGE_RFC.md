@@ -330,6 +330,26 @@ has not: the sheet still shows the poses and expressions.
    chosen by price per second of final video and how well it holds a
    character from a keyframe, compared through the aggregator adapters.
 
+Status (2026-11-20): phase 5's story shots are built for any provider
+(`src/generate/story.js`; `finish --generate`, and `make --animation
+--generate`). Choices made where this RFC left them open:
+
+- The drafts are the keyframes; with a draft video model
+  (`--generate-draft-video`) they are draft clips too. `--stop-after drafts`
+  stops before any render with HANDIN.json naming the plates and any draft
+  clips (so `handin check` can look at them); the review is those files, not
+  the animatic with drafts swapped in. Headless without `--stop-after`
+  goes on to the finals (as at the bible and the animatic); attended, it
+  asks.
+- A keyframe is checked by the hand-in judge (`src/hand_in.js`
+  `visionHandInJudge`) against the bible's sheets and must_keep; its first
+  finding is the one changed line of the retry. With no vision model the
+  keyframe is accepted unchecked, and the hand-in check marks the shot
+  not-checked.
+- A keyframe is reused across tiers, so a final animates the keyframe its
+  draft was approved from.
+- A plate brief with no place (a shot with no set) is not generated.
+
 ## 10. Risks
 
 - **Character drift is the whole problem.** The bible check catches gross

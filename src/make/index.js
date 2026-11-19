@@ -2410,11 +2410,23 @@ async function finishInputs(ctx, stage = "finish") {
   const finishOptions = { renderer: ctx.renderer, quality: ctx.quality, musicFallback: true, ...(options.concurrency != null ? { concurrency: options.concurrency } : {}), ...(options.music != null ? { music: String(options.music).toLowerCase() } : {}), ...(options.musicVolume != null ? { musicVolume: Number(options.musicVolume) } : {}), ...(options.musicDuck != null ? { musicDuck: Number(options.musicDuck) } : {}), ...(options.musicPrompt != null ? { musicPrompt: String(options.musicPrompt) } : {}), sfx: makeSfxMode(options.sfx, ctx.env), ...(ctx.finishScenes?.length ? { scenes: ctx.finishScenes } : {}) };
   const musicNote = options.music != null ? `--music ${options.music}` : ctx.routing.music ? `the supplied track assets/${ctx.routing.music.path}` : (ctx.env.ELEVENLABS_API_KEY ? "ElevenLabs (ELEVENLABS_API_KEY is set; PAID unless the music lock or cache has the track)" : "the synth bed (no ELEVENLABS_API_KEY)");
   const sfxNote = finishOptions.sfx === "generated" ? "generated per event (ElevenLabs sound effects; PAID unless the project lock or cache has them)" : finishOptions.sfx;
-  const finishAdapters = { env: ctx.env, notice: ctx.say, progress: (event) => ctx.progress?.({ stage, ...event }), ...(adapters.finishAdapters ?? {}) };
+  // An animated story's --generate answers its story shots and plates in finish (src/generate/story.js).
+  if (options.animation) Object.assign(finishOptions, storyGenerateOptions(options));
+  const finishAdapters = { env: ctx.env, notice: ctx.say, progress: (event) => ctx.progress?.({ stage, ...event }), ...(options.animation && ctx.model?.vision ? { handInClient: ctx.model.client } : {}), ...(adapters.ask ? { ask: adapters.ask } : {}), ...(adapters.finishAdapters ?? {}) };
   if (adapters.voiceProvider) finishAdapters.voiceProvider = adapters.voiceProvider;
   if (adapters.normalizeVoice) finishAdapters.normalizeVoice = adapters.normalizeVoice;
   const run = adapters.finish ?? (await import("../finish.js")).runFinish;
   return { finishOptions, finishAdapters, run, musicNote, sfxNote };
+}
+
+// make's --generate flags as finish takes them; --stop-after drafts and --approve drafts pass through.
+function storyGenerateOptions(options) {
+  const keys = ["generate", "generateImage", "generateVideo", "generateDraftVideo", "budget", "budgetDaily", "maxGenerations"];
+  return {
+    ...Object.fromEntries(keys.filter((key) => options[key] != null).map((key) => [key, options[key]])),
+    ...(String(options.stopAfter ?? "").toLowerCase() === "drafts" ? { stopAfter: "drafts" } : {}),
+    ...(approvals(options.approve).includes("drafts") ? { approve: "drafts" } : {})
+  };
 }
 
 // The sound a finish paid for (generated effects, a generated track): once, where it was made.
@@ -2520,6 +2532,11 @@ async function stageFinish(ctx) {
   if (finish.status === "failed") {
     const failed = finish.stages.find((stage) => stage.status === "failed");
     throw new Error(`finish failed at the ${failed?.name ?? "unknown"} stage: ${errorSummary(failed?.error)}`);
+  }
+  if (finish.generate) report.generate = { ...(report.generate ?? {}), story: finish.generate };
+  if (finish.status === "awaiting-approval") {
+    const again = `launchclip make ${JSON.stringify(ctx.text)} --animation --out ${project} --approve drafts`;
+    ctx.stop = { after: "drafts", status: "awaiting-approval", reason: "stopped for approval of the generated drafts (--stop-after drafts)", next: [...(finish.next_steps ?? []).slice(0, 1), `To make the finals and render, run the same command with --approve drafts (${again}); the drafts and everything before them are reused.`] };
   }
   return { status: "done" };
 }

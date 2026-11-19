@@ -25,7 +25,8 @@ export const MAKE_QUALITIES = Object.freeze(["draft", "high"]);
 export const CARD_BACKDROPS = Object.freeze(["off", "footage"]);
 // --stop-after and --approve: the places a run can stop for a person's yes. bible and animatic are a character
 // story's (docs/ANIMATION_PIPELINE_RFC.md §6.3); storyboard is any video's: planned and playable, nothing rendered.
-export const ANIMATION_STOP_POINTS = Object.freeze(["bible", "animatic"]);
+// drafts is a character story's with --generate: its generated keyframes and draft clips (docs/GENERATED_FOOTAGE_RFC.md §6).
+export const ANIMATION_STOP_POINTS = Object.freeze(["bible", "animatic", "drafts"]);
 // The stop of plan-only mode (docs/guide/headless.md "Plan first, render on demand").
 export const PLAN_STOP = "storyboard";
 export const MAKE_STOP_POINTS = Object.freeze([...ANIMATION_STOP_POINTS, PLAN_STOP]);
