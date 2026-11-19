@@ -1469,7 +1469,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 - `carousel export`: Package a rendered carousel for each destination: numbered slides, a PDF for LinkedIn, a card sheet for Meta ads, caption.md, alt.json and CAROUSEL.json listing every file and the check results.
 
   ```text
-  launchclip carousel export <project> [--dest <id>[,<id>...]] [--json] # package rendered slides per destination: PDF, card sheet, caption.md, alt.json, CAROUSEL.json
+  launchclip carousel export <project> [--dest <id>[,<id>...]] [--link <url>] [--json] # package rendered slides per destination: PDF, card sheet, caption.md, alt.json, CAROUSEL.json
   ```
 
 - `generate brief`: Print the generation brief for every footage shot request ({kind: "shot"}) in a project's storyboard, without calling any provider, so it can be pasted into any image or video tool by hand. Each brief has the keyframe (image) prompt and negative, the motion (video) prompt with its length padded at each end, and a hash; a still or an image request stops at the keyframe. A request that names a real product, person, place or event is refused, with the reason. --shot <id> prints one (a request id or its scene id); --json prints {request, brief, reason} for each, plus accepted ({image, video} files) for steps already made for the current brief, which a re-run reuses instead of paying again.

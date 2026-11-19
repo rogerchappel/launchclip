@@ -286,7 +286,7 @@ function titleOptions(value) {
   return value.map((entry) => cleanText(typeof entry === "string" ? entry : entry?.title ?? entry?.text)).filter(Boolean);
 }
 
-function hashtagList(value, title) {
+export function hashtagList(value, title) {
   const given = Array.isArray(value) ? value : typeof value === "string" ? value.split(/[\s,]+/) : null;
   const words = given ?? String(title).toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((word) => word.length >= 4 && !STOP.has(word) && !/^\d+$/.test(word)).slice(0, 3);
   return [...new Set(words.map((word) => String(word).trim().replace(/^#+/, "").replace(/[^\p{L}\p{N}_]/gu, "")).filter(Boolean).map((word) => `#${word}`))];
