@@ -21,7 +21,7 @@ import { commandHelp, helpText, USAGE_GROUPS, wantsHelp } from "./cli_usage.js";
 import { parseSubjectInvocation } from "./subject/cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "queue", "library", "skills", "style", "profile", "skeletons", "cast", "bible", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "preview", "publish-manifest", "make", "research", "history", "fx", "voice", "export", "cutdown", "reel", "sfx", "sound", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "queue", "library", "skills", "style", "profile", "skeletons", "cast", "bible", "generate", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "preview", "publish-manifest", "make", "research", "history", "fx", "voice", "export", "cutdown", "reel", "sfx", "sound", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -54,6 +54,9 @@ export async function runCli(argv, io = {}) {
   // launchclip bible freeze|show <project> [flags]
   const bibleProject = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const bibleInvocation = command === "bible" ? { action: firstArg, project: bibleProject, flagArgs: bibleProject ? rest.slice(1) : rest } : null;
+  // launchclip generate brief <project> [flags]
+  const generateProject = command === "generate" && rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
+  const generateInvocation = command === "generate" ? { action: firstArg, project: generateProject, flagArgs: generateProject ? rest.slice(1) : rest } : null;
   // launchclip profile list | show <id> | measure <folder> [flags]
   const profileTarget = rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const profileInvocation = command === "profile" ? { action: firstArg, target: profileTarget, flagArgs: profileTarget ? rest.slice(1) : rest } : null;
@@ -91,7 +94,7 @@ export async function runCli(argv, io = {}) {
   const researchCaptureInvocation = command === "research" && firstArg === "capture" ? { target: researchCaptureTarget ?? "research", flagArgs: researchCaptureTarget ? rest.slice(1) : rest } : null;
   // launchclip reel <project> | reel check <video>: the positional after "check" is the video.
   const reelFlagArgs = command === "reel" ? (firstArg === "check" ? rest.slice(1) : rest) : null;
-  const flags = parseFlags(reelFlagArgs ?? researchCaptureInvocation?.flagArgs ?? researchAttachInvocation?.flagArgs ?? evidenceInvocation?.flagArgs ?? libraryInvocation?.flagArgs ?? styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? bibleInvocation?.flagArgs ?? collectionInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? skeletonsInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? soundInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? historyInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? (command === "doctor" ? rest.filter((arg) => arg !== "--agent") : rest));
+  const flags = parseFlags(reelFlagArgs ?? researchCaptureInvocation?.flagArgs ?? researchAttachInvocation?.flagArgs ?? evidenceInvocation?.flagArgs ?? libraryInvocation?.flagArgs ?? styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? bibleInvocation?.flagArgs ?? generateInvocation?.flagArgs ?? collectionInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? skeletonsInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? soundInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? historyInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? (command === "doctor" ? rest.filter((arg) => arg !== "--agent") : rest));
   // Model calls in flight together each take their own connection (src/own_connection_fetch.js); a fetch the caller passed is used as it is.
   const tracker = createCostTracker({ fetch: io.fetch ? baseFetch : ownConnectionFetch(baseFetch), limitUsd: parseCostLimit(flags["max-cost-usd"] ?? process.env.LAUNCHCLIP_MAX_COST_USD) });
   const previousFetch = globalThis.fetch;
@@ -145,6 +148,15 @@ export async function runCli(argv, io = {}) {
         stdout.write(`${JSON.stringify(result, null, 2)}\n`);
         throw new Error(`launchclip bible show: ${result.errors.length} error(s) in ${result.file}`);
       }
+    } else if (command === "generate") {
+      if (generateInvocation.action !== "brief") throw new Error(`launchclip generate needs an action: launchclip generate brief <project> [--shot <id>] [--json]${generateInvocation.action ? ` (got ${generateInvocation.action})` : ""}`);
+      const { projectBriefs, formatBriefs } = await import("./generate/brief.js");
+      const all = await projectBriefs(required(generateInvocation.project, "project path"));
+      const shot = typeof flags.shot === "string" ? flags.shot : null;
+      const briefs = shot ? all.filter(({ request }) => request.id === shot || request.scene_id === shot) : all;
+      if (shot && !briefs.length) throw new Error(`launchclip generate brief: no shot request ${shot} in ${generateInvocation.project}`);
+      stdout.write(flags.json ? `${JSON.stringify(briefs, null, 2)}\n` : formatBriefs(briefs));
+      return;
     } else if (command === "collection" || command === "recipe") {
       const { collectionNewCommand, collectionShowCommand, formatCollectionShow, recipeNewCommand } = await import("./collection_cli.js");
       if (command === "recipe") result = await recipeNewCommand(collectionInvocation.target, flags);

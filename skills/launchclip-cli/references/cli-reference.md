@@ -1442,6 +1442,12 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip bible show <project>                    # the bible, checked against its hash, its sheets and the storyboard
   ```
 
+- `generate brief`: Print the generation brief for every footage shot request ({kind: "shot"}) in a project's storyboard, without calling any provider, so it can be pasted into any image or video tool by hand. Each brief has the keyframe (image) prompt and negative, the motion (video) prompt with its length padded at each end, and a hash; a still or an image request stops at the keyframe. A request that names a real product, person, place or event is refused, with the reason. --shot <id> prints one (a request id or its scene id); --json prints {request, brief, reason} for each.
+
+  ```text
+  launchclip generate brief <project> [--shot <id>] [--json] # the generation brief for each footage shot request; calls no provider
+  ```
+
 - `collection new`: Create <root>/<id>/ with collection.json, a seeded style in styles/ that every video shares (unless --style names one), brand/ for logos and brand.json, recipes/ and a RULES.md the script pass, planner and critic read. isolation is strict: the brand folder and rules stay inside the collection.
 
   ```text
