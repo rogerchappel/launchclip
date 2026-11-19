@@ -17,10 +17,13 @@ import { applyProjectStyle } from "../story_style.js";
 
 const execFileAsync = promisify(execFile);
 
-// Proposals from the RFC (§6, §13); they need a pass against real feeds.
+// Font-size floors at 1080 px wide, scaled by the canvas width, as a
+// production carousel system sets them; the RFC's first proposal (cap height
+// 3.5% / 6% of the height, about 68 / 116 px of font at 4:5) failed slides
+// that read fine in the feed.
+export const BODY_MIN_FONT_PX = 46;
+export const HEADLINE_MIN_FONT_PX = 52;
 export const CAP_HEIGHT_RATIO = 0.7; // cap height of a display or text face, as a share of its font size
-export const BODY_CAP_SHARE = 0.035;
-export const HEADLINE_CAP_SHARE = 0.06;
 export const CONTRAST_AA = 4.5;
 export const CONTRAST_AA_LARGE = 3;
 export const THUMBNAIL_WIDTH = 160;
@@ -136,19 +139,18 @@ export function geometryFindings(boxes, dest) {
   for (const box of boxes) {
     if (box.error) { findings.push({ rule: "type-size", slide: box.slide, level: "fail", reason: `the slide's module does not lay out at ${W}×${H}: ${box.error}` }); continue; }
     for (const text of box.texts) {
-      const cap = text.fontSize * CAP_HEIGHT_RATIO;
-      const share = text.role === "headline" ? HEADLINE_CAP_SHARE : BODY_CAP_SHARE;
-      if (cap >= share * H) continue;
-      findings.push({ rule: "type-size", slide: box.slide, level: "fail", reason: `${text.role} has a cap height of ${round(cap)} px, under ${round(share * H)} px (${round(share * 100)}% of ${H}); set it at ${Math.ceil(share * H / CAP_HEIGHT_RATIO)} px or more` });
+      const min = (text.role === "headline" ? HEADLINE_MIN_FONT_PX : BODY_MIN_FONT_PX) * W / 1080;
+      if (text.fontSize >= min) continue;
+      findings.push({ rule: "type-size", slide: box.slide, level: "fail", reason: `${text.role} is set at ${round(text.fontSize)} px; at ${W} px wide it needs ${Math.ceil(min)} px or more` });
     }
     const rect = box.texts[0]?.rect;
     if (!rect) continue;
     const safe = dest.safe;
     const over = {
-      top: safe.top * H - rect.y,
-      bottom: rect.y + rect.height - (1 - safe.bottom) * H,
-      left: safe.left * W - rect.x,
-      right: rect.x + rect.width - (1 - safe.right) * W
+      top: safe.top - rect.y,
+      bottom: rect.y + rect.height - (H - safe.bottom),
+      left: safe.left - rect.x,
+      right: rect.x + rect.width - (W - safe.right)
     };
     const sides = Object.entries(over).filter(([, px]) => px > 0.5);
     if (sides.length) findings.push({ rule: "safe-zone", slide: box.slide, level: "fail", reason: `text runs ${sides.map(([side, px]) => `${round(px)} px into the ${side} zone`).join(", ")} the platform covers` });

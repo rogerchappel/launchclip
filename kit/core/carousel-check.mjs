@@ -79,6 +79,42 @@ const CLAIM = /\d+(?:[.,]\d+)?\s*(?:%|x\b|×|times\b|percent\b)|[$€£]\s?\d/i;
 const ALT_FILE = /^[\w .()-]+\.(png|jpe?g|webp|gif|svg|mp4|mov|heic|avif)$/i;
 const ALT_PLACEHOLDER = /^(slide|image|img|photo|picture|screenshot|untitled)[\s_-]*\d*$/i;
 
+// The copy rules (filler, hook-length, cut-off, restated-ending, duplicates,
+// word-budget, scaffold-leak): thresholds from a production carousel system's
+// copy checks. shortcut: English word lists, like VAGUE above.
+export const HOOK_WORDS = Object.freeze([4, 14]);
+export const HOOK_MIN_WORDS = 3;
+export const RESTATED_OVERLAP = 0.85;
+export const WORDS_PER_SLIDE = Object.freeze([3, 28]);
+export const MIN_DECK_WORDS = 6;
+
+// Stock phrases that say nothing a reader can use.
+const FILLER = [
+  /\bgame[\s-]?changer\b/i, /\bunlock (?:your|the) (?:full )?potential\b/i, /\belevate your\b/i, /\btransform your (?:journey|life|business|workflow)\b/i,
+  /\bstay tuned\b/i, /\bin today'?s (?:fast[\s-]paced|digital|modern) world\b/i, /\btake (?:it|your \w+) to the next level\b/i, /\blook no further\b/i,
+  /\bwithout further ado\b/i, /\bsecret sauce\b/i, /\bsupercharge your\b/i, /\brevolutioni[sz]e (?:the way|your)\b/i, /\bthe power of\b/i, /\bdive (?:deep )?into\b/i
+];
+// Words a finished line does not end on.
+const DANGLING = new Set(["a", "an", "the", "and", "or", "but", "nor", "to", "of", "is", "are", "was", "were", "can", "will", "should", "would", "could", "my", "your", "our", "their", "its", "than"]);
+const ELLIPSIS = /(?:…|\.\.\.)\s*$/;
+const SENTENCE_END = /[.!?…]["'”’)]*\s*$/;
+// Planning labels the model wrote around the copy instead of leaving out.
+const SCAFFOLD = [/^\s*(?:slide\s*\d+|hook|cta|body|headline|caption|cover|payoff|title|subtitle)\s*[:–—]/im, /\[(?:image|photo|img|visual|graphic|icon|placeholder|b-roll)\b[^\]]*\]/i, /\{\{[^}]*\}\}/, /\b(?:lorem ipsum|TODO|TBD)\b/];
+const STOP = new Set([...DANGLING, "this", "that", "for", "with", "in", "on", "at", "by", "from", "it", "you", "we", "i", "be", "do", "not", "no", "so", "as", "if"]);
+const norm = (text) => words(text).map((word) => word.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "")).filter(Boolean);
+const contentWords = (text) => norm(text).filter((word) => !STOP.has(word));
+
+/** Is this line cut off? The reason, or null. prose: a sentence (body copy), so one left open counts. */
+export function cutOff(text, { prose = false } = {}) {
+  const line = String(text ?? "").trim();
+  if (!line) return null;
+  if (ELLIPSIS.test(line)) return "ends in an ellipsis";
+  const last = norm(line).at(-1);
+  if (last && DANGLING.has(last) && !/[.!?]["'”’)]*$/.test(line)) return `ends on "${last}"`;
+  if (prose && /[.!?]\s/.test(line) && !SENTENCE_END.test(line)) return "stops mid-sentence";
+  return null;
+}
+
 /** The plan rules on a carousel story. → findings ({rule, slide, level, reason}). */
 export function carouselPlanFindings(story) {
   const findings = [];
@@ -175,6 +211,82 @@ export function carouselPlanFindings(story) {
     const sourced = (typeof scene.params?.source === "string" && scene.params.source.trim()) || sources.some((entry) => entry.scene === scene.id || entry.until === scene.id);
     if (!sourced) add("claims", i + 1, "warn", `"${match[0].trim()}" states a result with no source: add params.source or frame.sources [{text, scene: "${scene.id}"}]`);
   });
+
+  findings.push(...copyFindings(slides, texts, carousel.caption));
+  return findings;
+}
+
+// The copy rules, on slide text and the caption.
+function copyFindings(slides, texts, caption) {
+  const findings = [];
+  const add = (rule, slide, level, reason) => findings.push({ rule, slide, level, reason });
+  const captionParts = isObject(caption) ? ["hook", "body", "cta"].filter((key) => typeof caption[key] === "string" && caption[key].trim()).map((key) => ({ key, text: caption[key] })) : [];
+  const headlineOf = (i) => texts[i].headlines[0]?.text ?? "";
+  const bodyOf = (i) => texts[i].supports.map((block) => block.text).join(" ");
+
+  // filler
+  const filler = (text) => FILLER.map((pattern) => text.match(pattern)?.[0]).find(Boolean);
+  texts.forEach((text, i) => { const hit = filler(text.all); if (hit) add("filler", i + 1, "fail", `"${hit}" is a stock phrase; say the specific thing instead`); });
+  for (const part of captionParts) { const hit = filler(part.text); if (hit) add("filler", null, "fail", `caption.${part.key} uses the stock phrase "${hit}"; say the specific thing instead`); }
+
+  // hook-length: the caption's first line and the cover headline
+  const coverIndex = slides.findIndex((scene) => scene.slide?.role === "cover");
+  const hooks = [
+    ...(isObject(caption) && typeof caption.hook === "string" ? [{ slide: null, name: "caption.hook", text: caption.hook }] : []),
+    ...(coverIndex === -1 ? [] : [{ slide: coverIndex + 1, name: "the cover headline", text: headlineOf(coverIndex) }])
+  ].filter((hook) => hook.text.trim());
+  for (const hook of hooks) {
+    const count = words(hook.text).length;
+    if (count < HOOK_MIN_WORDS) add("hook-length", hook.slide, "fail", `${hook.name} is ${count} word${count === 1 ? "" : "s"}; a hook needs ${HOOK_WORDS[0]} to ${HOOK_WORDS[1]}: "${hook.text}"`);
+    else if (count < HOOK_WORDS[0] || count > HOOK_WORDS[1]) add("hook-length", hook.slide, "warn", `${hook.name} is ${count} words; a hook reads best in ${HOOK_WORDS[0]} to ${HOOK_WORDS[1]}`);
+  }
+
+  // cut-off: a headline left hanging, or body copy stopped mid-sentence
+  slides.forEach((scene, i) => {
+    const headline = cutOff(headlineOf(i));
+    if (headline) add("cut-off", i + 1, "fail", `the headline ${headline}: "${headlineOf(i)}"`);
+    for (const block of texts[i].supports) {
+      const why = cutOff(block.text, { prose: typeof scene.params?.[block.key] === "string" });
+      if (why) add("cut-off", i + 1, "fail", `params.${block.key} ${why}: "${block.text}"`);
+    }
+  });
+
+  // restated-ending: the last slide says nothing the deck has not. A payoff
+  // summary does this on purpose, so a deck ending on its payoff is let be.
+  const last = slides.length - 1;
+  if (slides.length > 2 && slides[last].slide?.role !== "payoff") {
+    const end = [...new Set(contentWords(texts[last].all))];
+    const before = new Set(texts.slice(0, last).flatMap((text) => contentWords(text.all)));
+    const shared = end.filter((word) => before.has(word)).length;
+    if (end.length >= 3 && shared / end.length >= RESTATED_OVERLAP) add("restated-ending", last + 1, "warn", `${Math.round(shared / end.length * 100)}% of the last slide's words are on earlier slides; end on something new: the next step, the takeaway in one line`);
+  }
+
+  // duplicates
+  const repeated = (pick, name) => {
+    const seen = new Map();
+    texts.forEach((_, i) => {
+      const key = norm(pick(i)).join(" ");
+      if (!key) return;
+      if (seen.has(key)) add("duplicates", i + 1, "fail", `the same ${name} as slide ${seen.get(key)}: "${pick(i)}"`);
+      else seen.set(key, i + 1);
+    });
+  };
+  repeated(headlineOf, "headline");
+  repeated(bodyOf, "body text");
+
+  // word-budget: the deck as a whole
+  const total = texts.reduce((sum, text) => sum + words(text.all).length, 0);
+  const low = Math.max(MIN_DECK_WORDS, WORDS_PER_SLIDE[0] * slides.length), high = WORDS_PER_SLIDE[1] * slides.length;
+  if (slides.length && total < low) add("word-budget", null, "warn", `${total} words across ${slides.length} slides; under ${low}, the slides say too little to be worth a swipe`);
+  if (total > high) add("word-budget", null, "fail", `${total} words across ${slides.length} slides; over ${high}, it reads as a document, not a carousel`);
+
+  // scaffold-leak
+  const leak = (text) => SCAFFOLD.map((pattern) => text.match(pattern)?.[0]).find(Boolean);
+  texts.forEach((text, i) => {
+    const hit = [...text.headlines, ...text.supports, ...text.meta].map((block) => leak(block.text)).find(Boolean);
+    if (hit) add("scaffold-leak", i + 1, "fail", `"${hit.trim()}" is a planning label, not copy; take it out`);
+  });
+  for (const part of captionParts) { const hit = leak(part.text); if (hit) add("scaffold-leak", null, "fail", `caption.${part.key} carries the planning label "${hit.trim()}"; take it out`); }
 
   return findings;
 }

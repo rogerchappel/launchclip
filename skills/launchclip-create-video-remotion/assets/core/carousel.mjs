@@ -26,16 +26,18 @@ export const CAROUSEL_ARC_IDS = Object.freeze(Object.keys(CAROUSEL_ARCS));
 
 // shortcut: platform limits and safe zones are from public guidance as of
 // 2026-11 (RFC §8, §14), not the platforms' own docs; check them before relying
-// on a figure. safe: fractions of the canvas each side keeps clear of text.
+// on a figure. safe: px each side keeps clear of text at the canvas size, as a
+// production carousel system sets them (4:5 feeds 96/72/96/72, 1:1 72 all
+// round, TikTok 180 top and 240 bottom over its caption and buttons).
 // captionPreview: characters shown before the caption is cut ("… more").
 export const CAROUSEL_DESTINATIONS = Object.freeze({
-  instagram: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 20], motion: true, exports: ["png", "mp4"], captionPreview: 125, tags: true, safe: { top: 0.05, bottom: 0.08, left: 0.05, right: 0.05 } },
-  tiktok: { aspect: "9:16", width: 1080, height: 1920, slides: [1, 35], motion: false, exports: ["jpg"], captionPreview: 90, tags: true, safe: { top: 0.1, bottom: 0.22, left: 0.05, right: 0.15 } },
-  linkedin: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 300], motion: false, exports: ["pdf", "png"], captionPreview: 210, tags: false, safe: { top: 0.05, bottom: 0.05, left: 0.05, right: 0.05 } },
-  facebook: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 10], motion: true, exports: ["png", "mp4"], captionPreview: 125, tags: false, safe: { top: 0.05, bottom: 0.08, left: 0.05, right: 0.05 } },
-  "meta-ads": { aspect: "1:1", width: 1080, height: 1080, slides: [2, 10], motion: true, exports: ["png", "mp4", "cards"], captionPreview: 125, tags: false, safe: { top: 0.05, bottom: 0.05, left: 0.05, right: 0.05 } },
-  x: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 4], motion: true, exports: ["png", "mp4"], captionPreview: 280, tags: false, safe: { top: 0.05, bottom: 0.05, left: 0.05, right: 0.05 } },
-  threads: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 20], motion: true, exports: ["png", "mp4"], captionPreview: 150, tags: false, safe: { top: 0.05, bottom: 0.05, left: 0.05, right: 0.05 } }
+  instagram: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 20], motion: true, exports: ["png", "mp4"], captionPreview: 125, tags: true, safe: { top: 96, right: 72, bottom: 96, left: 72 } },
+  tiktok: { aspect: "9:16", width: 1080, height: 1920, slides: [1, 35], motion: false, exports: ["jpg"], captionPreview: 90, tags: true, safe: { top: 180, right: 72, bottom: 240, left: 72 } },
+  linkedin: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 300], motion: false, exports: ["pdf", "png"], captionPreview: 210, tags: false, safe: { top: 96, right: 72, bottom: 96, left: 72 } },
+  facebook: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 10], motion: true, exports: ["png", "mp4"], captionPreview: 125, tags: false, safe: { top: 96, right: 72, bottom: 96, left: 72 } },
+  "meta-ads": { aspect: "1:1", width: 1080, height: 1080, slides: [2, 10], motion: true, exports: ["png", "mp4", "cards"], captionPreview: 125, tags: false, safe: { top: 72, right: 72, bottom: 72, left: 72 } },
+  x: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 4], motion: true, exports: ["png", "mp4"], captionPreview: 280, tags: false, safe: { top: 96, right: 72, bottom: 96, left: 72 } },
+  threads: { aspect: "4:5", width: 1080, height: 1350, slides: [1, 20], motion: true, exports: ["png", "mp4"], captionPreview: 150, tags: false, safe: { top: 96, right: 72, bottom: 96, left: 72 } }
 });
 export const CAROUSEL_DESTINATION_IDS = Object.freeze(Object.keys(CAROUSEL_DESTINATIONS));
 

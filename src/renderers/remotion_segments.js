@@ -240,17 +240,18 @@ export function remotionMemoryOptions(budget = renderBudget()) {
 /**
  * Render segments of the LaunchclipStory composition.
  * segments: [{startFrame, endFrame (exclusive), output}]
- * Calls onSegment(segment, seconds) after each one. Returns
+ * Calls onSegment(segment, seconds) after each one. `browser` (from
+ * openBrowser) is used and left open; without it one is opened and closed. Returns
  * {bundle: {cached, seconds}, segments: [{output, seconds}]}.
  */
-export async function renderRemotionSegments({ entry, project, props, segments, kitHash, concurrency, bundleRoot, onSegment, logLevel = "error", browserExecutable = remotionBrowserExecutable(), memory = remotionMemoryOptions(), renderer = null }) {
+export async function renderRemotionSegments({ entry, project, props, segments, kitHash, concurrency, bundleRoot, onSegment, logLevel = "error", browserExecutable = remotionBrowserExecutable(), memory = remotionMemoryOptions(), renderer = null, browser: shared = null }) {
   const { openBrowser, renderMedia, selectComposition } = renderer ?? await import("@remotion/renderer");
   const bundleStarted = performance.now();
   const { serveUrl, cached } = await cachedBundle({ entry, project, kitHash, bundleRoot });
   const bundleSeconds = (performance.now() - bundleStarted) / 1000;
   const results = [];
   if (!segments.length) return { bundle: { cached, seconds: bundleSeconds }, segments: results };
-  const browser = await openBrowser("chrome", { logLevel, browserExecutable });
+  const browser = shared ?? await openBrowser("chrome", { logLevel, browserExecutable });
   try {
     const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID, inputProps: props, puppeteerInstance: browser, logLevel, ...memory });
     for (const segment of segments) {
@@ -278,7 +279,7 @@ export async function renderRemotionSegments({ entry, project, props, segments, 
       onSegment?.(segment, seconds);
     }
   } finally {
-    await browser.close({ silent: true }).catch(() => {});
+    if (!shared) await browser.close({ silent: true }).catch(() => {});
   }
   return { bundle: { cached, seconds: bundleSeconds }, segments: results };
 }
@@ -289,11 +290,11 @@ export async function renderRemotionSegments({ entry, project, props, segments, 
  * The evidence stage took each still with its own `remotion still` process,
  * a fresh Chrome per frame: up to 64 of them on a long video.
  */
-export async function renderRemotionStills({ entry, project, props, stills, kitHash, bundleRoot, onStill, logLevel = "error", browserExecutable = remotionBrowserExecutable(), memory = remotionMemoryOptions(), renderer = null }) {
+export async function renderRemotionStills({ entry, project, props, stills, kitHash, bundleRoot, onStill, logLevel = "error", browserExecutable = remotionBrowserExecutable(), memory = remotionMemoryOptions(), renderer = null, browser: shared = null }) {
   const { openBrowser, renderStill, selectComposition } = renderer ?? await import("@remotion/renderer");
   const { serveUrl, cached } = await cachedBundle({ entry, project, kitHash, bundleRoot });
   if (!stills.length) return { bundle: { cached }, stills: [] };
-  const browser = await openBrowser("chrome", { logLevel, browserExecutable });
+  const browser = shared ?? await openBrowser("chrome", { logLevel, browserExecutable });
   try {
     const composition = await selectComposition({ serveUrl, id: COMPOSITION_ID, inputProps: props, puppeteerInstance: browser, logLevel, ...memory });
     for (const still of stills) {
@@ -302,7 +303,7 @@ export async function renderRemotionStills({ entry, project, props, stills, kitH
       onStill?.(still);
     }
   } finally {
-    await browser.close({ silent: true }).catch(() => {});
+    if (!shared) await browser.close({ silent: true }).catch(() => {});
   }
   return { bundle: { cached }, stills: stills.map((still) => still.output) };
 }
