@@ -959,6 +959,33 @@ drawn in code, with the critic loop.** Phases 9–12 are hand-in. Phases
 
 ### Hand-in
 
+Status (2026-11-20): plates and whole shots are checked and drawn
+(`src/hand_in.js`, `launchclip handin check`, finish's validate stage and
+its `hand-in` gate); sprite casts are listed as `unused` until phase 11's
+sprite form lands. Choices made where this RFC left them open:
+
+- A plate is drawn by `cast-scene` itself (`params.plate {src, floor}`):
+  the set's furniture alone stands on the plate's floor and nothing is
+  drawn behind it. One `img` node in the shared tree, so both renderers
+  draw it alike (parity fixture `characters-plate`). Every shot in the
+  place must be a cast-scene on a set with a furniture-only form and no
+  `world`, `props`, `screen` or `backdrop: "room"` of its own, or the plate
+  is rejected.
+- A whole shot becomes a `clip` scene with the shot's id, window and
+  transitions (`move: "none"`).
+- A plate is a still; it must match the story's aspect within 1% and be at
+  least half its width. Its brightness is measured and recorded; the
+  caption legibility gate judges the rendered frame.
+- A whole shot is frozen below a mean frame change of 0.001
+  (`FROZEN_MOTION`, a guess to tune on fixtures).
+- The measured colour check (§5.4 step 1) is not built: its thresholds must
+  come from fixtures (§5.6). The bible check is the manifest's
+  `bible_hash` and the vision judge (`handin check --model`, or a host's
+  `handInJudge` adapter for finish); without one it is `not-checked` and
+  the report is `ready-for-review`.
+- The asset-provider hook for character shots and plates (§5.3 way 2) is
+  not wired yet.
+
 **Phase 9. The hand-in contract and check.**
 - Scope: `HANDIN.json`, validation for all three kinds, the measured bible
   check, the vision judge, `qa/hand-in.json`, the `hand-in` gate,
