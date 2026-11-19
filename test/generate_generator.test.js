@@ -162,7 +162,7 @@ test("flags parse into provider specs and budgets", () => {
   assert.equal(generateSpecs({}), null);
   assert.deepEqual(generateSpecs({ generate: "fal", image: "fal:fal-ai/flux/dev", video: "fal:fal-ai/kling" }), { image: { provider: "fal", model: "fal-ai/flux/dev" }, video: { provider: "fal", model: "fal-ai/kling" }, draftVideo: null });
   assert.deepEqual(generateSpecs({ generate: "cmd:node gen.mjs --x" }).image, { provider: "cmd", model: "node gen.mjs --x" });
-  assert.throws(() => generateSpecs({ generate: "midjourney" }), /must name fal, elevenlabs, cmd/);
+  assert.throws(() => generateSpecs({ generate: "midjourney" }), /must name fal, elevenlabs, local, cmd/);
   assert.throws(() => generateSpecs({ video: "fal:x" }), /keyframe provider/);
   assert.deepEqual(parseBudget("5"), { usd: 5 });
   assert.deepEqual(parseBudget("2.5usd,200credits"), { usd: 2.5, credits: 200 });
@@ -211,4 +211,17 @@ test("an unpriced provider is held to its call cap, even with a budget, across r
   const later = { ...again, quote: async () => ({ amount: null, unit: "credits" }) };
   await plan(dir, createGenerator({ project: dir, image: later, video: later, maxCalls: 3, pollMs: NO_POLL }));
   assert.deepEqual(submits(again), []);
+});
+
+test("a provider that spends only local seconds runs headless with no budget, cap or approval", async (t) => {
+  for (const amount of [12, null]) {
+    const dir = await project(t);
+    // Like the local adapter: a rate may be missing from the quote, but fetch reports the seconds it took.
+    const fake = createFakeProvider({ price: amount ?? 3, unit: "seconds" });
+    const provider = { ...fake, quote: async () => ({ amount, unit: "seconds" }) };
+    const notes = [];
+    const out = await plan(dir, createGenerator({ project: dir, image: provider, video: provider, pollMs: NO_POLL, notice: (line) => notes.push(line) }));
+    assert.ok(out.shots.length > 0, notes.join("\n"));
+    assert.match(notes.join("\n"), amount ? /quote: .*\d+ seconds; local time only/ : /unknown seconds; local time only/);
+  }
 });
