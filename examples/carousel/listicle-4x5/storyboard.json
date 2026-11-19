@@ -131,11 +131,11 @@
       "slide": {
         "role": "cta",
         "medium": "still",
-        "alt": "Follow for a habit a week"
+        "alt": "Save this for your next sprint"
       },
       "params": {
-        "action": "Follow for a habit a week",
-        "emphasis": "habit",
+        "action": "Save this for your next sprint",
+        "emphasis": "Save",
         "handle": "fastteams.test"
       }
     }
