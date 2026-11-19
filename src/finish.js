@@ -1272,6 +1272,20 @@ const STAGES = [
       const { checkLayoutProject, subjectInfos } = await import("./layout_check.js");
       const layoutOptions = () => ({ story: ctx.copy, words: ctx.words ?? [], beats: ctx.beats ?? undefined });
       const resolveOptions = () => ({ words: ctx.words ?? [], beats: ctx.beats, edl: ctx.edl, subject: ctx.subject, track: ctx.track });
+      // Hand-in (docs/ANIMATION_PIPELINE_RFC.md §5): HANDIN.json art that passes
+      // replaces the code-drawn shot or place in the resolved copy; what fails falls back.
+      const { applyHandIn, checkHandIn, writeHandInReport } = await import("./hand_in.js");
+      ctx.handIn = await checkHandIn(ctx.project, { story: ctx.resolved, look: ctx.options.handInLook ?? "one", judge: ctx.adapters.handInJudge ?? null, ...(ctx.adapters.handInHooks ?? {}) });
+      if (ctx.handIn) {
+        await writeHandInReport(ctx.project, ctx.handIn);
+        ctx.warnings.push(...ctx.handIn.notes.map((note) => `hand-in: ${note}`));
+        const handed = applyHandIn(ctx.copy, ctx.handIn);
+        if (handed !== ctx.copy) {
+          ctx.copy = handed;
+          ctx.resolved = resolveStory(ctx.copy, resolveOptions());
+          ctx.boundaries = deriveBoundaries(ctx.resolved);
+        }
+      }
       // A boxed card on the flat plate while the story has footage (tells: boxed-on-flat) goes on that footage, before the layout check measures it.
       const backed = boxedOnFlatBackdrops(ctx.copy, ctx.resolved, { words: ctx.words ?? [] });
       if (backed.changes.length) {
@@ -1298,7 +1312,7 @@ const STAGES = [
       ctx.warnings.push(...layout.warnings.map((message) => `layout: ${message}`));
       if (ctx.prototype) applyPrototype(ctx);
       await writeResolvedCopy(ctx);
-      const details = { scenes: ctx.resolved.scenes.length, boundaries: ctx.boundaries.length, words: ctx.words?.length ?? 0, subject: ctx.subjectGate, cast: ctx.castGate, bible: ctx.bibleGate, layout: { status: layout.status, profile: layout.profile, errors: layout.errors, warnings: layout.findings.filter((finding) => finding.severity !== "error").length } };
+      const details = { scenes: ctx.resolved.scenes.length, boundaries: ctx.boundaries.length, words: ctx.words?.length ?? 0, subject: ctx.subjectGate, cast: ctx.castGate, bible: ctx.bibleGate, ...(ctx.handIn ? { hand_in: handInGate(ctx.handIn) } : {}), layout: { status: layout.status, profile: layout.profile, errors: layout.errors, warnings: layout.findings.filter((finding) => finding.severity !== "error").length } };
       if (layout.status === "failed") {
         const lines = layout.findings.filter((finding) => finding.severity === "error").slice(0, 8).map((finding) => `${finding.rule} @${finding.at}s [${finding.ids.join(", ")}] ${finding.detail ?? ""}`.trim());
         const error = new Error(`layout check failed (${layout.errors} error${layout.errors === 1 ? "" : "s"}):\n- ${lines.join("\n- ")}`);
@@ -1744,6 +1758,11 @@ const STAGES = [
 ];
 
 /** The resolved story with the series its audio.react layers read (from AUDIO_FEATURES.json) as audio.features. */
+/** The hand-in gate from qa/hand-in.json: its status, the look and each asset's fate. */
+function handInGate(report) {
+  return { status: report.status, report: "qa/hand-in.json", look: report.look, assets: report.assets.map(({ kind, shot, place, character, status, reason }) => ({ kind, ...(shot ? { shot } : {}), ...(place ? { place } : {}), ...(character ? { character } : {}), status, ...(reason ? { reason } : {}) })) };
+}
+
 export function withAudioFeatures(resolved, features) {
   const picked = features && audioFeatureNeeds(resolved).length ? pickAudioFeatures(resolved, features) : null;
   return picked ? { ...resolved, audio: { ...resolved.audio, features: picked } } : resolved;
@@ -2137,6 +2156,9 @@ async function runGates(ctx, { pixels = true } = {}) {
   if (castGate && castGate.status !== "skipped") gates.cast = castGate;
   const bibleGate = ctx.bibleGate ?? ctx.state.stages?.validate?.details?.bible;
   if (bibleGate && bibleGate.status !== "skipped") gates.bible = bibleGate;
+  // The hand-in gate never fails the render: rejected art has fallen back (status "fallback").
+  const handIn = ctx.handIn ? handInGate(ctx.handIn) : ctx.state.stages?.validate?.details?.hand_in;
+  if (handIn) gates["hand-in"] = handIn;
   // Direction guardrails (docs/DIRECTION_GUARDRAILS.md), on the resolved story.
   try {
     gates.physics = physicsGate(ctx.resolved);
