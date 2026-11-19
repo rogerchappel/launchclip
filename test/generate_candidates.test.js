@@ -11,6 +11,7 @@ import { projectBriefs } from "../src/generate/brief.js";
 import { MAX_KEYFRAME_CANDIDATES, createGenerator, parseKeyframeCandidates, visionKeyframeCheck } from "../src/generate/generator.js";
 import { readLedger } from "../src/generate/ledger.js";
 import { checkKeyframe, recordShot } from "../src/generate/record.js";
+import { audienceConcepts } from "../src/generate/concepts.js";
 import { createFakeProvider } from "./fixtures/generate/fake-provider.js";
 
 const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "generate-brief");
@@ -138,4 +139,43 @@ test("skill path: generate check ranks several files; record keeps one round's c
   assert.equal(kept.entry.attempt, 1);
   assert.equal(kept.entry.candidate, 2);
   await assert.rejects(recordShot(dir, { ...base, file: files[1], attempt: "3" }), /--attempt must be the round/);
+});
+
+test("concepts: each candidate is its own concept, one concepts call per batch, the rank judges each against its concept", async (t) => {
+  const dir = await project(t);
+  const fake = createFakeProvider({ price: 0.04 });
+  const prompts = [];
+  const submit = fake.submit;
+  fake.submit = (brief, step, ...rest) => { if (step === "image") prompts.push(brief.image.prompt); return submit(brief, step, ...rest); };
+  const asked = [];
+  const concepts = async (requests) => { asked.push(requests.map((r) => r.id)); return new Map(requests.map((r) => [r.id, ["a cup from above", "steam over a cup at dawn"]])); };
+  const seen = [];
+  const check = async () => ({ ok: true });
+  check.rank = async ({ files, concepts: given }) => { seen.push(given); return { best: 1, verdicts: files.map(() => ({ ok: true })), change: null }; };
+  const generator = createGenerator({ project: dir, image: fake, video: fake, budget: { usd: 5 }, candidates: 2, concepts, check, pollMs: NO_POLL });
+  const { request } = await one(dir, generator);
+  assert.equal(asked.length, 1);
+  assert.match(prompts[0], /^a cup from above\./);
+  assert.match(prompts[1], /^steam over a cup at dawn\./);
+  assert.deepEqual(seen, [["a cup from above", "steam over a cup at dawn"]]);
+  const stills = (await readLedger(dir)).filter((entry) => entry.shot === request.id && entry.step === "image");
+  assert.deepEqual(stills.map((entry) => [entry.concept, entry.verdict]), [["a cup from above", "rejected"], ["steam over a cup at dawn", "accepted"]]);
+});
+
+test("audienceConcepts: one call for every shot; refused or missing concepts fall back to the shot's shows; a failed call writes none", async () => {
+  let calls = 0;
+  const client = { runStructured: async (call) => {
+    calls += 1;
+    assert.match(call.input, /Brief: coffee for night-shift nurses/);
+    assert.match(call.input, /- s1: a cup of coffee/);
+    return { value: { audience: "nurses", direction: "hospital break room, 3am", shots: [{ id: "s1", concepts: ["a paper cup on a break-room counter at 3am.", "a cup held by someone in Starbucks scrubs"] }] } };
+  } };
+  const notes = [];
+  const ideas = await audienceConcepts(client, { count: 3, prompt: "coffee for night-shift nurses", notice: (line) => notes.push(line) })([{ id: "s1", shows: "a cup of coffee" }, { id: "s2", shows: "a clock" }]);
+  assert.equal(calls, 1);
+  assert.deepEqual(ideas.get("s1"), ["a paper cup on a break-room counter at 3am", "a cup of coffee", "a cup of coffee"]);
+  assert.equal(ideas.has("s2"), false);
+  assert.match(notes[0], /break room/);
+  const failed = await audienceConcepts({ runStructured: async () => { throw new Error("down"); } }, { count: 2 })([{ id: "s1", shows: "a cup" }]);
+  assert.equal(failed.size, 0);
 });

@@ -68,6 +68,8 @@ Story shots and plates (a project with a frozen bible and an animatic) go the sa
 
 A still costs a few cents and a clip tens of cents, so it pays to make several stills and animate only the best. `--keyframe-candidates <n>` (1 to 6, default 1) on `make` and `finish` makes n stills per shot in one round. The vision check ranks them in one look: a candidate fails on anomalies (malformed hands or faces, impossible objects), visible text, logos or UI, or a missing subject, and the best passing one, by look match plus aesthetics, is the one animated. The others are logged as rejected with the reason. The quote and the budget count every candidate, and a round uses one of the shot's three attempts. With no vision model configured there is nothing to choose with, so one still is made per shot. Clips are never made in candidates.
 
+On `make`, the candidates of a footage shot are different concepts, not several draws of one prompt. Once the quote is allowed, one text call per video reads the prompt and the collection's rules, works out who the video is for, picks one direction for every shot (setting, kind of people, time of day) so the shots still match, and writes a concept per candidate for each shot. Each candidate's prompt opens with its concept, and the rank judges each still against its own concept. The ledger records each candidate's `concept`. If the call fails, or a concept names a brand or a person, that candidate uses the shot's own `shows`.
+
 ## Budgets
 
 Before any paid call, each batch of shots is quoted and printed.

@@ -42,6 +42,13 @@ what the call cost. Map the brief onto whatever parameters yours has.
    agrees, make a few candidates (two to four) in one round: one
    `generate allow` with `--quote` for the whole round, every candidate
    recorded with that round's `--attempt` and its own `--candidate <n>`.
+   For a footage shot, make each candidate a different concept, as
+   `make --generate` does: decide who the video is for, pick one direction
+   for the whole video (setting, kind of people, time of day) that they
+   would recognise, and write each candidate one plain lower-case sentence
+   in that direction (no brands, names or text). That sentence replaces the
+   prompt's first sentence (the shot's `shows`); the rest stays word for
+   word. Story shots and plates keep the bible's prompt.
    Call your image tool with `brief.image.prompt` word
    for word, `brief.image.negative` as the negative prompt (or appended as
    "Avoid: …" when the tool has none), and `brief.image.width` ×
