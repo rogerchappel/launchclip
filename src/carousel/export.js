@@ -85,7 +85,7 @@ async function exportDestination(story, id, dir, flags) {
     out.files.push("slides.pdf");
   }
   if (dest.exports.includes("cards")) {
-    const sheet = cardSheet(story, found.map((files) => name(files.video ?? files.image)), flags.link);
+    const sheet = cardSheet(story, found.map((files) => name(files.video ?? files.image)), flags.link, found.map((files) => (files.video ? name(files.image) : null)));
     await writeJson(path.join(dir, "cards.json"), sheet);
     out.warnings.push(...sheet.warnings);
     out.files.push("cards.json");
@@ -124,8 +124,12 @@ async function slidesPdf(images) {
   return writePdf(pages);
 }
 
-/** The ad card sheet (§9.1): headline, description and link per card, within Meta's lengths. */
-export function cardSheet(story, files, link) {
+/**
+ * The ad card sheet (§9.1): headline, description and link per card, within
+ * Meta's lengths. thumbnails[i]: a video card's image (its still), which a
+ * video card needs as its thumbnail.
+ */
+export function cardSheet(story, files, link, thumbnails = []) {
   const slides = carouselSlides(story);
   if (slides.length > META_MAX_CARDS) throw new Error(`a Meta carousel ad takes at most ${META_MAX_CARDS} cards; this carousel has ${slides.length}`);
   const caption = story.carousel?.caption ?? {};
@@ -135,7 +139,7 @@ export function cardSheet(story, files, link) {
     const params = scene.params ?? {};
     const headline = firstText(params.headline, params.title, params.text, scene.slide.alt);
     const description = firstText(params.subhead, params.subtitle, params.body, params.description, scene.slide.role === "cta" ? caption.cta : "");
-    const card = { card: index + 1, file: files[index], headline: fit(headline, META_CARD_HEADLINE), description: fit(description, META_CARD_DESCRIPTION), link: link ?? null };
+    const card = { card: index + 1, file: files[index], headline: fit(headline, META_CARD_HEADLINE), description: fit(description, META_CARD_DESCRIPTION), link: link ?? null, ...(thumbnails[index] ? { thumbnail: thumbnails[index] } : {}) };
     for (const [field, text] of [["headline", headline], ["description", description]]) if (card[field] !== text) warnings.push(`card ${index + 1} ${field} cut to ${field === "headline" ? META_CARD_HEADLINE : META_CARD_DESCRIPTION} characters: "${text}"`);
     return card;
   });

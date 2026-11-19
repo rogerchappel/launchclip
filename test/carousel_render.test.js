@@ -5,8 +5,9 @@ import path from "node:path";
 import test from "node:test";
 import sharp from "sharp";
 import { remotionBundleDir } from "../src/renderers/remotion_segments.js";
-import { reframe, renderCarousel } from "../src/carousel/render.js";
-import { runStoryCommand } from "../src/story_cli.js";
+import { motionStory, reframe, renderCarousel } from "../src/carousel/render.js";
+import { runStoryCommand, validateStory } from "../src/story_cli.js";
+import { choreographyGate } from "../src/movement_guardrails.js";
 import { slideStills } from "@launchclip/core/carousel.mjs";
 
 const SAMPLE = path.resolve("examples/carousel/listicle-4x5/storyboard.json");
@@ -76,9 +77,16 @@ test("a motion slide gets a silent clip of its scene where the destination takes
     const [instagram, tiktok] = report.destinations;
     assert.deepEqual(instagram.slides[3].files, ["04.png", "04.mp4"]);
     assert.deepEqual(instagram.slides[3].clip, { start_frame: 360, end_frame: 480 });
+    // The clip is the whole of the slide's own story; its still is a frame of that story.
     const media = calls.find(([name]) => name === "renderMedia")[1];
-    assert.deepEqual(media.frameRange, [360, 479]);
+    assert.deepEqual(media.frameRange, [0, 119]);
     assert.equal(media.muted, true);
+    assert.deepEqual([media.inputProps.scenes.map((scene) => scene.id), media.inputProps.ending], [["summary"], { loop_to: "summary" }]);
+    const still = calls.find(([name, options]) => name === "renderStill" && options.output.endsWith("instagram/04.png"))[1];
+    assert.equal(still.inputProps, media.inputProps);
+    assert.equal(still.frame, instagram.slides[3].frame - 360);
+    // One browser per destination, for every still and clip.
+    assert.equal(calls.filter(([name]) => name === "openBrowser").length, 2);
     assert.deepEqual(await readdir(instagram.out).then((names) => names.filter((name) => name.includes("mezzanine"))), []);
     // TikTok takes images only: the still goes, with the contract's warning.
     assert.deepEqual(tiktok.slides[3].files, ["04.png", "04.jpg"]);
@@ -126,6 +134,53 @@ test("--dest falls back to the story's destinations, and a video story is refuse
     video.scenes = video.scenes.map(({ slide, ...scene }) => scene);
     await writeFile(path.join(project, "storyboard.json"), JSON.stringify(video));
     await assert.rejects(renderCarousel(project, {}, adapters), /is not a carousel/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("motionStory: the slide alone as a valid video story that loops onto itself, seam and all", async () => {
+  const story = (await runStoryCommand("resolve", path.resolve("examples/carousel/motion-ad-1x1/storyboard.json"), {})).story_resolved;
+  for (const id of ["meta-ads", "instagram", "tiktok"]) {
+    const solo = motionStory(reframe(story, id).story, "product");
+    assert.deepEqual(validateStory(solo).errors, [], id);
+    assert.equal(solo.format.kind, undefined);
+    assert.deepEqual([solo.format.duration, solo.resolved.frames, solo.ending], [6, 180, { loop_to: "product" }]);
+    assert.deepEqual(solo.scenes.map((scene) => [scene.id, scene.start, scene.end, scene.in?.type, scene.slide]), [["product", 0, 6, "cut", undefined]]);
+    // Without the typed in, a plate at frame 0 enters fully visible and the loop blinks.
+    assert.deepEqual(choreographyGate(solo).findings, [], id);
+  }
+});
+
+test("hyperframes: still slides in one snapshot, each motion slide its own story rendered whole and kept silent", async () => {
+  const { root, project } = await fixture((story) => {
+    Object.assign(story.scenes[3], { loop: true, slide: { ...story.scenes[3].slide, medium: "motion" } });
+    return story;
+  });
+  const calls = [];
+  const run = async (command, args) => {
+    const display = command === "ffmpeg" ? ["ffmpeg", ...args] : args.slice(1);
+    calls.push([...display]);
+    if (display[0] === "snapshot") {
+      const out = args[args.indexOf("--output") + 1];
+      await mkdir(out, { recursive: true });
+      for (const [i] of args[args.indexOf("--at") + 1].split(",").entries()) await sharp({ create: { width: 4, height: 5, channels: 3, background: "#151515" } }).png().toFile(path.join(out, `frame-${String(i).padStart(2, "0")}.png`));
+    }
+    if (display[0] === "render") await writeFile(args[args.indexOf("--output") + 1], "mp4");
+    if (command === "ffmpeg") await copyFile(args[args.indexOf("-i") + 1], args.at(-1));
+    return { stdout: "", stderr: "" };
+  };
+  try {
+    const report = await renderCarousel(project, { dest: "instagram", renderer: "hyperframes" }, { run });
+    const [instagram] = report.destinations;
+    assert.equal(instagram.status, "rendered", instagram.errors.join("\n"));
+    assert.deepEqual(instagram.slides[3].files, ["04.png", "04.mp4"]);
+    const snapshots = calls.filter(([name]) => name === "snapshot").map((args) => args[args.indexOf("--at") + 1].split(",").length);
+    assert.deepEqual(snapshots, [4, 1]);
+    assert.equal(calls.filter(([name]) => name === "render").length, 1);
+    const ffmpeg = calls.find(([name]) => name === "ffmpeg");
+    assert.ok(ffmpeg.includes("-an") && ffmpeg.includes("copy"), "the clip is remuxed, silent");
+    assert.deepEqual(await readdir(path.join(project, ".launchclip")), [], "the work dir is removed");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
