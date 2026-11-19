@@ -117,7 +117,8 @@ export function createFootageBase(moduleId, params, ctx, {allowed, required = []
 
   const geometry = profileGeometry(canvas, portrait ? 'shorts' : 'landscape');
   const zone = geometry.safeZone, band = geometry.captionBand;
-  const bottom = hidesCaptions ? zone.y + zone.height : Math.min(zone.y + zone.height, band.y - 30 * unit);
+  // A carousel slide has no captions (ctx.noCaptions), so its text may use the band.
+  const bottom = hidesCaptions || ctx.noCaptions ? zone.y + zone.height : Math.min(zone.y + zone.height, band.y - 30 * unit);
   const up = v => Math.ceil(v * 100 - 1e-6) / 100, down = v => Math.floor(v * 100 + 1e-6) / 100;
   const sx = up(zone.x), sy = up(zone.y);
   let safe = {x: sx, y: sy, width: r2(down(zone.x + zone.width) - sx), height: r2(down(bottom) - sy)};
