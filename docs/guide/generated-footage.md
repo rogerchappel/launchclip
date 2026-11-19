@@ -64,6 +64,10 @@ It copies the file under `assets/shots/generated/`, logs one ledger line (provid
 
 Story shots and plates (a project with a frozen bible and an animatic) go the same way: `generate record` writes an accepted clip or plate into `HANDIN.json`, and `launchclip handin check` decides whether it is used.
 
+## Keyframe candidates
+
+A still costs a few cents and a clip tens of cents, so it pays to make several stills and animate only the best. `--keyframe-candidates <n>` (1 to 6, default 1) on `make` and `finish` makes n stills per shot in one round. The vision check ranks them in one look: a candidate fails on anomalies (malformed hands or faces, impossible objects), visible text, logos or UI, or a missing subject, and the best passing one, by look match plus aesthetics, is the one animated. The others are logged as rejected with the reason. The quote and the budget count every candidate, and a round uses one of the shot's three attempts. With no vision model configured there is nothing to choose with, so one still is made per shot. Clips are never made in candidates.
+
 ## Budgets
 
 Before any paid call, each batch of shots is quoted and printed.
