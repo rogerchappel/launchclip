@@ -91,7 +91,7 @@
       "params": {
         "media": "assets/photos/dashboard.jpg",
         "variant": "top",
-        "share": 0.42,
+        "share": 0.47,
         "title": "Every check in one view",
         "align": "left",
         "body": "Builds, reviews and rollouts on one screen, live."
@@ -111,7 +111,7 @@
       "params": {
         "media": "assets/photos/dashboard.jpg",
         "variant": "top",
-        "share": 0.42,
+        "share": 0.47,
         "kicker": "When it breaks",
         "title": "Roll back in one tap",
         "align": "left",

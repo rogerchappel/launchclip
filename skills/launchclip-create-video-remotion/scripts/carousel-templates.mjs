@@ -39,10 +39,10 @@ const ASPECTS = ["4:5", "1:1", "9:16"];
 export const CAROUSEL_GRAMMARS = Object.freeze({
   "full-bleed": { describe: "a photo across the whole slide under a reading layer, the text set over it", textShare: 0.36, needsImage: true, caps: { headline: 44, body: 22 },
     draws: { "4:5": "photo-scene, 1–3 lines over a full or bottom scrim", "1:1": "photo-scene, as 4:5", "9:16": "photo-scene, as 4:5" } },
-  "image-panel": { describe: "a photo across the top of the slide, the headline and a line or a short list in a panel under it", textShare: 0.4, needsImage: true, caps: { headline: 60, body: 90 },
-    draws: { "4:5": "split-screen top, share 0.42", "1:1": "split-screen top, share 0.45", "9:16": "split-screen top, share 0.45" } },
+  "image-panel": { describe: "a photo across the top of the slide, the headline and a line or a short list in a panel under it", textShare: 0.4, needsImage: true, caps: { headline: 48, body: 60 },
+    draws: { "4:5": "split-screen top, share 0.47", "1:1": "split-screen top, share 0.45", "9:16": "split-screen top, share 0.45" } },
   "two-region": { describe: "two halves that answer each other: before and after, myth and fact, don't and do", textShare: 0.36, needsImage: false, caps: { headline: 40, body: 40 },
-    draws: { "4:5": "compare, the negative side with crosses, the positive with ticks", "1:1": "compare, side by side", "9:16": "compare, stacked" } },
+    draws: { "4:5": "compare in free type (halves, versus or verdict), the negative side crossed, the positive ticked", "1:1": "compare, side by side", "9:16": "compare, stacked" } },
   "proof-stat": { describe: "one big figure with what it measures and where it comes from", textShare: 0.6, needsImage: false, caps: { headline: 48, body: 60 },
     draws: { "4:5": "stat-card (with a source), media-stat behind (with a photo), else concept-card free", "1:1": "as 4:5", "9:16": "as 4:5" } },
   steps: { describe: "a checklist or a numbered sequence in free type", textShare: 0.6, needsImage: false, caps: { headline: 48, body: 40, items: 6, item: 32 },
@@ -77,7 +77,7 @@ export const CAROUSEL_TEMPLATES = Object.freeze({
     grammar: { cover: "text-card", body: "text-card", payoff: "steps", cta: "text-card" },
     surface: { cover: "brand", body: "dark", payoff: "dark", cta: "brand" },
     caps: { headline: 48, body: 50 },
-    type: { align: "left", hook: "flush", cta: "flush", stat: "giant", list: "stack", compare: "split", quote: "pull", title: "line-by-line-slide" }
+    type: { align: "left", hook: "flush", cta: "flush", stat: "giant", list: "stack", compare: "halves", quote: "pull", title: "line-by-line-slide" }
   }),
   "field-notes": T({
     describe: "An editorial list, how-to or lesson on a light ground: ink type on the brand's pale tone, quiet and printed.",
@@ -87,7 +87,7 @@ export const CAROUSEL_TEMPLATES = Object.freeze({
     grammar: { cover: "text-card", body: "text-card", payoff: "steps", cta: "text-card" },
     surface: { cover: "light", body: "light", payoff: "light", cta: "light" },
     caps: { headline: 48, body: 50 },
-    type: { align: "left", hook: "flush", cta: "flush", stat: "giant", list: "stack", compare: "split", quote: "mark", title: "mask-reveal-up" }
+    type: { align: "left", hook: "flush", cta: "flush", stat: "giant", list: "stack", compare: "halves", quote: "mark", title: "mask-reveal-up" }
   }),
   "photo-diary": T({
     describe: "A personal-brand photo story: every slide a photo with one line over it, the lesson on the ground, the ask on a photo.",
@@ -107,7 +107,7 @@ export const CAROUSEL_TEMPLATES = Object.freeze({
     grammar: { cover: "text-card", body: "text-card", payoff: "text-card", cta: "text-card" },
     surface: { cover: "brand", body: "dark", payoff: "dark", cta: "brand" },
     caps: { headline: 60, body: 50 },
-    type: { align: "center", hook: "centered", cta: "centered", stat: "giant", list: "stack", compare: "split", quote: "centered", title: "focus-blur-resolve" }
+    type: { align: "center", hook: "centered", cta: "centered", stat: "giant", list: "stack", compare: "halves", quote: "centered", title: "focus-blur-resolve" }
   }),
   "signal-report": T({
     describe: "A data or report carousel: one figure per slide, each with its source, the takeaways as a checklist.",
@@ -117,7 +117,7 @@ export const CAROUSEL_TEMPLATES = Object.freeze({
     grammar: { cover: "text-card", body: "proof-stat", payoff: "steps", cta: "text-card" },
     surface: { cover: "brand", body: "dark", payoff: "dark", cta: "brand" },
     caps: { headline: 48, body: 60 },
-    type: { align: "left", hook: "flush", cta: "flush", stat: "giant", list: "stack", compare: "split", quote: "pull", title: "shared-axis-y" }
+    type: { align: "left", hook: "flush", cta: "flush", stat: "giant", list: "stack", compare: "halves", quote: "pull", title: "shared-axis-y" }
   }),
   "myth-split": T({
     describe: "Myth and fact: each slide splits into the belief and the correction, the wrong side crossed, the right side ticked.",
@@ -127,7 +127,7 @@ export const CAROUSEL_TEMPLATES = Object.freeze({
     grammar: { cover: "text-card", body: "two-region", payoff: "text-card", cta: "text-card" },
     surface: { cover: "brand", body: "dark", payoff: "dark", cta: "brand" },
     caps: { headline: 40, body: 40 },
-    type: { align: "center", hook: "centered", cta: "centered", stat: "giant", list: "stack", compare: "split", quote: "pull", title: "kinetic-center-build" }
+    type: { align: "center", hook: "centered", cta: "centered", stat: "giant", list: "stack", compare: "verdict", quote: "pull", title: "kinetic-center-build" }
   }),
   "then-now": T({
     describe: "A before-and-after: the old way and the new side by side, the change in one figure, photos where there are some.",
@@ -340,7 +340,7 @@ export function drawSlide(slide, grammar, template, { aspect = "4:5" } = {}) {
     const items = slideItems(slide);
     const figure = slideFigure(slide);
     const extra = items.length >= 2 ? { items: items.slice(0, 4) } : figure && !body ? { stat: drop({ value: figure.value, label: cut(figure.label, 40) }) } : { body: body || undefined };
-    return { module: "split-screen", params: drop({ media: image, variant: "top", share: aspect === "4:5" ? 0.42 : 0.45, kicker: eyebrow, title: headline, align: type.align, ...extra }) };
+    return { module: "split-screen", params: drop({ media: image, variant: "top", share: aspect === "4:5" ? 0.47 : 0.45, kicker: eyebrow, title: headline, align: type.align, ...extra }) };
   }
   if (grammar === "two-region") {
     const pair = slidePair(slide);

@@ -82,7 +82,7 @@
       },
       "params": {
         "mode": "before-after",
-        "variant": "split",
+        "variant": "verdict",
         "left": {
           "title": "Myth",
           "items": [
@@ -110,7 +110,7 @@
       },
       "params": {
         "mode": "before-after",
-        "variant": "split",
+        "variant": "verdict",
         "left": {
           "title": "Myth",
           "items": [
