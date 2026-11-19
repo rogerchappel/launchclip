@@ -57,7 +57,7 @@
 // in HyperFrames (the feel, the medium) steps per story frame here too, and
 // layers mount on whole story frames, the frame space of the segment plan.
 import React from "react";
-import { AbsoluteFill, Audio, Freeze, OffthreadVideo, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Freeze, Img, OffthreadVideo, Sequence, useCurrentFrame, useVideoConfig } from "remotion";
 import { assetUrl } from "./media";
 import type { CalculateMetadataFunction } from "remotion";
 // @ts-ignore plain ESM from kit/core
@@ -104,6 +104,9 @@ import { storyCaptionZones } from "../core/cast-captions.mjs";
 import { breakoutNotch, layoutPlan, layoutStateAt, withLayoutCameras } from "../core/footage-layout.mjs";
 // @ts-ignore plain ESM from kit/core
 import { MEDIUM_LAYER_ID, MEDIUM_Z, mediumDefs, mediumLayerStyle, mediumPlan } from "../core/medium.mjs";
+// @ts-ignore plain ESM from kit/core
+// @ts-ignore plain ESM from kit/core
+import { slideContinuity } from "../core/carousel-continuity.mjs";
 // @ts-ignore plain ESM from kit/core
 import { LOOK_FURNITURE_ID, LOOK_LAYER_ID, LOOK_Z, lookCss, lookDefs, lookPlan, lookPlaneStyle, lookStepFrame, lookStepped, lookUnderMarkup, lookVarsAt } from "../core/look.mjs";
 // @ts-ignore plain ESM from kit/core
@@ -293,6 +296,21 @@ export const WorldField: React.FC<{ blobs: any[]; tiles: any[]; t: number }> = (
   );
 };
 
+// Carousel swipe continuity (kit/core/carousel-continuity.mjs): the slide's
+// slice of the panorama under the module, and the seam elements over it, at
+// whole-pixel offsets so adjacent slides meet exactly. Outside the hold drift,
+// as the HyperFrames .lc-pano / .lc-seam markup.
+const PanoramaSlice: React.FC<{ plan: any }> = ({ plan }) => (
+  <AbsoluteFill style={{ overflow: "hidden", pointerEvents: "none" }} aria-hidden>
+    <Img src={assetUrl(plan.src)} style={{ position: "absolute", left: plan.left, top: 0, width: plan.width, height: plan.height, maxWidth: "none", objectFit: "cover", objectPosition: "50% 50%" }} />
+  </AbsoluteFill>
+);
+const SeamElements: React.FC<{ seams: any[] }> = ({ seams }) => (
+  <AbsoluteFill style={{ overflow: "hidden", pointerEvents: "none" }} aria-hidden>
+    {seams.map((seam: any, i: number) => <div key={i} style={seam.style}>{seam.text ?? null}</div>)}
+  </AbsoluteFill>
+);
+
 // startFrame: the enclosing Sequence's from; tweens carry absolute times, so the
 // layer samples them at the absolute composition time (kit/remotion/clock.tsx).
 // World camera: placement = the plate's world transform; transparent = a
@@ -301,7 +319,7 @@ export const WorldField: React.FC<{ blobs: any[]; tiles: any[]; t: number }> = (
 // background blobs (plates only, not in world mode); drift = the hold-drift
 // wrapper.
 type CameraProps = { placement?: any; transparent?: boolean; parallax?: any[] };
-const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean | number; field?: any[] | null; backdrop?: any; light?: any[] | null; drift?: any; behave?: any; zoom?: any[]; children: React.ReactNode } & CameraProps> = ({ startFrame, tweens, plate, background, freeze, field, backdrop, light, drift, behave, zoom, placement, transparent, parallax, children }) => {
+const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean | number; field?: any[] | null; backdrop?: any; light?: any[] | null; drift?: any; behave?: any; zoom?: any[]; continuity?: any; children: React.ReactNode } & CameraProps> = ({ startFrame, tweens, plate, background, freeze, field, backdrop, light, drift, behave, zoom, continuity, placement, transparent, parallax, children }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = (startFrame + frame) / fps;
@@ -321,7 +339,9 @@ const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; 
       {field ? <AmbientField blobs={field} t={t} /> : null}
       {backdrop ? <BackgroundField plan={backdrop} t={t} /> : null}
       {light?.length ? <LightField layers={light} t={t} /> : null}
+      {continuity?.panorama ? <PanoramaSlice plan={continuity.panorama} /> : null}
       {drift ? <AbsoluteFill style={driftStyle(drift, t)}>{content}</AbsoluteFill> : content}
+      {continuity?.seams.length ? <SeamElements seams={continuity.seams} /> : null}
     </AbsoluteFill>
   );
   // Cuts-mode zooms inside the shot (kit/core/zooms.mjs): a scale about the
@@ -719,7 +739,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
     const sceneLayer = ({ entry, render, model }: any) => (
       <Sequence key={entry.id} name={`${entry.id} · ${entry.scene.module}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps}>
         <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background}
-          field={entry.plate && !world ? fieldFor(entry.scene) : null} backdrop={entry.plate && !world ? backdropFor(entry.scene) : null} light={entry.plate && !world ? lightFor(entry.scene) : null} drift={sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} behave={sceneBehaviour(story, entry.scene, model, { start: entry.start, end: entry.renderEnd })} zoom={zoomFor(entry, model)}
+          field={entry.plate && !world ? fieldFor(entry.scene) : null} backdrop={entry.plate && !world ? backdropFor(entry.scene) : null} light={entry.plate && !world ? lightFor(entry.scene) : null} drift={sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} behave={sceneBehaviour(story, entry.scene, model, { start: entry.start, end: entry.renderEnd })} zoom={zoomFor(entry, model)} continuity={slideContinuity(story, entry.scene.id)}
           placement={entry.plate || entry.rides ? plan.placements[entry.rides ?? entry.id] : undefined} transparent={world && (entry.plate || Boolean(entry.rides))}
           parallax={entry.plate || entry.rides ? undefined : overlayOps(plan, { start: entry.start, end: entry.renderEnd })}>
           <SceneStartFrame.Provider value={frames(entry.start)}>{render()}</SceneStartFrame.Provider>
@@ -781,7 +801,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
   // no hold drift, as in the HyperFrames compiler.
   const sceneElement = ({ entry, render, model }: any, part?: "behind" | "front") => (
     <Sequence key={part === "behind" ? `${entry.id}-behind` : entry.id} name={`${entry.id} · ${entry.scene.module}${part === "behind" ? " (behind)" : ""}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps} style={lookPlaneStyle(look, entry.scene.id) as React.CSSProperties}>
-      <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background} field={entry.plate ? fieldFor(entry.scene) : null} backdrop={entry.plate ? backdropFor(entry.scene) : null} light={entry.plate ? lightFor(entry.scene) : null} drift={part === "behind" ? undefined : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} behave={part === "behind" ? undefined : sceneBehaviour(story, entry.scene, model, { start: entry.start, end: entry.renderEnd })} zoom={part === "behind" ? undefined : zoomFor(entry, model)}>
+      <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background} field={entry.plate ? fieldFor(entry.scene) : null} backdrop={entry.plate ? backdropFor(entry.scene) : null} light={entry.plate ? lightFor(entry.scene) : null} drift={part === "behind" ? undefined : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} behave={part === "behind" ? undefined : sceneBehaviour(story, entry.scene, model, { start: entry.start, end: entry.renderEnd })} zoom={part === "behind" ? undefined : zoomFor(entry, model)} continuity={part === "behind" ? undefined : slideContinuity(story, entry.scene.id)}>
         <SceneStartFrame.Provider value={frames(entry.start)}>{render(part)}</SceneStartFrame.Provider>
       </SceneLayer>
     </Sequence>
