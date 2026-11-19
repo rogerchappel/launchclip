@@ -353,7 +353,12 @@ function resolveSplit(params, ctx) {
   const push = u(Math.max(e.rise, 40));
   const from = {x: side === 'left' ? -push : side === 'right' ? push : 0, y: side === 'top' ? -push : side === 'bottom' ? push : 0, scale: Math.max(1, e.scale), rotation: 0};
   addWindow(b, {key: 'media', media, rect: mediaRect, radius: 0, from, shadow: false});
-  const laid = stackText(b, area, contentEntries(b, p, {}), {align, anchor: side === 'top' ? 'top' : 'center'});
+  // A carousel slide (no captions) sets the panel's title at poster size, as a
+  // feed panel does; when that stack cannot fit, the usual sizes stand.
+  const stack = (titleSize) => stackText(b, area, contentEntries(b, p, {titleSize}), {align, anchor: side === 'top' ? 'top' : 'center'});
+  const events = b.events.length;
+  let laid;
+  try { laid = ctx?.noCaptions && b.shape === 'portrait' ? stack(128) : stack(); } catch { b.events.length = events; laid = stack(); }
   addTexts(b, laid);
   // The seam: an accent line that wipes across, or a soft blend of the footage into the panel.
   const seam = side === 'top' ? mediaRect.height : side === 'bottom' ? mediaRect.y : side === 'left' ? mediaRect.width : mediaRect.x;

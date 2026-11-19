@@ -40,7 +40,7 @@
 import {formatBound, withinBounds} from './bounds.mjs';
 import {motionBlurPx, springValue} from './motion.mjs';
 import {grammarEase, grammarStagger, grammarTweens} from './grammar.mjs';
-import {CATALOG_B_STYLE, contrastRatio, fitText, glyphBoxes, makeCheck, mixColor, r2, rt, textWidth} from './catalog-b-base.mjs';
+import {CATALOG_B_STYLE, carouselZone, contrastRatio, fitText, glyphBoxes, makeCheck, mixColor, r2, rt, textWidth} from './catalog-b-base.mjs';
 import {abs, el, sampleTime, set, svgRoot, transformString, tw} from './catalog-b-view.mjs';
 import {profileGeometry} from './layout-check.mjs';
 import {subjectCoverShare} from './subject.mjs';
@@ -116,7 +116,7 @@ export function createFootageBase(moduleId, params, ctx, {allowed, required = []
   };
 
   const geometry = profileGeometry(canvas, portrait ? 'shorts' : 'landscape');
-  const zone = geometry.safeZone, band = geometry.captionBand;
+  const zone = carouselZone(ctx, canvas) ?? geometry.safeZone, band = geometry.captionBand;
   // A carousel slide has no captions (ctx.noCaptions), so its text may use the band.
   const bottom = hidesCaptions || ctx.noCaptions ? zone.y + zone.height : Math.min(zone.y + zone.height, band.y - 30 * unit);
   const up = v => Math.ceil(v * 100 - 1e-6) / 100, down = v => Math.floor(v * 100 + 1e-6) / 100;
