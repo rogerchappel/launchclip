@@ -1,0 +1,102 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "pull-quote (sample carousel template, instagram)",
+  "lane": "motion",
+  "format": {
+    "kind": "carousel",
+    "width": 1080,
+    "height": 1350,
+    "fps": 30,
+    "duration": 12,
+    "platform": "instagram"
+  },
+  "carousel": {
+    "arc": "quote",
+    "goal": "follow",
+    "destinations": [
+      "instagram"
+    ],
+    "template": "pull-quote",
+    "caption": {
+      "hook": "Two lines worth keeping on the wall.",
+      "body": "From two people who wrote the field's early rules.",
+      "cta": "Follow for a line a day.",
+      "tags": []
+    }
+  },
+  "background": {
+    "kind": "paper"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#f5f0e5",
+      "primary": "#751a23",
+      "accent": "#2f5d50",
+      "ink": "#f5f0e5",
+      "paper": "#25221f"
+    },
+    "fonts": {
+      "display": "dm-serif-display",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    },
+    "palette": "as-given"
+  },
+  "audio": null,
+  "scenes": [
+    {
+      "id": "cover",
+      "module": "quote-card",
+      "start": 0,
+      "end": 4,
+      "energy": 2,
+      "slide": {
+        "role": "cover",
+        "medium": "still",
+        "alt": "“Simplicity is prerequisite for reliability.” Edsger W. Dijkstra"
+      },
+      "params": {
+        "quote": "Simplicity is prerequisite for reliability.",
+        "author": "Edsger W. Dijkstra",
+        "highlight": "Simplicity",
+        "variant": "mark"
+      }
+    },
+    {
+      "id": "knuth",
+      "module": "quote-card",
+      "start": 4,
+      "end": 8,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "“Premature optimization is the root of all evil.” Donald Knuth"
+      },
+      "params": {
+        "quote": "Premature optimization is the root of all evil.",
+        "author": "Donald Knuth",
+        "variant": "mark"
+      }
+    },
+    {
+      "id": "cta",
+      "module": "cta",
+      "start": 8,
+      "end": 12,
+      "energy": 2,
+      "slide": {
+        "role": "cta",
+        "medium": "still",
+        "alt": "Follow for a line a day"
+      },
+      "params": {
+        "action": "Follow for a line a day",
+        "emphasis": "Follow",
+        "handle": "slowcode.test",
+        "variant": "flush"
+      }
+    }
+  ],
+  "notes": "Sample for a carousel template (docs/guide/carousels.md, Templates), written by scripts/carousel-template-samples.mjs. Figures, names and handles are illustrative. Photos are stand-ins already in the repo."
+}

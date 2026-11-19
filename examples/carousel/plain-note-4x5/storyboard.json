@@ -1,0 +1,66 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "plain-note (sample carousel template, instagram)",
+  "lane": "motion",
+  "format": {
+    "kind": "carousel",
+    "width": 1080,
+    "height": 1350,
+    "fps": 30,
+    "duration": 4,
+    "platform": "instagram"
+  },
+  "carousel": {
+    "arc": "single",
+    "goal": "follow",
+    "destinations": [
+      "instagram"
+    ],
+    "template": "plain-note",
+    "caption": {
+      "hook": "Something I wish I had heard at the start.",
+      "body": "",
+      "cta": "Follow for more notes like this.",
+      "tags": []
+    }
+  },
+  "background": {
+    "kind": "flat"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#ffffff",
+      "primary": "#17191b",
+      "accent": "#1d6fd8",
+      "ink": "#ffffff",
+      "paper": "#0c0d0e"
+    },
+    "fonts": {
+      "display": "inter",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    },
+    "palette": "as-given"
+  },
+  "audio": null,
+  "scenes": [
+    {
+      "id": "note",
+      "module": "quote-card",
+      "start": 0,
+      "end": 4,
+      "energy": 2,
+      "slide": {
+        "role": "cover",
+        "medium": "still",
+        "alt": "Startups rarely die from competition. They die building the wrong thing."
+      },
+      "params": {
+        "quote": "Startups rarely die from competition. They die building the wrong thing.",
+        "author": "founder.notes",
+        "variant": "pull"
+      }
+    }
+  ],
+  "notes": "Sample for a carousel template (docs/guide/carousels.md, Templates), written by scripts/carousel-template-samples.mjs. Figures, names and handles are illustrative. Photos are stand-ins already in the repo."
+}

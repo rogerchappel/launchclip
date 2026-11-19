@@ -1,0 +1,151 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "photo-essay (sample carousel template, instagram)",
+  "lane": "motion",
+  "format": {
+    "kind": "carousel",
+    "width": 1080,
+    "height": 1350,
+    "fps": 30,
+    "duration": 20,
+    "platform": "instagram"
+  },
+  "carousel": {
+    "arc": "story",
+    "goal": "follow",
+    "destinations": [
+      "instagram"
+    ],
+    "template": "photo-essay",
+    "caption": {
+      "hook": "Three mornings on the ridge.",
+      "body": "A small project about getting up early.",
+      "cta": "Follow for the rest of the series.",
+      "tags": [
+        "photography",
+        "outdoors"
+      ]
+    }
+  },
+  "background": {
+    "kind": "flat"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#f5f2ea",
+      "primary": "#ad5639",
+      "accent": "#2f5d50",
+      "ink": "#f5f2ea",
+      "paper": "#202020"
+    },
+    "fonts": {
+      "display": "fraunces",
+      "body": "dm-sans",
+      "meta": "jetbrains-mono"
+    },
+    "palette": "as-given"
+  },
+  "audio": null,
+  "scenes": [
+    {
+      "id": "cover",
+      "module": "split-screen",
+      "start": 0,
+      "end": 4,
+      "energy": 2,
+      "slide": {
+        "role": "cover",
+        "medium": "still",
+        "alt": "Photo essay. Three mornings on the ridge. over a photo"
+      },
+      "params": {
+        "media": "assets/photos/ridge.jpg",
+        "variant": "top",
+        "share": 0.52,
+        "kicker": "Photo essay →",
+        "title": "Three mornings on the ridge",
+        "align": "left"
+      }
+    },
+    {
+      "id": "first",
+      "module": "split-screen",
+      "start": 4,
+      "end": 8,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Day one. Fog until seven, then everything at once. The light arrives faster than you can set up.. over a photo"
+      },
+      "params": {
+        "media": "assets/photos/ridge-sun.jpg",
+        "variant": "top",
+        "share": 0.45,
+        "kicker": "Day one",
+        "title": "Fog until seven, then everything at once",
+        "align": "left",
+        "body": "The light arrives faster than you can set up."
+      }
+    },
+    {
+      "id": "second",
+      "module": "split-screen",
+      "start": 8,
+      "end": 12,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Day two. The quiet before anyone else is up. Nothing to do but wait for the colour.. over a photo"
+      },
+      "params": {
+        "media": "assets/photos/ridge-dusk.jpg",
+        "variant": "top",
+        "share": 0.45,
+        "kicker": "Day two",
+        "title": "The quiet before anyone else is up",
+        "align": "left",
+        "body": "Nothing to do but wait for the colour."
+      }
+    },
+    {
+      "id": "note",
+      "module": "motion-title",
+      "start": 12,
+      "end": 16,
+      "energy": 1,
+      "slide": {
+        "role": "payoff",
+        "medium": "still",
+        "alt": "What I learned. Get there an hour early. The best frame is never the one you planned."
+      },
+      "params": {
+        "text": "Get there an hour early",
+        "kicker": "What I learned",
+        "sub": "The best frame is never the one you planned.",
+        "align": "left",
+        "variant": "soft-blur-in"
+      }
+    },
+    {
+      "id": "cta",
+      "module": "cta",
+      "start": 16,
+      "end": 20,
+      "energy": 2,
+      "slide": {
+        "role": "cta",
+        "medium": "still",
+        "alt": "Follow for the rest of the series"
+      },
+      "params": {
+        "action": "Follow for the rest of the series",
+        "emphasis": "Follow",
+        "handle": "ridgelight.test",
+        "variant": "flush"
+      }
+    }
+  ],
+  "notes": "Sample for a carousel template (docs/guide/carousels.md, Templates), written by scripts/carousel-template-samples.mjs. Figures, names and handles are illustrative. Photos are stand-ins already in the repo."
+}

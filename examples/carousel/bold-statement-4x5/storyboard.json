@@ -1,0 +1,119 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "bold-statement (sample carousel template, instagram)",
+  "lane": "motion",
+  "format": {
+    "kind": "carousel",
+    "width": 1080,
+    "height": 1350,
+    "fps": 30,
+    "duration": 16,
+    "platform": "instagram"
+  },
+  "carousel": {
+    "arc": "quote",
+    "goal": "follow",
+    "destinations": [
+      "instagram"
+    ],
+    "template": "bold-statement",
+    "caption": {
+      "hook": "What we believe about building software.",
+      "body": "Three lines we hold ourselves to.",
+      "cta": "Follow if you agree.",
+      "tags": []
+    }
+  },
+  "background": {
+    "kind": "flat"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0745ec",
+      "primary": "#d9ff55",
+      "accent": "#d9ff55",
+      "ink": "#0a1a3f",
+      "paper": "#fff0d7"
+    },
+    "fonts": {
+      "display": "inter",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    },
+    "palette": "as-given"
+  },
+  "audio": null,
+  "scenes": [
+    {
+      "id": "cover",
+      "module": "hook-title",
+      "start": 0,
+      "end": 4,
+      "energy": 2,
+      "slide": {
+        "role": "cover",
+        "medium": "still",
+        "alt": "Small teams ship better software"
+      },
+      "params": {
+        "headline": "Small teams ship better software",
+        "emphasis": "ship better",
+        "eyebrow": "Swipe →",
+        "variant": "flush"
+      }
+    },
+    {
+      "id": "value-1",
+      "module": "hook-title",
+      "start": 4,
+      "end": 8,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Fewer meetings, more decisions"
+      },
+      "params": {
+        "headline": "Fewer meetings, more decisions",
+        "emphasis": "more decisions",
+        "variant": "flush"
+      }
+    },
+    {
+      "id": "value-2",
+      "module": "hook-title",
+      "start": 8,
+      "end": 12,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Write it down or it did not happen"
+      },
+      "params": {
+        "headline": "Write it down or it did not happen",
+        "emphasis": "Write it down",
+        "variant": "flush"
+      }
+    },
+    {
+      "id": "cta",
+      "module": "cta",
+      "start": 12,
+      "end": 16,
+      "energy": 2,
+      "slide": {
+        "role": "cta",
+        "medium": "still",
+        "alt": "Follow if you agree"
+      },
+      "params": {
+        "action": "Follow if you agree",
+        "emphasis": "Follow",
+        "handle": "smallteams.test",
+        "variant": "flush"
+      }
+    }
+  ],
+  "notes": "Sample for a carousel template (docs/guide/carousels.md, Templates), written by scripts/carousel-template-samples.mjs. Figures, names and handles are illustrative. Photos are stand-ins already in the repo."
+}
