@@ -291,6 +291,15 @@ export async function runCli(argv, io = {}) {
         prototype: Boolean(flags.prototype),
         animatic: Boolean(flags.animatic),
         handInLook: flags.look,
+        generate: flags.generate,
+        generateImage: flags["generate-image"],
+        generateVideo: flags["generate-video"],
+        generateDraftVideo: flags["generate-draft-video"],
+        budget: flags.budget,
+        budgetDaily: flags["budget-daily"],
+        maxGenerations: flags["max-generations"],
+        stopAfter: flags["stop-after"],
+        approve: flags.approve,
         planOnly: Boolean(flags["plan-only"]),
         into: flags.into,
         comparison: flags.comparison,
@@ -711,7 +720,7 @@ export function parseFlags(args) {
     }
     const name = token.slice(2);
     // make --approve bible names what is approved; elsewhere --approve is a switch.
-    if (name === "approve" && /^(bible|animatic|storyboard)(,(bible|animatic|storyboard))*$/.test(args[index + 1] ?? "")) {
+    if (name === "approve" && /^(bible|animatic|storyboard|drafts)(,(bible|animatic|storyboard|drafts))*$/.test(args[index + 1] ?? "")) {
       flags[name] = args[index + 1];
       index += 1;
       continue;

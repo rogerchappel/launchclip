@@ -958,6 +958,15 @@ export async function runFinish(projectPath, options = {}, adapterOverrides = {}
     resolved: null,
     gates: null
   };
+  // --generate (docs/GENERATED_FOOTAGE_RFC.md): story shots and plates are
+  // generated into HANDIN.json before validate checks the hand-in. Not for the
+  // animatic, which they are briefed from.
+  if (!animatic && !candidate && !prototype && !planOnly) {
+    const { finishGenerate } = await import("./generate/story.js");
+    ctx.generate = await finishGenerate(project, options, adapters);
+    if (ctx.generate) for (const note of ctx.generate.notes) ctx.warnings.push(`generate: ${note}`);
+    if (ctx.generate?.status === "awaiting-approval") ctx.halt = "--stop-after drafts: the drafts are made; nothing is rendered until they are approved (--approve drafts)";
+  }
   const stages = [];
   let failed = null;
   let finished = false;
@@ -2401,7 +2410,7 @@ async function stylePack(ctx) {
 function buildReport(ctx, stages, { seconds, failed }) {
   const gates = ctx.gates ?? {};
   const gateStatuses = Object.values(gates).map((gate) => gate.status);
-  const status = failed ? "failed" : ctx.plan ? "planned" : ctx.preview ? "preview" : ctx.candidate ? "candidate" : ctx.prototype ? "prototype" : gateStatuses.includes("failed") ? "needs-repair" : "ready-for-review";
+  const status = failed ? "failed" : ctx.generate?.status === "awaiting-approval" ? "awaiting-approval" : ctx.plan ? "planned" : ctx.preview ? "preview" : ctx.candidate ? "candidate" : ctx.prototype ? "prototype" : gateStatuses.includes("failed") ? "needs-repair" : "ready-for-review";
   const nextSteps = [];
   const render = stages.find((stage) => stage.name === "render");
   if (failed) {
@@ -2418,6 +2427,7 @@ function buildReport(ctx, stages, { seconds, failed }) {
     for (const name of ctx.plan.checks.failed) nextSteps.push(`The ${name} check fails on the planned story (plan.checks.gates.${name} in ${PATHS.report}); fix storyboard.json and run launchclip finish ${ctx.project} --plan-only again.`);
     nextSteps.push(`Play the planned story in a browser player (${PLAYER_MANIFEST_FILE} lists its files; ${PATHS.resolved} is the story), then render it: launchclip finish ${ctx.project} (the voice, captions and sound are reused).`);
   }
+  if (!failed && ctx.generate?.status === "awaiting-approval") nextSteps.push(`Look at the drafts (${ctx.generate.drafts} keyframe(s) under assets/shots/generated; launchclip handin check ${ctx.project} checks any draft clips), then run the same finish with --approve drafts to make the finals and render.`);
   if (!failed && ctx.preview) nextSteps.push(`Look at ${rel(ctx.project, ctx.preview.output)}; when it is right, run launchclip finish ${ctx.project} --scene ${ctx.preview.scene} to re-render it into the final.`);
   return {
     schema_version: FINISH_REPORT_VERSION,
@@ -2434,6 +2444,7 @@ function buildReport(ctx, stages, { seconds, failed }) {
     output: ctx.out,
     ...(ctx.preview ? { preview: { scene: ctx.preview.scene, output: ctx.preview.output } } : {}),
     ...(ctx.plan ? { plan: ctx.plan } : {}),
+    ...(ctx.generate ? { generate: { status: ctx.generate.status, shots: ctx.generate.shots, plates: ctx.generate.plates, quotes: ctx.generate.quotes, stopped: ctx.generate.stopped, ledger: "qa/generation-log.jsonl" } } : {}),
     ...(ctx.candidate ? { candidate: { id: ctx.candidate, ...(ctx.candidateReceipt ?? {}) } } : {}),
     ...(ctx.animatic?.file ? { animatic: ctx.animatic } : {}),
     ...(ctx.prototype ? { prototype: { cut: ctx.prototype.cut ?? null, duration: ctx.prototype.duration ?? null } } : {}),
