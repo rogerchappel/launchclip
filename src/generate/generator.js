@@ -31,12 +31,19 @@ export const GENERATED_DIR = path.join("assets", "shots", "generated");
 // Poll pace (the ElevenLabs docs ask for no more than every 2 s for images, 10 s for video).
 export const POLL_MS = Object.freeze({ image: 2000, video: 10_000 });
 
-export function createGenerator({ project, image, video = null, budget = null, daily = null, tier = "final", maxCalls = null, library = null, check = null, approve = null, look = lookParagraph(null), fps, pollMs = POLL_MS, notice = () => {} }) {
+// Keyframe candidates per round: stills are cheap next to a clip, so several are
+// made and the best one is animated. One by default.
+export const MAX_KEYFRAME_CANDIDATES = 6;
+
+export function createGenerator({ project, image, video = null, budget = null, daily = null, tier = "final", maxCalls = null, library = null, check = null, approve = null, candidates = 1, look = lookParagraph(null), fps, pollMs = POLL_MS, notice = () => {} }) {
   if (!project) throw new Error("createGenerator needs a project");
   if (!image) throw new Error("createGenerator needs an image provider (the keyframe step)");
   const notes = [];
   const quotes = [];
   const say = (line) => { notes.push(line); notice(`generate: ${line}`); };
+  let count = parseKeyframeCandidates(candidates) ?? 1;
+  // Paying for several stills with nothing to choose between them is waste.
+  if (count > 1 && !check) { say(`no vision model is configured to choose between keyframe candidates, so one is made per shot, not ${count}`); count = 1; }
   // given: the user's --budget; without one, each approved quote becomes the budget.
   const given = Boolean(budget && Object.keys(budget).length);
   let limit = given ? { ...budget } : null;
@@ -82,7 +89,7 @@ export function createGenerator({ project, image, video = null, budget = null, d
   async function allow(todo) {
     const items = { image: [], video: [] };
     for (const job of todo) {
-      if (!job.cached.image) items.image.push({ brief: job.brief, step: "image", tier });
+      if (!job.cached.image) for (let i = 0; i < count; i += 1) items.image.push({ brief: job.brief, step: "image", tier });
       if (wantsVideo(job)) items.video.push({ brief: job.brief, step: "video", tier });
     }
     const unpriced = new Set();
@@ -149,59 +156,81 @@ export function createGenerator({ project, image, video = null, budget = null, d
     }
   }
 
-  // One step until accepted, rejected (image) or out of attempts/budget.
+  // One step until accepted, rejected (image) or out of attempts/budget. An
+  // image attempt is a round of `count` candidate stills sharing one attempt
+  // number; the check picks the one to keep, and the rest are logged rejected.
   async function step(job, name, brief, options, changed) {
     const provider = providerFor(name);
+    const want = name === "image" ? count : 1;
     for (;;) {
       const attempt = await nextAttempt(project, job.request.id, name);
       if (attempt == null) { say(`${job.request.id}: ${name} not generated after ${MAX_ATTEMPTS} attempts; the shot needs simplifying`); return null; }
-      const quote = await provider.quote(brief, name, tier);
-      const gate = await spendGate({ project, provider: provider.id, quote, budget: limit ?? {}, daily, maxCalls });
-      const { priced } = gate;
-      if (!gate.ok) {
-        stopped = gate.reasons.join("; ");
-        say(`${job.request.id}: not generated, ${stopped}`);
-        return null;
-      }
-      const entry = { shot: job.request.id, step: name, tier, attempt, provider: provider.id, brief_hash: job.brief.brief_hash, ...(changed ? { changed } : {}) };
-      const started = Date.now();
-      let result;
-      try {
-        result = await run(provider, brief, name, tier, options, path.join(project, GENERATED_DIR, job.request.id, `${name}-${tier}-${attempt}`), pollMs[name] ?? 0);
-      } catch (error) {
-        if (error?.name === "AbortError") throw error;
-        // shortcut: a failed call is logged at its quote (or 0 when unpriced); providers that report a refund-free failure can return cost 0 from fetch later.
-        await appendLedger(project, { ...entry, model: error.model ?? null, cost: priced ? cost(quote) : { amount: 0, unit: quote.unit }, ...(priced ? {} : { cost_unknown: true }), seconds: secondsSince(started), verdict: "failed", reason: String(error?.message ?? error).slice(0, 300) });
-        say(`${job.request.id}: ${name} attempt ${attempt} failed (${String(error?.message ?? error).split("\n")[0]})`);
-        continue;
-      }
-      const file = path.relative(project, result.file);
-      const spent = result.cost ? cost(result.cost) : priced ? cost(quote) : { amount: 0, unit: quote.unit };
-      const base = { ...entry, model: result.model ?? null, seed: result.seed ?? null, cost: spent, ...(!result.cost && !priced ? { cost_unknown: true } : {}), seconds: secondsSince(started), file, licence: result.licence ?? null };
-      if (name === "image") {
-        const verdict = await keyframeCheck(result.file, brief, job.request);
-        if (!verdict.ok) {
-          await appendLedger(project, { ...base, verdict: "rejected", reason: verdict.reason ?? "the keyframe does not show the request" });
-          say(`${job.request.id}: keyframe attempt ${attempt} rejected (${verdict.reason ?? "no reason given"})`);
-          return { verdict: "rejected", change: verdict.change || (job.request.shows ? `It must clearly show: ${job.request.shows}.` : "Match the reference sheets and the description exactly.") };
+      const made = [];
+      for (let i = 1; i <= want; i += 1) {
+        const quote = await provider.quote(brief, name, tier);
+        const gate = await spendGate({ project, provider: provider.id, quote, budget: limit ?? {}, daily, maxCalls });
+        const { priced } = gate;
+        if (!gate.ok) {
+          stopped = gate.reasons.join("; ");
+          say(`${job.request.id}: not generated, ${stopped}`);
+          if (made.length) break;
+          return null;
         }
+        const entry = { shot: job.request.id, step: name, tier, attempt, ...(want > 1 ? { candidate: i } : {}), provider: provider.id, brief_hash: job.brief.brief_hash, ...(changed ? { changed } : {}) };
+        const started = Date.now();
+        let result;
+        try {
+          result = await run(provider, brief, name, tier, options, path.join(project, GENERATED_DIR, job.request.id, `${name}-${tier}-${attempt}${want > 1 ? `-c${i}` : ""}`), pollMs[name] ?? 0);
+        } catch (error) {
+          if (error?.name === "AbortError") throw error;
+          // shortcut: a failed call is logged at its quote (or 0 when unpriced); providers that report a refund-free failure can return cost 0 from fetch later.
+          await appendLedger(project, { ...entry, model: error.model ?? null, cost: priced ? cost(quote) : { amount: 0, unit: quote.unit }, ...(priced ? {} : { cost_unknown: true }), seconds: secondsSince(started), verdict: "failed", reason: String(error?.message ?? error).slice(0, 300) });
+          say(`${job.request.id}: ${name} attempt ${attempt}${want > 1 ? ` candidate ${i}` : ""} failed (${String(error?.message ?? error).split("\n")[0]})`);
+          continue;
+        }
+        const spent = result.cost ? cost(result.cost) : priced ? cost(quote) : { amount: 0, unit: quote.unit };
+        made.push({ abs: result.file, base: { ...entry, model: result.model ?? null, seed: result.seed ?? null, cost: spent, ...(!result.cost && !priced ? { cost_unknown: true } : {}), seconds: secondsSince(started), file: path.relative(project, result.file), licence: result.licence ?? null } });
       }
-      return await appendLedger(project, { ...base, verdict: "accepted" });
+      if (!made.length) continue;
+      if (name !== "image") return await appendLedger(project, { ...made[0].base, verdict: "accepted" });
+      const { best, verdicts, change } = await chooseKeyframe(made.map((entry) => entry.abs), brief, job.request);
+      let accepted = null;
+      for (const [i, entry] of made.entries()) {
+        const verdict = verdicts[i] ?? {};
+        if (i === best) accepted = await appendLedger(project, { ...entry.base, verdict: "accepted" });
+        else await appendLedger(project, { ...entry.base, verdict: "rejected", reason: verdict.ok ? "another candidate was chosen" : (verdict.reason ?? "the keyframe does not show the request") });
+      }
+      if (accepted) {
+        if (made.length > 1) say(`${job.request.id}: keyframe candidate ${accepted.candidate} of ${made.length} chosen`);
+        return accepted;
+      }
+      const reason = verdicts.map((verdict) => verdict?.reason).filter(Boolean)[0] ?? "no reason given";
+      say(`${job.request.id}: keyframe attempt ${attempt} rejected${made.length > 1 ? ` (all ${made.length} candidates)` : ""} (${reason})`);
+      return { verdict: "rejected", change: change || (job.request.shows ? `It must clearly show: ${job.request.shows}.` : "Match the reference sheets and the description exactly.") };
     }
   }
 
-  async function keyframeCheck(file, brief, request) {
+  // → {best: index | null, verdicts: [{ok, reason}], change}. A check with rank()
+  // compares the candidates in one look; one without checks them in turn and keeps the first that passes.
+  async function chooseKeyframe(files, brief, request) {
     if (!check) {
       // shortcut: no vision route configured, so the keyframe is accepted unseen; configure a model that takes images to check it.
       if (!checkNoted) { say("no vision model is configured, so keyframes are accepted without a check"); checkNoted = true; }
-      return { ok: true };
+      return { best: 0, verdicts: files.map(() => ({ ok: true })), change: null };
     }
     try {
-      return await check({ file, brief, request });
+      if (files.length > 1 && check.rank) return await check.rank({ files, brief, request });
+      const verdicts = [];
+      for (const file of files) {
+        const verdict = await check({ file, brief, request });
+        verdicts.push(verdict);
+        if (verdict.ok) return { best: verdicts.length - 1, verdicts, change: null };
+      }
+      return { best: null, verdicts, change: verdicts.at(-1)?.change ?? null };
     } catch (error) {
-      // A check that cannot run (the model is down) would fail every retry the same way: the paid keyframe is kept.
+      // A check that cannot run (the model is down) would fail every retry the same way: the first paid keyframe is kept.
       say(`${request.id}: the keyframe check failed (${String(error?.message ?? error).split("\n")[0]}); the keyframe is accepted unchecked`);
-      return { ok: true };
+      return { best: 0, verdicts: files.map(() => ({ ok: true })), change: null };
     }
   }
 
@@ -354,7 +383,7 @@ export function createCommandProvider(command, { env = process.env, notice, cwd,
  * → check({file, brief, request}) → {ok, reason, change}
  */
 export function visionKeyframeCheck(client, { readImage = defaultReadImage } = {}) {
-  return async ({ file, request }) => {
+  const check = async ({ file, request }) => {
     const result = await client.runStructured({
       instructions: "You check a generated keyframe for a video. Say whether it clearly shows the requested subject, and whether any text, lettering, logo, user interface or recognisable real person is visible (that fails it). When it fails, give one short sentence to add to the image prompt that fixes the main problem.",
       input: `Requested subject: ${request.shows}`,
@@ -367,6 +396,46 @@ export function visionKeyframeCheck(client, { readImage = defaultReadImage } = {
     const ok = Boolean(value.shows_subject) && !value.has_text_or_logo;
     return { ok, reason: ok ? null : String(value.finding ?? "the keyframe does not show the request"), change: ok ? null : String(value.change ?? "") || null };
   };
+  // Several candidates in one look: each passes or fails as above (plus anomalies), and the
+  // best passing one is the highest look match plus aesthetics. → {best, verdicts, change}
+  check.rank = async ({ files, brief, request }) => {
+    const result = await client.runStructured({
+      instructions: "You compare candidate keyframes for one shot of a video, numbered from 1 in the order given. For each, say whether it clearly shows the requested subject; whether any text, lettering, logo, user interface or recognisable real person is visible; whether it has anomalies (malformed hands or faces, extra or missing fingers or limbs, melted or impossible objects, physics that cannot happen); and score from 0 to 10 how well it matches the look asked for and how good it is to look at (composition, light, focus, a calm lower third). Give a short finding for each. Then give one short sentence to add to the image prompt that would fix the main problem if every candidate fails.",
+      input: `Requested subject: ${request.shows ?? brief?.image?.prompt ?? ""}\nThe look asked for: ${brief?.image?.prompt ?? ""}\nCandidates: ${files.length}`,
+      images: await Promise.all(files.map(async (file) => ({ url: await readImage(file), detail: "low" }))),
+      schema: RANK_SCHEMA,
+      schemaName: "launchclip_keyframe_rank",
+      maxOutputTokens: 300 + 200 * files.length
+    });
+    const rows = Array.isArray(result?.value?.candidates) ? result.value.candidates : [];
+    const verdicts = files.map((_, i) => {
+      const row = rows.find((entry) => Number(entry.index) === i + 1) ?? rows[i] ?? {};
+      const ok = Boolean(row.shows_subject) && !row.has_text_or_logo && !row.anomalies;
+      return { ok, score: (Number(row.look_match) || 0) + (Number(row.aesthetics) || 0), reason: ok ? null : String(row.finding ?? "the keyframe does not pass") };
+    });
+    const passing = verdicts.map((verdict, i) => [verdict, i]).filter(([verdict]) => verdict.ok);
+    const best = passing.length ? passing.reduce((a, b) => (b[0].score > a[0].score ? b : a))[1] : null;
+    return { best, verdicts, change: best == null ? String(result?.value?.change ?? "") || null : null };
+  };
+  return check;
+}
+
+const RANK_SCHEMA = Object.freeze({
+  type: "object",
+  additionalProperties: false,
+  required: ["candidates", "change"],
+  properties: {
+    candidates: { type: "array", items: { type: "object", additionalProperties: false, required: ["index", "shows_subject", "has_text_or_logo", "anomalies", "look_match", "aesthetics", "finding"], properties: { index: { type: "integer" }, shows_subject: { type: "boolean" }, has_text_or_logo: { type: "boolean" }, anomalies: { type: "boolean" }, look_match: { type: "integer" }, aesthetics: { type: "integer" }, finding: { type: "string" } } } },
+    change: { type: "string" }
+  }
+});
+
+/** --keyframe-candidates <n>: stills per keyframe round, 1 to MAX_KEYFRAME_CANDIDATES; nothing → null. */
+export function parseKeyframeCandidates(value) {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1 || n > MAX_KEYFRAME_CANDIDATES) throw new Error(`--keyframe-candidates must be a whole number from 1 to ${MAX_KEYFRAME_CANDIDATES}; got ${value}`);
+  return n;
 }
 
 const KEYFRAME_SCHEMA = Object.freeze({

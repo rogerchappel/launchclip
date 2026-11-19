@@ -21,7 +21,7 @@ import { BIBLE_FILE } from "@launchclip/core/bible.mjs";
 import { HANDIN_FILE, HANDIN_SCHEMA, visionHandInJudge } from "../hand_in.js";
 import { writeFileAtomic } from "../atomic_write.js";
 import { storyBriefs } from "./brief.js";
-import { createGenerator, createProviders, generateSpecs, parseBudget } from "./generator.js";
+import { createGenerator, createProviders, generateSpecs, parseBudget, parseKeyframeCandidates } from "./generator.js";
 
 export const DRAFTS_STOP = "drafts";
 
@@ -35,7 +35,7 @@ const castOf = (bible) => (Array.isArray(bible?.cast) ? bible.cast : Array.isArr
  * notice, hooks (storyBriefs' frame).
  * → {status: "generated" | "awaiting-approval", shots, plates, quotes, stopped, notes}
  */
-export async function generateStoryAssets(project, { image, video = null, draft = false, budget = null, daily = null, maxCalls = null, stopAfter = null, approved = false, ask = null, judge = null, notice = () => {}, hooks = {} } = {}) {
+export async function generateStoryAssets(project, { image, video = null, draft = false, budget = null, daily = null, maxCalls = null, candidates = 1, stopAfter = null, approved = false, ask = null, judge = null, notice = () => {}, hooks = {} } = {}) {
   const root = path.resolve(project);
   if (!existsSync(path.join(root, BIBLE_FILE))) throw new Error(`generating story shots needs a frozen show bible (${BIBLE_FILE}); make one with launchclip bible freeze`);
   const story = JSON.parse(await readFile(path.join(root, "storyboard.json"), "utf8"));
@@ -53,7 +53,7 @@ export async function generateStoryAssets(project, { image, video = null, draft 
 
   // One pass of the generator over the requests at one tier; → Map id → shot | null.
   const pass = async (tier, requests) => {
-    const generator = createGenerator({ project: root, image, video, budget, daily, tier, maxCalls, check, approve: ask, notice, fps: Number(story.format?.fps) || undefined });
+    const generator = createGenerator({ project: root, image, video, budget, daily, tier, maxCalls, candidates, check, approve: ask, notice, fps: Number(story.format?.fps) || undefined });
     try {
       const answers = await Promise.all(requests.map((request) => generator.findShot(request)));
       const report = generator.report();
@@ -144,6 +144,7 @@ export async function finishGenerate(project, options, adapters = {}) {
     budget: parseBudget(options.budget),
     daily: parseBudget(options.budgetDaily, "--budget-daily"),
     maxCalls: parseMaxGenerations(options.maxGenerations),
+    candidates: parseKeyframeCandidates(options.keyframeCandidates) ?? 1,
     stopAfter: options.stopAfter ?? null,
     approved: approvals.includes(DRAFTS_STOP),
     ask: attended ? (question) => (adapters.ask ?? askYesNo)(question) : null,

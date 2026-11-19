@@ -162,7 +162,7 @@ export async function runCli(argv, io = {}) {
     } else if (command === "generate") {
       if (generateInvocation.action === "record") {
         const { recordShot } = await import("./generate/record.js");
-        const recorded = await recordShot(required(generateInvocation.project, "project path"), { shot: flags.shot, step: flags.step, file: flags.file, madeWith: flags["made-with"], licence: flags.licence, cost: flags.cost, seed: flags.seed, briefHash: flags["brief-hash"], verdict: flags.verdict, reason: flags.reason });
+        const recorded = await recordShot(required(generateInvocation.project, "project path"), { shot: flags.shot, step: flags.step, file: flags.file, madeWith: flags["made-with"], licence: flags.licence, cost: flags.cost, seed: flags.seed, briefHash: flags["brief-hash"], verdict: flags.verdict, reason: flags.reason, attempt: flags.attempt, candidate: flags.candidate });
         stdout.write(flags.json ? `${JSON.stringify(recorded, null, 2)}\n` : `recorded ${recorded.entry.shot} ${recorded.entry.step} attempt ${recorded.entry.attempt} (${recorded.entry.verdict})${recorded.entry.cost_unknown ? ", cost unknown" : ""}: ${recorded.entry.file}${recorded.placed ? "; placed in storyboard.json" : ""}\n`);
         return;
       }
@@ -176,7 +176,7 @@ export async function runCli(argv, io = {}) {
       if (generateInvocation.action === "check") {
         const { checkKeyframe } = await import("./generate/record.js");
         const verdict = await checkKeyframe(required(generateInvocation.project, "project path"), { shot: flags.shot, file: flags.file, model: flags.model });
-        stdout.write(flags.json ? `${JSON.stringify(verdict, null, 2)}\n` : `${verdict.ok ? "accepted" : "rejected"}: ${verdict.shot}${verdict.reason ? `: ${verdict.reason}` : ""}${verdict.change ? `\nchange: ${verdict.change}` : ""}\n`);
+        stdout.write(flags.json ? `${JSON.stringify(verdict, null, 2)}\n` : `${verdict.ok ? "accepted" : "rejected"}: ${verdict.shot}${verdict.chosen ? ` (candidate ${verdict.chosen} chosen)` : ""}${verdict.reason ? `: ${verdict.reason}` : ""}${verdict.change ? `\nchange: ${verdict.change}` : ""}\n`);
         if (!verdict.ok) process.exitCode = 1;
         return;
       }
@@ -327,6 +327,7 @@ export async function runCli(argv, io = {}) {
         budget: flags.budget,
         budgetDaily: flags["budget-daily"],
         maxGenerations: flags["max-generations"],
+        keyframeCandidates: flags["keyframe-candidates"],
         stopAfter: flags["stop-after"],
         approve: flags.approve,
         planOnly: Boolean(flags["plan-only"]),

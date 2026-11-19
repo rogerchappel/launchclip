@@ -31,7 +31,7 @@ import { keyframeCheck, writeHandIn } from "./story.js";
 export const AGENT_PROVIDER = "agent";
 const EXTENSIONS = { image: /\.(jpe?g|png|webp)$/i, video: /\.(mp4|webm|mov)$/i };
 
-export async function recordShot(project, { shot, step, file, madeWith, licence, cost = null, seed = null, briefHash = null, verdict = "accepted", reason = null }, hooks = {}) {
+export async function recordShot(project, { shot, step, file, madeWith, licence, cost = null, seed = null, briefHash = null, verdict = "accepted", reason = null, attempt: round = null, candidate = null }, hooks = {}) {
   if (!EXTENSIONS[step]) throw new Error(`generate record needs --step image or --step video; got ${step}`);
   if (!file || !existsSync(file)) throw new Error(`generate record needs --file <path> that exists; got ${file}`);
   if (!EXTENSIONS[step].test(file)) throw new Error(`--file for the ${step} step must be ${step === "image" ? ".jpg, .png or .webp" : ".mp4, .webm or .mov"}; got ${path.basename(file)}`);
@@ -46,13 +46,18 @@ export async function recordShot(project, { shot, step, file, madeWith, licence,
   const { request, brief } = found;
   if (briefHash && briefHash !== brief.brief_hash) throw new Error(`generate record: --brief-hash ${briefHash} is not the current brief for ${request.id} (${brief.brief_hash}); the storyboard or narration changed since, so run generate brief again and regenerate`);
 
-  const attempt = await nextAttempt(project, request.id, step);
+  // Keyframe candidates of one round share the attempt generate allow gave (--attempt), told apart by --candidate.
+  const next = await nextAttempt(project, request.id, step);
+  const attempt = round == null ? next : Number(round);
+  if (round != null && !(Number.isInteger(attempt) && attempt >= 1 && attempt <= (next ?? MAX_ATTEMPTS))) throw new Error(`--attempt must be the round generate allow gave, from 1 to ${next ?? MAX_ATTEMPTS}; got ${round}`);
   if (attempt == null) throw new Error(`generate record: ${request.id} already has ${MAX_ATTEMPTS} ${step} attempts; the shot needs simplifying, not another try`);
-  const rel = path.join(GENERATED_DIR, request.id, `${step}-${AGENT_PROVIDER}-${attempt}${path.extname(file).toLowerCase()}`);
+  const pick = candidate == null ? null : Number(candidate);
+  if (pick != null && !(Number.isInteger(pick) && pick >= 1)) throw new Error(`--candidate must be a whole number from 1; got ${candidate}`);
+  const rel = path.join(GENERATED_DIR, request.id, `${step}-${AGENT_PROVIDER}-${attempt}${pick ? `-c${pick}` : ""}${path.extname(file).toLowerCase()}`);
   await mkdir(path.dirname(path.join(project, rel)), { recursive: true });
   await copyFile(file, path.join(project, rel));
   const entry = await appendLedger(project, {
-    shot: request.id, step, tier: "final", attempt, provider: AGENT_PROVIDER, model: madeWith,
+    shot: request.id, step, tier: "final", attempt, ...(pick ? { candidate: pick } : {}), provider: AGENT_PROVIDER, model: madeWith,
     seed: seed == null ? null : Number(seed), brief_hash: brief.brief_hash,
     // No cost reported is unknown spend, not free.
     cost: spent ? { amount: Object.values(spent)[0], unit: Object.keys(spent)[0] } : { amount: 0, unit: "usd" },
@@ -102,7 +107,9 @@ export async function allowCall(project, { shot, step, quote = null, budget = nu
  * for it, hooks.frame for ffmpeg (as in projectBriefs).
  */
 export async function checkKeyframe(project, { shot, file, model = null } = {}, hooks = {}) {
-  if (!file || !existsSync(file)) throw new Error(`generate check needs --file <path> that exists; got ${file}`);
+  // Several candidates: --file a.png,b.png,c.png are ranked in one look, as make --keyframe-candidates does.
+  const files = String(file ?? "").split(",").map((entry) => entry.trim()).filter(Boolean);
+  if (!files.length || files.some((entry) => !existsSync(entry))) throw new Error(`generate check needs --file <path>[,<path>...] that exist; got ${file}`);
   const found = await findBrief(project, shot, "image", "generate check", hooks);
   let client = hooks.client ?? null;
   if (!client) {
@@ -113,12 +120,31 @@ export async function checkKeyframe(project, { shot, file, model = null } = {}, 
     client = made.client;
   }
   const { request, brief } = found;
-  if (request.role !== "story" && request.role !== "plate") return { shot: request.id, ...(await visionKeyframeCheck(client)({ file, brief, request })) };
-  const { visionHandInJudge } = await import("../hand_in.js");
-  const root = path.resolve(project);
-  const bible = await readBible(root);
-  const verdict = await keyframeCheck(visionHandInJudge(client), bible, root)({ file, request: { role: request.role, who: found.shot?.who ?? [] } });
-  return { shot: request.id, reason: null, change: null, ...verdict };
+  let one;
+  if (request.role !== "story" && request.role !== "plate") {
+    const vision = visionKeyframeCheck(client);
+    if (files.length > 1) return { shot: request.id, ...ranked(await vision.rank({ files, brief, request })) };
+    one = (entry) => vision({ file: entry, brief, request });
+  } else {
+    const { visionHandInJudge } = await import("../hand_in.js");
+    const root = path.resolve(project);
+    const judge = keyframeCheck(visionHandInJudge(await Promise.resolve(client)), await readBible(root), root);
+    one = (entry) => judge({ file: entry, request: { role: request.role, who: found.shot?.who ?? [] } });
+  }
+  if (files.length === 1) return { shot: request.id, reason: null, change: null, ...(await one(files[0])) };
+  // No ranking for the bible check: candidates are judged in turn and the first that passes is chosen.
+  const verdicts = [];
+  for (const entry of files) {
+    const verdict = await one(entry);
+    verdicts.push(verdict);
+    if (verdict.ok) return { shot: request.id, ...ranked({ best: verdicts.length - 1, verdicts, change: null }) };
+  }
+  return { shot: request.id, ...ranked({ best: null, verdicts, change: verdicts.at(-1)?.change ?? null }) };
+}
+
+// The ranking as the CLI reports it: candidates numbered from 1, in --file order.
+function ranked({ best, verdicts, change }) {
+  return { ok: best != null, chosen: best == null ? null : best + 1, candidates: verdicts.map((verdict, i) => ({ candidate: i + 1, ok: Boolean(verdict?.ok), ...(verdict?.score != null ? { score: verdict.score } : {}), reason: verdict?.reason ?? null })), reason: best == null ? (verdicts.find((verdict) => verdict?.reason)?.reason ?? "no candidate passes") : null, change };
 }
 
 /** The steps already accepted for this brief, any provider, whose file is still there: {image, video}. */

@@ -2,7 +2,7 @@
 // asset provider, behind the app's own provider when there is one.
 import { askYesNo } from "../demo/autopilot.js";
 import { lookParagraph } from "../generate/brief.js";
-import { createGenerator, createProviders, generateSpecs, parseBudget, visionKeyframeCheck } from "../generate/generator.js";
+import { createGenerator, createProviders, generateSpecs, parseBudget, parseKeyframeCandidates, visionKeyframeCheck } from "../generate/generator.js";
 
 /** The --generate* flags as specs, or null when generation is off. */
 export function makeGenerateSpecs(options = {}) {
@@ -26,6 +26,7 @@ export async function makeGenerator(ctx, { library = null, brand = null } = {}) 
     daily: parseBudget(ctx.options.budgetDaily, "--budget-daily"),
     tier: specs.draftVideo ? "draft" : "final",
     maxCalls: parseMaxGenerations(ctx.options.maxGenerations),
+    candidates: parseKeyframeCandidates(ctx.options.keyframeCandidates) ?? 1,
     library,
     check: vision ? visionKeyframeCheck(ctx.model.client) : null,
     approve: attended ? (question) => (ctx.adapters.ask ?? askYesNo)(question) : null,
