@@ -25,6 +25,11 @@ concurrency:
   group: parity-full-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # hyperframes pulls onnxruntime-node, whose install script downloads the CUDA
+  # build on Linux; that release asset 404s. CI only needs the CPU build.
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+
 jobs:
   modules:
     name: Modules ${{ matrix.shard }}/12

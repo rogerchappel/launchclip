@@ -13,6 +13,11 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  # hyperframes pulls onnxruntime-node, whose install script downloads the CUDA
+  # build on Linux; that release asset 404s. CI only needs the CPU build.
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+
 jobs:
   test:
     name: Node ${{ matrix.node }} on ${{ matrix.os }}
