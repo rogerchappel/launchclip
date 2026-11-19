@@ -167,16 +167,23 @@ and a reason, like the motion and direction checks.
 |---|---|
 | `cover-promise` | The cover has a headline of 3 to 12 words that names a specific subject or number |
 | `cover-thumbnail` | The cover's headline is legible when scaled to a 160 px wide feed thumbnail (measured cap height and contrast) |
-| `type-size` | No text under a minimum cap height for the canvas (proposed: 3.5% of the slide's height for body, 6% for headlines) |
+| `type-size` | No text under a minimum font size: 46 px for body and 52 px for headlines at 1080 px wide, scaled by the canvas width |
 | `one-idea` | At most one headline and one supporting block per slide, and a word budget (proposed: 25 words for body slides, 12 for the cover) |
 | `contrast` | WCAG AA contrast for every text run against what is under it, measured on the rendered pixels, not the palette |
-| `safe-zone` | Text clears each destination's overlay zones (TikTok's caption and buttons, Instagram's dots and profile row) |
+| `safe-zone` | Text clears each destination's overlay zones (TikTok's caption and buttons, Instagram's dots and profile row): px margins per destination, 96 / 72 / 96 / 72 on 4:5, 72 on 1:1, 180 top and 240 bottom on 9:16 |
 | `continuity` | Every slide uses the same type scale and palette roles; a slide that switches looks is a warning |
 | `swipe-cue` | The cover or second slide carries a cue to swipe (a crossing element, a broken sentence, a counter) unless the arc is `single` or `quote` |
 | `payoff` | Arcs that promise a list, steps or data have a payoff slide |
 | `cta-match` | The call to action matches the declared goal (save, comment keyword, follow, visit, install) |
 | `alt-text` | Every slide has alt text that describes it, not its file name |
 | `claims` | Numbers and claims on slides carry the same provenance a video's do ([EXPLAINER_CLAIMS_RFC.md](EXPLAINER_CLAIMS_RFC.md)) |
+| `filler` | No stock phrases ("game changer", "unlock your potential", "stay tuned" …) on slides or in the caption |
+| `hook-length` | The caption hook and the cover headline run 4 to 14 words; under 3 fails |
+| `cut-off` | No headline ending in an ellipsis or on a function word ("the", "to", "can" …), no body copy stopped mid-sentence |
+| `restated-ending` | The last slide says something new: at least 85% of its words already on earlier slides is a warning (a deck ending on its payoff is exempt) |
+| `duplicates` | No headline or body text repeated across slides |
+| `word-budget` | The deck carries max(6, 3 × slides) to 28 × slides words: under is a warning, over fails |
+| `scaffold-leak` | No planning labels in the copy ("Slide 3:", "Hook:", "CTA:", "[image]") |
 
 ### 6.1 Swipe continuity
 
