@@ -88,9 +88,9 @@ test("a motion slide: mp4 where the destination shows motion, its still where it
   const n = story.scenes.length;
   Object.assign(story.scenes[1], { loop: true });
   story.scenes[1].slide.medium = "motion";
-  const dir = await project(story, { instagram: [...stems(n), "02.mp4"], tiktok: stems(n), linkedin: stems(n) });
+  const dir = await project(story, { instagram: [...stems(n), "02.mp4"], tiktok: stems(n), linkedin: stems(n), "meta-ads": [...stems(n), "02.mp4"] });
   try {
-    const report = await run(dir, { dest: "instagram,tiktok,linkedin" }, {});
+    const report = await run(dir, { dest: "instagram,tiktok,linkedin,meta-ads" }, {});
     assert.deepEqual(report.destinations.instagram.files.slice(0, n + 1), ["01.png", "02.png", "02.mp4", ...stems(n).slice(2)]);
     assert.deepEqual(report.destinations.tiktok.files.slice(0, n), stems(n, "jpg"), "tiktok takes jpg, made from the png");
     assert.ok(existsSync(path.join(dir, "carousel/tiktok/02.jpg")));
@@ -98,6 +98,9 @@ test("a motion slide: mp4 where the destination shows motion, its still where it
     assert.ok(report.destinations.linkedin.warnings.some((w) => w.includes("sent as its still")));
     const alt = JSON.parse(readFileSync(path.join(dir, "carousel/instagram/alt.json"), "utf8"));
     assert.deepEqual(alt.filter((a) => a.slide === 2).map((a) => a.file), ["02.png", "02.mp4"]);
+    // The Meta card is the clip, with its still as the thumbnail; still cards have none.
+    const cards = JSON.parse(readFileSync(path.join(dir, "carousel/meta-ads/cards.json"), "utf8")).cards;
+    assert.deepEqual(cards.slice(0, 3).map((card) => [card.file, card.thumbnail]), [["01.png", undefined], ["02.mp4", "02.png"], ["03.png", undefined]]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
   // A motion slide with no mp4 is a missing render where motion is shown.
   const bare = await project(story, { instagram: stems(n) });
