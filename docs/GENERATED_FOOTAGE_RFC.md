@@ -382,4 +382,12 @@ Status (2026-11-20): phase 5's story shots are built for any provider
   or whether plates and whole shots cover the useful cases.
 - Whether the draft review should be the animatic with drafts swapped in,
   or a contact sheet of first, middle and last frames per shot.
-- How the agent's own tools (skill path) report cost back into the ledger.
+- ~~How the agent's own tools (skill path) report cost back into the
+  ledger.~~ Answered: the agent hands each attempt in with `launchclip
+  generate record` (provider `agent`, model from `--made-with`). A tool
+  that reports a cost passes it as `--cost <n><unit>`; otherwise the line
+  carries `cost_unknown: true` with a zero amount, and `MAKE.json` costs show
+  it as unknown (no USD estimate, a warning), never as free. No quote or
+  budget is enforced on that path: LaunchClip cannot see the tool's prices,
+  so the skill makes the agent ask the user before spending. Story shots
+  wait for the hand-in path.

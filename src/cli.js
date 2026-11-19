@@ -160,7 +160,13 @@ export async function runCli(argv, io = {}) {
       if (report.assets.some((asset) => asset.status === "rejected")) process.exitCode = 1;
       return;
     } else if (command === "generate") {
-      if (generateInvocation.action !== "brief") throw new Error(`launchclip generate needs an action: launchclip generate brief <project> [--shot <id>] [--json]${generateInvocation.action ? ` (got ${generateInvocation.action})` : ""}`);
+      if (generateInvocation.action === "record") {
+        const { recordShot } = await import("./generate/record.js");
+        const recorded = await recordShot(required(generateInvocation.project, "project path"), { shot: flags.shot, step: flags.step, file: flags.file, madeWith: flags["made-with"], licence: flags.licence, cost: flags.cost, seed: flags.seed, briefHash: flags["brief-hash"], verdict: flags.verdict, reason: flags.reason });
+        stdout.write(flags.json ? `${JSON.stringify(recorded, null, 2)}\n` : `recorded ${recorded.entry.shot} ${recorded.entry.step} attempt ${recorded.entry.attempt} (${recorded.entry.verdict})${recorded.entry.cost_unknown ? ", cost unknown" : ""}: ${recorded.entry.file}${recorded.placed ? "; placed in storyboard.json" : ""}\n`);
+        return;
+      }
+      if (generateInvocation.action !== "brief") throw new Error(`launchclip generate needs an action: launchclip generate brief|record <project> ...${generateInvocation.action ? ` (got ${generateInvocation.action})` : ""}`);
       const { projectBriefs, formatBriefs } = await import("./generate/brief.js");
       const all = await projectBriefs(required(generateInvocation.project, "project path"));
       const shot = typeof flags.shot === "string" ? flags.shot : null;

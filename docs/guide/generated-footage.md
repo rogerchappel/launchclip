@@ -24,6 +24,7 @@ The keyframe check uses the run's model when it can see images (`launchclip doct
 |---|---|---|
 | `fal:<endpoint id>` | fal.ai, many hosted models behind one API | `FAL_KEY` |
 | `elevenlabs:<model id>` | ElevenLabs Image & Video API (a paid plan; some models need approval or are unavailable in some regions) | `ELEVENLABS_API_KEY` |
+| `local:<workflow.json>` | a ComfyUI server you run on this machine, with open models you installed ([LOCAL_GENERATION.md](../LOCAL_GENERATION.md)); address from `COMFYUI_URL` | none |
 | `cmd:<command>` | any program of yours, including a local model | none |
 
 Keys are read from the environment, sent only to that provider, and never written to the project, the ledger or the logs.
@@ -40,7 +41,28 @@ launchclip make "A 30-second explainer on cold brew" \
 
 `--generate-draft-video <provider>:<model>` names a cheaper video model and generates at draft tier. With no video provider, video shots are left to the plan and "any" shots become stills.
 
-A `cmd:` provider is started once and speaks one JSON line per call on stdin and stdout. It reads `{id, op: "quote", brief, step, tier}` and answers `{id, amount, unit}` (amount `null` when it has no price), and reads `{id, op: "generate", brief, step, tier, startFrame?}` and answers `{id, file, model?, seed?, licence?, cost?}` or `{id, error}`. `step` is `image` or `video`; for the video step `startFrame` is the approved keyframe's path. A local model can quote `{amount: 0, unit: "seconds"}`: time on your machine needs no budget.
+A `cmd:` provider is started once and speaks one JSON line per call on stdin and stdout. It reads `{id, op: "quote", brief, step, tier}` and answers `{id, amount, unit}` (amount `null` when it has no price), and reads `{id, op: "generate", brief, step, tier, startFrame?}` and answers `{id, file, model?, seed?, licence?, cost?}` or `{id, error}`. `step` is `image` or `video`; for the video step `startFrame` is the approved keyframe's path. A local model quotes in `seconds` (`amount` may be `null` when it has no measured rate): time on your machine is not money, so a batch that spends only seconds needs no budget, no approval and no `--max-generations`.
+
+## With your agent's own tools
+
+If you make videos with the LaunchClip skill and your agent has an image or video generation tool connected (for example through MCP), the agent can generate the footage itself. LaunchClip never sees that tool or its account: it writes the brief, and the agent hands the file back.
+
+1. The agent asks you before spending, naming the shots, the tool and the cost if the tool can say.
+2. `launchclip generate brief <project> --json` gives each shot's brief. The agent makes the keyframe from `image.prompt`, `image.negative` and the size, checks it against what the shot must show, and animates it only when `steps` includes `video` (the keyframe as the start frame, `video.seconds + 2 × pad_seconds` long).
+3. Every attempt is handed in:
+
+```bash
+launchclip generate record <project> --shot <request id> --step image|video \
+  --file <path> --made-with "<tool>/<model>" --licence "<the tool's terms>" \
+  [--cost 0.04usd] [--seed 1234] [--brief-hash sha256:...] \
+  [--verdict accepted|rejected] [--reason "..."]
+```
+
+It copies the file under `assets/shots/generated/`, logs one ledger line (provider `agent`), and for an accepted still, or an accepted clip, points the storyboard's request at the file with `source.generated: true`. A `--brief-hash` that no longer matches the brief (the storyboard or narration changed since) is refused. Three attempts per shot and step, as in `make`.
+
+**Cost.** Pass `--cost` when the tool reported what the call cost. Without it the line is logged with `cost_unknown`, and `MAKE.json` costs show that generation as unknown (no USD estimate, with a warning), not as free: check the tool's own billing. The budget flags are for `make --generate`; on the skill path, the agent asking you first is the money gate.
+
+Story shots and plates are not recorded this way yet; they are handed in through the animation branch.
 
 ## Budgets
 

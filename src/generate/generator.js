@@ -25,7 +25,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { MAX_ASSET_PROVIDER_CONCURRENCY, createCommandAssetProvider } from "../asset_provider_cmd.js";
 import { footageBrief, lookParagraph, refusalReason } from "./brief.js";
-import { MAX_ATTEMPTS, appendLedger, beforeCall, checkBudget, nextAttempt, quoteBatch, readLedger, spentTotal } from "./ledger.js";
+import { FREE_UNITS, MAX_ATTEMPTS, appendLedger, beforeCall, checkBudget, nextAttempt, quoteBatch, readLedger, spentTotal } from "./ledger.js";
 
 export const GENERATED_DIR = path.join("assets", "shots", "generated");
 // Poll pace (the ElevenLabs docs ask for no more than every 2 s for images, 10 s for video).
@@ -86,6 +86,7 @@ export function createGenerator({ project, image, video = null, budget = null, d
       if (wantsVideo(job)) items.video.push({ brief: job.brief, step: "video", tier });
     }
     const unpriced = new Set();
+    const untimed = new Set();
     const totals = {};
     for (const step of ["image", "video"]) {
       if (!items[step].length) continue;
@@ -93,17 +94,20 @@ export function createGenerator({ project, image, video = null, budget = null, d
       // A null amount is "no price known": counted as 0 here, and the batch then needs a call cap (maxCalls).
       const quoted = await quoteBatch(items[step], { id: provider.id, quote: async (...args) => {
         const quote = await provider.quote(...args);
-        if (quote?.amount == null && quote?.unit) { unpriced.add(quote.unit); return { amount: 0, unit: quote.unit }; }
+        if (quote?.amount == null && quote?.unit) { (FREE_UNITS.has(quote.unit) ? untimed : unpriced).add(quote.unit); return { amount: 0, unit: quote.unit }; }
         return quote;
       } });
       for (const [unit, amount] of Object.entries(quoted.totals)) totals[unit] = (totals[unit] ?? 0) + amount;
     }
-    const text = `${todo.length} shot(s), ${Object.entries(totals).map(([unit, amount]) => `${unpriced.has(unit) ? "unknown" : round(amount)} ${unit}`).join(" + ") || "nothing to pay"}`;
+    const text = `${todo.length} shot(s), ${Object.entries(totals).map(([unit, amount]) => `${unpriced.has(unit) || untimed.has(unit) ? "unknown" : round(amount)} ${unit}`).join(" + ") || "nothing to pay"}`;
     const spent = await spentTotal(project);
     quotes.push({ shots: todo.map((job) => job.request.id), totals, unpriced: [...unpriced] });
     // An unpriced provider reports no cost either, so no budget can see its spend: only a cap on its calls bounds it.
     if (unpriced.size && !(maxCalls > 0)) { say(`quote: ${text}; refused: the provider gives no price in ${[...unpriced].join(", ")} and reports no cost, so its spend can't be counted or held to --budget; pass --max-generations <n> to cap its paid calls`); return false; }
-    const pricedSpend = Object.entries(totals).some(([unit, amount]) => !unpriced.has(unit) && amount > 0);
+    // Local time is not money: a batch that spends only seconds needs no budget, cap or approval.
+    const pricedSpend = Object.entries(totals).some(([unit, amount]) => !unpriced.has(unit) && !FREE_UNITS.has(unit) && amount > 0);
+    const units = Object.keys(totals);
+    if (units.length && units.every((unit) => FREE_UNITS.has(unit))) { say(`quote: ${text}; local time only, no money spent`); return true; }
     if (given) {
       const fits = checkBudget({ quote: totals, budget: limit, spent });
       if (!fits.ok) { say(`quote: ${text}; refused: ${fits.reasons.join("; ")}`); return false; }
@@ -153,8 +157,8 @@ export function createGenerator({ project, image, video = null, budget = null, d
       if (attempt == null) { say(`${job.request.id}: ${name} not generated after ${MAX_ATTEMPTS} attempts; the shot needs simplifying`); return null; }
       const quote = await provider.quote(brief, name, tier);
       const priced = quote?.amount != null;
-      if (!priced) {
-        const made = (await readLedger(project)).filter((entry) => entry.cost_unknown).length;
+      if (!priced && !FREE_UNITS.has(quote?.unit)) {
+        const made = (await readLedger(project)).filter((entry) => entry.cost_unknown && entry.provider === provider.id).length;
         if (!(maxCalls > 0) || made >= maxCalls) {
           stopped = maxCalls > 0 ? `the cap of ${maxCalls} unpriced call(s) is reached (--max-generations)` : "the provider gave no price and no call cap is set (--max-generations)";
           say(`${job.request.id}: not generated, ${stopped}`);
@@ -264,7 +268,7 @@ async function run(provider, brief, step, tier, options, outDir, wait) {
 /**
  * --generate / --generate-image / --generate-video / --generate-draft-video
  * values → {image, video} specs {provider, model}. provider is fal,
- * elevenlabs or cmd (model is then the command).
+ * elevenlabs, local (model is a ComfyUI workflow file) or cmd (model is then the command).
  */
 export function generateSpecs({ generate, image, video, draftVideo } = {}) {
   const parse = (value, flag) => {
@@ -285,7 +289,7 @@ export function generateSpecs({ generate, image, video, draftVideo } = {}) {
   return specs.image ? specs : null;
 }
 
-export const GENERATE_PROVIDERS = Object.freeze(["fal", "elevenlabs", "cmd"]);
+export const GENERATE_PROVIDERS = Object.freeze(["fal", "elevenlabs", "local", "cmd"]);
 
 /** "5", "5usd", "200credits", "5usd,200credits" → {usd: 5, credits: 200}; nothing → null. */
 export function parseBudget(value, flag = "--budget") {
@@ -304,6 +308,7 @@ export function parseBudget(value, flag = "--budget") {
 export async function createProviders(specs, { env = process.env, fetch, notice, cwd } = {}) {
   const make = async (provider, models) => {
     if (provider === "fal") return (await import("./providers/fal.js")).createFalProvider({ ...models, env, ...(fetch ? { fetch } : {}) });
+    if (provider === "local") return (await import("./providers/local.js")).createLocalProvider({ ...models, env, ...(fetch ? { fetch } : {}), ...(cwd ? { cwd } : {}) });
     if (provider === "elevenlabs") return (await import("./providers/elevenlabs.js")).createElevenLabsProvider({ ...models, env, ...(fetch ? { fetch } : {}) });
     return createCommandProvider(models.command, { env, notice, cwd });
   };
