@@ -1454,6 +1454,12 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip generate brief <project> [--shot <id>] [--json] # the generation brief for each footage shot request; calls no provider
   ```
 
+- `generate record`: Hand in a footage shot made with the agent's own image or video tool (the skill path): copies --file under assets/shots/generated/<id>/, appends one line to qa/generation-log.jsonl (provider agent; no --cost records cost_unknown: true, not zero), and for an accepted shot whose brief needs no further step points the storyboard's request at the file with source.generated. A --brief-hash that is not the current brief's is refused; three attempts per shot and step at most. Story shots and plates are not recorded yet.
+
+  ```text
+  launchclip generate record <project> --shot <id> --step image|video --file <path> --made-with <tool/model> --licence <text> [--cost <n>usd|credits] [--seed <n>] [--brief-hash sha256:...] [--verdict accepted|rejected] [--reason "..."] [--json] # hand in a shot made with the agent's own generation tool
+  ```
+
 - `collection new`: Create <root>/<id>/ with collection.json, a seeded style in styles/ that every video shares (unless --style names one), brand/ for logos and brand.json, recipes/ and a RULES.md the script pass, planner and critic read. isolation is strict: the brand folder and rules stay inside the collection.
 
   ```text
