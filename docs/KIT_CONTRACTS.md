@@ -7386,3 +7386,44 @@ play? `launchclip doctor --models [--json] [--model provider:model]
 clients take. A base64 `data:` URL (JPEG, PNG, GIF or WebP) or an http(s)
 URL becomes an image block, placed before the text (`anthropicContent`).
 `detail` is ignored. With no images the request is unchanged.
+
+## Generation brief (`src/generate/brief.js`, `launchclip generate brief`)
+
+The brief a generation provider is given for one footage shot
+(docs/GENERATED_FOOTAGE_RFC.md §4, §4.2). Every provider adapter reads this
+shape and nothing else:
+
+```js
+{
+  id,                               // the shot request's id
+  kind: "footage",                  // "story" shots (§4.1) come later
+  steps: ["image"] | ["image", "video"],
+  image: { prompt, negative, width, height, references: [/* absolute paths */] },
+  video: { prompt, seconds, pad_seconds, fps } | null,
+  brief_hash: "sha256:…"            // over the canonical JSON of everything else
+}
+```
+
+- `footageBrief(request, {look, fps})` builds it from an asset-provider shot
+  request (`src/asset_provider.js`). `steps` is `["image"]` when the request's
+  `type` is `"image"` or its slot shows a still, otherwise the keyframe then
+  the motion step, whose prompt is motion and camera only.
+- The image prompt is `shows` word for word, then the story's look paragraph
+  (`lookParagraph(story)`: the brand palette as hex, the look and grade, the
+  same for every shot in a video), the composition (a backdrop, `role:
+  "background"`, asks for an even frame with no strong subject and low
+  motion) and the narration line as context only.
+- `negative` is always `FOOTAGE_NEGATIVE`: no text, lettering, logos, UI or
+  real, named people.
+- `video.seconds` is the request's `duration` (`DEFAULT_SHOT_SECONDS` when
+  unresolved) plus `EDGE_PAD_SECONDS` (0.3 s) at each end.
+- A request that names a real product, person, place or event gets `null`;
+  `refusalReason(request)` says why. The check is a heuristic: a capitalised
+  word that does not open a sentence, a mixed-case word (`iPhone`), or ™, ®,
+  ©, @.
+
+`launchclip generate brief <project> [--shot <id>] [--json]` prints the brief
+for every `{kind: "shot"}` request in the project's storyboard (backdrops
+included), with the narration from its `audio.words`, and calls no provider.
+`--shot` takes a request id or a scene id; `--json` prints `[{request, brief,
+reason}]`.

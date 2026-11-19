@@ -1,0 +1,17 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Generation brief fixture",
+  "notes": "Footage shot requests for test/generate_brief.test.js: a video clip, a still card slot, an image request, a backdrop and one that names a real product (refused).",
+  "lane": "motion",
+  "format": { "width": 1080, "height": 1920, "fps": 30, "duration": 10 },
+  "brand": { "colors": { "bg": "#0b0d1a", "primary": "#ffb547" }, "fonts": { "display": "anton", "body": "space-grotesk" } },
+  "look": "film",
+  "audio": { "words": "NARRATION.json" },
+  "scenes": [
+    { "id": "s1", "module": "clip", "start": 0, "end": 2, "params": { "media": { "kind": "shot", "shows": "a barista pouring latte art, close up", "type": "video" } } },
+    { "id": "s2", "module": "device-frame", "start": 2, "end": 4, "params": { "image": { "kind": "shot", "shows": "a sunny kitchen table with a laptop", "type": "any" } } },
+    { "id": "s3", "module": "photo-scene", "start": 4, "end": 6, "params": { "media": { "kind": "shot", "shows": "a field of wheat at dawn", "type": "image" } } },
+    { "id": "s4", "module": "clip", "start": 6, "end": 8, "params": { "media": { "kind": "shot", "shows": "a man unboxing an iPhone", "type": "video" } } },
+    { "id": "s5", "module": "end-card", "start": 8, "end": 10, "params": { "title": "Brew better" }, "backdrop": { "kind": "shot", "shows": "a quiet cafe interior, out of focus" } }
+  ]
+}
