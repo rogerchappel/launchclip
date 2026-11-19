@@ -19,6 +19,14 @@ list, the animatic `ANIMATIC.json`), stop for the user after the bible and
 after the animatic, then rejoin at step 5. Headless:
 `launchclip make "<prompt>" --animation`.
 
+**A carousel or a single-image post** (swipeable slides, not a video) is
+`launchclip carousel make "<brief>" [--arc <id>|auto] [--dest
+instagram,linkedin] [--goal save|comment|follow|visit|install] [--images
+<dir>]`: it plans the slides, caption and alt text into `storyboard.json`
+(scenes are slides, `format.kind: "carousel"`), then renders, checks and
+exports per destination. To change a slide, edit `storyboard.json` and run
+`launchclip carousel render|check|export <project>`. Rules: docs/CAROUSELS_RFC.md.
+
 1. **Brief.** Ask at most three grouped questions (story, delivery, materials
    and audio), default the rest, and write `BRIEF.md`, `EVIDENCE.md` and
    `SOURCE.md` into the output project (`.launchclip/agent-<slug>`).

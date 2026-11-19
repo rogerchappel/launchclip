@@ -970,7 +970,7 @@ export function checkStoryboard(raw, { words = [], beats = null, track = null, t
 }
 
 // Delete params[path] ("motion.enter", "steps[1].at"). → whether there was a value to delete
-function dropParam(params, path) {
+export function dropParam(params, path) {
   const keys = path.split(/[.[\]]+/).filter(Boolean);
   let at = params;
   for (const key of keys.slice(0, -1)) { if (at === null || typeof at !== "object") return false; at = at[key]; }
