@@ -25,6 +25,7 @@ export async function makeGenerator(ctx, { library = null, brand = null } = {}) 
     budget: parseBudget(ctx.options.budget),
     daily: parseBudget(ctx.options.budgetDaily, "--budget-daily"),
     tier: specs.draftVideo ? "draft" : "final",
+    maxCalls: parseMaxGenerations(ctx.options.maxGenerations),
     library,
     check: vision ? visionKeyframeCheck(ctx.model.client) : null,
     approve: attended ? (question) => (ctx.adapters.ask ?? askYesNo)(question) : null,
@@ -32,4 +33,12 @@ export async function makeGenerator(ctx, { library = null, brand = null } = {}) 
     fps: Number(ctx.format?.fps) || undefined,
     notice: ctx.say
   });
+}
+
+/** --max-generations <n>: the cap on paid calls to a provider that gives no price; nothing → null. */
+export function parseMaxGenerations(value) {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) throw new Error(`--max-generations must be a whole number of calls from 1; got ${value}`);
+  return n;
 }

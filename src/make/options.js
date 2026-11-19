@@ -13,7 +13,7 @@ import { conceptsMode } from "./concept_story.js";
 import { candidatesMode } from "./candidates.js";
 import { compChoice } from "./comps.js";
 import { explainerMode } from "./visual_explainer.js";
-import { makeGenerateSpecs } from "./generate.js";
+import { makeGenerateSpecs, parseMaxGenerations } from "./generate.js";
 import { parseBudget } from "../generate/generator.js";
 import { parseSfxMode } from "../sfx/event_sounds.js";
 import { talkingHeadLayoutError } from "../talking_head_layout.js";
@@ -136,6 +136,7 @@ export const MAKE_FLAGS = Object.freeze([
   ["generate-draft-video", {}],
   ["budget", {}],
   ["budget-daily", {}],
+  ["max-generations", {}],
   // The fewest shots the plan must ask the asset provider for (0, the default, leaves them optional).
   ["min-shots", {}],
   // Full-screen cards on the app's footage (off, the default, keeps the stock plates).
@@ -195,6 +196,7 @@ export function makeOptionsFromFlags(flags = {}) {
     generateDraftVideo: flags["generate-draft-video"],
     budget: flags.budget,
     budgetDaily: flags["budget-daily"],
+    maxGenerations: flags["max-generations"],
     minShots: flags["min-shots"],
     cardBackdrops: flags["card-backdrops"],
     assetDescriptions: flags["asset-descriptions"],
@@ -293,6 +295,7 @@ export function validateMakeOptions(options = {}) {
   if (options.longFormVisuals != null && !["model", "rules"].includes(String(options.longFormVisuals).toLowerCase())) throw new Error(`--long-form-visuals must be model or rules; got ${options.longFormVisuals}`);
   if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);
   makeGenerateSpecs(options);
+  parseMaxGenerations(options.maxGenerations);
   parseBudget(options.budget);
   parseBudget(options.budgetDaily, "--budget-daily");
   if (options.explainer != null) explainerMode(options.explainer);
