@@ -149,14 +149,17 @@ test("a plan of slide content is laid out by a template: --template, or picked f
     { id: "cta", role: "cta", headline: "Save it for your sprint", handle: "fast.test", alt: "cta" }
   ] });
   const model = fakeModel(content);
-  const { story } = await make("habits of fast teams", { arc: "listicle", template: "myth-split" }, model);
+  const { story } = await make("habits of fast teams", { arc: "listicle", template: "bold-statement" }, model);
   assert.match(model.requests[0].instructions, /tooling lays them out with a carousel template/);
-  assert.equal(story.carousel.template, "myth-split");
+  assert.equal(story.carousel.template, "bold-statement");
   assert.deepEqual(story.scenes.map((scene) => scene.module), ["hook-title", "motion-title", "item-list", "cta"]);
-  assert.deepEqual(story.scenes[0].plate, { kind: "prism", params: { tint: "accent" } }, "the template's brand surface on the cover");
-  const auto = await make("habits of fast teams", { arc: "listicle" }, fakeModel(content));
-  assert.ok(["study-notes", "field-notes"].includes(auto.story.carousel.template), auto.story.carousel.template);
-  const long = fakeModel(listicle({ slides: content.slides.map((slide) => (slide.id === "one" ? { ...slide, headline: "x".repeat(70) } : slide)) }), content);
-  const { report } = await make("habits", { arc: "listicle", template: "study-notes" }, long);
-  assert.match(report.plan_attempts[0].errors.join("\n"), /headline is 70 characters; the study-notes template's text-card slide holds 48/);
+  assert.deepEqual(story.background, { kind: "flat" });
+  assert.equal(story.brand.palette, "as-given", "the template's brand ground");
+  // A step slide is the headline alone, so the other templates get the slide without its line.
+  const plain = listicle({ slides: content.slides.map(({ body, ...slide }) => slide) });
+  const auto = await make("habits of fast teams", { arc: "listicle" }, fakeModel(plain));
+  assert.ok(["numbered-steps", "plain-note", "plain-note-dark"].includes(auto.story.carousel.template), auto.story.carousel.template);
+  const long = fakeModel(listicle({ slides: plain.slides.map((slide) => (slide.id === "one" ? { ...slide, headline: "x".repeat(70) } : slide)) }), plain);
+  const { report } = await make("habits", { arc: "listicle", template: "numbered-steps" }, long);
+  assert.match(report.plan_attempts[0].errors.join("\n"), /headline is 70 characters; the numbered-steps template's step slide holds 48/);
 });
