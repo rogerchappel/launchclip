@@ -166,12 +166,35 @@ export async function runCli(argv, io = {}) {
         stdout.write(flags.json ? `${JSON.stringify(recorded, null, 2)}\n` : `recorded ${recorded.entry.shot} ${recorded.entry.step} attempt ${recorded.entry.attempt} (${recorded.entry.verdict})${recorded.entry.cost_unknown ? ", cost unknown" : ""}: ${recorded.entry.file}${recorded.placed ? "; placed in storyboard.json" : ""}\n`);
         return;
       }
-      if (generateInvocation.action !== "brief") throw new Error(`launchclip generate needs an action: launchclip generate brief|record <project> ...${generateInvocation.action ? ` (got ${generateInvocation.action})` : ""}`);
+      if (generateInvocation.action === "allow") {
+        const { allowCall } = await import("./generate/record.js");
+        const verdict = await allowCall(required(generateInvocation.project, "project path"), { shot: flags.shot, step: flags.step, quote: flags.quote, budget: flags.budget, daily: flags["budget-daily"], maxGenerations: flags["max-generations"] });
+        stdout.write(flags.json ? `${JSON.stringify(verdict, null, 2)}\n` : `${verdict.ok ? "allowed" : "refused"}: ${verdict.shot} ${verdict.step}${verdict.attempt ? ` attempt ${verdict.attempt}` : ""}${verdict.reasons.length ? `: ${verdict.reasons.join("; ")}` : ""}\n`);
+        if (!verdict.ok) process.exitCode = 1;
+        return;
+      }
+      if (generateInvocation.action === "check") {
+        const { checkKeyframe } = await import("./generate/record.js");
+        const verdict = await checkKeyframe(required(generateInvocation.project, "project path"), { shot: flags.shot, file: flags.file, model: flags.model });
+        stdout.write(flags.json ? `${JSON.stringify(verdict, null, 2)}\n` : `${verdict.ok ? "accepted" : "rejected"}: ${verdict.shot}${verdict.reason ? `: ${verdict.reason}` : ""}${verdict.change ? `\nchange: ${verdict.change}` : ""}\n`);
+        if (!verdict.ok) process.exitCode = 1;
+        return;
+      }
+      if (generateInvocation.action !== "brief") throw new Error(`launchclip generate needs an action: launchclip generate brief|allow|check|record <project> ...${generateInvocation.action ? ` (got ${generateInvocation.action})` : ""}`);
       const { projectBriefs, formatBriefs } = await import("./generate/brief.js");
-      const all = await projectBriefs(required(generateInvocation.project, "project path"));
+      const { acceptedSteps } = await import("./generate/record.js");
+      const project = required(generateInvocation.project, "project path");
+      const all = await projectBriefs(project);
       const shot = typeof flags.shot === "string" ? flags.shot : null;
-      const briefs = shot ? all.filter(({ request }) => request.id === shot || request.scene_id === shot) : all;
-      if (shot && !briefs.length) throw new Error(`launchclip generate brief: no shot request ${shot} in ${generateInvocation.project}`);
+      const picked = shot ? all.filter(({ request }) => request.id === shot || request.scene_id === shot) : all;
+      if (shot && !picked.length) throw new Error(`launchclip generate brief: no shot request ${shot} in ${generateInvocation.project}`);
+      // accepted: the steps already made for the current brief, so a re-run reuses them (as make --generate does).
+      const briefs = await Promise.all(picked.map(async (entry) => {
+        if (!entry.brief) return entry;
+        const done = await acceptedSteps(project, entry.brief);
+        const accepted = Object.fromEntries(Object.entries(done).filter(([, line]) => line).map(([step, line]) => [step, line.file]));
+        return Object.keys(accepted).length ? { ...entry, accepted } : entry;
+      }));
       stdout.write(flags.json ? `${JSON.stringify(briefs, null, 2)}\n` : formatBriefs(briefs));
       return;
     } else if (command === "collection" || command === "recipe") {

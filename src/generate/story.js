@@ -92,7 +92,7 @@ export async function generateStoryAssets(project, { image, video = null, draft 
 }
 
 // The keyframe checked against the bible: the hand-in judge on the still, as on a handed-in shot or plate.
-function keyframeCheck(judge, bible, root) {
+export function keyframeCheck(judge, bible, root) {
   return async ({ file, request }) => {
     const plate = request.role === "plate";
     const characters = (plate ? [] : request.who ?? []).map((id) => {
@@ -106,7 +106,7 @@ function keyframeCheck(judge, bible, root) {
 }
 
 // HANDIN.json: the generated entries replace any for the same shot or place this run tried; the rest are kept.
-async function writeHandIn(root, bible, { plates, shots, attempted }) {
+export async function writeHandIn(root, bible, { plates, shots, attempted }) {
   const file = path.join(root, HANDIN_FILE);
   const existing = existsSync(file) ? JSON.parse(await readFile(file, "utf8")) : {};
   const triedShots = new Set(attempted.filter((entry) => entry.request.role === "story").map((entry) => entry.shot.id));
