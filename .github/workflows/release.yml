@@ -29,6 +29,11 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+env:
+  # hyperframes pulls onnxruntime-node, whose install script downloads the CUDA
+  # build on Linux; that release asset 404s. CI only needs the CPU build.
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+
 jobs:
   publish:
     if: github.ref == 'refs/heads/main'

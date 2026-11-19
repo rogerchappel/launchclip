@@ -132,7 +132,8 @@ test("the vision judge rejects art that drops a must_keep item, and is shown the
 test("finish draws the hand-in in its resolved copy, writes qa/hand-in.json and reports the gate", async () => {
   const { dir, bible, story } = await project();
   await handIn(dir, bible, { places: [{ place: "standing", floor: 0.8 }] });
-  const report = await runFinish(dir, { renderer: "remotion", planOnly: true }, { env: {}, notice() {}, handInHooks: fakes() });
+  // music none, sfx off: the plain CI job has no FFmpeg, and the hand-in needs no sound.
+  const report = await runFinish(dir, { renderer: "remotion", planOnly: true, music: "none", sfx: "off" }, { env: {}, notice() {}, handInHooks: fakes() });
   assert.notEqual(report.status, "failed", JSON.stringify(report.stages.filter((stage) => stage.error)));
   const resolved = JSON.parse(await readFile(path.join(dir, ".launchclip/finish/story.resolved.json"), "utf8"));
   assert.ok(resolved.scenes.every((scene) => scene.params.plate?.src === "assets/plates/standing.png"));
