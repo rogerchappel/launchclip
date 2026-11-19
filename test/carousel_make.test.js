@@ -110,3 +110,19 @@ test("stages that are not built yet are pending; the plan still succeeds", async
   assert.deepEqual(ran, ["out"]);
   await assert.rejects(make("fast teams", {}, fakeModel(listicle()), { ...stubStages, render: async () => { throw new Error("chromium crashed"); } }), /carousel render failed .*chromium crashed/);
 });
+
+test("an optional param a slide's module refuses is taken off without a repair call", async () => {
+  const model = fakeModel(listicle({ slides: listicle().slides.map((entry) => (entry.id === "cta" ? { ...entry, params: { ...entry.params, icon: "bell" } } : entry)) }));
+  const { story, report } = await make("fast teams", { arc: "listicle" }, model);
+  assert.equal(model.requests.length, 1);
+  assert.equal(story.scenes.at(-1).params.icon, undefined);
+  assert.match(report.warnings.join("\n"), /cta: tooling took params.icon off/);
+});
+
+test("a refused param that is required is reported as refused, not as missing", async () => {
+  const long = listicle({ slides: listicle().slides.map((entry) => (entry.id === "two" ? { ...entry, params: { text: "Ship the smallest change that works ".repeat(4).trim() } } : entry)) });
+  const { report } = await make("fast teams", { arc: "listicle" }, fakeModel(long, listicle()));
+  const errors = report.plan_attempts[0].errors.join("\n");
+  assert.match(errors, /two \(motion-title\) does not lay out/);
+  assert.doesNotMatch(errors, /is required/);
+});

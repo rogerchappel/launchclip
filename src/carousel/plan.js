@@ -6,6 +6,7 @@ import { CAROUSEL_ARCS, CAROUSEL_ARC_IDS, CAROUSEL_DESTINATIONS, CAROUSEL_GOALS,
 import { STORY_SCHEMA, resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { validateModuleParams } from "@launchclip/core/module-schemas.mjs";
 import { resolveModule, sceneRenderEnd } from "@launchclip/core/modules.mjs";
+import { dropParam } from "../storyboard_planner.js";
 import { moduleCatalogue } from "@launchclip/core/planning-prompt.mjs";
 
 // Modules that need what a carousel does not have (footage, a presenter, a
@@ -49,6 +50,7 @@ export function slideRange({ arc = null, destinations, slides = null }) {
 }
 
 /** The planning instructions, in this repo's own words. */
+// shortcut: the list budgets are measured at 4:5 (1080×1350) with the default brand; derive them from moduleFit per canvas if other aspects need different numbers.
 export function planInstructions({ arc, goal, destinations, range, modules, photos, generate }) {
   const dest = CAROUSEL_DESTINATIONS[destinations[0]];
   const count = range.exact != null ? `exactly ${range.exact} slides` : `${range.min} to ${range.max} slides`;
@@ -71,6 +73,7 @@ export function planInstructions({ arc, goal, destinations, range, modules, phot
     "- Free type on a plain plate or a photo reads native; a run of boxed cards reads like a template ad. Prefer hook-title, motion-title, kinetic-words, item-list, count-up, quote and chart modules in their free-type variants; never use a variant named boxed.",
     "- alt: what the slide shows, for a screen reader (its words and picture), never a file name.",
     "- caption.hook is a second hook for the post's first line (under " + dest.captionPreview + " characters). caption.body adds what did not fit on the slides; it does not repeat them. caption.cta matches the last slide. caption.tags: " + (destinations.some((id) => CAROUSEL_DESTINATIONS[id].tags) ? "3 to 5 topical tags without #." : "an empty list (these destinations do not use tags)."),
+    "- Slides are read at phone size, and text that does not fit is refused: a headline at most 50 characters, a sub, detail or supporting line at most 50 characters, a label at most 28 characters. Lists are tight: an item-list holds 4 items of at most 16 characters under a title (6 without one), process-steps 5 steps of at most 24 characters; a payoff for a longer list names the few that matter. When a check says text is too long, cut it well under the limit. Leave timing params (at, kickerAt, stagger, tickAt) unset, and set an icon only with a handle.",
     "- Use only facts the brief gives or that are common knowledge; never invent statistics, customers or quotes.",
     "",
     "Modules: use only these ids, and only the params each lists. Never set params.id, kind, aspect, start or duration, rect, theme or track.",
@@ -121,7 +124,7 @@ export function planToStory(plan, { arc, goal, destinations, brand, style = null
 }
 
 /** Every reason a planned carousel story cannot go to render. [] when it can. */
-export function storyErrors(story, { modules, range }) {
+export function storyErrors(story, { modules, range, warnings = [] }) {
   const ids = modules.map((module) => module.id);
   // Its "not a known module" is said below with the reason (not a slide module).
   const errors = validateStory(story, { modules: ids, moduleParams: validateModuleParams }).errors.filter((line) => !line.includes("is not a known module"));
@@ -134,19 +137,40 @@ export function storyErrors(story, { modules, range }) {
   if (!story.carousel.caption.hook.trim()) errors.push("caption.hook is empty: write the post's first line");
   if (!story.carousel.caption.cta.trim()) errors.push("caption.cta is empty: ask the reader to do the goal");
   for (const id of story.carousel.destinations) errors.push(...destinationProblems(story, id).errors);
-  if (errors.length) return errors;
-  // Module fit: every slide lays out on this canvas (the `launchclip module fit` check).
+  // Module fit: every slide lays out on this canvas (the `launchclip module fit` check), in the same round, so one repair sees every error.
   let resolved;
-  try { resolved = resolveStory(JSON.parse(JSON.stringify(story))); } catch (error) { return [`the story does not resolve: ${message(error)}`]; }
+  try { resolved = resolveStory(JSON.parse(JSON.stringify(story))); } catch (error) { return errors.length ? errors : [`the story does not resolve: ${message(error)}`]; }
   for (const scene of resolved.scenes) {
-    try { resolveModule(scene, resolved, { end: sceneRenderEnd(resolved, scene) }); } catch (error) { errors.push(`scenes ${scene.id} (${scene.module}) does not lay out at ${story.format.width}×${story.format.height}: ${message(error)}`); }
+    if (!ids.includes(scene.module)) continue;
+    // As the storyboard planner does: an optional param with a value the module refuses is taken off and its default
+    // stands. The drops are kept only when the slide then lays out; otherwise the model gets the first error, not
+    // "required" for a param tooling took off. A list entry ("items[0]") is content, so it goes back to the model.
+    const original = JSON.stringify(scene.params);
+    const dropped = [];
+    let first = null;
+    for (let tries = 0; ; tries += 1) {
+      try {
+        resolveModule(scene, resolved, { end: sceneRenderEnd(resolved, scene) });
+        const planned = story.scenes.find((entry) => entry.id === scene.id);
+        for (const { path, why } of dropped) { dropParam(planned.params, path); warnings.push(`${scene.id}: tooling took params.${path} off (${why})`); }
+        break;
+      } catch (error) {
+        const why = message(error).split(" params: ").at(-1);
+        first ??= why;
+        const path = tries < 4 ? /params\.([A-Za-z0-9_.[\]]*[A-Za-z0-9_]) (?:must be |must fall |is not supported|leaves no room|needs params\.)/.exec(why)?.[1] : null;
+        if (path && dropParam(scene.params, path)) { dropped.push({ path, why }); continue; }
+        scene.params = JSON.parse(original);
+        errors.push(`scenes ${scene.id} (${scene.module}) does not lay out at ${story.format.width}×${story.format.height}: ${first}`);
+        break;
+      }
+    }
   }
   return errors;
 }
 
 /**
  * Plan a carousel. client: runStructured(); options as from make.js.
- * → {story, plan (the model's object, with image requests), attempts: [{ok, errors, usage}], range}
+ * → {story, plan (the model's object, with image requests), attempts: [{ok, errors, usage}], range, warnings}
  * Throws when the repaired plan still fails, listing the errors.
  */
 export async function planCarousel({ client, brief, arc = null, goal = null, destinations, slides = null, photos = [], generate = false, brand, style = null, say = () => {} }) {
@@ -159,6 +183,7 @@ export async function planCarousel({ client, brief, arc = null, goal = null, des
   const goalFor = (picked) => goal ?? DEFAULT_GOAL[picked] ?? "follow";
   const instructions = planInstructions({ arc, goal: goal ?? (arc ? goalFor(arc) : "the arc's: save for list, steps and data; comment for myth-fact; install for an ad; follow otherwise"), destinations, range, modules, photos, generate });
   const attempts = [];
+  const warnings = [];
   let input = `Brief: ${brief}\n`;
   for (let round = 0; round < 2; round += 1) {
     const result = await client.runStructured({ instructions, input, schema: CAROUSEL_PLAN_SCHEMA, schemaName: "launchclip_carousel_plan", maxOutputTokens: 8000 });
@@ -173,11 +198,12 @@ export async function planCarousel({ client, brief, arc = null, goal = null, des
         // The auto arc's count range is the picked arc's, inside the destinations'.
         const own = arc ? range : slideRange({ arc: picked, destinations, slides });
         story = planToStory(plan, { arc: picked, goal: goalFor(picked), destinations, brand, style });
-        errors = storyErrors(story, { modules, range: own });
+        warnings.length = 0;
+        errors = storyErrors(story, { modules, range: own, warnings });
       }
     }
     attempts.push({ ok: !errors.length, errors, usage: result?.usage ?? null });
-    if (!errors.length) return { story, plan, attempts, range };
+    if (!errors.length) return { story, plan, attempts, range, warnings };
     say(`plan: ${round ? "the repaired plan still has" : "the plan has"} ${errors.length} error(s)${round ? "" : "; one repair call"}`);
     input = `Brief: ${brief}\n\nYour last plan:\n${result?.value?.carousel_json ?? result?.text ?? ""}\n\nIt failed these checks. Return the whole corrected plan:\n- ${errors.join("\n- ")}\n`;
   }
