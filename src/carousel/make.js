@@ -41,7 +41,7 @@ export async function run(brief, flags = {}, io = {}) {
   const photos = flags.images ? await copyPhotos(path.resolve(cwd, String(flags.images)), project) : [];
   if (flags.images && !photos.length) throw new Error(`--images ${flags.images} has no .jpg, .png or .webp files`);
   say(`carousel: planning with ${model.provider} ${model.model} (PAID unless local)`);
-  const planned = await planCarousel({ client: model.client, brief, arc, goal: flags.goal ?? null, destinations, slides, photos, generate: Boolean(flags.generate), brand: styleBrand(style.pack), style: style.name, say });
+  const planned = await planCarousel({ client: model.client, brief, arc, goal: flags.goal ?? null, destinations, slides, photos, generate: Boolean(flags.generate), brand: styleBrand(style.pack), style: style.name, template: flags.template == null || flags.template === true || flags.template === "auto" ? null : String(flags.template), say });
   const { story } = planned;
   const report = { project, storyboard: "storyboard.json", arc: story.carousel.arc, goal: story.carousel.goal, destinations, slides: story.scenes.length, model: `${model.provider}:${model.model}`, style: style.name, plan_attempts: planned.attempts.map(({ ok, errors }) => ({ ok, errors })), images: null, variants: null, stages: {}, warnings: [...planned.warnings] };
   if (destinations.some((id) => id !== destinations[0] && CAROUSEL_DESTINATIONS[id].aspect !== CAROUSEL_DESTINATIONS[destinations[0]].aspect)) report.warnings.push(`the slides are laid out for ${destinations[0]}; destinations at another aspect are reframed by render`);

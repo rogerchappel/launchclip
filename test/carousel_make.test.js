@@ -126,3 +126,23 @@ test("a refused param that is required is reported as refused, not as missing", 
   assert.match(errors, /two \(motion-title\) does not lay out/);
   assert.doesNotMatch(errors, /is required/);
 });
+
+test("a plan of slide content is laid out by a template: --template, or picked from the brief", async () => {
+  const content = listicle({ slides: [
+    { id: "cover", role: "cover", headline: "3 habits of teams that ship daily", alt: "cover" },
+    { id: "one", role: "body", eyebrow: "01", headline: "Decide in the thread", body: "A written call travels further.", alt: "one" },
+    { id: "summary", role: "payoff", headline: "Save this", items: ["Decide in thread", "Ship small"], alt: "list" },
+    { id: "cta", role: "cta", headline: "Save it for your sprint", handle: "fast.test", alt: "cta" }
+  ] });
+  const model = fakeModel(content);
+  const { story } = await make("habits of fast teams", { arc: "listicle", template: "myth-split" }, model);
+  assert.match(model.requests[0].instructions, /tooling lays them out with a carousel template/);
+  assert.equal(story.carousel.template, "myth-split");
+  assert.deepEqual(story.scenes.map((scene) => scene.module), ["hook-title", "motion-title", "item-list", "cta"]);
+  assert.deepEqual(story.scenes[0].plate, { kind: "prism", params: { tint: "accent" } }, "the template's brand surface on the cover");
+  const auto = await make("habits of fast teams", { arc: "listicle" }, fakeModel(content));
+  assert.ok(["study-notes", "field-notes"].includes(auto.story.carousel.template), auto.story.carousel.template);
+  const long = fakeModel(listicle({ slides: content.slides.map((slide) => (slide.id === "one" ? { ...slide, headline: "x".repeat(70) } : slide)) }), content);
+  const { report } = await make("habits", { arc: "listicle", template: "study-notes" }, long);
+  assert.match(report.plan_attempts[0].errors.join("\n"), /headline is 70 characters; the study-notes template's text-card slide holds 48/);
+});
