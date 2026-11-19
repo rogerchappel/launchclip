@@ -22,3 +22,14 @@ test('item-list: every layout breathes once its items are in, out of step and ge
     c.items.forEach(item => assert.deepEqual([rest.get(`scene-item-${item.index}-idle`).y, rest.get(`scene-item-${item.index}-idle`).rotation], [0, 0]));
   }
 });
+
+test('item-list: a 4:5 slide holds five items of 24 characters under a title, stepping the shared size down to fit', () => {
+  const items = ['Decide in the thread', 'Ship the smallest change', 'Review on the same day', 'Write the brief first', 'Cut one meeting a week'];
+  for (const variant of ['stack', 'fan']) {
+    const model = MODULES['item-list'].resolve({title: 'Five habits to save', variant, items}, {id: 'scene', start: 0, duration: 4, format: {width: 1080, height: 1350, fps: 30}, brand, aspect: '4:5', hits: []});
+    const c = model.content;
+    assert.equal(c.items.length, 5, variant);
+    assert.ok(c.size >= 46 && c.size < 72, `${variant}: ${c.size} px, under the 72 px preferred and at least the 46 px body floor`);
+    for (const item of c.items) assert.ok(item.y + item.height <= model.rect.height + 1, `${variant}: item ${item.index} inside the rect`);
+  }
+});

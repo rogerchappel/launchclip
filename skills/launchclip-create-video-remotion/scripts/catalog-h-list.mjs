@@ -73,8 +73,9 @@ function listResolve(params, ctx) {
     return {index: i, label: text, detail, size: fit.size, lines: fit.lines, detailLines, height, width: textW, time, tickTime, number: String(i + 1).padStart(2, '0')};
   });
   // Every item shares the smallest fitted size, so the list reads as one set.
-  const size = Math.min(...items.map(item => item.size));
-  for (const item of items) {
+  let size = Math.min(...items.map(item => item.size));
+  const setSize = (next) => { size = next; for (const item of items) setItem(item); };
+  const setItem = (item) => {
     if (item.size !== size) item.lines = fitText(check, `params.items[${item.index}].label`, item.label, {family: 'body', width: textW, preferred: size, min: size, maxLines: 2}).lines;
     item.size = size;
     item.height = r2((showMarker && centred ? marker + u(14) : 0) + item.lines * size * 1.12 + (item.detailLines ? u(10) + item.detailLines * detailSize * 1.3 : 0));
@@ -85,7 +86,13 @@ function listResolve(params, ctx) {
       item.width = r2(pill.padX * 2 + pill.disc + pill.gap + text);
       item.height = r2(Math.max(item.height, pill.disc) + pill.padY * 2);
     }
-  }
+  };
+  setSize(size);
+  // A tall list on a portrait canvas: step the shared size down (never under the
+  // floor) until the stacked items and their least gap fit the rect's height.
+  const minGap = layout === 'pills' ? u(16) : u(20);
+  const stackH = () => items.reduce((sum, item) => sum + item.height, 0) + minGap * (n - 1);
+  if (['stack', 'fan', 'pills'].includes(layout)) { const floor = Math.ceil(b.min.key); while (stackH() > H0 && size > floor) setSize(Math.max(floor, Math.floor(size * 0.94))); }
   const place = {pills: placePills, stack: placeStack, fan: placeStack, scatter: placeScatter, orbit: placeOrbit}[layout];
   const subjectFit = subject ? fitText(check, 'params.subject', subject, {family: 'display', width: W * 0.6, preferred: u(120), min: b.min.key, maxLines: 1}) : null;
   place({items, W, top, H0, u, cols, rows, marker, showMarker, subjectFit, subject, check});
