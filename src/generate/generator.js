@@ -146,7 +146,7 @@ export function createGenerator({ project, image, video = null, budget = null, d
       const quote = await provider.quote(brief, name, tier);
       const priced = quote?.amount != null;
       if (!priced) {
-        const made = (await readLedger(project)).filter((entry) => entry.cost_unknown).length;
+        const made = (await readLedger(project)).filter((entry) => entry.cost_unknown && entry.provider === provider.id).length;
         if (!(maxCalls > 0) || made >= maxCalls) {
           stopped = maxCalls > 0 ? `the cap of ${maxCalls} unpriced call(s) is reached (--max-generations)` : "the provider gave no price and no call cap is set (--max-generations)";
           say(`${job.request.id}: not generated, ${stopped}`);
