@@ -106,7 +106,7 @@ export async function allowCall(project, { shot, step, quote = null, budget = nu
  * model is a provider:model route that takes images; hooks.client stands in
  * for it, hooks.frame for ffmpeg (as in projectBriefs).
  */
-export async function checkKeyframe(project, { shot, file, model = null } = {}, hooks = {}) {
+export async function checkKeyframe(project, { shot, file, model = null, audience = null, concepts = null } = {}, hooks = {}) {
   // Several candidates: --file a.png,b.png,c.png are ranked in one look, as make --keyframe-candidates does.
   const files = String(file ?? "").split(",").map((entry) => entry.trim()).filter(Boolean);
   if (!files.length || files.some((entry) => !existsSync(entry))) throw new Error(`generate check needs --file <path>[,<path>...] that exist; got ${file}`);
@@ -123,7 +123,9 @@ export async function checkKeyframe(project, { shot, file, model = null } = {}, 
   let one;
   if (request.role !== "story" && request.role !== "plate") {
     const vision = visionKeyframeCheck(client);
-    if (files.length > 1) return { shot: request.id, ...ranked(await vision.rank({ files, brief, request })) };
+    // --concepts "a|b|c": each file's own concept, in --file order; --audience: who the video is for.
+    const each = typeof concepts === "string" ? concepts.split("|").map((entry) => entry.trim()) : [];
+    if (files.length > 1) return { shot: request.id, ...ranked(await vision.rank({ files, brief, request, ...(each.some(Boolean) ? { concepts: files.map((_, i) => each[i] || null) } : {}), ...(typeof audience === "string" && audience.trim() ? { audience: audience.trim() } : {}) })) };
     one = (entry) => vision({ file: entry, brief, request });
   } else {
     const { visionHandInJudge } = await import("../hand_in.js");

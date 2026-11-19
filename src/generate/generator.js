@@ -35,7 +35,7 @@ export const POLL_MS = Object.freeze({ image: 2000, video: 10_000 });
 // made and the best one is animated. One by default.
 export const MAX_KEYFRAME_CANDIDATES = 6;
 
-export function createGenerator({ project, image, video = null, budget = null, daily = null, tier = "final", maxCalls = null, library = null, check = null, approve = null, candidates = 1, look = lookParagraph(null), fps, pollMs = POLL_MS, notice = () => {} }) {
+export function createGenerator({ project, image, video = null, budget = null, daily = null, tier = "final", maxCalls = null, library = null, check = null, approve = null, candidates = 1, concepts = null, look = lookParagraph(null), fps, pollMs = POLL_MS, notice = () => {} }) {
   if (!project) throw new Error("createGenerator needs a project");
   if (!image) throw new Error("createGenerator needs an image provider (the keyframe step)");
   const notes = [];
@@ -50,6 +50,7 @@ export function createGenerator({ project, image, video = null, budget = null, d
   let stopped = null;
   let pending = [];
   let checkNoted = false;
+  let audience = null;
 
   const providerFor = (step) => (step === "image" ? image : video);
   // keyframeOnly: a story draft stops at its approved keyframe; the clip is made once the draft is approved.
@@ -71,7 +72,10 @@ export function createGenerator({ project, image, video = null, budget = null, d
           if (reason) { say(`${job.request.id}: not generated, ${reason}`); job.resolve(null); continue; }
           // No video provider: a video request is left alone, an "any" one is answered with a still.
           if (!video && job.request.type === "video" && !job.request.still) { say(`${job.request.id}: not generated, no video provider is set (--generate-video)`); job.resolve(null); continue; }
-          job.brief = footageBrief(video ? job.request : { ...job.request, still: true }, { look, ...(fps ? { fps } : {}) });
+          const asked = video ? job.request : { ...job.request, still: true };
+          job.brief = footageBrief(asked, { look, ...(fps ? { fps } : {}) });
+          // A candidate's own concept: the same brief with another `shows`.
+          job.briefFor = (shows) => footageBrief({ ...asked, shows }, { look, ...(fps ? { fps } : {}) });
         }
         job.cached = await cachedSteps(project, job.brief, image, video, tier);
         if (job.cached.video || (job.cached.image && !wantsVideo(job))) { job.resolve(finished(job)); continue; }
@@ -82,6 +86,15 @@ export function createGenerator({ project, image, video = null, budget = null, d
     let allowed;
     try { allowed = await allow(todo); } catch (error) { for (const job of todo) job.reject(error); return; }
     if (!allowed) { for (const job of todo) job.resolve(null); return; }
+    // After the quote is allowed, one concepts call for the batch's footage keyframes; a concept costs no more to make than the plain prompt.
+    const fresh = todo.filter((job) => job.briefFor && !job.cached.image);
+    if (concepts && count > 1 && fresh.length) {
+      try {
+        const ideas = await concepts(fresh.map((job) => job.request));
+        audience = ideas.audience ?? audience;
+        for (const job of fresh) job.concepts = ideas.get(job.request.id) ?? null;
+      } catch (error) { say(`concepts: not written (${String(error?.message ?? error).split("\n")[0]})`); }
+    }
     // One at a time: the budget is checked against spend recorded by the call before.
     for (const job of todo) await generate(job).then(job.resolve, job.reject);
   }
@@ -176,11 +189,13 @@ export function createGenerator({ project, image, video = null, budget = null, d
           if (made.length) break;
           return null;
         }
-        const entry = { shot: job.request.id, step: name, tier, attempt, ...(want > 1 ? { candidate: i } : {}), provider: provider.id, brief_hash: job.brief.brief_hash, ...(changed ? { changed } : {}) };
+        const concept = name === "image" ? job.concepts?.[i - 1] ?? null : null;
+        const asked = concept ? { ...brief, image: { ...brief.image, prompt: `${job.briefFor(concept).image.prompt}${changed ? ` ${changed}` : ""}` } } : brief;
+        const entry = { shot: job.request.id, step: name, tier, attempt, ...(want > 1 ? { candidate: i } : {}), ...(concept ? { concept } : {}), provider: provider.id, brief_hash: job.brief.brief_hash, ...(changed ? { changed } : {}) };
         const started = Date.now();
         let result;
         try {
-          result = await run(provider, brief, name, tier, options, path.join(project, GENERATED_DIR, job.request.id, `${name}-${tier}-${attempt}${want > 1 ? `-c${i}` : ""}`), pollMs[name] ?? 0);
+          result = await run(provider, asked, name, tier, options, path.join(project, GENERATED_DIR, job.request.id, `${name}-${tier}-${attempt}${want > 1 ? `-c${i}` : ""}`), pollMs[name] ?? 0);
         } catch (error) {
           if (error?.name === "AbortError") throw error;
           // shortcut: a failed call is logged at its quote (or 0 when unpriced); providers that report a refund-free failure can return cost 0 from fetch later.
@@ -189,11 +204,11 @@ export function createGenerator({ project, image, video = null, budget = null, d
           continue;
         }
         const spent = result.cost ? cost(result.cost) : priced ? cost(quote) : { amount: 0, unit: quote.unit };
-        made.push({ abs: result.file, base: { ...entry, model: result.model ?? null, seed: result.seed ?? null, cost: spent, ...(!result.cost && !priced ? { cost_unknown: true } : {}), seconds: secondsSince(started), file: path.relative(project, result.file), licence: result.licence ?? null } });
+        made.push({ abs: result.file, concept, base: { ...entry, model: result.model ?? null, seed: result.seed ?? null, cost: spent, ...(!result.cost && !priced ? { cost_unknown: true } : {}), seconds: secondsSince(started), file: path.relative(project, result.file), licence: result.licence ?? null } });
       }
       if (!made.length) continue;
       if (name !== "image") return await appendLedger(project, { ...made[0].base, verdict: "accepted" });
-      const { best, verdicts, change } = await chooseKeyframe(made.map((entry) => entry.abs), brief, job.request);
+      const { best, verdicts, change } = await chooseKeyframe(made.map((entry) => entry.abs), brief, job.request, made.map((entry) => entry.concept));
       let accepted = null;
       for (const [i, entry] of made.entries()) {
         const verdict = verdicts[i] ?? {};
@@ -212,14 +227,14 @@ export function createGenerator({ project, image, video = null, budget = null, d
 
   // → {best: index | null, verdicts: [{ok, reason}], change}. A check with rank()
   // compares the candidates in one look; one without checks them in turn and keeps the first that passes.
-  async function chooseKeyframe(files, brief, request) {
+  async function chooseKeyframe(files, brief, request, concepts = []) {
     if (!check) {
       // shortcut: no vision route configured, so the keyframe is accepted unseen; configure a model that takes images to check it.
       if (!checkNoted) { say("no vision model is configured, so keyframes are accepted without a check"); checkNoted = true; }
       return { best: 0, verdicts: files.map(() => ({ ok: true })), change: null };
     }
     try {
-      if (files.length > 1 && check.rank) return await check.rank({ files, brief, request });
+      if (files.length > 1 && check.rank) return await check.rank({ files, brief, request, ...(concepts.some(Boolean) ? { concepts } : {}), ...(audience ? { audience } : {}) });
       const verdicts = [];
       for (const file of files) {
         const verdict = await check({ file, brief, request });
@@ -399,10 +414,12 @@ export function visionKeyframeCheck(client, { readImage = defaultReadImage } = {
   };
   // Several candidates in one look: each passes or fails as above (plus anomalies), and the
   // best passing one is the highest look match plus aesthetics. → {best, verdicts, change}
-  check.rank = async ({ files, brief, request }) => {
+  check.rank = async ({ files, brief, request, concepts = [], audience = null }) => {
     const result = await client.runStructured({
-      instructions: "You compare candidate keyframes for one shot of a video, numbered from 1 in the order given. For each, say whether it clearly shows the requested subject; whether any text, lettering, logo, user interface or recognisable real person is visible; whether it has anomalies (malformed hands or faces, extra or missing fingers or limbs, melted or impossible objects, physics that cannot happen); and score from 0 to 10 how well it matches the look asked for and how good it is to look at (composition, light, focus, a calm lower third). Give a short finding for each. Then give one short sentence to add to the image prompt that would fix the main problem if every candidate fails.",
-      input: `Requested subject: ${request.shows ?? brief?.image?.prompt ?? ""}\nThe look asked for: ${brief?.image?.prompt ?? ""}\nCandidates: ${files.length}`,
+      instructions: "You compare candidate keyframes for one shot of a video, numbered from 1 in the order given. For each, say whether it clearly shows the requested subject; whether any text, lettering, logo, user interface or recognisable real person is visible; whether it has anomalies (malformed hands or faces, extra or missing fingers or limbs, melted or impossible objects, physics that cannot happen); and score from 0 to 10 how well it matches the look asked for and how good it is to look at (composition, light, focus, a calm lower third), and how well it speaks to the video's audience (people they would recognise as their own world; with no audience given, how broadly it appeals). Give a short finding for each. Then give one short sentence to add to the image prompt that would fix the main problem if every candidate fails.",
+      input: [`Requested subject: ${request.shows ?? brief?.image?.prompt ?? ""}`, `The look asked for: ${brief?.image?.prompt ?? ""}`, `Candidates: ${files.length}`, audience ? `The audience: ${audience}` : null,
+        // Concept candidates each take the subject their own way: judge each against its concept.
+        ...concepts.map((concept, i) => (concept ? `Candidate ${i + 1}'s concept (counts as the requested subject): ${concept}` : null)).filter(Boolean)].join("\n"),
       images: await Promise.all(files.map(async (file) => ({ url: await readImage(file), detail: "low" }))),
       schema: RANK_SCHEMA,
       schemaName: "launchclip_keyframe_rank",
@@ -412,7 +429,7 @@ export function visionKeyframeCheck(client, { readImage = defaultReadImage } = {
     const verdicts = files.map((_, i) => {
       const row = rows.find((entry) => Number(entry.index) === i + 1) ?? rows[i] ?? {};
       const ok = Boolean(row.shows_subject) && !row.has_text_or_logo && !row.anomalies;
-      return { ok, score: (Number(row.look_match) || 0) + (Number(row.aesthetics) || 0), reason: ok ? null : String(row.finding ?? "the keyframe does not pass") };
+      return { ok, score: (Number(row.look_match) || 0) + (Number(row.aesthetics) || 0) + (Number(row.audience_fit) || 0), reason: ok ? null : String(row.finding ?? "the keyframe does not pass") };
     });
     const passing = verdicts.map((verdict, i) => [verdict, i]).filter(([verdict]) => verdict.ok);
     const best = passing.length ? passing.reduce((a, b) => (b[0].score > a[0].score ? b : a))[1] : null;
@@ -426,7 +443,7 @@ const RANK_SCHEMA = Object.freeze({
   additionalProperties: false,
   required: ["candidates", "change"],
   properties: {
-    candidates: { type: "array", items: { type: "object", additionalProperties: false, required: ["index", "shows_subject", "has_text_or_logo", "anomalies", "look_match", "aesthetics", "finding"], properties: { index: { type: "integer" }, shows_subject: { type: "boolean" }, has_text_or_logo: { type: "boolean" }, anomalies: { type: "boolean" }, look_match: { type: "integer" }, aesthetics: { type: "integer" }, finding: { type: "string" } } } },
+    candidates: { type: "array", items: { type: "object", additionalProperties: false, required: ["index", "shows_subject", "has_text_or_logo", "anomalies", "look_match", "aesthetics", "audience_fit", "finding"], properties: { index: { type: "integer" }, shows_subject: { type: "boolean" }, has_text_or_logo: { type: "boolean" }, anomalies: { type: "boolean" }, look_match: { type: "integer" }, aesthetics: { type: "integer" }, audience_fit: { type: "integer" }, finding: { type: "string" } } } },
     change: { type: "string" }
   }
 });

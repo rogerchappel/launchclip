@@ -42,6 +42,13 @@ what the call cost. Map the brief onto whatever parameters yours has.
    agrees, make a few candidates (two to four) in one round: one
    `generate allow` with `--quote` for the whole round, every candidate
    recorded with that round's `--attempt` and its own `--candidate <n>`.
+   For a footage shot, make each candidate a different concept, as
+   `make --generate` does: decide who the video is for, pick one direction
+   for the whole video (setting, kind of people, time of day) that they
+   would recognise, and write each candidate one plain lower-case sentence
+   in that direction (no brands, names or text). That sentence replaces the
+   prompt's first sentence (the shot's `shows`); the rest stays word for
+   word. Story shots and plates keep the bible's prompt.
    Call your image tool with `brief.image.prompt` word
    for word, `brief.image.negative` as the negative prompt (or appended as
    "Avoid: …" when the tool has none), and `brief.image.width` ×
@@ -51,7 +58,10 @@ what the call cost. Map the brief onto whatever parameters yours has.
    <request.id> --file <still> --model <provider:model that takes images>`
    (a footage shot against `request.shows`; a story shot or plate against
    the bible). For candidates, pass them all, `--file a.png,b.png,c.png`:
-   it ranks them in one look and names the `chosen` one; record that one
+   it ranks them in one look and names the `chosen` one (add `--audience
+   "<who the video is for>"` and `--concepts "a|b|c"`, each file's concept
+   in `--file` order, so each is judged against its own concept and scored
+   on how well it speaks to that audience); record that one
    accepted and the others rejected with their reason. Only the chosen still
    is animated. With no such model, judge it yourself by the same rule: it
    must clearly show `request.shows`, with no text, lettering, logo, user

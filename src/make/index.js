@@ -1642,7 +1642,7 @@ async function planStage(ctx) {
   const comfyAssets = !ctx.adapters.assets && ctx.options.assetProvider === "comfy" ? await createComfyAssetProvider({ project: ctx.project, url: ctx.options.comfyUrl, env: ctx.env, allowRemote: Boolean(ctx.options.comfyAllowRemote), allowLicences: String(ctx.options.allowModelLicence ?? "").split(",").map((id) => id.trim()).filter(Boolean), ...(ctx.options.comfyPlate ? { plate: ctx.options.comfyPlate } : {}), notice: ctx.say }) : null;
   const library = ctx.adapters.assets ?? comfyAssets ?? (ctx.options.assetProviderCmd ? createCommandAssetProvider(ctx.options.assetProviderCmd, { timeoutMs: drafting ? Math.min(assetProviderTimeoutMs(ctx.env), ctx.draft.waits.shotMs + 1000) : assetProviderTimeoutMs(ctx.env), concurrency: drafting ? Math.max(assetProviderConcurrency(ctx.env), MAX_ASSET_PROVIDER_CONCURRENCY) : assetProviderConcurrency(ctx.env), notice: ctx.say, env: ctx.env, cwd: ctx.project }) : null);
   // --generate: generated footage for what the library (when there is one) has no shot for.
-  const generator = generating ? await makeGenerator(ctx, { library, brand }) : null;
+  const generator = generating ? await makeGenerator(ctx, { library, brand, rules: rulesText(ctx) }) : null;
   const provider = generator ?? library;
   // never_use: the provider is told, and a shot that is one is refused.
   const constrained = provider && constraints?.never_use.length ? constrainProvider(provider, constraints, { assetsDir: ctx.assetsDir, notice: ctx.say }) : provider;
