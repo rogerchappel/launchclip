@@ -45,6 +45,8 @@ export function createGenerator({ project, image, video = null, budget = null, d
   let checkNoted = false;
 
   const providerFor = (step) => (step === "image" ? image : video);
+  // keyframeOnly: a story draft stops at its approved keyframe; the clip is made once the draft is approved.
+  const wantsVideo = (job) => Boolean(job.brief.video) && !job.request.keyframeOnly;
 
   // The batch: quote what is left to generate, then let it through or refuse it.
   async function flush(batch) {
@@ -53,13 +55,19 @@ export function createGenerator({ project, image, video = null, budget = null, d
       try {
         const shot = library ? await library.findShot(job.request, { signal: job.signal }) : null;
         if (shot) { job.resolve(shot); continue; }
-        const reason = refusalReason(job.request);
-        if (reason) { say(`${job.request.id}: not generated, ${reason}`); job.resolve(null); continue; }
-        // No video provider: a video request is left alone, an "any" one is answered with a still.
-        if (!video && job.request.type === "video" && !job.request.still) { say(`${job.request.id}: not generated, no video provider is set (--generate-video)`); job.resolve(null); continue; }
-        job.brief = footageBrief(video ? job.request : { ...job.request, still: true }, { look, ...(fps ? { fps } : {}) });
+        if (job.request.storyBrief) {
+          // A story shot or plate brings its own brief (brief.js storyBrief / plateBrief).
+          if (!video && job.request.storyBrief.video && !job.request.keyframeOnly) { say(`${job.request.id}: not generated, no video provider is set (--generate-video)`); job.resolve(null); continue; }
+          job.brief = job.request.storyBrief;
+        } else {
+          const reason = refusalReason(job.request);
+          if (reason) { say(`${job.request.id}: not generated, ${reason}`); job.resolve(null); continue; }
+          // No video provider: a video request is left alone, an "any" one is answered with a still.
+          if (!video && job.request.type === "video" && !job.request.still) { say(`${job.request.id}: not generated, no video provider is set (--generate-video)`); job.resolve(null); continue; }
+          job.brief = footageBrief(video ? job.request : { ...job.request, still: true }, { look, ...(fps ? { fps } : {}) });
+        }
         job.cached = await cachedSteps(project, job.brief, image, video, tier);
-        if (job.cached.video || (job.cached.image && !job.brief.video)) { job.resolve(finished(job)); continue; }
+        if (job.cached.video || (job.cached.image && !wantsVideo(job))) { job.resolve(finished(job)); continue; }
         todo.push(job);
       } catch (error) { job.reject(error); }
     }
@@ -73,9 +81,9 @@ export function createGenerator({ project, image, video = null, budget = null, d
 
   async function allow(todo) {
     const items = { image: [], video: [] };
-    for (const { brief, cached } of todo) {
-      if (!cached.image) items.image.push({ brief, step: "image", tier });
-      if (brief.video) items.video.push({ brief, step: "video", tier });
+    for (const job of todo) {
+      if (!job.cached.image) items.image.push({ brief: job.brief, step: "image", tier });
+      if (wantsVideo(job)) items.video.push({ brief: job.brief, step: "video", tier });
     }
     const unpriced = new Set();
     const totals = {};
@@ -117,7 +125,7 @@ export function createGenerator({ project, image, video = null, budget = null, d
       job.cached.image = await keyframe(job);
       if (!job.cached.image) return null;
     }
-    if (brief.video && !job.cached.video) {
+    if (wantsVideo(job) && !job.cached.video) {
       job.cached.video = await step(job, "video", brief, { startFrame: path.resolve(project, job.cached.image.file), signal }, null);
       if (!job.cached.video) return null;
     }
@@ -179,7 +187,7 @@ export function createGenerator({ project, image, video = null, budget = null, d
         if (!verdict.ok) {
           await appendLedger(project, { ...base, verdict: "rejected", reason: verdict.reason ?? "the keyframe does not show the request" });
           say(`${job.request.id}: keyframe attempt ${attempt} rejected (${verdict.reason ?? "no reason given"})`);
-          return { verdict: "rejected", change: verdict.change || `It must clearly show: ${job.request.shows}.` };
+          return { verdict: "rejected", change: verdict.change || (job.request.shows ? `It must clearly show: ${job.request.shows}.` : "Match the reference sheets and the description exactly.") };
         }
       }
       return await appendLedger(project, { ...base, verdict: "accepted" });
@@ -233,10 +241,12 @@ export function createGenerator({ project, image, video = null, budget = null, d
 }
 
 // The accepted ledger lines this brief can reuse, per step. The key is the
-// unchanged brief's hash, the provider, the tier and, once known, the model.
+// unchanged brief's hash, the provider, the tier (the video step's; a keyframe
+// serves every tier, so a final animates the keyframe its draft was approved
+// from) and, once known, the model.
 async function cachedSteps(project, brief, image, video, tier) {
   const entries = (await readLedger(project)).reverse();
-  const find = (step, provider) => entries.find((entry) => entry.verdict === "accepted" && entry.step === step && entry.tier === tier && entry.provider === provider.id && entry.brief_hash === brief.brief_hash && entry.file && existsSync(path.resolve(project, entry.file))) ?? null;
+  const find = (step, provider) => entries.find((entry) => entry.verdict === "accepted" && entry.step === step && (step === "image" || entry.tier === tier) && entry.provider === provider.id && entry.brief_hash === brief.brief_hash && entry.file && existsSync(path.resolve(project, entry.file))) ?? null;
   return { image: find("image", image), video: brief.video && video ? find("video", video) : null };
 }
 
