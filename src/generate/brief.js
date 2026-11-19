@@ -33,6 +33,8 @@ export const DEFAULT_SHOT_SECONDS = 4;
 export const DEFAULT_FPS = 30;
 
 // What no generated keyframe may show (§4.2 "Never").
+// Said in the prompt too, for models that ignore the negative prompt.
+export const NO_TEXT = "A clean photograph with no text, letters, captions, subtitles, signs or logos anywhere in the frame.";
 export const FOOTAGE_NEGATIVE = "text, lettering, captions, subtitles, signs with words, logos, brand marks, watermarks, user interface, readable screens, real or named people, celebrities, public figures";
 
 /**
@@ -74,14 +76,15 @@ export function footageBrief(request, { look = lookParagraph(null), fps = DEFAUL
   if (refusalReason(request)) return null;
   const still = request.type === "image" || request.still === true;
   const backdrop = request.role === "background";
-  const line = String(request.line ?? "").trim();
+  // The narration line is never in the prompt: image models draw quoted words as
+  // captions, and some (flux schnell) ignore the negative prompt. shows says what the shot is.
   const prompt = [
     `${String(request.shows).trim()}.`,
     look,
     backdrop
-      ? "Composition: a calm, even background with no strong subject; text will sit over all of it."
-      : "Composition: keep the lower third calm, captions sit there.",
-    line ? `Context only, never shown as text, the narration over this shot: "${line}"` : null
+      ? "Composition: a calm, even background with no strong subject and empty space across the frame."
+      : "Composition: keep the lower third calm and empty.",
+    NO_TEXT
   ].filter(Boolean).join(" ");
   const seconds = Number(request.duration) > 0 ? Number(request.duration) : DEFAULT_SHOT_SECONDS;
   const body = {

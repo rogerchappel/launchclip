@@ -18,6 +18,7 @@ const BRIEF = {
 };
 const OPENAPI = {
   'fal-ai/flux/dev': { components: { schemas: { FluxInput: { properties: { prompt: {}, image_size: {} } } } } },
+  'fal-ai/nano-banana': { components: { schemas: { NanoInput: { properties: { prompt: {}, aspect_ratio: { enum: ['1:1', '16:9', '9:16'] } } } } } },
   'fal-ai/veo3.1/image-to-video': { components: { schemas: { VeoInput: { properties: {
     prompt: {}, image_url: {}, negative_prompt: {}, duration: { enum: ['4s', '6s', '8s'] }, aspect_ratio: { enum: ['auto', '16:9', '9:16'] } } } } } }
 };
@@ -49,7 +50,7 @@ function mockFal({ statuses = ['IN_QUEUE', 'IN_PROGRESS', 'COMPLETED'], error, p
     }
     if (u.pathname.endsWith('/cancel')) return json({ status: 'CANCELLATION_REQUESTED' }, 202);
     if (u.host === 'queue.fal.run') {
-      return json(u.pathname.includes('flux')
+      return json(u.pathname.includes('flux') || u.pathname.includes('nano')
         ? { images: [{ url: 'https://v3.fal.media/files/a/img.png', content_type: 'image/png' }], seed: 7 }
         : { video: { url: 'https://v3.fal.media/files/b/clip.mp4' } });
     }
@@ -191,4 +192,13 @@ test('fake provider: deterministic files for both steps, scripted failure', asyn
   await fake.poll(video);
   assert.equal((await fake.poll(video)).state, 'failed');
   assert.equal(path.extname((await fake.fetch(video, dir)).file), '.mp4');
+});
+
+test('image step: a model that takes only aspect_ratio gets the brief\'s ratio, not image_size', async () => {
+  const mock = mockFal();
+  const fal = provider(mock, { imageModel: 'fal-ai/nano-banana' });
+  await run(fal, 'image');
+  const submit = mock.requests.find((r) => r.method === 'POST');
+  assert.equal(submit.body.aspect_ratio, '16:9');
+  assert.equal(submit.body.image_size, undefined);
 });

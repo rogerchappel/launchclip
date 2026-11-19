@@ -9,7 +9,7 @@ The design is in [GENERATED_FOOTAGE_RFC.md](../GENERATED_FOOTAGE_RFC.md).
 For every footage shot the plan asks for:
 
 1. **Your library first.** If the run has an asset provider (`--asset-provider-cmd`, or the app's own), it is asked first. Only what it has no shot for is generated.
-2. **The brief.** The request becomes a generation brief: what it shows, the narration line as context only, the story's look (one paragraph shared by every shot, so they match), a calm lower third for captions, and a list of what may never appear (text, logos, UI, real people). `launchclip generate brief <project>` prints the briefs without calling anything, so you can paste them into any tool by hand.
+2. **The brief.** The request becomes a generation brief: what it shows (the narration line is left out, since image models draw quoted words as captions), the story's look (one paragraph shared by every shot, so they match), a calm lower third for captions, and a list of what may never appear (text, logos, UI, real people). `launchclip generate brief <project>` prints the briefs without calling anything, so you can paste them into any tool by hand.
 3. **The quote.** Every shot left to make is quoted before anything is generated (see [Budgets](#budgets)).
 4. **The keyframe.** A still is made from text and checked against what the shot must show. A rejected still is retried with one changed line, up to three attempts; then the scene is designed without footage.
 5. **The video.** Only when the shot wants video, the approved keyframe is animated. The clip is requested 0.3 s longer at each end and trimmed back, because generated clips drift at their ends.

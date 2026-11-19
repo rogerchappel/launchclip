@@ -159,7 +159,7 @@ the slot shows a still.
 | Field | From |
 |---|---|
 | Subject | `shows`, word for word: the planner already writes it concretely |
-| Context | the narration `line` the shot sits under, as context only, never as text to show |
+| Context | not the narration `line`: image models draw quoted words into the frame (seen with a real provider), so `shows` alone says what the shot is, and "no text" is said in the prompt as well as the negative, for models that ignore negatives |
 | Look | the story's brand palette and look, written once per story as a fixed paragraph so every footage shot in a video matches |
 | Composition | where captions and cards sit in that scene, so the keyframe leaves that area calm; a backdrop request asks for low motion and no strong subject |
 | Motion | for video, one slow camera move or one action; a backdrop gets a slow pan or push only |
