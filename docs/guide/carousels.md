@@ -28,7 +28,7 @@ launchclip carousel export ./my-carousel
 |---|---|
 | `make "<brief>"` | Picks the arc (`listicle`, `how-to`, `myth-fact`, `before-after`, `story`, `data`, `ad`, `quote`, `single`), writes the slides, the caption and the alt text, then renders and checks |
 | `render <project>` | Each slide's still, and an MP4 loop for each motion slide, into `carousel/<dest>/` as `01.png`, `02.png` … |
-| `check <project>` | The slide rules: a cover that reads at thumbnail size, type large enough for the feed, one idea per slide, contrast, safe zones, a payoff where the arc promises one, alt text. Exits 1 on a failure |
+| `check <project>` | The slide rules: a cover that reads at thumbnail size, type large enough for the feed, one idea per slide, contrast, safe zones, a payoff where the arc promises one, alt text, and copy that is not filler, cut off, repeated or a leaked planning label. Exits 1 on a failure |
 | `export <project>` | Packages each destination's files, ready to upload |
 
 ## Destinations

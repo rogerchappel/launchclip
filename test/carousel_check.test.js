@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { carouselPlanFindings, namesSomething, slideText } from "@launchclip/core/carousel-check.mjs";
+import { carouselPlanFindings, cutOff, namesSomething, slideText } from "@launchclip/core/carousel-check.mjs";
 import { CAROUSEL_DESTINATIONS } from "@launchclip/core/carousel.mjs";
 import { declaredTextBoxes, geometryFindings, measuredContrast, readPixels, run } from "../src/carousel/check.js";
 
@@ -106,6 +106,98 @@ test("claims: a result-type number needs a source", () => {
   assert.deepEqual(rules(carouselPlanFindings(story), "claims"), []);
   // A count of items ("3 habits") is not a claim.
   assert.deepEqual(rules(carouselPlanFindings(clean()), "claims"), []);
+});
+
+test("filler: stock phrases fail on slides and in the caption", () => {
+  assert.deepEqual(rules(carouselPlanFindings(clean()), "filler"), []);
+  const story = clean();
+  story.scenes[2].params.headline = "This habit is a real game-changer";
+  story.carousel.caption.body = "Unlock your potential with three small habits.";
+  const found = rules(carouselPlanFindings(story), "filler");
+  assert.deepEqual(found.map((finding) => [finding.slide, finding.level]), [[3, "fail"], [null, "fail"]]);
+  assert.match(found[0].reason, /game-changer/);
+  assert.match(found[1].reason, /caption\.body/);
+});
+
+test("hook-length: the caption hook and cover headline at 4 to 14 words; under 3 fails", () => {
+  assert.deepEqual(rules(carouselPlanFindings(clean()), "hook-length"), []);
+  const story = clean();
+  story.carousel.caption.hook = "Ship faster.";
+  story.scenes[0].params.headline = "Three habits for speed";
+  assert.deepEqual(rules(carouselPlanFindings(story), "hook-length").map((finding) => [finding.slide, finding.level]), [[null, "fail"]]);
+  story.carousel.caption.hook = "Teams ship faster";
+  story.scenes[0].params.headline = "The three habits that let the fastest teams we studied ship every single working day";
+  assert.deepEqual(rules(carouselPlanFindings(story), "hook-length").map((finding) => [finding.slide, finding.level]), [[null, "warn"], [1, "warn"]]);
+});
+
+test("cut-off: a headline left hanging, or body stopped mid-sentence", () => {
+  assert.deepEqual(rules(carouselPlanFindings(clean()), "cut-off"), []);
+  assert.equal(cutOff("Ship the smallest change that works"), null);
+  assert.match(cutOff("Ship the smallest change…"), /ellipsis/);
+  assert.match(cutOff("Ship the smallest change..."), /ellipsis/);
+  assert.match(cutOff("Decide in the thread, not in the"), /ends on "the"/);
+  assert.match(cutOff("Three habits you can"), /ends on "can"/);
+  assert.match(cutOff("Decide in writing. Then the team moves on without", { prose: true }) ?? "", /mid-sentence/);
+  assert.equal(cutOff("Decide in writing. Then move on.", { prose: true }), null);
+  assert.equal(cutOff("From teams that ship daily", { prose: true }), null, "a one-line fragment is a style, not a cut");
+  const story = clean();
+  story.scenes[1].params.headline = "Decide in the thread, not in a…";
+  story.scenes[2].params.sub = "Small changes review fast. Big ones wait for the";
+  const found = rules(carouselPlanFindings(story), "cut-off");
+  assert.deepEqual(found.map((finding) => [finding.slide, finding.level]), [[2, "fail"], [3, "fail"]]);
+  assert.match(found[1].reason, /params\.sub ends on "the"/);
+});
+
+test("restated-ending: a last slide that only repeats the deck", () => {
+  assert.deepEqual(rules(carouselPlanFindings(clean()), "restated-ending"), []);
+  const story = clean();
+  story.scenes[4].params.action = "Save this: decide in the thread, ship the smallest change";
+  const found = rules(carouselPlanFindings(story), "restated-ending");
+  assert.deepEqual(found.map((finding) => [finding.slide, finding.level]), [[5, "warn"]]);
+  // A deck that ends on its payoff summary repeats by design.
+  const payoffLast = clean();
+  payoffLast.scenes = payoffLast.scenes.slice(0, 4);
+  payoffLast.scenes[3].params.items = [{ label: "Decide in the thread" }, { label: "Ship the smallest change" }];
+  assert.deepEqual(rules(carouselPlanFindings(payoffLast), "restated-ending"), []);
+});
+
+test("duplicates: the same headline or body on two slides", () => {
+  assert.deepEqual(rules(carouselPlanFindings(clean()), "duplicates"), []);
+  const story = clean();
+  story.scenes[2].params.headline = "Decide in the thread — not in a meeting!";
+  story.scenes[1].params.sub = "Writing it down ends the debate.";
+  story.scenes[2].params.sub = "Writing it down ends the debate.";
+  const found = rules(carouselPlanFindings(story), "duplicates");
+  assert.deepEqual(found.map((finding) => [finding.slide, finding.level]), [[3, "fail"], [3, "fail"]]);
+  assert.match(found[0].reason, /headline as slide 2/);
+  assert.match(found[1].reason, /body text as slide 2/);
+});
+
+test("word-budget: max(6, 3 per slide) to 28 per slide across the deck", () => {
+  assert.deepEqual(rules(carouselPlanFindings(clean()), "word-budget"), []);
+  const thin = clean();
+  for (const scene of thin.scenes) scene.params = { headline: "Go" };
+  assert.deepEqual(rules(carouselPlanFindings(thin), "word-budget").map((finding) => finding.level), ["warn"]);
+  const long = clean();
+  const sentence = "Every habit here comes from teams that ship daily and write things down first. ";
+  long.scenes.forEach((scene) => { scene.params.sub = sentence.repeat(3).trim(); });
+  const found = rules(carouselPlanFindings(long), "word-budget");
+  assert.deepEqual(found.map((finding) => finding.level), ["fail"]);
+  assert.match(found[0].reason, /over 140/);
+});
+
+test("scaffold-leak: planning labels in slide copy or the caption", () => {
+  assert.deepEqual(rules(carouselPlanFindings(clean()), "scaffold-leak"), []);
+  const story = clean();
+  story.scenes[1].params.headline = "Slide 2: Decide in the thread";
+  story.scenes[2].params.sub = "[image of a merged pull request]";
+  story.carousel.caption.hook = "Hook: most teams are not slow, they wait";
+  const found = rules(carouselPlanFindings(story), "scaffold-leak");
+  assert.deepEqual(found.map((finding) => [finding.slide, finding.level]), [[2, "fail"], [3, "fail"], [null, "fail"]]);
+  // A numbered step is copy, not a label.
+  const steps = clean();
+  steps.scenes[1].params.headline = "Step 1: decide in the thread";
+  assert.deepEqual(rules(carouselPlanFindings(steps), "scaffold-leak"), []);
 });
 
 test("type-size and safe-zone on declared boxes", () => {
