@@ -1,0 +1,143 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Release notes on autopilot (sample carousel, 1:1 ad with a motion slide)",
+  "notes": "Sample carousel (docs/CAROUSELS_RFC.md §5.3): an ad arc whose second slide is a looping motion slide. Destinations that take motion get its clip; image-only ones (TikTok) get its still. Values are illustrative.",
+  "lane": "motion",
+  "format": {
+    "kind": "carousel",
+    "width": 1080,
+    "height": 1080,
+    "fps": 30,
+    "duration": 18,
+    "platform": "meta-ads"
+  },
+  "carousel": {
+    "arc": "ad",
+    "goal": "install",
+    "destinations": [
+      "meta-ads",
+      "instagram",
+      "tiktok"
+    ],
+    "caption": {
+      "hook": "Release notes, written while you merge.",
+      "body": "Relay reads your merged pull requests and drafts the changelog, the blog post and the email.",
+      "cta": "Try Relay free today.",
+      "tags": [
+        "devtools",
+        "changelog"
+      ]
+    }
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0b1020",
+      "primary": "#ffb547",
+      "accent": "#4fd1c5",
+      "ink": "#0b1020",
+      "paper": "#f4f1ea"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "audio": null,
+  "scenes": [
+    {
+      "id": "problem",
+      "module": "hook-title",
+      "start": 0,
+      "end": 4,
+      "energy": 2,
+      "slide": {
+        "role": "cover",
+        "medium": "still",
+        "alt": "Headline: your release notes ship a week late"
+      },
+      "params": {
+        "eyebrow": "Relay for release notes",
+        "headline": "Your release notes ship a week late",
+        "emphasis": "a week late"
+      }
+    },
+    {
+      "id": "product",
+      "module": "node-graph",
+      "start": 4,
+      "end": 10,
+      "energy": 2,
+      "loop": true,
+      "slide": {
+        "role": "body",
+        "medium": "motion",
+        "alt": "Relay at the centre, sending merged pull requests out to the changelog, the blog and email"
+      },
+      "params": {
+        "title": "Every merge, written up",
+        "hub": {
+          "label": "Relay",
+          "icon": "sparkles"
+        },
+        "nodes": [
+          {
+            "id": "prs",
+            "label": "Merged PRs",
+            "icon": "git-pull-request"
+          },
+          {
+            "id": "changelog",
+            "label": "Changelog",
+            "icon": "list-checks"
+          },
+          {
+            "id": "blog",
+            "label": "Blog post",
+            "icon": "newspaper"
+          },
+          {
+            "id": "email",
+            "label": "Email",
+            "icon": "mail"
+          }
+        ]
+      }
+    },
+    {
+      "id": "proof",
+      "module": "hook-title",
+      "start": 10,
+      "end": 14,
+      "energy": 2,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "80% less time on release prep (illustrative)"
+      },
+      "params": {
+        "eyebrow": "Illustrative example",
+        "headline": "80% less time on release prep",
+        "emphasis": "80%"
+      }
+    },
+    {
+      "id": "offer",
+      "module": "cta",
+      "start": 14,
+      "end": 18,
+      "energy": 2,
+      "slide": {
+        "role": "cta",
+        "medium": "still",
+        "alt": "Try Relay free today, relay.example"
+      },
+      "params": {
+        "action": "Try Relay free today",
+        "emphasis": "free",
+        "detail": "Release notes on autopilot",
+        "handle": "relay.example"
+      }
+    }
+  ]
+}
