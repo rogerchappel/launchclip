@@ -390,7 +390,8 @@ export function visionKeyframeCheck(client, { readImage = defaultReadImage } = {
       images: [{ url: await readImage(file), detail: "low" }],
       schema: KEYFRAME_SCHEMA,
       schemaName: "launchclip_keyframe_check",
-      maxOutputTokens: 400
+      // Room for a reasoning model to think before it answers (a small cap returned nothing on a real run).
+      maxOutputTokens: 2000
     });
     const value = result?.value ?? {};
     const ok = Boolean(value.shows_subject) && !value.has_text_or_logo;
@@ -405,7 +406,7 @@ export function visionKeyframeCheck(client, { readImage = defaultReadImage } = {
       images: await Promise.all(files.map(async (file) => ({ url: await readImage(file), detail: "low" }))),
       schema: RANK_SCHEMA,
       schemaName: "launchclip_keyframe_rank",
-      maxOutputTokens: 300 + 200 * files.length
+      maxOutputTokens: 4000
     });
     const rows = Array.isArray(result?.value?.candidates) ? result.value.candidates : [];
     const verdicts = files.map((_, i) => {
