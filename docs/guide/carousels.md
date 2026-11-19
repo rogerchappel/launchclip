@@ -35,45 +35,61 @@ launchclip carousel export ./my-carousel
 
 A template is the design layer between the plan and the modules. The planner writes each slide's words (a headline, a line under it, list items, a figure with its source, a quote, a photo); the template decides how the slide is laid out, so a carousel looks designed whatever the content. Pick one with `--template <id>` or `carousel.template` in the story; without one, `make` picks from the brief.
 
+Ten templates follow feed styles that have been proven in production, rebuilt on LaunchClip's modules and brand system. `lit-window` is LaunchClip's own.
+
 ![Every template's sample at 4:5](../images/carousel-templates.jpg)
 
-| Template | For | Arcs |
+| Template | The look | For |
 |---|---|---|
-| `product-proof` | An app or SaaS ad: the product on screen, the result in one figure, a plain offer | ad, before-after, data |
-| `study-notes` | An educational list or how-to in large free type, with a checklist to save | listicle, how-to |
-| `field-notes` | An editorial list, how-to or lesson on a light ground | listicle, how-to, story, quote |
-| `photo-diary` | A personal photo story: a photo and one line per slide | story, before-after, single |
-| `quiet-quote` | A quote or a motivation series | quote, single |
-| `signal-report` | A data or report carousel: one sourced figure per slide | data, ad |
-| `myth-split` | Myth and fact: the myth struck through, the fact stamped | myth-fact |
-| `then-now` | A before-and-after: the old way against the new, the change in one figure | before-after, story, ad |
+| `caption-block` | The photo on top, a solid panel under it with condensed capitals; a short checklist under a slimmer photo | Education and checklists with photos |
+| `cinematic-dark` | Photos edge to edge under a dark reading layer, heavy centred capitals | Practical advice, coaching, motivation |
+| `cinematic-light` | The same under a soft light wash | The same, calmer |
+| `plain-note` | A white page: one observation in plain sentence case, signed with the account's handle | Founder notes, opinions |
+| `plain-note-dark` | The same on near-black, the punchline lit | Reminders, hot takes |
+| `numbered-steps` | A photo-led cover with the promise on black, then one big numbered step per slide, the checklist as numbered lines | How-tos, routines, frameworks |
+| `paper-story` | Warm paper, a serif headline over a framed photo, a caption under it | Product and founder stories |
+| `bold-statement` | The brand colour as the page, oversized capitals, one phrase lit | Values, manifestos, statements |
+| `pull-quote` | Serif pull quotes on paper, a large quotation mark in the accent | Quotes and testimonials |
+| `photo-essay` | Large photos across the top of a light page, restrained captions | Photography, recaps, trips |
+| `lit-window` | Each photo in a rounded window in a soft pool of brand-coloured light, the type set free around it | Product shots, screenshots, case studies |
 
 ### How a slide gets its layout
 
-Each slide takes one of six layouts (grammars). The content decides first; after that comes the template's choice for the slide's role, and then a plain default:
+Each slide takes one of eight layouts (grammars). The content decides first; after that comes the template's choice for the slide's role, and then type on the ground:
 
 | Grammar | When | Drawn by |
 |---|---|---|
 | `two-region` | The headline opens on one marker and the body on its pair (`Myth:` / `Fact:`, `Before:` / `After:`, `Don't:` / `Do:`) | `compare` in free type |
 | `proof-stat` | A `stat`, or a %, a currency amount, a multiplier, or a number with a unit such as hours or users | `stat-card` (with a source), `media-stat` (with a photo), else `concept-card` |
-| `steps` | `items`, or a body with two or more sequence words (first, then, finally) | `item-list` |
-| `full-bleed` | A cover with a photo, or the template's choice | `photo-scene` under a reading layer |
-| `image-panel` | A body slide with a photo | `split-screen` |
-| `text-card` | Everything else, quotes and the call to action | `hook-title`, `motion-title`, `quote-card`, `cta` |
+| `steps` | `items`, or a body with two or more sequence words (first, then, finally). A short list with a photo stays in an `image-panel` template's photo panel | `item-list` |
+| `image-panel` | The template's choice, with a photo: the photo on top, the text in a panel under it | `split-screen` |
+| `framed-image` | The template's choice, with a photo: the headline over a framed photo, a caption under it | `landscape-card` |
+| `full-bleed` | A cover with a photo when no template is set | `photo-scene` under a reading layer |
+| `step` | The template's choice: one numbered step per slide, the headline alone | `section-card` |
+| `text-card` | Everything else, quotes, notes and the call to action | `hook-title`, `motion-title`, `quote-card`, `cta` |
 
-Each grammar has the most of the slide its text may cover (0.36 to 0.68), type floors at 1080 wide (headline 52 px, body 46 px, scaled by width) and copy caps. A template's own caps sit inside those. Copy over a cap goes back to the planner in its repair round.
+Each grammar has the most of the slide its text may cover, type floors at 1080 wide (headline 52 px, body 46 px, scaled by width) and copy caps. A template's own caps sit inside those. Copy over a cap goes back to the planner in its repair round.
 
-### Surfaces and colour
+### Grounds, surfaces and colour
 
-Each role sits on a surface. `dark` and `light` are the carousel's ground, and a carousel has one ground: `light` turns the brand over, so its palest colour becomes the ground and its darkest the type. `brand` is a plate lit in the brand's primary or accent. `on-image` puts the slide's photo behind a reading layer at 0.6. Colours always come from the brand or the style pack. No template names a hex.
+A template sets the carousel's ground, and a carousel has one:
+
+- `dark` is the brand's own dark ground.
+- `light` turns the brand over, so its palest colour becomes the ground and its darkest the type.
+- `brand` makes the brand's primary the page.
+- `pure` takes a dark or light ground to a near-black or near-white page in the brand's hue.
+
+Type, accent and the colour on a primary fill (a call-to-action pill) are moved until they read on that ground. Each role then sits on the ground, on a plate lit in the brand colour, or `on-image`: the slide's photo behind a reading layer (0.6 for the cinematic templates, 0.74 under a numbered step). Colours always come from the brand or the style pack. No template names a hex.
+
+A carousel slide that isn't 9:16 lays out inside the feed's margins (5% each side and at the top, 8% at the bottom), not under a Shorts-style interface, and with no captions band. 9:16 slides keep the Shorts safe zone.
 
 ### The automatic pick
 
 Without `--template`, each template scores the brief: +2 for each `best_for` word, −3 for each `avoid_when` word, +4 when it suits the arc, and points up or down for photos. Among the templates within two points of the best, the style's seed picks one, so two carousels on the same brief rarely look the same.
 
-The samples are in `examples/carousel/<template>-4x5` (plus `study-notes-9x16`), written by `node scripts/carousel-template-samples.mjs`. Their photos are stand-ins already in the repo. Remotion and HyperFrames draw the templates the same way:
+The samples are in `examples/carousel/<template>-4x5` (plus `numbered-steps-9x16`), written by `node scripts/carousel-template-samples.mjs`. Their photos are stand-ins already in the repo. Remotion and HyperFrames draw the templates the same way:
 
-![field-notes and myth-split: Remotion above, HyperFrames below](../images/carousel-templates-parity.jpg)
+![numbered-steps, paper-story and cinematic-dark: Remotion above, HyperFrames below](../images/carousel-templates-parity.jpg)
 
 ## Destinations
 
