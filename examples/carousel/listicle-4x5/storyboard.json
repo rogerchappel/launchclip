@@ -1,0 +1,143 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Five habits of fast teams (sample carousel, 4:5 listicle)",
+  "notes": "Sample carousel (docs/CAROUSELS_RFC.md): a story whose scenes are slides. Each still is the slide's settled frame. Values are illustrative.",
+  "lane": "motion",
+  "format": {
+    "kind": "carousel",
+    "width": 1080,
+    "height": 1350,
+    "fps": 30,
+    "duration": 20,
+    "platform": "instagram"
+  },
+  "carousel": {
+    "arc": "listicle",
+    "goal": "save",
+    "destinations": [
+      "instagram",
+      "linkedin"
+    ],
+    "caption": {
+      "hook": "Most teams are not slow. They wait.",
+      "body": "Three habits that cut the waiting out of a week, from teams that ship daily.",
+      "cta": "Save this for your next planning meeting.",
+      "tags": [
+        "productivity",
+        "engineering"
+      ]
+    }
+  },
+  "brand": {
+    "colors": {
+      "bg": "#f2eee6",
+      "primary": "#e2412b",
+      "accent": "#1f6feb",
+      "ink": "#151515",
+      "paper": "#f2eee6"
+    },
+    "fonts": {
+      "display": "bricolage-grotesque",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "audio": null,
+  "scenes": [
+    {
+      "id": "cover",
+      "module": "hook-title",
+      "start": 0,
+      "end": 4,
+      "energy": 2,
+      "slide": {
+        "role": "cover",
+        "medium": "still",
+        "alt": "Headline: 3 habits that make teams ship faster"
+      },
+      "params": {
+        "headline": "3 habits that make teams ship faster",
+        "emphasis": "ship faster",
+        "kicker": "Swipe"
+      }
+    },
+    {
+      "id": "habit-1",
+      "module": "hook-title",
+      "start": 4,
+      "end": 8,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Habit 1: decide in the thread, not in a meeting"
+      },
+      "params": {
+        "headline": "Decide in the thread, not in a meeting",
+        "emphasis": "thread",
+        "kicker": "1"
+      }
+    },
+    {
+      "id": "habit-2",
+      "module": "hook-title",
+      "start": 8,
+      "end": 12,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Habit 2: ship the smallest change that works"
+      },
+      "params": {
+        "headline": "Ship the smallest change that works",
+        "emphasis": "smallest",
+        "kicker": "2"
+      }
+    },
+    {
+      "id": "summary",
+      "module": "item-list",
+      "start": 12,
+      "end": 16,
+      "energy": 1,
+      "slide": {
+        "role": "payoff",
+        "medium": "still",
+        "alt": "Checklist of the three habits"
+      },
+      "params": {
+        "title": "Save this",
+        "variant": "stack",
+        "items": [
+          {
+            "label": "Decide in thread"
+          },
+          {
+            "label": "Ship small"
+          },
+          {
+            "label": "Review same day"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cta",
+      "module": "cta",
+      "start": 16,
+      "end": 20,
+      "energy": 2,
+      "slide": {
+        "role": "cta",
+        "medium": "still",
+        "alt": "Follow for a habit a week"
+      },
+      "params": {
+        "action": "Follow for a habit a week",
+        "emphasis": "habit",
+        "handle": "fastteams.test"
+      }
+    }
+  ]
+}
