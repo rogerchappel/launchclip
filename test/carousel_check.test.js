@@ -112,13 +112,20 @@ test("type-size and safe-zone on declared boxes", () => {
   const dest = CAROUSEL_DESTINATIONS.instagram;
   const rect = { x: 80, y: 200, width: 860, height: 600 };
   const box = (texts, role = "body") => [{ slide: 1, role, texts: texts.map((text) => ({ rect, ...text })) }];
-  assert.deepEqual(geometryFindings(box([{ role: "headline", fontSize: 120 }], "cover"), dest), []);
-  assert.equal(geometryFindings(box([{ role: "headline", fontSize: 90 }], "cover"), dest)[0].level, "fail");
-  assert.equal(geometryFindings(box([{ role: "body", fontSize: 50 }]), dest)[0].level, "fail");
-  assert.deepEqual(geometryFindings(box([{ role: "body", fontSize: 72 }]), dest), []);
-  const tiktok = geometryFindings(box([{ role: "body", fontSize: 120 }]), CAROUSEL_DESTINATIONS.tiktok);
-  assert.match(rules(tiktok, "safe-zone")[0].reason, /22 px into the right zone/);
-  assert.deepEqual(rules(geometryFindings(box([{ role: "body", fontSize: 72 }]), dest), "safe-zone"), []);
+  // type-size: font floors of 52 px (headline) and 46 px (body) at 1080 wide, scaled by width.
+  assert.deepEqual(geometryFindings(box([{ role: "headline", fontSize: 52 }], "cover"), dest), []);
+  assert.match(geometryFindings(box([{ role: "headline", fontSize: 50 }], "cover"), dest)[0].reason, /50 px; at 1080 px wide it needs 52 px/);
+  assert.equal(geometryFindings(box([{ role: "body", fontSize: 45 }]), dest)[0].level, "fail");
+  assert.deepEqual(geometryFindings(box([{ role: "body", fontSize: 46 }]), dest), []);
+  const half = { ...dest, width: 540, height: 675 };
+  assert.deepEqual(rules(geometryFindings(box([{ role: "body", fontSize: 23 }]), half), "type-size"), [], "scaled by width");
+  assert.equal(rules(geometryFindings(box([{ role: "body", fontSize: 22 }]), half), "type-size").length, 1);
+  // safe-zone: px margins per destination (4:5 96/72/96/72, 9:16 180/72/240/72).
+  assert.deepEqual(rules(geometryFindings(box([{ role: "body", fontSize: 120 }]), CAROUSEL_DESTINATIONS.tiktok), "safe-zone"), []);
+  const wide = [{ slide: 1, role: "body", texts: [{ role: "body", fontSize: 72, rect: { x: 60, y: 90, width: 960, height: 600 } }] }];
+  assert.match(rules(geometryFindings(wide, dest), "safe-zone")[0].reason, /6 px into the top zone, 12 px into the left zone, 12 px into the right zone/);
+  const low = [{ slide: 1, role: "body", texts: [{ role: "body", fontSize: 72, rect: { x: 80, y: 1500, width: 860, height: 300 } }] }];
+  assert.match(rules(geometryFindings(low, CAROUSEL_DESTINATIONS.tiktok), "safe-zone")[0].reason, /^text runs 120 px into the bottom zone/);
 });
 
 test("the sample's declared boxes at 4:5 and 9:16", () => {

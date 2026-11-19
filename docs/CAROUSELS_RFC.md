@@ -167,7 +167,7 @@ and a reason, like the motion and direction checks.
 |---|---|
 | `cover-promise` | The cover has a headline of 3 to 12 words that names a specific subject or number |
 | `cover-thumbnail` | The cover's headline is legible when scaled to a 160 px wide feed thumbnail (measured cap height and contrast) |
-| `type-size` | No text under a minimum cap height for the canvas (proposed: 3.5% of the slide's height for body, 6% for headlines) |
+| `type-size` | No text under a minimum font size: 46 px for body and 52 px for headlines at 1080 px wide, scaled by the canvas width |
 | `one-idea` | At most one headline and one supporting block per slide, and a word budget (proposed: 25 words for body slides, 12 for the cover) |
 | `contrast` | WCAG AA contrast for every text run against what is under it, measured on the rendered pixels, not the palette |
 | `safe-zone` | Text clears each destination's overlay zones (TikTok's caption and buttons, Instagram's dots and profile row) |
