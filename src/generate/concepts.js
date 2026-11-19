@@ -7,7 +7,7 @@ import { refusalReason } from "./brief.js";
 
 /**
  * → async (requests) → Map(request id → [shows]), each list `count` long or
- * empty. context: {prompt, rules} from the run. A failed call or a refused
+ * empty, and .audience (who the video is for) when the call said. context: {prompt, rules} from the run. A failed call or a refused
  * concept falls back to the request's own `shows`, so nothing is lost.
  */
 export function audienceConcepts(client, { count, prompt = null, rules = null, notice = () => {} } = {}) {
@@ -30,6 +30,8 @@ export function audienceConcepts(client, { count, prompt = null, rules = null, n
         maxOutputTokens: 4000
       });
       rows = Array.isArray(result?.value?.shots) ? result.value.shots : [];
+      // Who it is for, kept on the map for the rank's audience score.
+      if (result?.value?.audience) out.audience = String(result.value.audience).slice(0, 300);
       if (result?.value?.direction) notice(`concepts: ${String(result.value.direction).slice(0, 200)}`);
     } catch (error) {
       notice(`concepts: not written (${String(error?.message ?? error).split("\n")[0]}); each candidate uses the shot's own prompt`);

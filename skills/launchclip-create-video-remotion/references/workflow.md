@@ -595,7 +595,10 @@ what the call cost. Map the brief onto whatever parameters yours has.
    <request.id> --file <still> --model <provider:model that takes images>`
    (a footage shot against `request.shows`; a story shot or plate against
    the bible). For candidates, pass them all, `--file a.png,b.png,c.png`:
-   it ranks them in one look and names the `chosen` one; record that one
+   it ranks them in one look and names the `chosen` one (add `--audience
+   "<who the video is for>"` and `--concepts "a|b|c"`, each file's concept
+   in `--file` order, so each is judged against its own concept and scored
+   on how well it speaks to that audience); record that one
    accepted and the others rejected with their reason. Only the chosen still
    is animated. With no such model, judge it yourself by the same rule: it
    must clearly show `request.shows`, with no text, lettering, logo, user

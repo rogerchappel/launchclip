@@ -50,6 +50,7 @@ export function createGenerator({ project, image, video = null, budget = null, d
   let stopped = null;
   let pending = [];
   let checkNoted = false;
+  let audience = null;
 
   const providerFor = (step) => (step === "image" ? image : video);
   // keyframeOnly: a story draft stops at its approved keyframe; the clip is made once the draft is approved.
@@ -90,6 +91,7 @@ export function createGenerator({ project, image, video = null, budget = null, d
     if (concepts && count > 1 && fresh.length) {
       try {
         const ideas = await concepts(fresh.map((job) => job.request));
+        audience = ideas.audience ?? audience;
         for (const job of fresh) job.concepts = ideas.get(job.request.id) ?? null;
       } catch (error) { say(`concepts: not written (${String(error?.message ?? error).split("\n")[0]})`); }
     }
@@ -232,7 +234,7 @@ export function createGenerator({ project, image, video = null, budget = null, d
       return { best: 0, verdicts: files.map(() => ({ ok: true })), change: null };
     }
     try {
-      if (files.length > 1 && check.rank) return await check.rank({ files, brief, request, ...(concepts.some(Boolean) ? { concepts } : {}) });
+      if (files.length > 1 && check.rank) return await check.rank({ files, brief, request, ...(concepts.some(Boolean) ? { concepts } : {}), ...(audience ? { audience } : {}) });
       const verdicts = [];
       for (const file of files) {
         const verdict = await check({ file, brief, request });
@@ -412,10 +414,10 @@ export function visionKeyframeCheck(client, { readImage = defaultReadImage } = {
   };
   // Several candidates in one look: each passes or fails as above (plus anomalies), and the
   // best passing one is the highest look match plus aesthetics. → {best, verdicts, change}
-  check.rank = async ({ files, brief, request, concepts = [] }) => {
+  check.rank = async ({ files, brief, request, concepts = [], audience = null }) => {
     const result = await client.runStructured({
-      instructions: "You compare candidate keyframes for one shot of a video, numbered from 1 in the order given. For each, say whether it clearly shows the requested subject; whether any text, lettering, logo, user interface or recognisable real person is visible; whether it has anomalies (malformed hands or faces, extra or missing fingers or limbs, melted or impossible objects, physics that cannot happen); and score from 0 to 10 how well it matches the look asked for and how good it is to look at (composition, light, focus, a calm lower third). Give a short finding for each. Then give one short sentence to add to the image prompt that would fix the main problem if every candidate fails.",
-      input: [`Requested subject: ${request.shows ?? brief?.image?.prompt ?? ""}`, `The look asked for: ${brief?.image?.prompt ?? ""}`, `Candidates: ${files.length}`,
+      instructions: "You compare candidate keyframes for one shot of a video, numbered from 1 in the order given. For each, say whether it clearly shows the requested subject; whether any text, lettering, logo, user interface or recognisable real person is visible; whether it has anomalies (malformed hands or faces, extra or missing fingers or limbs, melted or impossible objects, physics that cannot happen); and score from 0 to 10 how well it matches the look asked for and how good it is to look at (composition, light, focus, a calm lower third), and how well it speaks to the video's audience (people they would recognise as their own world; with no audience given, how broadly it appeals). Give a short finding for each. Then give one short sentence to add to the image prompt that would fix the main problem if every candidate fails.",
+      input: [`Requested subject: ${request.shows ?? brief?.image?.prompt ?? ""}`, `The look asked for: ${brief?.image?.prompt ?? ""}`, `Candidates: ${files.length}`, audience ? `The audience: ${audience}` : null,
         // Concept candidates each take the subject their own way: judge each against its concept.
         ...concepts.map((concept, i) => (concept ? `Candidate ${i + 1}'s concept (counts as the requested subject): ${concept}` : null)).filter(Boolean)].join("\n"),
       images: await Promise.all(files.map(async (file) => ({ url: await readImage(file), detail: "low" }))),
@@ -427,7 +429,7 @@ export function visionKeyframeCheck(client, { readImage = defaultReadImage } = {
     const verdicts = files.map((_, i) => {
       const row = rows.find((entry) => Number(entry.index) === i + 1) ?? rows[i] ?? {};
       const ok = Boolean(row.shows_subject) && !row.has_text_or_logo && !row.anomalies;
-      return { ok, score: (Number(row.look_match) || 0) + (Number(row.aesthetics) || 0), reason: ok ? null : String(row.finding ?? "the keyframe does not pass") };
+      return { ok, score: (Number(row.look_match) || 0) + (Number(row.aesthetics) || 0) + (Number(row.audience_fit) || 0), reason: ok ? null : String(row.finding ?? "the keyframe does not pass") };
     });
     const passing = verdicts.map((verdict, i) => [verdict, i]).filter(([verdict]) => verdict.ok);
     const best = passing.length ? passing.reduce((a, b) => (b[0].score > a[0].score ? b : a))[1] : null;
@@ -441,7 +443,7 @@ const RANK_SCHEMA = Object.freeze({
   additionalProperties: false,
   required: ["candidates", "change"],
   properties: {
-    candidates: { type: "array", items: { type: "object", additionalProperties: false, required: ["index", "shows_subject", "has_text_or_logo", "anomalies", "look_match", "aesthetics", "finding"], properties: { index: { type: "integer" }, shows_subject: { type: "boolean" }, has_text_or_logo: { type: "boolean" }, anomalies: { type: "boolean" }, look_match: { type: "integer" }, aesthetics: { type: "integer" }, finding: { type: "string" } } } },
+    candidates: { type: "array", items: { type: "object", additionalProperties: false, required: ["index", "shows_subject", "has_text_or_logo", "anomalies", "look_match", "aesthetics", "audience_fit", "finding"], properties: { index: { type: "integer" }, shows_subject: { type: "boolean" }, has_text_or_logo: { type: "boolean" }, anomalies: { type: "boolean" }, look_match: { type: "integer" }, aesthetics: { type: "integer" }, audience_fit: { type: "integer" }, finding: { type: "string" } } } },
     change: { type: "string" }
   }
 });

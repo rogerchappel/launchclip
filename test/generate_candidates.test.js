@@ -148,16 +148,16 @@ test("concepts: each candidate is its own concept, one concepts call per batch, 
   const submit = fake.submit;
   fake.submit = (brief, step, ...rest) => { if (step === "image") prompts.push(brief.image.prompt); return submit(brief, step, ...rest); };
   const asked = [];
-  const concepts = async (requests) => { asked.push(requests.map((r) => r.id)); return new Map(requests.map((r) => [r.id, ["a cup from above", "steam over a cup at dawn"]])); };
+  const concepts = async (requests) => { asked.push(requests.map((r) => r.id)); return Object.assign(new Map(requests.map((r) => [r.id, ["a cup from above", "steam over a cup at dawn"]])), { audience: "night-shift nurses" }); };
   const seen = [];
   const check = async () => ({ ok: true });
-  check.rank = async ({ files, concepts: given }) => { seen.push(given); return { best: 1, verdicts: files.map(() => ({ ok: true })), change: null }; };
+  check.rank = async ({ files, concepts: given, audience }) => { seen.push(given, audience); return { best: 1, verdicts: files.map(() => ({ ok: true })), change: null }; };
   const generator = createGenerator({ project: dir, image: fake, video: fake, budget: { usd: 5 }, candidates: 2, concepts, check, pollMs: NO_POLL });
   const { request } = await one(dir, generator);
   assert.equal(asked.length, 1);
   assert.match(prompts[0], /^a cup from above\./);
   assert.match(prompts[1], /^steam over a cup at dawn\./);
-  assert.deepEqual(seen, [["a cup from above", "steam over a cup at dawn"]]);
+  assert.deepEqual(seen, [["a cup from above", "steam over a cup at dawn"], "night-shift nurses"]);
   const stills = (await readLedger(dir)).filter((entry) => entry.shot === request.id && entry.step === "image");
   assert.deepEqual(stills.map((entry) => [entry.concept, entry.verdict]), [["a cup from above", "rejected"], ["steam over a cup at dawn", "accepted"]]);
 });
@@ -175,7 +175,34 @@ test("audienceConcepts: one call for every shot; refused or missing concepts fal
   assert.equal(calls, 1);
   assert.deepEqual(ideas.get("s1"), ["a paper cup on a break-room counter at 3am", "a cup of coffee", "a cup of coffee"]);
   assert.equal(ideas.has("s2"), false);
+  assert.equal(ideas.audience, "nurses");
   assert.match(notes[0], /break room/);
   const failed = await audienceConcepts({ runStructured: async () => { throw new Error("down"); } }, { count: 2 })([{ id: "s1", shows: "a cup" }]);
   assert.equal(failed.size, 0);
+});
+
+test("the rank adds audience fit to the score and passes the audience and each concept to the model", async () => {
+  const client = { runStructured: async (call) => {
+    assert.match(call.input, /The audience: café owners/);
+    assert.match(call.input, /Candidate 2's concept \(counts as the requested subject\): an owner counting the till/);
+    return { value: { change: "", candidates: [
+      { index: 1, shows_subject: true, has_text_or_logo: false, anomalies: false, look_match: 8, aesthetics: 8, audience_fit: 2, finding: "generic" },
+      { index: 2, shows_subject: true, has_text_or_logo: false, anomalies: false, look_match: 7, aesthetics: 7, audience_fit: 9, finding: "their world" }
+    ] } };
+  } };
+  const ranked = await visionKeyframeCheck(client, { readImage: async () => "data:image/png;base64," }).rank({ files: ["a", "b"], brief: { image: { prompt: "p" } }, request: { shows: "a café" }, concepts: ["a café counter", "an owner counting the till"], audience: "café owners" });
+  assert.equal(ranked.best, 1);
+});
+
+test("skill path: generate check takes --audience and --concepts for the rank", async (t) => {
+  const dir = await project(t);
+  const scratch = await mkdtemp(path.join(os.tmpdir(), "launchclip-candidates-files-"));
+  t.after(() => rm(scratch, { recursive: true, force: true }));
+  const files = await Promise.all([1, 2].map(async (i) => { const file = path.join(scratch, `c${i}.png`); await cp(PNG, file); return file; }));
+  let input = "";
+  const client = { runStructured: async (call) => { input = call.input; return { value: { change: "", candidates: [1, 2].map((index) => ({ index, shows_subject: true, has_text_or_logo: false, anomalies: false, look_match: 5, aesthetics: 5, audience_fit: index * 4, finding: "ok" })) } }; } };
+  const ranked = await checkKeyframe(dir, { shot: "s1", file: files.join(","), audience: "nurses", concepts: "a break-room cup | a cup at the nurses' station" }, { client });
+  assert.equal(ranked.chosen, 2);
+  assert.match(input, /The audience: nurses/);
+  assert.match(input, /Candidate 2's concept \(counts as the requested subject\): a cup at the nurses' station/);
 });

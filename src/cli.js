@@ -175,7 +175,7 @@ export async function runCli(argv, io = {}) {
       }
       if (generateInvocation.action === "check") {
         const { checkKeyframe } = await import("./generate/record.js");
-        const verdict = await checkKeyframe(required(generateInvocation.project, "project path"), { shot: flags.shot, file: flags.file, model: flags.model });
+        const verdict = await checkKeyframe(required(generateInvocation.project, "project path"), { shot: flags.shot, file: flags.file, model: flags.model, audience: flags.audience, concepts: flags.concepts });
         stdout.write(flags.json ? `${JSON.stringify(verdict, null, 2)}\n` : `${verdict.ok ? "accepted" : "rejected"}: ${verdict.shot}${verdict.chosen ? ` (candidate ${verdict.chosen} chosen)` : ""}${verdict.reason ? `: ${verdict.reason}` : ""}${verdict.change ? `\nchange: ${verdict.change}` : ""}\n`);
         if (!verdict.ok) process.exitCode = 1;
         return;
