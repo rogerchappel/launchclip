@@ -9,7 +9,7 @@
   brief a generation provider would be given: a keyframe prompt (`shows`
   word for word, the story's look paragraph, the narration as context), a
   negative that forbids text, logos, UI and real people, a motion prompt
-  padded 0.3 s at each end, and a hash. Nothing is called. Requests that
+  with the shot's length and a 0.3 s pad for each end, and a hash. Nothing is called. Requests that
   name a real product, person or place are refused with the reason
   (`src/generate/brief.js`, docs/GENERATED_FOOTAGE_RFC.md §4.2).
 - **Sets that arrive together and breathe.** `icon-grid` cells flock out of

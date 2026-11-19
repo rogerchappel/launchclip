@@ -7415,8 +7415,10 @@ shape and nothing else:
   motion) and the narration line as context only.
 - `negative` is always `FOOTAGE_NEGATIVE`: no text, lettering, logos, UI or
   real, named people.
-- `video.seconds` is the request's `duration` (`DEFAULT_SHOT_SECONDS` when
-  unresolved) plus `EDGE_PAD_SECONDS` (0.3 s) at each end.
+- `video.seconds` is the shot's own length, the request's `duration`
+  (`DEFAULT_SHOT_SECONDS` when unresolved), without padding. `pad_seconds`
+  is `EDGE_PAD_SECONDS` (0.3 s): an adapter requests `seconds + 2 *
+  pad_seconds` and `source_start` trims the pad back.
 - A request that names a real product, person, place or event gets `null`;
   `refusalReason(request)` says why. The check is a heuristic: a capitalised
   word that does not open a sentence, a mixed-case word (`iPhone`), or ™, ®,

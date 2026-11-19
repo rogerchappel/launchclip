@@ -51,10 +51,10 @@ test("a backdrop asks for low motion and no strong subject", () => {
   assert.match(brief.video.prompt, /^Low motion/);
 });
 
-test("video length is the duration plus the edge padding at each end", () => {
+test("video length is the shot's own length; the edge padding is separate", () => {
   assert.equal(EDGE_PAD_SECONDS, 0.3);
   const { video } = footageBrief(request({ duration: 2 }), { fps: 24 });
-  assert.equal(video.seconds, 2.6);
+  assert.equal(video.seconds, 2);
   assert.equal(video.pad_seconds, EDGE_PAD_SECONDS);
   assert.equal(video.fps, 24);
 });
@@ -85,11 +85,12 @@ test("generate brief prints every shot request in a project without a provider",
   assert.match(text, /# s4-[0-9a-f]{10} \(scene s4\)\nrefused: .*iPhone/);
   assert.match(text, /\(scene s5, backdrop\)/);
   assert.match(text, /"Good coffee starts slow\."/);
+  assert.match(text, /video prompt \(2 s at 30 fps; request 2\.6 s, 0\.3 s padding each end\)/);
 
   const all = JSON.parse(await cli(["generate", "brief", FIXTURE, "--json"]));
   assert.deepEqual(all.map(({ request }) => request.scene_id), ["s1", "s2", "s3", "s4", "s5"]);
   assert.deepEqual(all.map(({ brief }) => brief?.steps ?? null), [["image", "video"], ["image"], ["image"], null, ["image", "video"]]);
-  assert.equal(all[0].brief.video.seconds, 2.6);
+  assert.equal(all[0].brief.video.seconds, 2);
   assert.equal(all[0].brief.video.fps, 30);
 
   const one = JSON.parse(await cli(["generate", "brief", FIXTURE, "--shot", "s3", "--json"]));
