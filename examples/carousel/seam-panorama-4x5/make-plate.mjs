@@ -27,25 +27,27 @@ const stars = Array.from({ length: 260 }, () => {
   return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}" fill="#f4efe6" opacity="${(0.25 + rand() * 0.6 * (1 - x / (W * 0.7))).toFixed(2)}"/>`;
 }).join("");
 const far = ridge(860, 70, [3, 7, 13], 120);
-const mid = ridge(1000, 90, [2, 5, 11], 260);
+const mid = ridge(1010, 80, [2, 5, 11], 110);
 const near = ridge(1180, 60, [4, 9, 17], 80);
 // The summit: the mid ridge's peak sits on the third seam's far side.
 const peakX = 3460;
-const summit = (x) => Math.min(mid(x), 430 + Math.abs(x - peakX) * 0.9);
+const summit = (x) => Math.min(mid(x), 640 + Math.abs(x - peakX) * 1.05);
 const contours = (fn, from, count, gap, color) => Array.from({ length: count }, (_, i) => `<path d="${line((x) => fn(x) + from + i * gap)}" fill="none" stroke="${color}" stroke-width="1.6" opacity="${(0.5 - i * 0.03).toFixed(2)}"/>`).join("");
-const trail = [[260, 1250], [900, 1160], [1500, 1120], [2050, 1010], [2600, 900], [3050, 700], [3300, 560], [peakX, summit(peakX) + 6]];
+const trail = [[260, 1250], [900, 1160], [1500, 1120], [2050, 1010], [2600, 900], [3050, 800], [3300, 700], [peakX, summit(peakX) + 6]];
 const trailD = trail.map(([x, y], i) => `${i ? "L" : "M"}${x} ${y}`).join(" ");
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
 <defs>
-  <linearGradient id="sky" x1="0" x2="1" y1="0" y2="0.35"><stop offset="0" stop-color="#0b1520"/><stop offset="0.45" stop-color="#16263a"/><stop offset="0.75" stop-color="#5a3a4a"/><stop offset="0.9" stop-color="#d9654a"/><stop offset="1" stop-color="#ffb36b"/></linearGradient>
-  <radialGradient id="sun" cx="${(3900 / W).toFixed(3)}" cy="0.62" r="0.22"><stop offset="0" stop-color="#ffd8a0" stop-opacity="0.95"/><stop offset="1" stop-color="#ff7a45" stop-opacity="0"/></radialGradient>
+  <linearGradient id="sky" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#0b1520"/><stop offset="0.5" stop-color="#16263a"/><stop offset="0.8" stop-color="#3a2c44"/><stop offset="1" stop-color="#4a2e40"/></linearGradient>
+  <linearGradient id="dawn" x1="0" x2="0" y1="0" y2="1"><stop offset="0.3" stop-color="#0b1520" stop-opacity="0.6"/><stop offset="0.5" stop-color="#0b1520" stop-opacity="0"/></linearGradient>
+  <radialGradient id="sun" cx="${(3900 / W).toFixed(3)}" cy="0.62" r="0.26" gradientTransform="translate(${(3900 / W).toFixed(3)} 0.66) scale(1 2.2) translate(-${(3900 / W).toFixed(3)} -0.66)"><stop offset="0" stop-color="#ffd8a0" stop-opacity="1"/><stop offset="0.35" stop-color="#ff8a4c" stop-opacity="0.75"/><stop offset="1" stop-color="#c2413a" stop-opacity="0"/></radialGradient>
   <linearGradient id="farG" x1="0" x2="1"><stop offset="0" stop-color="#1b2c40"/><stop offset="1" stop-color="#7a4552"/></linearGradient>
   <linearGradient id="midG" x1="0" x2="1"><stop offset="0" stop-color="#132131"/><stop offset="1" stop-color="#4a2a3a"/></linearGradient>
   <linearGradient id="nearG" x1="0" x2="1"><stop offset="0" stop-color="#0a131c"/><stop offset="1" stop-color="#22151f"/></linearGradient>
 </defs>
 <rect width="${W}" height="${H}" fill="url(#sky)"/>
 <rect width="${W}" height="${H}" fill="url(#sun)"/>
+<rect width="${W}" height="${H}" fill="url(#dawn)"/>
 ${stars}
 <path d="${path(far)}" fill="url(#farG)"/>${contours(far, 26, 9, 22, "#2c4560")}
 <path d="${path(summit)}" fill="url(#midG)"/>${contours(summit, 30, 14, 26, "#3b2f48")}
