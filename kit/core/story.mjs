@@ -1,11 +1,12 @@
 // story.json v1: validate, resolve time anchors, derive boundaries.
 //
-// Plain ESM that imports only import-free siblings (palette.mjs, oklch.mjs),
+// Plain ESM that imports only import-free siblings (palette.mjs, oklch.mjs, carousel.mjs),
 // so it can be bundled into Remotion and copied into skills unchanged. The
 // canonical copy lives in kit/core/; see docs/KIT_CONTRACTS.md
 // ("story.json v1") for the binding contract.
 
 import { BRAND_PALETTE_MODES, workingBrand } from "./palette.mjs";
+import { carouselProblems } from "./carousel.mjs";
 
 export const STORY_SCHEMA = "launchclip.story.v1";
 // Non-additive changes made inside STORY_SCHEMA so far: a story's
@@ -223,7 +224,7 @@ const EPS = 1e-6;
 // light: the story's lighting (a style pack's light; kit/core/lighting.mjs).
 // grade: the colour grade applied to the finished render (a style pack's grade; kit/core/grade.mjs).
 // finish: whole-frame shader passes over the finished render (kit/core/finish.mjs, src/finish_pass.js).
-const TOP_LEVEL = new Set(["grade", "finish", "look", "light", "cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine", "bible", "direction"]);
+const TOP_LEVEL = new Set(["grade", "finish", "look", "light", "cover", "variants", "background", "panel", "medium", "schema", "lane", "format", "brand", "audio", "base", "scenes", "overlays", "ending", "title", "notes", "resolved", "meta", "phase", "cinematic_contract", "style", "motion", "camera", "ambient", "layout", "sections", "frame", "cast", "chapters", "world", "skeleton", "plate", "engine", "bible", "direction", "carousel"]);
 
 // ---------------------------------------------------------------------------
 // Anchors
@@ -615,6 +616,8 @@ export function validateStory(story, { modules, moduleParams } = {}) {
       err(`format aspect ${width}x${height} is not supported; use 9:16, 16:9, 1:1 or 4:5`);
     }
     if (story.format.platform !== undefined && !nonEmpty(story.format.platform)) err("format.platform must be a non-empty string");
+    // format.kind "carousel": the scenes are slides (kit/core/carousel.mjs, docs/CAROUSELS_RFC.md).
+    for (const problem of carouselProblems(story)) err(problem);
   }
 
   // brand

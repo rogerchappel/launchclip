@@ -1448,6 +1448,30 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip handin check <project> [--look mixed] [--model provider:model] [--json] # check HANDIN.json art against the story and the bible; writes qa/hand-in.json
   ```
 
+- `carousel make`: Plan, render and check a carousel or a single-image post from a brief (docs/CAROUSELS_RFC.md): a story whose scenes are slides, each a still (the slide's settled frame) or a short motion loop, with a post caption and alt text per destination.
+
+  ```text
+  launchclip carousel make "<brief>" [--arc <id>|auto] [--dest instagram,linkedin,...] [--slides <n>] [--goal save|comment|follow|visit|install] [--images <dir>] [--generate <provider>[:<model>]] [--variants <n>] [--out <dir>] [--json] # plan, render and check a carousel or single-image post (docs/CAROUSELS_RFC.md)
+  ```
+
+- `carousel render`: Render each slide of a carousel project: the still at the slide's settled frame, and a loop for each motion slide, laid out again for each destination's canvas, into carousel/<dest>/.
+
+  ```text
+  launchclip carousel render <project> [--dest <id>[,<id>...]] [--renderer remotion|hyperframes] [--json] # each slide's still (and motion slides' loops) per destination, into carousel/<dest>/
+  ```
+
+- `carousel check`: Check a carousel against the slide rules: a cover that makes one promise and reads at thumbnail size, type large enough for the feed, one idea per slide, contrast on the rendered pixels, the destination's safe zones, a payoff where the arc promises one, alt text. Exits 1 on a failure.
+
+  ```text
+  launchclip carousel check <project> [--dest <id>] [--json] # the slide rules (cover, type size, one idea, contrast, safe zones, alt text); exits 1 on a failure
+  ```
+
+- `carousel export`: Package a rendered carousel for each destination: numbered slides, a PDF for LinkedIn, a card sheet for Meta ads, caption.md, alt.json and CAROUSEL.json listing every file and the check results.
+
+  ```text
+  launchclip carousel export <project> [--dest <id>[,<id>...]] [--json] # package rendered slides per destination: PDF, card sheet, caption.md, alt.json, CAROUSEL.json
+  ```
+
 - `generate brief`: Print the generation brief for every footage shot request ({kind: "shot"}) in a project's storyboard, without calling any provider, so it can be pasted into any image or video tool by hand. Each brief has the keyframe (image) prompt and negative, the motion (video) prompt with its length padded at each end, and a hash; a still or an image request stops at the keyframe. A request that names a real product, person, place or event is refused, with the reason. --shot <id> prints one (a request id or its scene id); --json prints {request, brief, reason} for each, plus accepted ({image, video} files) for steps already made for the current brief, which a re-run reuses instead of paying again.
 
   ```text
