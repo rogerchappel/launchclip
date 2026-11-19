@@ -20,6 +20,8 @@ import { DEFAULT_BRAND, suggestMotion } from "@launchclip/core/planning-prompt.m
 import { estimateModelUsageCost } from "../cost_tracker.js";
 import { SHOTS_DIR, shotRequestLimit } from "../asset_provider.js";
 import { createComfyAssetProvider } from "../comfy/asset_provider.js";
+import { LEDGER_FILE, ledgerCosts } from "../generate/ledger.js";
+import { makeGenerateSpecs, makeGenerator } from "./generate.js";
 import { MAX_ASSET_PROVIDER_CONCURRENCY, assetProviderConcurrency, assetProviderTimeoutMs, createCommandAssetProvider } from "../asset_provider_cmd.js";
 import { CONSTRAINTS_FILE, PROJECT_CONSTRAINTS_FILE, constrainProvider, constraintsDocument, hasConstraints, loadConstraints, neverUseMatcher, storySrc } from "../constraints.js";
 import { mediaNotesLine } from "../inventory_notes.js";
@@ -284,6 +286,8 @@ export async function runMake(prompt, options = {}, adapters = {}) {
     if (report.status === "failed") break;
   }
   report.timings.total = round1((now() - started) / 1000);
+  // Generated footage: the project's ledger, every attempt this video has paid for (docs/GENERATED_FOOTAGE_RFC.md §7).
+  for (const item of (await ledgerCosts(project)).line_items) report.costs.items.push({ stage: "generate", ...item });
   report.costs.estimated_usd = round4(report.costs.items.reduce((sum, item) => sum + (item.estimated_usd ?? 0), 0));
   report.costs.complete = report.costs.items.every((item) => item.estimated_usd != null);
   // How the model calls ran: a stage whose calls overlapped has more call_seconds than its wall time in timings.
@@ -1583,7 +1587,8 @@ async function planStage(ctx) {
   if (lane === "footage-led" && ctx.base) {
     try { subjectTrack = await readStoryTrack(project, { base: ctx.base.src }); } catch (error) { report.warnings.push(`${TRACK_FILE} not used for placement (${String(error?.message ?? error).split("\n")[0]})`); }
   }
-  const hasProvider = Boolean(ctx.adapters.assets || ctx.options.assetProviderCmd || ctx.options.assetProvider);
+  const generating = makeGenerateSpecs(options);
+  const hasProvider = Boolean(ctx.adapters.assets || ctx.options.assetProviderCmd || ctx.options.assetProvider || generating);
   const shotLimit = shotRequestLimit(ctx.format?.duration);
   const minShots = hasProvider ? Math.min(Number(options.minShots ?? 0), shotLimit) : 0;
   // Card backdrops are on whenever there is a provider to ask for footage (--card-backdrops off keeps stock plates).
@@ -1593,7 +1598,7 @@ async function planStage(ctx) {
   const laidOut = layout !== "full" && lane === "footage-led" ? layout : null;
   if (layout !== "full" && !laidOut) report.warnings.push(`--layout ${layout} ignored: it lays out a talking head, and this video is ${lane} (no recording with speech is the base)`);
   if (laidOut === "stacked" && !(ctx.format.height > ctx.format.width)) report.warnings.push("--layout stacked ignored: it is for 9:16; this video is not portrait");
-  const planHash = hashValue({ brief, lane, format: ctx.format, ...(drafting ? { draft: 1, direction_ms: ctx.draft.waits.directionMs } : {}), ...(explainer ? { explainer: 1 } : {}), ...(visual ? { visual: 1 } : {}), ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? ctx.options.assetProvider ?? "app" } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(laidOut ? { layout: laidOut } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}), ...(subjectTrack ? { face_track: hashValue(subjectTrack.frames) } : {}), ...(pinned ? { bible: pinned.bible.hash } : {}) });
+  const planHash = hashValue({ brief, lane, format: ctx.format, ...(drafting ? { draft: 1, direction_ms: ctx.draft.waits.directionMs } : {}), ...(explainer ? { explainer: 1 } : {}), ...(visual ? { visual: 1 } : {}), ...(ctx.skeleton ? { skeleton: ctx.skeleton.id } : {}), brand, audio: fixedAudio, base: ctx.base ?? null, style: style?.name ?? null, words: hashValue(ctx.words), model: ctx.model.spec, v: 2, profile: profile?.id ?? null, ...(options.density != null ? { density: Number(options.density) } : {}), ...(subject ? { subject: { usable: subject.usable, framing: subject.framing } } : {}), ...(hasProvider ? { shots: ctx.options.assetProviderCmd ?? ctx.options.assetProvider ?? (ctx.adapters.assets ? "app" : null) } : {}), ...(generating ? { generate: generating } : {}), ...(minShots ? { min_shots: minShots } : {}), ...(cardBackdrops ? { card_backdrops: cardBackdrops } : {}), ...(laidOut ? { layout: laidOut } : {}), ...(constraints ? { constraints: constraintsDocument(constraints) } : {}), ...(subjectTrack ? { face_track: hashValue(subjectTrack.frames) } : {}), ...(pinned ? { bible: pinned.bible.hash } : {}) });
   // --min-shots: only an asset provider can supply shots; above what a plan of this length may ask for it is clamped.
   if (Number(options.minShots) > 0 && !hasProvider) report.warnings.push(`--min-shots ${options.minShots} ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for shots`);
   if (String(options.cardBackdrops ?? "off").toLowerCase() === "footage" && !hasProvider) report.warnings.push("--card-backdrops footage ignored: there is no asset provider (--asset-provider-cmd or adapters.assets) to ask for footage");
@@ -1635,11 +1640,14 @@ async function planStage(ctx) {
   // --asset-provider comfy: plates and draft clips from a local ComfyUI; any failure is "no shot".
   if (ctx.options.assetProvider && ctx.options.assetProvider !== "comfy") throw new Error(`--asset-provider must be comfy; got ${ctx.options.assetProvider} (for your own command, use --asset-provider-cmd)`);
   const comfyAssets = !ctx.adapters.assets && ctx.options.assetProvider === "comfy" ? await createComfyAssetProvider({ project: ctx.project, url: ctx.options.comfyUrl, env: ctx.env, allowRemote: Boolean(ctx.options.comfyAllowRemote), allowLicences: String(ctx.options.allowModelLicence ?? "").split(",").map((id) => id.trim()).filter(Boolean), ...(ctx.options.comfyPlate ? { plate: ctx.options.comfyPlate } : {}), notice: ctx.say }) : null;
-  const provider = ctx.adapters.assets ?? comfyAssets ?? (ctx.options.assetProviderCmd ? createCommandAssetProvider(ctx.options.assetProviderCmd, { timeoutMs: drafting ? Math.min(assetProviderTimeoutMs(ctx.env), ctx.draft.waits.shotMs + 1000) : assetProviderTimeoutMs(ctx.env), concurrency: drafting ? Math.max(assetProviderConcurrency(ctx.env), MAX_ASSET_PROVIDER_CONCURRENCY) : assetProviderConcurrency(ctx.env), notice: ctx.say, env: ctx.env, cwd: ctx.project }) : null);
+  const library = ctx.adapters.assets ?? comfyAssets ?? (ctx.options.assetProviderCmd ? createCommandAssetProvider(ctx.options.assetProviderCmd, { timeoutMs: drafting ? Math.min(assetProviderTimeoutMs(ctx.env), ctx.draft.waits.shotMs + 1000) : assetProviderTimeoutMs(ctx.env), concurrency: drafting ? Math.max(assetProviderConcurrency(ctx.env), MAX_ASSET_PROVIDER_CONCURRENCY) : assetProviderConcurrency(ctx.env), notice: ctx.say, env: ctx.env, cwd: ctx.project }) : null);
+  // --generate: generated footage for what the library (when there is one) has no shot for.
+  const generator = generating ? await makeGenerator(ctx, { library, brand }) : null;
+  const provider = generator ?? library;
   // never_use: the provider is told, and a shot that is one is refused.
   const constrained = provider && constraints?.never_use.length ? constrainProvider(provider, constraints, { assetsDir: ctx.assetsDir, notice: ctx.say }) : provider;
   const assets = constrained && drafting ? deadlineProvider(constrained, ctx.draft.waits.shotMs) : constrained;
-  if (assets) ctx.say(drafting ? `assets: the draft asks ${ctx.adapters.assets ? "the app" : "the asset provider command"} for its shots at once, and waits ${round1(ctx.draft.waits.shotMs / 1000)} s for each` : `assets: the planner may ask ${ctx.adapters.assets ? "the app" : "the asset provider command"} for shots`);
+  if (assets) ctx.say(drafting ? `assets: the draft asks ${ctx.adapters.assets ? "the app" : library ? "the asset provider command" : "the footage generator"} for its shots at once, and waits ${round1(ctx.draft.waits.shotMs / 1000)} s for each` : `assets: the planner may ask ${ctx.adapters.assets ? "the app" : library ? "the asset provider command" : "the footage generator"} for shots`);
   const planOptions = {
     brief: planBrief,
     words: ctx.words,
@@ -1687,6 +1695,11 @@ async function planStage(ctx) {
     if (shot.cost_usd > 0) report.costs.items.push({ stage: "shot", scene_id: shot.scene_id, provider: shot.source?.provider ?? "asset-provider", model: shot.source?.model ?? null, estimated_usd: shot.cost_usd, fallback: false });
   }
   if (assets) report.shots = plan.shots ?? [];
+  if (generator) {
+    const generated = generator.report();
+    report.generate = { quotes: generated.quotes, stopped: generated.stopped, ledger: LEDGER_FILE };
+    for (const note of generated.notes) report.warnings.push(`generate: ${note}`);
+  }
   // shot_counts: {min, requested, answered}; report.shots stays the list of shots used.
   if (assets) report.shot_counts = plan.shot_counts ?? { min: minShots, requested: 0, answered: 0 };
   for (const warning of plan.warnings ?? []) if (warning.startsWith("shots: ") || warning.startsWith("backdrops: ") || warning.startsWith("layout: ") || warning.startsWith("stacked: ") || warning.startsWith("face: ") || warning.startsWith("featured: ")) report.warnings.push(warning);

@@ -13,6 +13,8 @@ import { conceptsMode } from "./concept_story.js";
 import { candidatesMode } from "./candidates.js";
 import { compChoice } from "./comps.js";
 import { explainerMode } from "./visual_explainer.js";
+import { makeGenerateSpecs } from "./generate.js";
+import { parseBudget } from "../generate/generator.js";
 import { parseSfxMode } from "../sfx/event_sounds.js";
 import { talkingHeadLayoutError } from "../talking_head_layout.js";
 
@@ -127,6 +129,13 @@ export const MAKE_FLAGS = Object.freeze([
   ["visual-similarity-limit", { setting: true }],
   // The app's shot source (src/asset_provider_cmd.js): a property of the host, not a recipe.
   ["asset-provider-cmd", {}],
+  // Generated footage (src/generate/generator.js, docs/guide/generated-footage.md): opt-in, paid, quoted first.
+  ["generate", {}],
+  ["generate-image", {}],
+  ["generate-video", {}],
+  ["generate-draft-video", {}],
+  ["budget", {}],
+  ["budget-daily", {}],
   // The fewest shots the plan must ask the asset provider for (0, the default, leaves them optional).
   ["min-shots", {}],
   // Full-screen cards on the app's footage (off, the default, keeps the stock plates).
@@ -180,6 +189,12 @@ export function makeOptionsFromFlags(flags = {}) {
     comfyAllowRemote: flags["comfy-allow-remote"],
     comfyPlate: flags["comfy-plate"],
     allowModelLicence: flags["allow-model-licence"],
+    generate: flags.generate,
+    generateImage: flags["generate-image"],
+    generateVideo: flags["generate-video"],
+    generateDraftVideo: flags["generate-draft-video"],
+    budget: flags.budget,
+    budgetDaily: flags["budget-daily"],
     minShots: flags["min-shots"],
     cardBackdrops: flags["card-backdrops"],
     assetDescriptions: flags["asset-descriptions"],
@@ -277,6 +292,9 @@ export function validateMakeOptions(options = {}) {
   if (options.assetDescriptions != null && !DESCRIPTION_MODES.includes(String(options.assetDescriptions).toLowerCase())) throw new Error(`--asset-descriptions must be ${DESCRIPTION_MODES.join(", ")}; got ${options.assetDescriptions}`);
   if (options.longFormVisuals != null && !["model", "rules"].includes(String(options.longFormVisuals).toLowerCase())) throw new Error(`--long-form-visuals must be model or rules; got ${options.longFormVisuals}`);
   if (options.visualHistoryLimit != null && !(Number.isInteger(Number(options.visualHistoryLimit)) && Number(options.visualHistoryLimit) >= 0)) throw new Error(`--visual-history-limit must be a whole number of entries; got ${options.visualHistoryLimit}`);
+  makeGenerateSpecs(options);
+  parseBudget(options.budget);
+  parseBudget(options.budgetDaily, "--budget-daily");
   if (options.explainer != null) explainerMode(options.explainer);
   if (options.animation != null && typeof options.animation !== "boolean") throw new Error(`--animation takes no value; got ${options.animation}`);
   if (options.engine != null && !(typeof options.engine === "string" && options.engine.trim())) throw new Error("--engine takes the series engine in one sentence: the problem that goes wrong every episode (--engine \"…\" --animation)");

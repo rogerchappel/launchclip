@@ -30,7 +30,7 @@ export const GENERATED_DIR = path.join("assets", "shots", "generated");
 // Poll pace (the ElevenLabs docs ask for no more than every 2 s for images, 10 s for video).
 export const POLL_MS = Object.freeze({ image: 2000, video: 10_000 });
 
-export function createGenerator({ project, image, video = image, budget = null, daily = null, tier = "final", library = null, check = null, approve = null, look = lookParagraph(null), fps, pollMs = POLL_MS, notice = () => {} }) {
+export function createGenerator({ project, image, video = null, budget = null, daily = null, tier = "final", library = null, check = null, approve = null, look = lookParagraph(null), fps, pollMs = POLL_MS, notice = () => {} }) {
   if (!project) throw new Error("createGenerator needs a project");
   if (!image) throw new Error("createGenerator needs an image provider (the keyframe step)");
   const notes = [];
@@ -54,7 +54,9 @@ export function createGenerator({ project, image, video = image, budget = null, 
         if (shot) { job.resolve(shot); continue; }
         const reason = refusalReason(job.request);
         if (reason) { say(`${job.request.id}: not generated, ${reason}`); job.resolve(null); continue; }
-        job.brief = footageBrief(job.request, { look, ...(fps ? { fps } : {}) });
+        // No video provider: a video request is left alone, an "any" one is answered with a still.
+        if (!video && job.request.type === "video" && !job.request.still) { say(`${job.request.id}: not generated, no video provider is set (--generate-video)`); job.resolve(null); continue; }
+        job.brief = footageBrief(video ? job.request : { ...job.request, still: true }, { look, ...(fps ? { fps } : {}) });
         job.cached = await cachedSteps(project, job.brief, image, video, tier);
         if (job.cached.video || (job.cached.image && !job.brief.video)) { job.resolve(finished(job)); continue; }
         todo.push(job);
@@ -179,7 +181,13 @@ export function createGenerator({ project, image, video = image, budget = null, 
       if (!checkNoted) { say("no vision model is configured, so keyframes are accepted without a check"); checkNoted = true; }
       return { ok: true };
     }
-    return check({ file, brief, request });
+    try {
+      return await check({ file, brief, request });
+    } catch (error) {
+      // A check that cannot run (the model is down) would fail every retry the same way: the paid keyframe is kept.
+      say(`${request.id}: the keyframe check failed (${String(error?.message ?? error).split("\n")[0]}); the keyframe is accepted unchecked`);
+      return { ok: true };
+    }
   }
 
   function finished(job) {

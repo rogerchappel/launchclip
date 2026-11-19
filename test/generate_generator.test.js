@@ -7,7 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { resolveShots } from "../src/asset_provider.js";
 import { loadWords } from "../src/finish.js";
-import { createCommandProvider, createGenerator, generateSpecs, parseBudget } from "../src/generate/generator.js";
+import { createCommandProvider, createGenerator, generateSpecs, parseBudget, visionKeyframeCheck } from "../src/generate/generator.js";
 import { ledgerCosts, readLedger } from "../src/generate/ledger.js";
 import { createFakeProvider } from "./fixtures/generate/fake-provider.js";
 
@@ -34,7 +34,7 @@ test("the fake provider drives a fixture storyboard through image and video, and
   const dir = await project(t);
   const fake = createFakeProvider({ price: 0.05, pollsUntilDone: 2 });
   const notes = [];
-  const generator = createGenerator({ project: dir, image: fake, budget: { usd: 5 }, pollMs: NO_POLL, notice: (line) => notes.push(line) });
+  const generator = createGenerator({ project: dir, image: fake, video: fake, budget: { usd: 5 }, pollMs: NO_POLL, notice: (line) => notes.push(line) });
   const out = await plan(dir, generator);
 
   // s1 a clip (image → video), s2 a still card slot and s3 an image (image only), s5 a backdrop (video); s4 names a product.
@@ -57,7 +57,7 @@ test("the fake provider drives a fixture storyboard through image and video, and
   assert.equal((await ledgerCosts(dir)).by_unit.usd, 0.3);
 
   const again = createFakeProvider({ price: 0.05 });
-  const rerun = await plan(dir, createGenerator({ project: dir, image: again, budget: { usd: 5 }, pollMs: NO_POLL }));
+  const rerun = await plan(dir, createGenerator({ project: dir, image: again, video: again, budget: { usd: 5 }, pollMs: NO_POLL }));
   assert.deepEqual(submits(again), [], "every accepted asset is reused");
   assert.equal(rerun.shots.length, out.shots.length);
   assert.equal((await readLedger(dir)).length, 6);
@@ -69,7 +69,7 @@ test("spend that passes the budget stops generation and the rest come back null"
   const fake = createFakeProvider({ price: 2 });
   const cheap = { ...fake, quote: async () => ({ amount: 0.5, unit: "usd" }) };
   const notes = [];
-  const out = await plan(dir, createGenerator({ project: dir, image: cheap, budget: { usd: 3 }, pollMs: NO_POLL, notice: (line) => notes.push(line) }));
+  const out = await plan(dir, createGenerator({ project: dir, image: cheap, video: cheap, budget: { usd: 3 }, pollMs: NO_POLL, notice: (line) => notes.push(line) }));
   assert.deepEqual(submits(fake), ["s1:image", "s1:video"]);
   assert.equal(out.shots.length, 1);
   assert.match(notes.join("\n"), /the budget is reached/);
@@ -87,7 +87,7 @@ test("a batch is refused without a budget headless, over its budget, or unpriced
     const fake = createFakeProvider({ price: 0.05 });
     const provider = options.unpriced ? { ...fake, quote: async () => ({ amount: null, unit: "credits" }) } : fake;
     const notes = [];
-    const out = await plan(dir, createGenerator({ project: dir, image: provider, ...options, pollMs: NO_POLL, notice: (line) => notes.push(line) }));
+    const out = await plan(dir, createGenerator({ project: dir, image: provider, video: provider, ...options, pollMs: NO_POLL, notice: (line) => notes.push(line) }));
     assert.deepEqual(submits(fake), []);
     assert.equal(out.shots.length, 0);
     assert.match(notes.join("\n"), reason);
@@ -99,12 +99,12 @@ test("attended, the quote is asked about and a yes becomes the budget", async (t
   const dir = await project(t);
   const asked = [];
   const no = createFakeProvider({ price: 0.05 });
-  await plan(dir, createGenerator({ project: dir, image: no, approve: async (text) => { asked.push(text); return false; }, pollMs: NO_POLL }));
+  await plan(dir, createGenerator({ project: dir, image: no, video: no, approve: async (text) => { asked.push(text); return false; }, pollMs: NO_POLL }));
   assert.deepEqual(submits(no), []);
   assert.match(asked[0], /generate: 3 shot\(s\), 0.2 usd\. Generate them\?/);
 
   const yes = createFakeProvider({ price: 0.05 });
-  const out = await plan(dir, createGenerator({ project: dir, image: yes, approve: async () => true, pollMs: NO_POLL }));
+  const out = await plan(dir, createGenerator({ project: dir, image: yes, video: yes, approve: async () => true, pollMs: NO_POLL }));
   assert.equal(out.shots.length, 4);
 });
 
@@ -133,7 +133,7 @@ test("a library is asked first and only its misses are generated", async (t) => 
   const dir = await project(t);
   const fake = createFakeProvider({ price: 0.05 });
   const library = { findShot: async (request) => (request.scene_id === "s3" ? { kind: "image", file: path.join(FIXTURE, "..", "parity", "assets", "testsrc.png"), source: { provider: "library" } } : null) };
-  const out = await plan(dir, createGenerator({ project: dir, image: fake, library, budget: { usd: 5 }, pollMs: NO_POLL }));
+  const out = await plan(dir, createGenerator({ project: dir, image: fake, video: fake, library, budget: { usd: 5 }, pollMs: NO_POLL }));
   assert.ok(!submits(fake).includes("s3:image"));
   assert.ok(submits(fake).includes("s1:image"));
   assert.equal(out.shots.find((shot) => shot.scene_id === "s3").source.provider, "library");
@@ -168,4 +168,26 @@ test("flags parse into provider specs and budgets", () => {
   assert.deepEqual(parseBudget("2.5usd,200credits"), { usd: 2.5, credits: 200 });
   assert.equal(parseBudget(undefined), null);
   assert.throws(() => parseBudget("lots"), /<n>\[usd\|credits\]/);
+});
+
+test("with no video provider, video requests are left alone and the rest are stills", async (t) => {
+  const dir = await project(t);
+  const fake = createFakeProvider({ price: 0.05 });
+  const notes = [];
+  const out = await plan(dir, createGenerator({ project: dir, image: fake, budget: { usd: 5 }, pollMs: NO_POLL, notice: (line) => notes.push(line) }));
+  assert.deepEqual(submits(fake).sort(), ["s2:image", "s3:image"]);
+  assert.match(notes.join("\n"), /s1-.*no video provider/);
+  assert.ok(out.shots.every((shot) => shot.kind === "image"));
+});
+
+test("the vision check passes a keyframe that shows the subject with no text, and returns the fix line otherwise", async () => {
+  const answers = [{ shows_subject: true, has_text_or_logo: false, finding: "", change: "" }, { shows_subject: true, has_text_or_logo: true, finding: "a sign with words", change: "No signs anywhere." }];
+  const seen = [];
+  const client = { runStructured: async (call) => { seen.push(call); return { value: answers.shift() }; } };
+  const check = visionKeyframeCheck(client, { readImage: async () => "data:image/png;base64,AA==" });
+  const request = { shows: "a field of wheat at dawn" };
+  assert.deepEqual(await check({ file: "k.png", request }), { ok: true, reason: null, change: null });
+  assert.deepEqual(await check({ file: "k.png", request }), { ok: false, reason: "a sign with words", change: "No signs anywhere." });
+  assert.match(seen[0].input, /a field of wheat at dawn/);
+  assert.equal(seen[0].images[0].url, "data:image/png;base64,AA==");
 });
