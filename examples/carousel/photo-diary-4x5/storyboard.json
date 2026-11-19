@@ -1,0 +1,193 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "photo-diary (sample carousel template, instagram)",
+  "lane": "motion",
+  "format": {
+    "kind": "carousel",
+    "width": 1080,
+    "height": 1350,
+    "fps": 30,
+    "duration": 20,
+    "platform": "instagram"
+  },
+  "carousel": {
+    "arc": "story",
+    "goal": "follow",
+    "destinations": [
+      "instagram"
+    ],
+    "template": "photo-diary",
+    "caption": {
+      "hook": "I am not a morning person. I tried anyway.",
+      "body": "A year of running before work, in five pictures.",
+      "cta": "Follow for the next twelve months.",
+      "tags": [
+        "running",
+        "habits",
+        "mornings"
+      ]
+    }
+  },
+  "plate": {
+    "kind": "grain",
+    "params": {
+      "tint": "neutral"
+    }
+  },
+  "brand": {
+    "colors": {
+      "bg": "#101418",
+      "primary": "#f2a65a",
+      "accent": "#8fb8de",
+      "ink": "#101418",
+      "paper": "#f6f1ea"
+    },
+    "fonts": {
+      "display": "dm-serif-display",
+      "body": "manrope",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "audio": null,
+  "scenes": [
+    {
+      "id": "cover",
+      "module": "photo-scene",
+      "start": 0,
+      "end": 4,
+      "energy": 2,
+      "slide": {
+        "role": "cover",
+        "medium": "still",
+        "alt": "The year I ran before work. and what it changed"
+      },
+      "params": {
+        "media": "assets/photos/ridge.jpg",
+        "lines": [
+          {
+            "text": "The year I ran before"
+          },
+          {
+            "text": "work",
+            "emphasis": true
+          },
+          {
+            "text": "and what it changed"
+          }
+        ],
+        "align": "left",
+        "scrim": "bottom",
+        "move": "push-in",
+        "zoom": 0.04
+      }
+    },
+    {
+      "id": "week-one",
+      "module": "photo-scene",
+      "start": 4,
+      "end": 8,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Week one was mostly walking. Out at six every day"
+      },
+      "params": {
+        "media": "assets/photos/ridge.jpg",
+        "lines": [
+          {
+            "text": "Week one was mostly"
+          },
+          {
+            "text": "walking",
+            "emphasis": true
+          },
+          {
+            "text": "Out at six every day"
+          }
+        ],
+        "align": "left",
+        "scrim": "bottom",
+        "move": "push-in",
+        "zoom": 0.04
+      }
+    },
+    {
+      "id": "spring",
+      "module": "photo-scene",
+      "start": 8,
+      "end": 12,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "By spring the hills felt shorter. Mornings got easier"
+      },
+      "params": {
+        "media": "assets/photos/ridge.jpg",
+        "lines": [
+          {
+            "text": "By spring the hills"
+          },
+          {
+            "text": "felt shorter",
+            "emphasis": true
+          },
+          {
+            "text": "Mornings got easier"
+          }
+        ],
+        "align": "left",
+        "scrim": "bottom",
+        "move": "push-in",
+        "zoom": 0.04
+      }
+    },
+    {
+      "id": "lesson",
+      "module": "motion-title",
+      "start": 12,
+      "end": 16,
+      "energy": 1,
+      "slide": {
+        "role": "payoff",
+        "medium": "still",
+        "alt": "The lesson. Start smaller than feels useful. Ten minutes you keep beat an hour you skip."
+      },
+      "params": {
+        "text": "Start smaller than feels useful",
+        "kicker": "The lesson",
+        "sub": "Ten minutes you keep beat an hour you skip.",
+        "align": "left",
+        "variant": "soft-blur-in"
+      }
+    },
+    {
+      "id": "cta",
+      "module": "cta",
+      "plate": {
+        "kind": "image",
+        "params": {
+          "src": "assets/photos/ridge.jpg",
+          "dim": 0.6,
+          "blur": 6
+        }
+      },
+      "start": 16,
+      "end": 20,
+      "energy": 2,
+      "slide": {
+        "role": "cta",
+        "medium": "still",
+        "alt": "Follow for the next year"
+      },
+      "params": {
+        "action": "Follow for the next year",
+        "emphasis": "Follow",
+        "handle": "morningmiles.test",
+        "variant": "low"
+      }
+    }
+  ],
+  "notes": "Sample for a carousel template (docs/guide/carousels.md, Templates), written by scripts/carousel-template-samples.mjs. Figures, names and handles are illustrative. Photos are stand-ins already in the repo."
+}

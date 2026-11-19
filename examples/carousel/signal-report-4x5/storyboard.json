@@ -1,0 +1,160 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "signal-report (sample carousel template, instagram)",
+  "lane": "motion",
+  "format": {
+    "kind": "carousel",
+    "width": 1080,
+    "height": 1350,
+    "fps": 30,
+    "duration": 20,
+    "platform": "instagram"
+  },
+  "carousel": {
+    "arc": "data",
+    "goal": "save",
+    "destinations": [
+      "instagram"
+    ],
+    "template": "signal-report",
+    "caption": {
+      "hook": "When you ship matters as much as what.",
+      "body": "Patterns from a sample of release notes.",
+      "cta": "Save the findings.",
+      "tags": [
+        "devops",
+        "data"
+      ]
+    }
+  },
+  "plate": {
+    "kind": "pinstripe",
+    "params": {
+      "tint": "neutral"
+    }
+  },
+  "brand": {
+    "colors": {
+      "bg": "#07131a",
+      "primary": "#2dd4bf",
+      "accent": "#facc15",
+      "ink": "#07131a",
+      "paper": "#eef6f7"
+    },
+    "fonts": {
+      "display": "space-grotesk",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "audio": null,
+  "scenes": [
+    {
+      "id": "cover",
+      "module": "hook-title",
+      "plate": {
+        "kind": "bands",
+        "params": {
+          "tint": "primary"
+        }
+      },
+      "start": 0,
+      "end": 4,
+      "energy": 2,
+      "slide": {
+        "role": "cover",
+        "medium": "still",
+        "alt": "Release report. What a year of release notes taught us"
+      },
+      "params": {
+        "headline": "What a year of release notes taught us",
+        "emphasis": "release notes",
+        "eyebrow": "Release report",
+        "variant": "flush"
+      }
+    },
+    {
+      "id": "midweek",
+      "module": "stat-card",
+      "start": 4,
+      "end": 8,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Midweek wins"
+      },
+      "params": {
+        "value": "62%",
+        "label": "of releases shipped Tuesday or Wednesday",
+        "source": "Sample data (illustrative)",
+        "variant": "giant"
+      }
+    },
+    {
+      "id": "friday",
+      "module": "stat-card",
+      "start": 8,
+      "end": 12,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Fridays cost more"
+      },
+      "params": {
+        "value": "3.4×",
+        "label": "more rollbacks on Friday releases",
+        "source": "Sample data (illustrative)",
+        "variant": "giant"
+      }
+    },
+    {
+      "id": "takeaways",
+      "module": "item-list",
+      "start": 12,
+      "end": 16,
+      "energy": 1,
+      "slide": {
+        "role": "payoff",
+        "medium": "still",
+        "alt": "What to take from it. Ship midweek. Keep diffs small. Keep Friday for fixes"
+      },
+      "params": {
+        "title": "What to take from it",
+        "items": [
+          "Ship midweek",
+          "Keep diffs small",
+          "Keep Friday for fixes"
+        ],
+        "variant": "stack",
+        "ticks": true
+      }
+    },
+    {
+      "id": "cta",
+      "module": "cta",
+      "plate": {
+        "kind": "bands",
+        "params": {
+          "tint": "primary"
+        }
+      },
+      "start": 16,
+      "end": 20,
+      "energy": 2,
+      "slide": {
+        "role": "cta",
+        "medium": "still",
+        "alt": "Save the findings"
+      },
+      "params": {
+        "action": "Save the findings",
+        "emphasis": "Save",
+        "handle": "releasenotes.test",
+        "variant": "flush"
+      }
+    }
+  ],
+  "notes": "Sample for a carousel template (docs/guide/carousels.md, Templates), written by scripts/carousel-template-samples.mjs. Figures, names and handles are illustrative. Photos are stand-ins already in the repo."
+}

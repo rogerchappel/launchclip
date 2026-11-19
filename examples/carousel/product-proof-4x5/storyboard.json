@@ -1,0 +1,172 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "product-proof (sample carousel template, instagram)",
+  "lane": "motion",
+  "format": {
+    "kind": "carousel",
+    "width": 1080,
+    "height": 1350,
+    "fps": 30,
+    "duration": 20,
+    "platform": "instagram"
+  },
+  "carousel": {
+    "arc": "ad",
+    "goal": "install",
+    "destinations": [
+      "instagram"
+    ],
+    "template": "product-proof",
+    "caption": {
+      "hook": "Release day should be boring.",
+      "body": "Every check, review and rollout in one place.",
+      "cta": "Install it free.",
+      "tags": []
+    }
+  },
+  "plate": {
+    "kind": "studio",
+    "params": {
+      "tint": "neutral"
+    }
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0b1020",
+      "primary": "#5b84ff",
+      "accent": "#22d3a6",
+      "ink": "#0b1020",
+      "paper": "#f4f6fb"
+    },
+    "fonts": {
+      "display": "sora",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "audio": null,
+  "scenes": [
+    {
+      "id": "cover",
+      "module": "photo-scene",
+      "start": 0,
+      "end": 4,
+      "energy": 2,
+      "slide": {
+        "role": "cover",
+        "medium": "still",
+        "alt": "Ship releases without the panic. Now on iOS and web"
+      },
+      "params": {
+        "media": "assets/photos/dashboard.jpg",
+        "lines": [
+          {
+            "text": "Ship releases without"
+          },
+          {
+            "text": "the panic",
+            "emphasis": true
+          },
+          {
+            "text": "Now on iOS and web"
+          }
+        ],
+        "align": "left",
+        "scrim": "bottom",
+        "move": "push-in",
+        "zoom": 0.04
+      }
+    },
+    {
+      "id": "one-view",
+      "module": "split-screen",
+      "start": 4,
+      "end": 8,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Every check in one view. Builds, reviews and rollouts on one screen, live."
+      },
+      "params": {
+        "media": "assets/photos/dashboard.jpg",
+        "variant": "top",
+        "share": 0.42,
+        "title": "Every check in one view",
+        "align": "left",
+        "body": "Builds, reviews and rollouts on one screen, live."
+      }
+    },
+    {
+      "id": "roll-back",
+      "module": "split-screen",
+      "start": 8,
+      "end": 12,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "When it breaks. Roll back in one tap. Undo a release before your users notice."
+      },
+      "params": {
+        "media": "assets/photos/dashboard.jpg",
+        "variant": "top",
+        "share": 0.42,
+        "kicker": "When it breaks",
+        "title": "Roll back in one tap",
+        "align": "left",
+        "body": "Undo a release before your users notice."
+      }
+    },
+    {
+      "id": "proof",
+      "module": "stat-card",
+      "plate": {
+        "kind": "blooms",
+        "params": {
+          "tint": "primary"
+        }
+      },
+      "start": 12,
+      "end": 16,
+      "energy": 1,
+      "slide": {
+        "role": "payoff",
+        "medium": "still",
+        "alt": "Less prep, more shipping"
+      },
+      "params": {
+        "value": "80%",
+        "label": "less time on release prep",
+        "source": "Beta teams, 2026 (illustrative)",
+        "variant": "giant"
+      }
+    },
+    {
+      "id": "cta",
+      "module": "cta",
+      "plate": {
+        "kind": "blooms",
+        "params": {
+          "tint": "primary"
+        }
+      },
+      "start": 16,
+      "end": 20,
+      "energy": 2,
+      "slide": {
+        "role": "cta",
+        "medium": "still",
+        "alt": "Install it free today. Free for teams of five"
+      },
+      "params": {
+        "action": "Install it free today",
+        "emphasis": "free",
+        "detail": "Free for teams of five",
+        "handle": "shipdeck.test",
+        "variant": "flush"
+      }
+    }
+  ],
+  "notes": "Sample for a carousel template (docs/guide/carousels.md, Templates), written by scripts/carousel-template-samples.mjs. Figures, names and handles are illustrative. Photos are stand-ins already in the repo."
+}
