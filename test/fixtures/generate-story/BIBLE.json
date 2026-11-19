@@ -1,0 +1,15 @@
+{
+  "schema": "launchclip.show-bible.v1",
+  "frozen": true,
+  "cast": {
+    "style": "chibi",
+    "characters": [
+      { "id": "foal", "name": "Foal", "position": "left", "sheet": "bible/sheets/foal.png", "must_keep": ["white socks", "nick in the left ear"],
+        "description": "Foal is a young horse, small size. Proportions: about 2.5 heads tall, drawn chibi. Colours: coat #b9652f, mane #f3e3c3. Signature item: white socks. Gesture: tilts its head when unsure. Must keep: white socks; nick in the left ear. Flaw: a small nick in the left ear." },
+      { "id": "mare", "name": "Mare", "position": "right", "sheet": "bible/sheets/mare.png", "must_keep": ["white blaze", "scar over the right eye"],
+        "description": "Mare is a grown horse, large size. Proportions: about 3 heads tall, drawn chibi. Colours: coat #8d8d92, mane #2a2226. Signature item: white blaze. Gesture: lowers its head to listen. Must keep: white blaze; scar over the right eye. Flaw: a thin scar over the right eye." }
+    ]
+  },
+  "world": { "kind": "park", "time": "day" },
+  "rules": ["Mare never runs."]
+}
