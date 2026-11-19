@@ -49,6 +49,8 @@ These limits come from public guidance as of November 2026. Check each platform'
 
 Where a destination takes images only, a motion slide is sent as its still, and the export says so.
 
+A motion slide is a scene of 3 to 8 seconds with `loop: true`. Its clip is silent and exactly the scene's length, and its last frame leads back into its first, background included. Its still is a frame of that clip and doubles as the poster. See `examples/carousel/motion-ad-1x1` for an ad whose second slide moves.
+
 ## What export writes
 
 For each destination, in `carousel/<dest>/`:
@@ -57,7 +59,7 @@ For each destination, in `carousel/<dest>/`:
 |---|---|
 | `01.png` … | The slides in order (`.jpg` for TikTok), and `NN.mp4` for each motion slide where motion is shown |
 | `slides.pdf` | LinkedIn: one page per slide at the slide's size |
-| `cards.json` | Meta ads: each card's file, headline, description and link, cut to Meta's recommended lengths (32 and 18 characters). Pass `--link <url>` for the link |
+| `cards.json` | Meta ads: each card's file (the MP4 for a motion slide, with its still as `thumbnail`), headline, description and link, cut to Meta's recommended lengths (32 and 18 characters). Pass `--link <url>` for the link |
 | `caption.md` | The post caption: the hook, the body, the call to action, and tags where the platform uses them (Instagram, TikTok). It flags a hook longer than the platform shows before "… more", and ends with a plain version to paste |
 | `alt.json` | Alt text for each slide file |
 
