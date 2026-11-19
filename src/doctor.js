@@ -44,6 +44,8 @@ export async function diagnoseInstallation(options = {}) {
   const subject = await (options.subjectStatus ?? subjectStatus)(env);
   // Recording source pages for research (optional playwright, a Chromium, ffmpeg).
   const evidenceCapture = await (options.captureStatus ?? (async () => (await import("./research/capture_status.js")).captureRecorderStatus({ env })))();
+  // Local footage generation (--generate local:<workflow>): a ComfyUI server the user runs.
+  const comfyui = await (options.comfyuiStatus ?? comfyuiStatus)(env);
   const rasterizer = await firstAvailable(["magick", "convert", "sips"], commandAvailable);
   const nodeSupported = nodeMajor >= MINIMUM_NODE_MAJOR;
   const coreReady = nodeSupported && missingPackageFiles.length === 0;
@@ -80,6 +82,7 @@ export async function diagnoseInstallation(options = {}) {
       whisper: { available: whisper, required_for_rendering: false },
       subject,
       evidence_capture: evidenceCapture,
+      comfyui,
       yt_dlp: { available: ytDlp, required_for_rendering: false }
     },
     credentials: {
@@ -136,6 +139,17 @@ async function subjectStatus(env) {
     model_paths: model.models.map((entry) => entry.path),
     ...(runtime && model.installed ? {} : { hint: runtime ? "run: launchclip subject setup (or let the first subject probe download it)" : "onnxruntime-node did not load; reinstall LaunchClip" })
   };
+}
+
+// One GET with a short timeout; never starts or installs anything.
+async function comfyuiStatus(env, doFetch = globalThis.fetch) {
+  const url = String(env.COMFYUI_URL || "http://127.0.0.1:8188").replace(/\/+$/, "");
+  try {
+    const response = await doFetch(`${url}/system_stats`, { signal: AbortSignal.timeout(1500) });
+    const stats = response.ok ? await response.json() : null;
+    if (stats) return { available: true, required_for_rendering: false, url, version: stats.system?.comfyui_version ?? null, devices: (stats.devices ?? []).map((device) => device.type) };
+  } catch {}
+  return { available: false, required_for_rendering: false, url, hint: "for --generate local:<workflow>, start ComfyUI or set COMFYUI_URL (docs/LOCAL_GENERATION.md)" };
 }
 
 async function hasFile(file) {
