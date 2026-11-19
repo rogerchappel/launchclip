@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { carouselPlanFindings, namesSomething, slideText } from "@launchclip/core/carousel-check.mjs";
 import { CAROUSEL_DESTINATIONS } from "@launchclip/core/carousel.mjs";
 import { declaredTextBoxes, geometryFindings, measuredContrast, readPixels, run } from "../src/carousel/check.js";
@@ -115,7 +116,6 @@ test("type-size and safe-zone on declared boxes", () => {
   assert.equal(geometryFindings(box([{ role: "headline", fontSize: 90 }], "cover"), dest)[0].level, "fail");
   assert.equal(geometryFindings(box([{ role: "body", fontSize: 50 }]), dest)[0].level, "fail");
   assert.deepEqual(geometryFindings(box([{ role: "body", fontSize: 72 }]), dest), []);
-  assert.equal(geometryFindings(box([{ role: "body", fontSize: 72 }, { role: "body", fontSize: 40, floor: true }]), dest)[0].level, "warn");
   const tiktok = geometryFindings(box([{ role: "body", fontSize: 120 }]), CAROUSEL_DESTINATIONS.tiktok);
   assert.match(rules(tiktok, "safe-zone")[0].reason, /22 px into the right zone/);
   assert.deepEqual(rules(geometryFindings(box([{ role: "body", fontSize: 72 }]), dest), "safe-zone"), []);
@@ -151,6 +151,24 @@ test("measuredContrast: ink against the box's background", () => {
   const grey = measuredContrast(image(240, 140, [255, 255, 255], [190, 190, 190], rect), rect);
   assert.ok(grey > 1.5 && grey < 3, `light grey on white is low contrast (${grey})`);
   assert.equal(measuredContrast(image(240, 140, [20, 20, 20], [20, 20, 20], rect), rect), null, "no ink, nothing to measure");
+});
+
+// The text box of a real render (sample slide 2, Remotion, quarter size): white
+// and red type on a dark red glow, which outnumbers the type.
+const REAL = fileURLToPath(new URL("./fixtures/carousel/habit-slide-text-box.png", import.meta.url));
+
+test("contrast on a real render: the glow behind the type is not the ink", { timeout: 30000 }, async () => {
+  const rect = { x: 0, y: 0, width: 215, height: 204 };
+  const real = measuredContrast(await readPixels(REAL, 215, 204), rect);
+  assert.ok(real > 10, `white type on the dark glow reads well over AA (${real})`);
+  // The same slide with its contrast flattened is a real low-contrast case.
+  const dir = mkdtempSync(path.join(os.tmpdir(), "carousel-low-"));
+  try {
+    const low = path.join(dir, "low.png");
+    execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", REAL, "-vf", "eq=contrast=0.3:brightness=0.1", low]);
+    const ratio = measuredContrast(await readPixels(low, 215, 204), rect);
+    assert.ok(ratio < 3, `flattened, it fails AA (${ratio})`);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("readPixels reads a PNG back at a size", { timeout: 30000 }, async () => {
@@ -191,7 +209,7 @@ test("carousel check on a project: plan only without a render, then pixel rules 
       const bg = i === 2 ? [90, 90, 90] : [21, 21, 21];
       writePng(path.join(render, `slide-${i + 1}.png`), image(540, 675, bg, ink, half(box.texts[0].rect)));
     });
-    writeFileSync(path.join(render, "render.json"), JSON.stringify({ slides: boxes.map((box, i) => ({ id: box.id, file: `slide-${i + 1}.png`, width: 540, height: 675 })) }));
+    writeFileSync(path.join(render, "render.json"), JSON.stringify({ slides: boxes.map((box, i) => ({ id: box.id, files: [`slide-${i + 1}.png`], width: 540, height: 675 })) }));
 
     out = "";
     const after = await run(dir, { json: true }, io);

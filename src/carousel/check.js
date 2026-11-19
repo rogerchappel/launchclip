@@ -29,6 +29,10 @@ export const THUMBNAIL_MIN_CAP_PX = 6;
 const INK_RATIO = 1.25;
 // Fewer ink pixels than this share of the box: nothing to measure.
 const MIN_INK_SHARE = 0.002;
+// The ink is the median of this share of the box's pixels, those farthest from
+// the background: a glow or gradient behind the type also stands off the
+// median, and outnumbers the type, so the median of every candidate is glow.
+const INK_TAIL_SHARE = 0.01;
 
 const PIXEL_RULES = ["contrast", "cover-thumbnail"];
 
@@ -81,11 +85,12 @@ async function checkDestination(project, story, id) {
 }
 
 /**
- * Each slide's text at a canvas: [{slide, id, role, error?, texts: [{role: "headline" | "body", rect, fontSize, floor?}]}].
+ * Each slide's text at a canvas: [{slide, id, role, error?, texts: [{role: "headline" | "body", rect, fontSize}]}].
  * A module declares one box for its text. Its largest font is the cover's
  * headline, or another slide's main text (held to the body size: a list's
- * items are not a headline); its declared smallest (minTextPx) is a floor
- * that text may not use, so it only warns.
+ * items are not a headline). Its declared smallest (minTextPx) is a floor for
+ * text the slide may not set (an unused eyebrow), so it is not checked; a
+ * render that reports measured text runs (render.json texts) checks every run.
  */
 export function declaredTextBoxes(story, canvas) {
   const format = { ...story.format, width: canvas.width, height: canvas.height };
@@ -101,7 +106,6 @@ export function declaredTextBoxes(story, canvas) {
     const sizes = fontSizes(model);
     const largest = Math.max(...sizes, model.minTextPx ?? 0);
     if (largest > 0) entry.texts.push({ role: entry.role === "cover" ? "headline" : "body", rect, fontSize: largest });
-    if (model.minTextPx != null && model.minTextPx < largest) entry.texts.push({ role: "body", rect, fontSize: model.minTextPx, floor: true });
     return entry;
   });
 }
@@ -135,8 +139,7 @@ export function geometryFindings(boxes, dest) {
       const cap = text.fontSize * CAP_HEIGHT_RATIO;
       const share = text.role === "headline" ? HEADLINE_CAP_SHARE : BODY_CAP_SHARE;
       if (cap >= share * H) continue;
-      const what = text.floor ? "the module's smallest text (minTextPx), where it is used," : text.role;
-      findings.push({ rule: "type-size", slide: box.slide, level: text.floor ? "warn" : "fail", reason: `${what} has a cap height of ${round(cap)} px, under ${round(share * H)} px (${round(share * 100)}% of ${H}); set it at ${Math.ceil(share * H / CAP_HEIGHT_RATIO)} px or more` });
+      findings.push({ rule: "type-size", slide: box.slide, level: "fail", reason: `${text.role} has a cap height of ${round(cap)} px, under ${round(share * H)} px (${round(share * 100)}% of ${H}); set it at ${Math.ceil(share * H / CAP_HEIGHT_RATIO)} px or more` });
     }
     const rect = box.texts[0]?.rect;
     if (!rect) continue;
@@ -153,7 +156,7 @@ export function geometryFindings(boxes, dest) {
   return findings;
 }
 
-/** carousel/<dest>/render.json ({slides: [{file, width?, height?, texts?}]}) or NN.png per slide; null when nothing is rendered. */
+/** carousel/<dest>/render.json ({slides: [{files: [png, mp4?] | file, still?, width?, height?, texts?}]}) or NN.png per slide; null when nothing is rendered. */
 async function readRender(dir, story) {
   const count = carouselSlides(story).length;
   let manifest = null;
@@ -162,7 +165,7 @@ async function readRender(dir, story) {
   const slides = [];
   for (let i = 0; i < count; i += 1) {
     const entry = listed?.[i] ?? {};
-    const file = path.resolve(dir, entry.still ?? entry.file ?? `${slideStem(i, count)}.png`);
+    const file = path.resolve(dir, entry.still ?? entry.file ?? (Array.isArray(entry.files) ? entry.files.find((name) => /\.(png|jpe?g)$/i.test(name)) : undefined) ?? `${slideStem(i, count)}.png`);
     slides.push((await exists(file)) ? { ...entry, file } : null);
   }
   return slides.some(Boolean) ? { dir, slides: slides.map((slide) => slide ?? {}) } : null;
@@ -176,7 +179,7 @@ async function pixelFindings(boxes, render, canvas) {
     const image = await readPixels(slide.file, canvas.width, canvas.height);
     const rect = box.texts[0].rect;
     const ratio = measuredContrast(image, rect);
-    const needed = box.texts.some((text) => text.role === "body" && !text.floor) ? CONTRAST_AA : CONTRAST_AA_LARGE;
+    const needed = box.texts.some((text) => text.role === "body") ? CONTRAST_AA : CONTRAST_AA_LARGE;
     if (ratio !== null && ratio < needed) findings.push({ rule: "contrast", slide: box.slide, level: "fail", reason: `text measures ${round(ratio)}:1 against what is under it; WCAG AA needs ${needed}:1` });
     if (box.role !== "cover") continue;
     const headline = box.texts.find((text) => text.role === "headline") ?? box.texts[0];
@@ -204,7 +207,8 @@ const ratioOf = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 /**
  * WCAG contrast of the text in a box against what is under it, on pixels:
  * the background is the box's median luminance, the ink the median of the
- * pixels that stand off it (on whichever side more of them sit). null when
+ * INK_TAIL_SHARE of pixels farthest from it, on whichever side more pixels
+ * stand off it. null when
  * the box holds no ink. shortcut: one background per box; text over a busy
  * photo needs a per-glyph background, add it when slides set type on imagery.
  */
@@ -223,7 +227,8 @@ export function measuredContrast(image, rect) {
   const darker = values.filter((v) => ratioOf(v, bg) >= INK_RATIO && v < bg);
   const ink = lighter.length >= darker.length ? lighter : darker;
   if (ink.length < MIN_INK_SHARE * values.length) return null;
-  return ratioOf(median(ink), bg);
+  const tail = ink.sort((a, b) => ratioOf(b, bg) - ratioOf(a, bg)).slice(0, Math.max(1, Math.round(INK_TAIL_SHARE * values.length)));
+  return ratioOf(median(tail), bg);
 }
 
 export function formatReport(report) {
