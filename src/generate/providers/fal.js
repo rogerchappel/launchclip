@@ -17,7 +17,7 @@
 // How the brief maps to fal inputs. Each model has its own input schema, so
 // the adapter reads it from fal's model metadata (OpenAPI) and only sends a
 // field the model takes:
-//   image: prompt, image_size {width, height}, negative_prompt (if taken),
+//   image: prompt, image_size {width, height} (or aspect_ratio when the model takes only that), negative_prompt (if taken),
 //          references as image_urls (if taken; otherwise not sent).
 //   video: prompt (motion and camera only), image_url = the start frame,
 //          duration = seconds + pad_seconds at each end, rounded up to the
@@ -153,7 +153,11 @@ export function createFalProvider({ imageModel, videoModel, draftVideoModel, fet
 }
 
 async function imageInput(image, props) {
-  const input = { prompt: image.prompt, image_size: { width: image.width, height: image.height } };
+  const input = { prompt: image.prompt };
+  // Models take either a size or an aspect ratio (nano-banana: aspect_ratio only, square by default).
+  const ratio = aspect(image.width, image.height);
+  if (props?.aspect_ratio?.enum?.includes(ratio) && !props?.image_size) input.aspect_ratio = ratio;
+  else input.image_size = { width: image.width, height: image.height };
   if (image.negative && props?.negative_prompt) input.negative_prompt = image.negative;
   if (image.references?.length && props?.image_urls) input.image_urls = await Promise.all(image.references.map(dataUri));
   return input;

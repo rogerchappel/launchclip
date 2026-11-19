@@ -4,7 +4,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { runCli } from "../src/cli.js";
 import { commandHelp } from "../src/cli_usage.js";
-import { EDGE_PAD_SECONDS, FOOTAGE_NEGATIVE, footageBrief, lookParagraph, refusalReason } from "../src/generate/brief.js";
+import { EDGE_PAD_SECONDS, FOOTAGE_NEGATIVE, NO_TEXT, footageBrief, lookParagraph, refusalReason } from "../src/generate/brief.js";
 
 const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "generate-brief");
 const request = (over = {}) => ({ id: "s1-abc", scene_id: "s1", shows: "a barista pouring latte art, close up", type: "any", still: false, line: "Good coffee starts slow.", duration: 2, format: { width: 1080, height: 1920, aspect: "portrait" }, ...over });
@@ -24,14 +24,16 @@ test("steps follow the request's type and still", () => {
   assert.deepEqual(footageBrief(request({ type: "video", still: true })).steps, ["image"]);
 });
 
-test("the prompt uses shows word for word, the line as context and the story's look", () => {
+test("the prompt uses shows word for word and the story's look, never the narration line", () => {
   const look = lookParagraph({ brand: { colors: { bg: "#0b0d1a", primary: "#ffb547" } }, look: "film" });
   assert.match(look, /#0b0d1a/);
   assert.match(look, /film/);
   const brief = footageBrief(request(), { look });
   assert.ok(brief.image.prompt.startsWith("a barista pouring latte art, close up."));
   assert.ok(brief.image.prompt.includes(look));
-  assert.match(brief.image.prompt, /never shown as text.*"Good coffee starts slow\."/);
+  // Image models draw quoted words as captions: the line stays out, and no-text is said in the prompt too.
+  assert.ok(!brief.image.prompt.includes("Good coffee starts slow"));
+  assert.ok(brief.image.prompt.includes(NO_TEXT));
   assert.equal(brief.image.width, 1080);
   assert.equal(brief.image.height, 1920);
   assert.deepEqual(brief.image.references, []);
@@ -84,7 +86,7 @@ test("generate brief prints every shot request in a project without a provider",
   assert.match(text, /# s2-[0-9a-f]{10} \(scene s2\)\nsteps: image\n/);
   assert.match(text, /# s4-[0-9a-f]{10} \(scene s4\)\nrefused: .*iPhone/);
   assert.match(text, /\(scene s5, backdrop\)/);
-  assert.match(text, /"Good coffee starts slow\."/);
+  assert.doesNotMatch(text, /Good coffee starts slow/);
   assert.match(text, /video prompt \(2 s at 30 fps; request 2\.6 s, 0\.3 s padding each end\)/);
 
   const all = JSON.parse(await cli(["generate", "brief", FIXTURE, "--json"]));
