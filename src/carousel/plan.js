@@ -8,6 +8,7 @@ import { validateModuleParams } from "@launchclip/core/module-schemas.mjs";
 import { resolveModule, sceneRenderEnd } from "@launchclip/core/modules.mjs";
 import { dropParam } from "../storyboard_planner.js";
 import { moduleCatalogue } from "@launchclip/core/planning-prompt.mjs";
+import { CAROUSEL_GRAMMARS, CAROUSEL_TEMPLATES, layoutCarousel, pickTemplate, templateCopyProblems } from "@launchclip/core/carousel-templates.mjs";
 import { carouselPlanFindings } from "@launchclip/core/carousel-check.mjs";
 
 // Modules that need what a carousel does not have (footage, a presenter, a
@@ -52,15 +53,16 @@ export function slideRange({ arc = null, destinations, slides = null }) {
 
 /** The planning instructions, in this repo's own words. */
 // shortcut: the list budgets are measured at 4:5 (1080×1350) with the default brand; derive them from moduleFit per canvas if other aspects need different numbers.
-export function planInstructions({ arc, goal, destinations, range, modules, photos, generate }) {
+export function planInstructions({ arc, goal, destinations, range, modules, photos, generate, template = null }) {
   const dest = CAROUSEL_DESTINATIONS[destinations[0]];
   const count = range.exact != null ? `exactly ${range.exact} slides` : `${range.min} to ${range.max} slides`;
   const arcs = arc ? `The arc is ${arc}: ${CAROUSEL_ARCS[arc].describe}.` : `Pick the arc that fits the brief best:\n${CAROUSEL_ARC_IDS.map((id) => `- ${id} (${CAROUSEL_ARCS[id].slides.join("-")} slides): ${CAROUSEL_ARCS[id].describe}`).join("\n")}`;
   const lines = [
-    "You plan a carousel: a set of slides people swipe through in a social feed, made by a video engine whose scene modules draw each slide. Return one JSON object in carousel_json.",
+    "You plan a carousel: a set of slides people swipe through in a social feed. Return one JSON object in carousel_json.",
     "",
     "Shape:",
-    '{"title": string, "arc": string, "goal": string, "caption": {"hook": string, "body": string, "cta": string, "tags": [string]}, "slides": [{"id": kebab-case, "role": "cover"|"body"|"payoff"|"cta", "module": module id, "params": {…}, "alt": string' + (generate ? ', "image": string|null' : "") + "}]}",
+    '{"title": string, "arc": string, "goal": string, "caption": {"hook": string, "body": string, "cta": string, "tags": [string]}, "slides": [{"id": kebab-case, "role": "cover"|"body"|"payoff"|"cta", "headline": string, "body"?: string, "items"?: [string], "stat"?: {"value", "label", "source"}, "quote"?: {"text", "author", "role"?}, "eyebrow"?: string, "emphasis"?: string, "handle"?: string' + (photos?.length ? ', "photo"?: one of the photos' : "") + ', "alt": string' + (generate ? ', "image": string|null' : "") + "}]}",
+    "You write each slide's words; tooling lays them out with a carousel template. Set only the fields a slide needs: a list or a checklist as items (2 to 6 of at most 32 characters); a figure as stat, with its source; a quote with the person who said it; a pair as a headline that opens on the first marker and a body that opens on the second (\"Myth: …\" / \"Fact: …\", \"Before: …\" / \"After: …\", \"Don't: …\" / \"Do: …\"); eyebrow is a small label (at most 24 characters, a step number or section), emphasis a word of the headline to colour, handle the account or link on the cta slide.",
     "",
     arcs,
     `Make ${count}. The canvas is ${dest.width}×${dest.height} (${dest.aspect}) for ${destinations.join(", ")}.`,
@@ -71,39 +73,32 @@ export function planInstructions({ arc, goal, destinations, range, modules, phot
     "- One idea per slide: one headline and at most one supporting line or list; body slides stay under 25 words. If an idea needs two reads, split it.",
     "- Roles: the first slide is the cover; at most one cta slide, last. A list, steps, story, data or before-after carousel puts a payoff slide (the summary or checklist worth saving) just before the cta.",
     "- Keep the look the same on every slide (the brand is fixed by tooling), and give the reader a pull to the next slide: a numbered marker, a sentence that continues.",
-    "- Free type on a plain plate or a photo reads native; a run of boxed cards reads like a template ad. Prefer hook-title, motion-title, kinetic-words, item-list, count-up, quote and chart modules in their free-type variants; never use a variant named boxed.",
     "- alt: what the slide shows, for a screen reader (its words and picture), never a file name.",
     "- caption.hook is a second hook for the post's first line (under " + dest.captionPreview + " characters). caption.body adds what did not fit on the slides; it does not repeat them. caption.cta matches the last slide. caption.tags: " + (destinations.some((id) => CAROUSEL_DESTINATIONS[id].tags) ? "3 to 5 topical tags without #." : "an empty list (these destinations do not use tags)."),
-    "- Slides are read at phone size, and text that does not fit is refused: a headline at most 50 characters, a sub, detail or supporting line at most 50 characters, a label at most 28 characters. Lists are tight: an item-list holds 4 items of at most 16 characters under a title (6 without one), process-steps 5 steps of at most 24 characters; a payoff for a longer list names the few that matter. When a check says text is too long, cut it well under the limit. Leave timing params (at, kickerAt, stagger, tickAt) unset, and set an icon only with a handle.",
+    `- Slides are read at phone size, and text that does not fit is refused: a headline at most ${template ? CAROUSEL_TEMPLATES[template].caps.headline : 48} characters, a body line at most ${template ? CAROUSEL_TEMPLATES[template].caps.body : 50} (a slide over a photo holds ${CAROUSEL_GRAMMARS["full-bleed"].caps.body}), list items at most 32. When a check says text is too long, cut it well under the limit.`,
     "- Use only facts the brief gives or that are common knowledge; never invent statistics, customers or quotes.",
     "",
-    "Modules: use only these ids, and only the params each lists. Never set params.id, kind, aspect, start or duration, rect, theme or track.",
-    ...(photos?.length ? ["", `The user's photos (put them in a photo module's media param as written): ${photos.join(", ")}. A story carousel uses them on most slides.`] : []),
-    ...(generate ? ["", 'Slides may have a generated photo: set "image" to what it shows in plain lower-case words (a scene, no brand, person name, text or logo), use a photo module, and set its media param to "assets/generated/<slide id>.png". Every photo slide shares one setting, kind of people and time of day. Leave "image" null on other slides.'] : []),
-    ""
+    ...(photos?.length ? [`The user's photos (set a slide's photo to one, as written): ${photos.join(", ")}. A story carousel uses them on most slides.`] : []),
+    ...(generate ? ['Slides may have a generated photo: set "image" to what it shows in plain lower-case words (a scene, no brand, person name, text or logo). Every photo slide shares one setting, kind of people and time of day. Leave "image" null on other slides.'] : [])
   ];
-  for (const module of modules) {
-    lines.push(`### ${module.id}: ${firstSentence(module.describe)}`);
-    for (const param of module.params) if (!param.tuning) lines.push(`- ${param.name}: ${param.text.length > 110 ? `${param.text.slice(0, 107)}…` : param.text}`);
-    if (module.variants) lines.push(`variants: ${module.variants.join(", ")}`);
-  }
   return lines.join("\n");
 }
 
-const firstSentence = (text) => { const match = /^(.{20,200}?[.!?])\s/.exec(`${text} `); return (match ? match[1] : text.slice(0, 200)).trim(); };
-
 /** The model's plan → a carousel story. Tooling owns the format, brand, style, timing and medium. */
-export function planToStory(plan, { arc, goal, destinations, brand, style = null }) {
+export function planToStory(plan, { arc, goal, destinations, brand, style = null, template = null }) {
   const dest = CAROUSEL_DESTINATIONS[destinations[0]];
-  const slides = Array.isArray(plan?.slides) ? plan.slides : [];
+  // A generated image lands at assets/generated/<slide id>.png (make.js), so that is the slide's photo.
+  const slides = (Array.isArray(plan?.slides) ? plan.slides : []).map((slide, i) => (typeof slide?.image === "string" && slide.image.trim() && !slide.photo ? { ...slide, photo: `assets/generated/${slide.id || `slide-${i + 1}`}.png` } : slide));
+  // A slide the plan gives as content (no module) is laid out by the template; a slide with a module stays as written.
+  const layout = template ? layoutCarousel(template, slides.map((slide) => (slide && typeof slide === "object" ? slide : {})), { aspect: dest.aspect, brand }) : null;
   const scenes = slides.map((slide, i) => ({
     id: typeof slide?.id === "string" && slide.id ? slide.id : `slide-${i + 1}`,
-    module: slide?.module,
+    ...(layout && !slide?.module ? { module: layout.scenes[i].module, ...(layout.scenes[i].plate ? { plate: layout.scenes[i].plate } : {}) } : { module: slide?.module }),
     start: i * SLIDE_SECONDS,
     end: (i + 1) * SLIDE_SECONDS,
     energy: ["cover", "cta"].includes(slide?.role) ? 2 : 1,
     slide: { role: slide?.role, medium: "still", alt: typeof slide?.alt === "string" ? slide.alt : "" },
-    params: slide?.params && typeof slide.params === "object" ? slide.params : {}
+    params: layout && !slide?.module ? layout.scenes[i].params : slide?.params && typeof slide.params === "object" ? slide.params : {}
   }));
   const caption = plan?.caption && typeof plan.caption === "object" ? plan.caption : {};
   return {
@@ -115,10 +110,12 @@ export function planToStory(plan, { arc, goal, destinations, brand, style = null
       arc: arc ?? plan?.arc,
       goal: goal ?? plan?.goal,
       destinations,
+      ...(template ? { template } : {}),
       caption: { hook: String(caption.hook ?? ""), body: String(caption.body ?? ""), cta: String(caption.cta ?? ""), tags: Array.isArray(caption.tags) ? caption.tags.map(String).filter((tag) => tag.trim()).map((tag) => tag.replace(/^#/, "")) : [] }
     },
     ...(style ? { style } : {}),
-    brand,
+    ...layout?.story,
+    brand: layout?.story.brand ?? brand,
     audio: null,
     scenes
   };
@@ -177,7 +174,7 @@ export function storyErrors(story, { modules, range, warnings = [] }) {
  * → {story, plan (the model's object, with image requests), attempts: [{ok, errors, usage}], range, warnings}
  * Throws when the repaired plan still fails, listing the errors.
  */
-export async function planCarousel({ client, brief, arc = null, goal = null, destinations, slides = null, photos = [], generate = false, brand, style = null, say = () => {} }) {
+export async function planCarousel({ client, brief, arc = null, goal = null, destinations, slides = null, photos = [], generate = false, brand, style = null, template = null, say = () => {} }) {
   if (arc && !CAROUSEL_ARCS[arc]) throw new Error(`--arc must be auto or one of ${CAROUSEL_ARC_IDS.join(", ")}`);
   if (goal && !CAROUSEL_GOALS.includes(goal)) throw new Error(`--goal must be one of ${CAROUSEL_GOALS.join(", ")}`);
   const range = slideRange({ arc, destinations, slides });
@@ -185,7 +182,9 @@ export async function planCarousel({ client, brief, arc = null, goal = null, des
   const modules = slideModules({ photos: photos.length > 0 || generate });
   // Without --goal, the arc's usual goal; the auto arc's is settled after the model picks it.
   const goalFor = (picked) => goal ?? DEFAULT_GOAL[picked] ?? "follow";
-  const instructions = planInstructions({ arc, goal: goal ?? (arc ? goalFor(arc) : "the arc's: save for list, steps and data; comment for myth-fact; install for an ad; follow otherwise"), destinations, range, modules, photos, generate });
+  // The template: --template, else the brief's best fit for the arc, varied by the style's seed (picked again for an auto arc).
+  const templateFor = (picked) => pickTemplate({ template, brief, arc: picked, images: photos.length > 0 || generate, seed: style ?? "" });
+  const instructions = planInstructions({ arc, goal: goal ?? (arc ? goalFor(arc) : "the arc's: save for list, steps and data; comment for myth-fact; install for an ad; follow otherwise"), destinations, range, modules, photos, generate, template: arc || template ? templateFor(arc) : null });
   const attempts = [];
   const warnings = [];
   let input = `Brief: ${brief}\n`;
@@ -201,9 +200,11 @@ export async function planCarousel({ client, brief, arc = null, goal = null, des
       else {
         // The auto arc's count range is the picked arc's, inside the destinations'.
         const own = arc ? range : slideRange({ arc: picked, destinations, slides });
-        story = planToStory(plan, { arc: picked, goal: goalFor(picked), destinations, brand, style });
+        const chosen = templateFor(picked);
+        story = planToStory(plan, { arc: picked, goal: goalFor(picked), destinations, brand, style, template: chosen });
         warnings.length = 0;
-        errors = storyErrors(story, { modules, range: own, warnings });
+        const content = (Array.isArray(plan.slides) ? plan.slides : []).filter((slide) => slide && typeof slide === "object" && !slide.module);
+        errors = [...(content.length ? templateCopyProblems(chosen, content) : []), ...storyErrors(story, { modules, range: own, warnings })];
       }
     }
     attempts.push({ ok: !errors.length, errors, usage: result?.usage ?? null });

@@ -421,11 +421,11 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
   };
 
   // Safe zone: Shorts (portrait) or title-safe (landscape). Modules that keep
-  // captions stay above the caption band.
+  // captions stay above the caption band; a carousel slide has none (ctx.noCaptions).
   const geometry = profileGeometry(canvas, portrait ? 'shorts' : 'landscape');
   const zone = geometry.safeZone, band = geometry.captionBand;
   const captionGap = 30 * unit;
-  const bottom = hidesCaptions ? zone.y + zone.height : Math.min(zone.y + zone.height, band.y - captionGap);
+  const bottom = hidesCaptions || ctx.noCaptions ? zone.y + zone.height : Math.min(zone.y + zone.height, band.y - captionGap);
   // Round inward to 0.01 px so the rect never pokes outside the zone.
   const up = v => Math.ceil(v * 100 - 1e-6) / 100, down = v => Math.floor(v * 100 + 1e-6) / 100;
   const sx = up(zone.x), sy = up(zone.y);

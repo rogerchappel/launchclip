@@ -26,10 +26,54 @@ launchclip carousel export ./my-carousel
 
 | Step | What it does |
 |---|---|
-| `make "<brief>"` | Picks the arc (`listicle`, `how-to`, `myth-fact`, `before-after`, `story`, `data`, `ad`, `quote`, `single`), writes the slides, the caption and the alt text, then renders and checks |
+| `make "<brief>"` | Picks the arc and a template (`listicle`, `how-to`, `myth-fact`, `before-after`, `story`, `data`, `ad`, `quote`, `single`), writes the slides, the caption and the alt text, then renders and checks |
 | `render <project>` | Each slide's still, and an MP4 loop for each motion slide, into `carousel/<dest>/` as `01.png`, `02.png` … |
 | `check <project>` | The slide rules: a cover that reads at thumbnail size, type large enough for the feed, one idea per slide, contrast, safe zones, a payoff where the arc promises one, alt text, and copy that is not filler, cut off, repeated or a leaked planning label. Exits 1 on a failure |
 | `export <project>` | Packages each destination's files, ready to upload |
+
+## Templates
+
+A template is the design layer between the plan and the modules. The planner writes each slide's words (a headline, a line under it, list items, a figure with its source, a quote, a photo); the template decides how the slide is laid out, so a carousel looks designed whatever the content. Pick one with `--template <id>` or `carousel.template` in the story; without one, `make` picks from the brief.
+
+![Every template's sample at 4:5](../images/carousel-templates.jpg)
+
+| Template | For | Arcs |
+|---|---|---|
+| `product-proof` | An app or SaaS ad: the product on screen, the result in one figure, a plain offer | ad, before-after, data |
+| `study-notes` | An educational list or how-to in large free type, with a checklist to save | listicle, how-to |
+| `field-notes` | An editorial list, how-to or lesson on a light ground | listicle, how-to, story, quote |
+| `photo-diary` | A personal photo story: a photo and one line per slide | story, before-after, single |
+| `quiet-quote` | A quote or a motivation series | quote, single |
+| `signal-report` | A data or report carousel: one sourced figure per slide | data, ad |
+| `myth-split` | Myth and fact: the myth struck through, the fact stamped | myth-fact |
+| `then-now` | A before-and-after: the old way against the new, the change in one figure | before-after, story, ad |
+
+### How a slide gets its layout
+
+Each slide takes one of six layouts (grammars). The content decides first; after that comes the template's choice for the slide's role, and then a plain default:
+
+| Grammar | When | Drawn by |
+|---|---|---|
+| `two-region` | The headline opens on one marker and the body on its pair (`Myth:` / `Fact:`, `Before:` / `After:`, `Don't:` / `Do:`) | `compare` in free type |
+| `proof-stat` | A `stat`, or a %, a currency amount, a multiplier, or a number with a unit such as hours or users | `stat-card` (with a source), `media-stat` (with a photo), else `concept-card` |
+| `steps` | `items`, or a body with two or more sequence words (first, then, finally) | `item-list` |
+| `full-bleed` | A cover with a photo, or the template's choice | `photo-scene` under a reading layer |
+| `image-panel` | A body slide with a photo | `split-screen` |
+| `text-card` | Everything else, quotes and the call to action | `hook-title`, `motion-title`, `quote-card`, `cta` |
+
+Each grammar has the most of the slide its text may cover (0.36 to 0.68), type floors at 1080 wide (headline 52 px, body 46 px, scaled by width) and copy caps. A template's own caps sit inside those. Copy over a cap goes back to the planner in its repair round.
+
+### Surfaces and colour
+
+Each role sits on a surface. `dark` and `light` are the carousel's ground, and a carousel has one ground: `light` turns the brand over, so its palest colour becomes the ground and its darkest the type. `brand` is a plate lit in the brand's primary or accent. `on-image` puts the slide's photo behind a reading layer at 0.6. Colours always come from the brand or the style pack. No template names a hex.
+
+### The automatic pick
+
+Without `--template`, each template scores the brief: +2 for each `best_for` word, −3 for each `avoid_when` word, +4 when it suits the arc, and points up or down for photos. Among the templates within two points of the best, the style's seed picks one, so two carousels on the same brief rarely look the same.
+
+The samples are in `examples/carousel/<template>-4x5` (plus `study-notes-9x16`), written by `node scripts/carousel-template-samples.mjs`. Their photos are stand-ins already in the repo. Remotion and HyperFrames draw the templates the same way:
+
+![field-notes and myth-split: Remotion above, HyperFrames below](../images/carousel-templates-parity.jpg)
 
 ## Destinations
 
