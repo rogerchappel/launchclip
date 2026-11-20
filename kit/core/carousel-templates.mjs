@@ -22,8 +22,10 @@
 // primary as the page (brand); `pure` takes the ground to a near-white or
 // near-black page in the brand's hue. Surfaces are that ground, a plate lit in
 // the brand colour, or the slide's photo under a reading layer. Every module
-// used is a catalogue module both renderers draw. Import-free, so carousel.mjs
-// can read the ids.
+// used is a catalogue module both renderers draw. It imports only the reading
+// gradient's checks (no cycle), so carousel.mjs can read the ids.
+
+import { readingGradientErrors } from "./reading-gradient.mjs";
 
 // Smallest type at 1080 wide (scale by width / 1080).
 export const MIN_HEADLINE_PX = 52;
@@ -68,7 +70,10 @@ const CONTENT_GRAMMARS = ["two-region", "proof-stat", "steps"];
 // plate under the whole carousel instead of a plain ground. grammar: per role,
 // the layout the template prefers when the content does not ask for another
 // and the slide has what it needs. surface: per role. reading: the layer over a
-// photo under type (dim: how much ground covers it, blur in px). brandPlate:
+// photo under type: {dim, blur} a flat ground over it (dim: how much, blur in
+// px), or {gradient, blur} a reading gradient (kit/core/reading-gradient.mjs),
+// solid where the type sits and clear toward the far edge; panel: the gradient
+// an image-panel photo fades by into its panel, solid at the seam. brandPlate:
 // the plate a "brand" surface lights. type: alignment, case (caps: display
 // capitals; sentence: as written), the photo's share of an image-panel slide
 // per role, ticks (a payoff checklist ticks rather than numbers), byline (the
@@ -87,6 +92,7 @@ export const CAROUSEL_TEMPLATES = Object.freeze({
     best_for: ["education", "checklist", "checklists", "tips", "guide", "explain", "learn", "how", "busy"],
     avoid_when: ["cinematic", "minimal", "quote", "motivation"],
     arcs: ["listicle", "how-to", "ad", "data", "before-after"], images: "wanted", ground: "dark", background: "flat",
+    reading: { panel: { color: "ground", stops: [0, 0.3], opacity: 1 } },
     grammar: { cover: "image-panel", body: "image-panel", payoff: "image-panel", cta: "text-card" },
     surface: { cover: "dark", body: "dark", payoff: "dark", cta: "dark" },
     caps: { headline: 48, body: 60 },
@@ -96,7 +102,8 @@ export const CAROUSEL_TEMPLATES = Object.freeze({
     describe: "Documentary photos edge to edge under a dark reading layer, direct coaching copy in heavy centred capitals.",
     best_for: ["advice", "practical", "motivation", "coach", "coaching", "creator", "habit", "habits", "mindset", "lesson", "lessons", "discipline"],
     avoid_when: ["statistics", "data", "report", "survey", "numbers"],
-    arcs: ["listicle", "how-to", "story", "quote", "single"], images: "needed", ground: "dark", pure: true, background: "flat", reading: { dim: 0.6, blur: 0 },
+    arcs: ["listicle", "how-to", "story", "quote", "single"], images: "needed", ground: "dark", pure: true, background: "flat",
+    reading: { gradient: { color: "ground", direction: "bottom", stops: [0.62, 0.95], opacity: 0.9 }, blur: 0 },
     grammar: { cover: "text-card", body: "text-card", payoff: "text-card", cta: "text-card" },
     surface: { cover: "on-image", body: "on-image", payoff: "on-image", cta: "on-image" },
     caps: { headline: 48, body: 80 },
@@ -106,7 +113,8 @@ export const CAROUSEL_TEMPLATES = Object.freeze({
     describe: "Documentary photos edge to edge under a soft light wash, direct coaching copy in heavy centred capitals.",
     best_for: ["advice", "practical", "motivation", "coach", "coaching", "creator", "habit", "habits", "wellness", "morning", "calm"],
     avoid_when: ["statistics", "data", "report", "survey", "night"],
-    arcs: ["listicle", "how-to", "story", "quote", "single"], images: "needed", ground: "light", pure: true, background: "flat", reading: { dim: 0.6, blur: 0 },
+    arcs: ["listicle", "how-to", "story", "quote", "single"], images: "needed", ground: "light", pure: true, background: "flat",
+    reading: { gradient: { color: "ground", direction: "bottom", stops: [0.6, 1], opacity: 0.88 }, blur: 0 },
     grammar: { cover: "text-card", body: "text-card", payoff: "text-card", cta: "text-card" },
     surface: { cover: "on-image", body: "on-image", payoff: "on-image", cta: "on-image" },
     caps: { headline: 48, body: 80 },
@@ -136,7 +144,8 @@ export const CAROUSEL_TEMPLATES = Object.freeze({
     describe: "A photo-led cover with the promise on black, then one big numbered step per slide, the checklist as short numbered lines.",
     best_for: ["steps", "step", "how", "guide", "numbered", "routine", "routines", "habits", "process", "framework", "checklist"],
     avoid_when: ["single", "photo", "story", "quote"],
-    arcs: ["how-to", "listicle"], images: "optional", ground: "dark", pure: true, background: "flat", reading: { dim: 0.74, blur: 0 },
+    arcs: ["how-to", "listicle"], images: "optional", ground: "dark", pure: true, background: "flat",
+    reading: { gradient: { color: "ground", direction: "bottom", stops: [0.72, 1], opacity: 0.9 }, blur: 0, panel: { color: "ground", stops: [0, 0.45], opacity: 1 } },
     grammar: { cover: "image-panel", body: "step", payoff: "steps", cta: "text-card" },
     surface: { cover: "dark", body: "dark", payoff: "dark", cta: "dark" },
     caps: { headline: 48, body: 60 },
@@ -177,6 +186,7 @@ export const CAROUSEL_TEMPLATES = Object.freeze({
     best_for: ["photography", "photo", "photos", "community", "documentary", "recap", "trip", "travel", "event", "behind"],
     avoid_when: ["dense", "statistics", "checklist", "unrelated"],
     arcs: ["story", "before-after", "listicle"], images: "needed", ground: "light", background: "flat",
+    reading: { panel: { color: "ground", stops: [0, 0.22], opacity: 1 } },
     grammar: { cover: "image-panel", body: "image-panel", payoff: "text-card", cta: "text-card" },
     surface: { cover: "light", body: "light", payoff: "light", cta: "light" },
     caps: { headline: 48, body: 60 },
@@ -209,7 +219,15 @@ export function templateProblems(id, template = CAROUSEL_TEMPLATES[id], { arcIds
   if (!IMAGE_USE.includes(template.images)) err(`images must be one of ${IMAGE_USE.join(", ")}`);
   if (!template.plate === !template.background || (template.background && !BACKGROUNDS.includes(template.background))) err(`set one of background (${BACKGROUNDS.join(", ")}) or plate`);
   if (template.plate && template.ground !== "dark") err("a plate is drawn for a dark ground; a light or brand ground takes a background");
-  if (template.reading && !(template.reading.dim >= 0.4 && template.reading.dim <= 0.9 && template.reading.blur >= 0 && template.reading.blur <= 40)) err("reading must be {dim 0.4–0.9, blur 0–40}");
+  if (template.reading) {
+    const { dim, blur = 0, gradient, panel } = template.reading;
+    for (const key of Object.keys(template.reading)) if (!["dim", "blur", "gradient", "panel"].includes(key)) err(`reading.${key} is not a reading field (dim, blur, gradient, panel)`);
+    if (dim !== undefined && gradient !== undefined) err("reading takes dim (a flat layer) or gradient, not both");
+    if (dim !== undefined && !(dim >= 0.4 && dim <= 0.9)) err("reading.dim must be 0.4–0.9");
+    if (!(blur >= 0 && blur <= 40)) err("reading.blur must be 0–40");
+    for (const [key, value] of Object.entries({ gradient, panel })) if (value !== undefined) for (const message of readingGradientErrors(value, `reading.${key}`)) err(message);
+    if (panel?.direction !== undefined) err("reading.panel takes no direction: it is solid at the photo's seam");
+  }
   for (const role of ROLES) {
     if (!CAROUSEL_GRAMMAR_IDS.includes(template.grammar?.[role])) err(`grammar.${role} must be one of ${CAROUSEL_GRAMMAR_IDS.join(", ")}`);
     else if (CONTENT_GRAMMARS.includes(template.grammar[role]) && role !== "payoff") err(`grammar.${role} is ${template.grammar[role]}, which only content asks for; a template may prefer it for the payoff only`);
@@ -218,7 +236,7 @@ export function templateProblems(id, template = CAROUSEL_TEMPLATES[id], { arcIds
     // One ground per story (the engine renders one palette per story): a role is on that ground, the brand's plate or a photo.
     else if ((surface === "light" || surface === "dark") && surface !== template.ground) err(`surface.${role} is ${surface} on a ${template.ground} ground; use ${template.ground}, brand or on-image`);
     if (surface === "brand" && template.ground !== "brand" && !template.brandPlate) err(`surface.${role} is brand, so the template needs a brandPlate`);
-    if (surface === "on-image" && !template.reading) err(`surface.${role} is on-image, so the template needs a reading layer`);
+    if (surface === "on-image" && template.reading?.dim === undefined && !template.reading?.gradient) err(`surface.${role} is on-image, so the template needs a reading layer`);
   }
   for (const key of ["headline", "body"]) if (!(Number.isInteger(template.caps?.[key]) && template.caps[key] >= 16)) err(`caps.${key} must be a whole number of characters from 16`);
   if (!["left", "center"].includes(template.type?.align)) err("type.align must be left or center");
@@ -414,7 +432,8 @@ export function drawSlide(slide, grammar, template, { aspect = "4:5", cue = fals
     const rest = body ? lines(body, width, 3 - head.length).map((text) => ({ text })) : [];
     const all = [...head, ...rest].slice(0, 3);
     if (asks) { const last = all.at(-1); if (last.text.length + 2 <= width) last.text += " →"; else if (all.length < 3) all.push({ text: "Swipe →" }); }
-    return { module: "photo-scene", params: { media: image, lines: all, align: type.align, scrim: type.align === "center" ? "full" : "bottom", move: "push-in", zoom: 0.04, title: cut(headline, 60) } };
+    const reading = template.reading?.gradient ? { gradient: template.reading.gradient } : { scrim: type.align === "center" ? "full" : "bottom" };
+    return { module: "photo-scene", params: { media: image, lines: all, align: type.align, ...reading, move: "push-in", zoom: 0.04, title: cut(headline, 60) } };
   }
   if (grammar === "image-panel") {
     const items = slideItems(slide);
@@ -422,7 +441,7 @@ export function drawSlide(slide, grammar, template, { aspect = "4:5", cue = fals
     const extra = items.length >= 2 ? { items: items.slice(0, 4) } : figure && !body ? { stat: drop({ value: figure.value, label: cut(figure.label, 40) }) } : { body: body || undefined };
     const share = Math.min(type.share?.[slide.role] ?? 0.47, aspect === "1:1" ? 0.5 : 0.62);
     const panel = swipe ? { body: swipe } : extra;
-    return { module: "split-screen", params: drop({ media: image, variant: "top", share, kicker: eyebrow, title: type.case === "caps" ? headline.toUpperCase() : headline, align: type.align, ...panel }) };
+    return { module: "split-screen", params: drop({ media: image, variant: "top", share, fade: template.reading?.panel, kicker: eyebrow, title: type.case === "caps" ? headline.toUpperCase() : headline, align: type.align, ...panel }) };
   }
   if (grammar === "framed-image") return { module: "landscape-card", params: drop({ media: image, kicker: eyebrow, title: headline, caption: body || undefined }) };
   if (grammar === "two-region") {
@@ -463,8 +482,8 @@ export function surfacePlate(template, surface, slide, grammar) {
   if (surface === "brand" && template.brandPlate) return { kind: template.brandPlate.kind, params: { tint: template.brandPlate.tint } };
   // A photo grammar draws its own photo; a type-only slide with a photo sets it behind the reading layer.
   if (surface === "on-image" && words(slide?.photo) && !CAROUSEL_GRAMMARS[grammar].needsImage && grammar !== "proof-stat") {
-    const { dim, blur } = template.reading ?? { dim: READING_LAYER, blur: 6 };
-    return { kind: "image", params: { src: words(slide.photo), dim, blur } };
+    const { dim = READING_LAYER, blur = template.reading ? 0 : 6, gradient } = template.reading ?? {};
+    return { kind: "image", params: { src: words(slide.photo), ...(gradient ? { gradient } : { dim }), blur } };
   }
   return null;
 }

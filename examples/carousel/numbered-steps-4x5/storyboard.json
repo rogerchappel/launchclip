@@ -64,6 +64,14 @@
         "media": "assets/photos/ridge-dusk.jpg",
         "variant": "top",
         "share": 0.5,
+        "fade": {
+          "color": "ground",
+          "stops": [
+            0,
+            0.45
+          ],
+          "opacity": 1
+        },
         "title": "HOW TO WRITE THE BRIEF BEFORE YOU BUILD",
         "align": "center",
         "body": "SWIPE FOR THE STEPS"

@@ -8,14 +8,19 @@
 //     and h in slide heights. kind: "word" (text set h tall from x, y),
 //     "rule" (a filled bar; a thin one is a line), "card" (a rounded bar),
 //     "circle" (the ellipse in the box). color: a brand colour role or #hex.
-//   carousel.panorama: {src, slides: [from, to]}
+//   carousel.panorama: {src, slides: [from, to], reading?}
 //     One plate laid over slides from..to (1-based, inclusive): it covers
 //     (to - from + 1) × width by height once and each slide shows its slice.
+//     reading: a reading gradient (kit/core/reading-gradient.mjs) over each
+//     slide's slice, in the brand's colours; it runs top to bottom, so the
+//     slices still meet at every seam.
 //
 // The carry mapping (kit/core/carry.mjs) between two slides is a fixed offset
 // of one slide width, so each element is placed once on the pair's canvas in
 // whole pixels and each slide draws it shifted by its own whole-pixel offset:
 // the two halves meet exactly at the seam.
+
+import { readingGradient, readingGradientErrors } from "./reading-gradient.mjs";
 
 export const SEAM_KINDS = Object.freeze(["word", "rule", "card", "circle"]);
 const SEAM_KEYS = ["after", "kind", "x", "y", "w", "h", "color", "text"];
@@ -49,9 +54,10 @@ export function continuityProblems(story) {
   }
   const pano = carousel.panorama;
   if (pano !== undefined) {
-    if (!isObject(pano)) errors.push("carousel.panorama must be {src, slides: [from, to]}");
+    if (!isObject(pano)) errors.push("carousel.panorama must be {src, slides: [from, to], reading?}");
     else {
-      for (const key of Object.keys(pano)) if (!["src", "slides"].includes(key)) errors.push(`carousel.panorama.${key} is not a panorama field (src, slides)`);
+      for (const key of Object.keys(pano)) if (!["src", "slides", "reading"].includes(key)) errors.push(`carousel.panorama.${key} is not a panorama field (src, slides, reading)`);
+      if (pano.reading !== undefined) errors.push(...readingGradientErrors(pano.reading, "carousel.panorama.reading"));
       if (!(typeof pano.src === "string" && pano.src.trim())) errors.push("carousel.panorama.src must be the plate's path in the project (assets/…)");
       const [from, to] = Array.isArray(pano.slides) ? pano.slides : [];
       if (!(Array.isArray(pano.slides) && pano.slides.length === 2 && Number.isInteger(from) && Number.isInteger(to) && from >= 1 && to > from && to <= ids.length)) errors.push(`carousel.panorama.slides must be [from, to], slide numbers 1 to ${ids.length} with from < to`);
@@ -85,7 +91,8 @@ export function panoramaSlice(panorama, index, width, height) {
 
 /**
  * What one slide draws for continuity: {panorama, seams} or null.
- * panorama: {src, left, width, height} for an <img> with object-fit cover;
+ * panorama: {src, left, width, height, reading?} for an <img> with object-fit
+ * cover, reading the CSS background of a layer over it;
  * seams: [{kind, text?, style}] with style a CSS property map in px.
  */
 export function slideContinuity(story, sceneId) {
@@ -108,7 +115,8 @@ export function slideContinuity(story, sceneId) {
     seams.push({ kind: seam.kind, text: seam.kind === "word" ? seam.text : undefined, style });
   }
   if (!slice && !seams.length) return null;
-  return { panorama: slice ? { src: slice.src, left: -slice.offset, width: slice.width, height: slice.height } : null, seams };
+  const reading = slice && isObject(carousel.panorama.reading) ? readingGradient(carousel.panorama.reading, story.brand?.colors ?? {}) : null;
+  return { panorama: slice ? { src: slice.src, left: -slice.offset, width: slice.width, height: slice.height, ...(reading ? { reading } : {}) } : null, seams };
 }
 
 /** True when a seam element or the panorama crosses from slide `index` (0-based) into the next. */

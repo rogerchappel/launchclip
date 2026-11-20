@@ -55,6 +55,7 @@ import {contrastRatio, fitText, mixColor, r2, rt, textWidth} from './catalog-b-b
 import {abs, el, set, tw} from './catalog-b-view.mjs';
 import {createFootageBase} from './catalog-c.mjs';
 import {grammarEase, grammarStagger} from './grammar.mjs';
+import {readingGradient, readingGradientErrors} from './reading-gradient.mjs';
 import {BEFORE_AFTER, beforeAfterAxis} from './before-after.mjs';
 
 export const MEDIA_LAYOUT_TIMING = Object.freeze({minDuration: 1.5, lead: 0.15, stagger: 0.28, textFade: 0.3, textRise: 28, exit: 0.3, minHold: 1.2, push: 0.05, count: 0.9});
@@ -319,14 +320,17 @@ function finishLayout(b, extra = {}) {
 // split-screen
 
 function resolveSplit(params, ctx) {
-  const b = layoutBase('split-screen', params, ctx, ['media', 'variant', 'share', 'divider', 'kicker', 'title', 'body', 'stat', 'items', 'align'], ['media']);
+  const b = layoutBase('split-screen', params, ctx, ['media', 'variant', 'share', 'divider', 'fade', 'kicker', 'title', 'body', 'stat', 'items', 'align'], ['media']);
   const {check, canvas, safe, u, colors} = b;
   const p = b.params;
   const media = layoutMedia(check, p.media, 'params.media');
   let side = p.variant === undefined ? (b.shape === 'wide' ? 'left' : 'top') : check.oneOf(p.variant, 'params.variant', SPLIT_VARIANTS);
   // A plan written for 9:16 renders sensibly at 16:9: top → left, bottom → right.
   if (b.shape === 'wide' && (side === 'top' || side === 'bottom')) side = side === 'top' ? 'left' : 'right';
-  const divider = p.divider === undefined ? 'line' : check.oneOf(p.divider, 'params.divider', ['line', 'blend']);
+  // fade: a reading gradient (kit/core/reading-gradient.mjs) over the footage, solid at the seam; it implies the blend.
+  const fade = p.fade ?? null;
+  if (fade) { const errors = readingGradientErrors(fade, 'params.fade'); if (errors.length) check.fail('params.fade', errors.join('; ')); }
+  const divider = fade ? 'blend' : p.divider === undefined ? 'line' : check.oneOf(p.divider, 'params.divider', ['line', 'blend']);
   const align = p.align === undefined ? 'left' : check.oneOf(p.align, 'params.align', ['left', 'center']);
   // The footage's share of the frame. A portrait top half stops above the
   // text room the caption band leaves (the band sits low in the frame).
@@ -368,6 +372,10 @@ function resolveSplit(params, ctx) {
     const thick = u(6);
     const rect = vertical ? {x: 0, y: seam - thick / 2, width: canvas.width, height: thick} : {x: seam - thick / 2, y: 0, width: thick, height: canvas.height};
     b.decor.push({key: 'divider', rect: roundRect(rect), style: {background: colors.primary}, at: rt(b.start + T.lead), wipe: vertical ? 'x' : 'y'});
+  } else if (fade) {
+    // Anchored at the seam: the photo's edge that meets the panel.
+    const edge = {top: 'bottom', bottom: 'top', left: 'right', right: 'left'}[side];
+    b.decor.push({key: 'blend', rect: roundRect({...mediaRect, ...(vertical ? {height: mediaRect.height + 1, y: side === 'top' ? 0 : mediaRect.y - 1} : {width: mediaRect.width + 1, x: side === 'left' ? 0 : mediaRect.x - 1})}), style: {background: readingGradient(fade, colors, {edge})}, at: b.start});
   } else {
     const depth = (vertical ? mediaRect.height : mediaRect.width) * 0.28;
     const toward = {top: '180deg', bottom: '0deg', left: '90deg', right: '270deg'}[side];
@@ -905,7 +913,8 @@ const CONTENT = {
 export const splitScreen = definition('split-screen',
   'Footage fills the top or bottom half of the frame (left or right on a wide frame) and the other half carries the line: a title, a stat or a short list, across an accent line or a soft blend. Keeps captions.',
   {media: MEDIA, variant: 'top|bottom|left|right: where the footage sits (default top; on a 16:9 frame top → left, bottom → right)', share: '0.3–0.65, the footage\'s share of the frame (default 0.4 top on 9:16, else 0.5)',
-    divider: 'line|blend (default line): an accent line that wipes across the seam, or the footage fading into the panel', ...CONTENT, align: 'left|center (default left)'},
+    divider: 'line|blend (default line): an accent line that wipes across the seam, or the footage fading into the panel',
+    fade: '{color?: ground|primary, tint? 0–0.6, stops?: [solid, clear], opacity? 0.3–1}: a brand-coloured reading gradient over the footage, solid at the seam and clear from stops[1] of the footage (implies the blend; kit/core/reading-gradient.mjs)', ...CONTENT, align: 'left|center (default left)'},
   ['item-<i>'], resolveSplit);
 export const landscapeCard = definition('landscape-card',
   'A landscape clip letterboxed in a rounded window mid-frame (16:9 by default), a title above and a caption or chip below: landscape library footage without a heavy crop. Keeps captions.',

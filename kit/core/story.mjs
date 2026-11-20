@@ -7,6 +7,7 @@
 
 import { BRAND_PALETTE_MODES, workingBrand } from "./palette.mjs";
 import { carouselProblems } from "./carousel.mjs";
+import { readingGradientErrors } from "./reading-gradient.mjs";
 
 export const STORY_SCHEMA = "launchclip.story.v1";
 // Non-additive changes made inside STORY_SCHEMA so far: a story's
@@ -1994,9 +1995,10 @@ function validatePlate(plate, err, path, { none = false, cycle = false, warn = n
       if (!(typeof given === "string" && PLATE_VIDEO_SRC.test(given) && !given.split("/").includes(".."))) err(`${path}.params.src must be a project-relative .mp4, .webm or .mov path (no URL, no leading /, no ..)`);
       continue;
     }
+    if (key === "gradient" && file) { for (const message of readingGradientErrors(given, `${path}.params.gradient`)) err(message); continue; }
     if (key === "treatment" && value.kind === "video") { if (!PLATE_VIDEO_TREATMENTS.includes(given)) err(`${path}.params.treatment must be one of ${PLATE_VIDEO_TREATMENTS.join(", ")}`); continue; }
     const unit = PLATE_UNIT[key] ?? own[key];
-    if (!unit) { err(`${path}.params.${key} is not supported (allowed: ${[...Object.keys(PLATE_UNIT), ...(file ? ["src"] : []), ...(value.kind === "video" ? ["treatment"] : []), ...Object.keys(own), "tint"].join(", ")})`); continue; }
+    if (!unit) { err(`${path}.params.${key} is not supported (allowed: ${[...Object.keys(PLATE_UNIT), ...(file ? ["src"] : []), ...(value.kind === "video" ? ["treatment"] : []), ...Object.keys(own), ...(file ? ["gradient"] : []), "tint"].join(", ")})`); continue; }
     const [min, max] = unit;
     if (!(typeof given === "number" && given >= min && given <= max)) err(`${path}.params.${key} must be a number from ${min} to ${max}`);
   }

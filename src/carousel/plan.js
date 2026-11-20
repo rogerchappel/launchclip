@@ -162,8 +162,8 @@ const clamp = (value, [min, max], fallback) => (Number.isFinite(Number(value)) ?
 function footageScene(scene, slide, clip, { template = null, aspect = "4:5", cue = false } = {}) {
   if (scene.module === "photo-scene") return { ...scene, params: { ...scene.params, media: { src: clip.src, sourceStart: clip.start } } };
   if (scene.plate?.kind === "image" && scene.plate.params?.src === clip.src) {
-    const { blur, dim } = scene.plate.params;
-    return { ...scene, plate: { kind: "video", params: { src: clip.src, start: clip.start, ...(blur != null ? { blur } : {}), ...(dim != null ? { dim } : {}) } } };
+    const { blur, dim, gradient } = scene.plate.params;
+    return { ...scene, plate: { kind: "video", params: { src: clip.src, start: clip.start, ...(blur != null ? { blur } : {}), ...(gradient ? { gradient } : dim != null ? { dim } : {}) } } };
   }
   // The template's full-bleed layout: its words wrapped to the photo width, its title, and the cover's swipe cue.
   const { plate: _plate, ...rest } = scene;
