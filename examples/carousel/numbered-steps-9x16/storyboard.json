@@ -44,6 +44,7 @@
       "body": "plus-jakarta-sans",
       "meta": "jetbrains-mono"
     },
+    "name": "Field Notes",
     "palette": "as-given"
   },
   "audio": null,
@@ -57,16 +58,15 @@
       "slide": {
         "role": "cover",
         "medium": "still",
-        "alt": "Write the brief before you build. Four steps, one page. over a photo"
+        "alt": "How to write the brief before you build. over a photo"
       },
       "params": {
         "media": "assets/photos/ridge-dusk.jpg",
         "variant": "top",
         "share": 0.5,
-        "kicker": "Swipe →",
-        "title": "Write the brief before you build",
+        "title": "HOW TO WRITE THE BRIEF BEFORE YOU BUILD",
         "align": "center",
-        "body": "Four steps, one page"
+        "body": "SWIPE FOR THE STEPS"
       }
     },
     {

@@ -40,6 +40,7 @@
       "body": "inter",
       "meta": "jetbrains-mono"
     },
+    "name": "Founder Notes",
     "palette": "as-given"
   },
   "audio": null,
@@ -53,12 +54,13 @@
       "slide": {
         "role": "cover",
         "medium": "still",
-        "alt": "Startups rarely die from competition. They die building the wrong thing."
+        "alt": "Most startups die building the wrong thing, very well."
       },
       "params": {
-        "quote": "Startups rarely die from competition. They die building the wrong thing.",
-        "author": "founder.notes",
-        "variant": "pull"
+        "quote": "Most startups die building the wrong thing, very well.",
+        "author": "Founder Notes",
+        "role": "@founder.notes",
+        "variant": "post"
       }
     }
   ],

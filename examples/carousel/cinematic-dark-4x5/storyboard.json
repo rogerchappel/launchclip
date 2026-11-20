@@ -44,13 +44,14 @@
       "body": "dm-sans",
       "meta": "jetbrains-mono"
     },
+    "name": "Steady Coach",
     "palette": "as-given"
   },
   "audio": null,
   "scenes": [
     {
       "id": "cover",
-      "module": "hook-title",
+      "module": "section-card",
       "plate": {
         "kind": "image",
         "params": {
@@ -65,17 +66,20 @@
       "slide": {
         "role": "cover",
         "medium": "still",
-        "alt": "Train the habit, not the goal. over a photo"
+        "alt": "Train the habit, not the goal. Start small.. over a photo"
       },
       "params": {
-        "headline": "Train the habit, not the goal",
-        "eyebrow": "Swipe →",
-        "variant": "centered"
+        "title": "Train the habit, not the goal",
+        "kicker": "Swipe →",
+        "sub": "Start small.",
+        "footer": "Steady Coach",
+        "page": "01",
+        "variant": "poster"
       }
     },
     {
       "id": "small",
-      "module": "motion-title",
+      "module": "section-card",
       "plate": {
         "kind": "image",
         "params": {
@@ -93,15 +97,16 @@
         "alt": "Make it too small to skip. Ten minutes you keep beat an hour you dread.. over a photo"
       },
       "params": {
-        "text": "Make it too small to skip",
+        "title": "Make it too small to skip",
         "sub": "Ten minutes you keep beat an hour you dread.",
-        "align": "center",
-        "variant": "focus-blur-resolve"
+        "footer": "Steady Coach",
+        "page": "02",
+        "variant": "poster"
       }
     },
     {
       "id": "same",
-      "module": "motion-title",
+      "module": "section-card",
       "plate": {
         "kind": "image",
         "params": {
@@ -119,15 +124,16 @@
         "alt": "Same time, same place. Decide once, then stop deciding.. over a photo"
       },
       "params": {
-        "text": "Same time, same place",
+        "title": "Same time, same place",
         "sub": "Decide once, then stop deciding.",
-        "align": "center",
-        "variant": "focus-blur-resolve"
+        "footer": "Steady Coach",
+        "page": "03",
+        "variant": "poster"
       }
     },
     {
       "id": "miss",
-      "module": "motion-title",
+      "module": "section-card",
       "plate": {
         "kind": "image",
         "params": {
@@ -145,15 +151,16 @@
         "alt": "Never miss twice. One off day is life. Two is a new habit.. over a photo"
       },
       "params": {
-        "text": "Never miss twice",
+        "title": "Never miss twice",
         "sub": "One off day is life. Two is a new habit.",
-        "align": "center",
-        "variant": "focus-blur-resolve"
+        "footer": "Steady Coach",
+        "page": "04",
+        "variant": "poster"
       }
     },
     {
       "id": "cta",
-      "module": "cta",
+      "module": "section-card",
       "plate": {
         "kind": "image",
         "params": {
@@ -171,10 +178,11 @@
         "alt": "Follow for one rule a week. over a photo"
       },
       "params": {
-        "action": "Follow for one rule a week",
-        "emphasis": "Follow",
-        "handle": "steadycoach.test",
-        "variant": "centered"
+        "title": "Follow for one rule a week",
+        "sub": "steadycoach.test",
+        "footer": "Steady Coach",
+        "page": "05",
+        "variant": "poster"
       }
     }
   ],
