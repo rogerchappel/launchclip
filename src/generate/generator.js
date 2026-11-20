@@ -176,8 +176,10 @@ export function createGenerator({ project, image, video = null, budget = null, d
     const provider = providerFor(name);
     const want = name === "image" ? count : 1;
     for (;;) {
-      const attempt = await nextAttempt(project, job.request.id, name);
-      if (attempt == null) { say(`${job.request.id}: ${name} not generated after ${MAX_ATTEMPTS} attempts; the shot needs simplifying`); return null; }
+      // The model this step asks for: switching models gets a fresh attempt cap.
+      const askedModel = (name === "video" && tier === "draft" ? provider.models?.draftVideo : null) ?? provider.models?.[name] ?? null;
+      const attempt = await nextAttempt(project, job.request.id, name, askedModel);
+      if (attempt == null) { say(`${job.request.id}: ${name} not generated after ${MAX_ATTEMPTS} attempts${askedModel ? ` with ${askedModel}` : ""}; the shot needs simplifying, or another model`); return null; }
       const made = [];
       for (let i = 1; i <= want; i += 1) {
         const quote = await provider.quote(brief, name, tier);
@@ -191,7 +193,7 @@ export function createGenerator({ project, image, video = null, budget = null, d
         }
         const concept = name === "image" ? job.concepts?.[i - 1] ?? null : null;
         const asked = concept ? { ...brief, image: { ...brief.image, prompt: `${job.briefFor(concept).image.prompt}${changed ? ` ${changed}` : ""}` } } : brief;
-        const entry = { shot: job.request.id, step: name, tier, attempt, ...(want > 1 ? { candidate: i } : {}), ...(concept ? { concept } : {}), provider: provider.id, brief_hash: job.brief.brief_hash, ...(changed ? { changed } : {}) };
+        const entry = { shot: job.request.id, step: name, tier, attempt, ...(want > 1 ? { candidate: i } : {}), ...(concept ? { concept } : {}), provider: provider.id, ...(askedModel ? { asked_model: askedModel } : {}), brief_hash: job.brief.brief_hash, ...(changed ? { changed } : {}) };
         const started = Date.now();
         let result;
         try {
@@ -350,12 +352,16 @@ export async function createProviders(specs, { env = process.env, fetch, notice,
   };
   const { image, video, draftVideo } = specs;
   const models = (spec, step) => (spec.provider === "cmd" ? { command: spec.model } : { [`${step}Model`]: spec.model ?? undefined });
-  if (!video) return { image: await make(image.provider, models(image, "image")), video: null };
+  // models: what each step asks for, so the ledger caps attempts per model (nextAttempt).
+  const named = (adapter, own) => Object.assign(adapter, { models: { ...adapter.models, ...own } });
+  const asked = (spec) => spec?.model ?? null;
+  if (!video) return { image: named(await make(image.provider, models(image, "image")), { image: asked(image) }), video: null };
+  const videoModels = { video: asked(video), draftVideo: asked(draftVideo) };
   if (video.provider === image.provider && (image.provider !== "cmd" || video.model === image.model)) {
-    const shared = await make(image.provider, { ...models(image, "image"), ...models(video, "video"), ...(draftVideo ? { draftVideoModel: draftVideo.model } : {}) });
+    const shared = named(await make(image.provider, { ...models(image, "image"), ...models(video, "video"), ...(draftVideo ? { draftVideoModel: draftVideo.model } : {}) }), { image: asked(image), ...videoModels });
     return { image: shared, video: shared };
   }
-  return { image: await make(image.provider, models(image, "image")), video: await make(video.provider, { ...models(video, "video"), ...(draftVideo ? { draftVideoModel: draftVideo.model } : {}) }) };
+  return { image: named(await make(image.provider, models(image, "image")), { image: asked(image) }), video: named(await make(video.provider, { ...models(video, "video"), ...(draftVideo ? { draftVideoModel: draftVideo.model } : {}) }), videoModels) };
 }
 
 /**

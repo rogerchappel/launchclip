@@ -100,6 +100,11 @@ test("nextAttempt counts per shot and step and stops after three attempts", () =
   assert.equal(await nextAttempt(project, "s1", "video"), null);
   assert.equal(await nextAttempt(project, "s1", "image"), 1);
   assert.equal(await nextAttempt(project, "s2", "video"), 1);
+  // Per model: m1 is out, m2 gets a fresh cap at the next number; asked_model wins over the model a call reported.
+  assert.equal(await nextAttempt(project, "s1", "video", "m1"), null);
+  assert.equal(await nextAttempt(project, "s1", "video", "m2"), 4);
+  await appendLedger(project, attempt({ attempt: 4, asked_model: "m2", model: "m2-v1.0", verdict: "failed" }));
+  assert.equal(await nextAttempt(project, "s1", "video", "m2"), 5);
 }));
 
 test("ledgerCosts gives cost-tracker line items: usd priced, credits flagged, local free", () => withProject(async (project) => {

@@ -129,6 +129,25 @@ test("a rejected keyframe is retried with one changed line, at most MAX_ATTEMPTS
   assert.deepEqual(submits(later), []);
 });
 
+test("failed attempts cap a shot per model: another video model gets a fresh cap, and every attempt's spend counts", async (t) => {
+  const dir = await project(t);
+  const request = { id: "x2-abc", scene_id: "x2", shows: "steam rising from a cup", type: "video", format: { width: 1080, height: 1350 }, duration: 3 };
+  const make = (video, fail = []) => Object.assign(createFakeProvider({ price: 0.1, fail }), { models: { image: "img", video } });
+  const first = make("model-a", ["video"]);
+  assert.equal(await createGenerator({ project: dir, image: first, video: first, budget: { usd: 5 }, pollMs: NO_POLL }).findShot(request), null);
+  // Out of attempts with model-a, across runs.
+  const again = make("model-a");
+  assert.equal(await createGenerator({ project: dir, image: again, video: again, budget: { usd: 5 }, pollMs: NO_POLL }).findShot(request), null);
+  assert.deepEqual(submits(again).filter((call) => call.endsWith(":video")), []);
+  // model-b starts its own count; attempt numbers keep rising so files never collide.
+  const other = make("model-b");
+  const shot = await createGenerator({ project: dir, image: other, video: other, budget: { usd: 5 }, pollMs: NO_POLL }).findShot(request);
+  assert.equal(shot?.kind, "video");
+  const videos = (await readLedger(dir)).filter((entry) => entry.step === "video");
+  assert.deepEqual(videos.map((entry) => [entry.asked_model, entry.attempt, entry.verdict]), [["model-a", 1, "failed"], ["model-a", 2, "failed"], ["model-a", 3, "failed"], ["model-b", 4, "accepted"]]);
+  assert.equal(Math.round((await ledgerCosts(dir)).by_unit.usd * 100) / 100, 0.5, "the keyframe, three failed clips and the made one");
+});
+
 test("a library is asked first and only its misses are generated", async (t) => {
   const dir = await project(t);
   const fake = createFakeProvider({ price: 0.05 });
