@@ -83,6 +83,9 @@
         "footer": "Steady Coach",
         "page": "01",
         "variant": "poster"
+      },
+      "ambient": {
+        "background": true
       }
     },
     {
@@ -118,6 +121,9 @@
         "footer": "Steady Coach",
         "page": "02",
         "variant": "poster"
+      },
+      "ambient": {
+        "background": true
       }
     },
     {
@@ -153,6 +159,9 @@
         "footer": "Steady Coach",
         "page": "03",
         "variant": "poster"
+      },
+      "ambient": {
+        "background": true
       }
     },
     {
@@ -188,6 +197,9 @@
         "footer": "Steady Coach",
         "page": "04",
         "variant": "poster"
+      },
+      "ambient": {
+        "background": true
       }
     },
     {
@@ -223,6 +235,9 @@
         "footer": "Steady Coach",
         "page": "05",
         "variant": "poster"
+      },
+      "ambient": {
+        "background": true
       }
     }
   ],

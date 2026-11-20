@@ -321,3 +321,17 @@ test("a plan that names its arc in prose keeps the arc it leads with, and a type
   const words = planToStory({ slides: [{ id: "a", role: "cta", headline: "Save this list", body: "Before you record" }] }, { arc: "listicle", goal: "save", destinations: ["instagram"], brand: null, template: "bold-statement" });
   assert.equal(words.scenes[0].slide.alt, "Save this list. Before you record");
 });
+
+test("a slide on a plate keeps its background on under a style pack that turns plates off", async () => {
+  const { scenePlatePlan } = await import("@launchclip/core/plates.mjs");
+  const plan = { slides: [
+    { id: "cover", role: "cover", headline: "Start a project in under a minute", alt: "Over the app", seconds: 3, clip: "assets/clips/app.mp4" },
+    { id: "cta", role: "cta", headline: "Save this setup", alt: "Save prompt", seconds: 3 }
+  ] };
+  const story = planToStory(plan, { arc: "how-to", goal: "save", destinations: ["instagram"], brand: null, template: "cinematic-dark", video: true });
+  const packed = { ...story, ambient: { background: false } };
+  assert.ok(scenePlatePlan(packed, packed.scenes[0]), "the clip's plate draws");
+  assert.equal(packed.scenes[1].ambient, undefined, "a slide with no plate keeps the pack's setting");
+  const lit = planToStory({ slides: [{ id: "a", role: "cover", headline: "Our launch in three numbers", alt: "Headline" }] }, { arc: "data", goal: "save", destinations: ["instagram"], brand: null, template: "lit-window" });
+  assert.equal(lit.scenes[0].ambient?.background, true, "the template's own light is a plate too");
+});

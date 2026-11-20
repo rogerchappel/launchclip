@@ -62,6 +62,9 @@
         "kicker": "Swipe →",
         "title": "Ship releases without the panic",
         "caption": "Every check, one screen"
+      },
+      "ambient": {
+        "background": true
       }
     },
     {
@@ -79,6 +82,9 @@
         "media": "assets/photos/dashboard.jpg",
         "title": "Every check in one view",
         "caption": "Builds, reviews and rollouts, live."
+      },
+      "ambient": {
+        "background": true
       }
     },
     {
@@ -97,6 +103,9 @@
         "label": "less time on release prep",
         "source": "Beta teams, 2026 (illustrative)",
         "variant": "giant"
+      },
+      "ambient": {
+        "background": true
       }
     },
     {
@@ -116,6 +125,9 @@
         "detail": "Free for teams of five",
         "handle": "shipdeck.test",
         "variant": "flush"
+      },
+      "ambient": {
+        "background": true
       }
     }
   ],
