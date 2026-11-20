@@ -88,7 +88,7 @@ export function planInstructions({ arc, goal, destinations, range, modules, phot
 export function planToStory(plan, { arc, goal, destinations, brand, style = null, template = null }) {
   const dest = CAROUSEL_DESTINATIONS[destinations[0]];
   // A generated image lands at assets/generated/<slide id>.png (make.js), so that is the slide's photo.
-  const slides = (Array.isArray(plan?.slides) ? plan.slides : []).map((slide, i) => (typeof slide?.image === "string" && slide.image.trim() && !slide.photo ? { ...slide, photo: `assets/generated/${slide.id || `slide-${i + 1}`}.png` } : slide));
+  const slides = (Array.isArray(plan?.slides) ? plan.slides : []).map(plainText).map((slide, i) => (typeof slide?.image === "string" && slide.image.trim() && !slide.photo ? { ...slide, photo: `assets/generated/${slide.id || `slide-${i + 1}`}.png` } : slide));
   // A slide the plan gives as content (no module) is laid out by the template; a slide with a module stays as written.
   const layout = template ? layoutCarousel(template, slides.map((slide) => (slide && typeof slide === "object" ? slide : {})), { aspect: dest.aspect, brand }) : null;
   const scenes = slides.map((slide, i) => ({
@@ -213,6 +213,19 @@ export async function planCarousel({ client, brief, arc = null, goal = null, des
     input = `Brief: ${brief}\n\nYour last plan:\n${result?.value?.carousel_json ?? result?.text ?? ""}\n\nIt failed these checks. Return the whole corrected plan:\n- ${errors.join("\n- ")}\n`;
   }
   throw new Error(`the carousel could not be planned; the repaired plan still fails:\n- ${attempts.at(-1).errors.slice(0, 12).join("\n- ")}`);
+}
+
+// Slide copy as one plain line: modules refuse control characters and angle brackets, and a line break the model
+// wrote is the layout's to make. A slide given as module + params is left as written.
+const SLIDE_TEXT = ["headline", "body", "eyebrow", "emphasis", "handle", "alt"];
+const plainLine = (value) => (typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f<>]+/g, " ").replace(/\s+/g, " ").trim() : value);
+function plainText(slide) {
+  if (!slide || typeof slide !== "object" || slide.module) return slide;
+  const out = { ...slide };
+  for (const key of SLIDE_TEXT) out[key] = plainLine(out[key]);
+  if (Array.isArray(out.items)) out.items = out.items.map(plainLine);
+  for (const key of ["stat", "quote"]) if (out[key] && typeof out[key] === "object") out[key] = Object.fromEntries(Object.entries(out[key]).map(([k, v]) => [k, plainLine(v)]));
+  return out;
 }
 
 function parsePlan(result) {

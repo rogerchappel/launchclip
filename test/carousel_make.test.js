@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { isEditorialKind } from "@launchclip/core/modules.mjs";
 import { run } from "../src/carousel/make.js";
-import { slideModules, slideRange } from "../src/carousel/plan.js";
+import { planToStory, slideModules, slideRange } from "../src/carousel/plan.js";
 
 const slide = (id, role, module, params, alt = `${id} slide`) => ({ id, role, module, params, alt });
 const listicle = (extra = {}) => ({
@@ -162,4 +162,12 @@ test("a plan of slide content is laid out by a template: --template, or picked f
   const long = fakeModel(listicle({ slides: plain.slides.map((slide) => (slide.id === "one" ? { ...slide, headline: "x".repeat(70) } : slide)) }), plain);
   const { report } = await make("habits", { arc: "listicle", template: "numbered-steps" }, long);
   assert.match(report.plan_attempts[0].errors.join("\n"), /headline is 70 characters; the numbered-steps template's step slide holds 48/);
+});
+
+test("slide copy is one plain line: no line breaks or angle brackets reach a module", () => {
+  const plan = { slides: [{ id: "only", role: "cover", headline: "Open studio\nday", body: "Saturday <10am to 4pm>\n22 Wharf Street", alt: "the date", items: undefined }] };
+  const story = planToStory(plan, { arc: "single", goal: "visit", destinations: ["instagram"], brand: null, template: "plain-note" });
+  const text = JSON.stringify(story.scenes[0].params);
+  assert.ok(!/[<>]|\\n/.test(text), text);
+  assert.match(text, /Open studio day/);
 });
