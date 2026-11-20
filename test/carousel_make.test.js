@@ -124,6 +124,14 @@ test("stages that are not built yet are pending; the plan still succeeds", async
   assert.deepEqual([second.report.stages.render.status, second.report.stages.check.status, second.report.stages.export.status], ["done", "done", "pending"]);
   assert.deepEqual(ran, ["out"]);
   await assert.rejects(make("fast teams", {}, fakeModel(listicle()), { ...stubStages, render: async () => { throw new Error("chromium crashed"); } }), /carousel render failed .*chromium crashed/);
+  // A destination that fails inside render: the stage is partial (or failed when all do), named, and the exit is non-zero.
+  const renderOf = (...statuses) => ({ ...stubStages, render: async () => ({ destinations: statuses.map(([id, status]) => ({ id, status })) }) });
+  try {
+    const partial = await make("fast teams", { dest: "instagram,linkedin" }, fakeModel(listicle()), renderOf(["instagram", "rendered"], ["linkedin", "failed"]));
+    assert.deepEqual([partial.report.stages.render.status, partial.report.stages.render.failed, partial.report.status, process.exitCode], ["partial", ["linkedin"], "stage-failed", 1]);
+    const failed = await make("fast teams", {}, fakeModel(listicle()), renderOf(["instagram", "failed"]));
+    assert.equal(failed.report.stages.render.status, "failed");
+  } finally { process.exitCode = 0; }
 });
 
 test("an optional param a slide's module refuses is taken off without a repair call", async () => {

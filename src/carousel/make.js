@@ -75,7 +75,12 @@ export async function run(brief, flags = {}, io = {}) {
     const runStage = io.stages?.[stage] ?? (await import(`./${stage}.js`)).run;
     try {
       // Each stage prints its own report; under --json only make's goes to stdout.
-      report.stages[stage] = { status: "done", report: await runStage(project, { ...flags, dest: destinations.join(",") }, flags.json ? { ...io, stdout: { write() {} } } : io) ?? null };
+      const result = await runStage(project, { ...flags, dest: destinations.join(",") }, flags.json ? { ...io, stdout: { write() {} } } : io) ?? null;
+      // A stage that runs per destination may fail some of them and carry on with the rest.
+      const all = Array.isArray(result?.destinations) ? result.destinations : [];
+      const failed = all.filter((entry) => entry?.status === "failed").map((entry) => entry.id);
+      report.stages[stage] = { status: !failed.length ? "done" : failed.length === all.length ? "failed" : "partial", ...(failed.length ? { failed, reason: `${failed.join(", ")} failed` } : {}), report: result };
+      if (failed.length) process.exitCode = 1;
     } catch (error) {
       if (/is not built yet/.test(String(error?.message))) { report.stages[stage] = { status: "pending", reason: `launchclip carousel ${stage} is not built yet` }; continue; }
       report.stages[stage] = { status: "failed", error: String(error?.message ?? error) };
@@ -84,7 +89,8 @@ export async function run(brief, flags = {}, io = {}) {
       throw new Error(`carousel ${stage} failed (the plan is written to ${path.join(project, "storyboard.json")}): ${String(error?.message ?? error).split("\n")[0]}`);
     }
   }
-  report.status = Object.values(report.stages).some((entry) => entry.status === "pending") ? "planned" : "done";
+  const stages = Object.values(report.stages);
+  report.status = stages.some((entry) => entry.status === "failed" || entry.status === "partial") ? "stage-failed" : stages.some((entry) => entry.status === "pending") ? "planned" : "done";
   print(io, flags, report);
   return report;
 }
