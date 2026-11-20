@@ -1,7 +1,7 @@
 {
   "schema": "launchclip.story.v1",
   "title": "Oil a deck in one weekend (sample video carousel, 4:5)",
-  "notes": "Sample video carousel (docs/CAROUSELS_RFC.md \u00a75.3): five separate short clips, one per card. The cover is free type over a handed-in clip (a video plate under a reading gradient, solid under the type and clear at the top); the second card is a 2 s drawn beat; the third plays a range of a longer clip (from 3 s) under a photo-scene's lines; the payoff is a drawn headline that plays once and holds its settled last frame; nothing loops. The clips are stand-ins already in the repo (examples/story/deck-materials-9x16).",
+  "notes": "Sample video carousel (docs/CAROUSELS_RFC.md \u00a75.3): five separate short clips, one per card. The cover is free type over a handed-in clip (a video plate under a reading gradient, solid under the type and fading out at the top); the second card is a 2 s drawn beat; the third plays a range of a longer clip (from 3 s) under a photo-scene's lines; the payoff is a drawn headline that plays once and holds its settled last frame; nothing loops. The clips are stand-ins already in the repo (examples/story/deck-materials-9x16).",
   "lane": "motion",
   "format": {
     "kind": "carousel",
@@ -58,8 +58,8 @@
             "color": "ground",
             "direction": "bottom",
             "stops": [
-              0.5,
-              0.92
+              0.72,
+              1
             ],
             "opacity": 0.9
           }
