@@ -48,7 +48,10 @@ export const CAROUSEL_DESTINATION_IDS = Object.freeze(Object.keys(CAROUSEL_DESTI
 // in every grammar). slide.still_at (seconds into the scene) overrides it.
 export const SLIDE_SECONDS = 4;
 export const SETTLE_MARGIN = 0.75;
-export const MOTION_SLIDE_SECONDS = Object.freeze([3, 8]);
+// A motion slide is its own short clip (RFC §5.3): 2 to 10 s, SLIDE_SECONDS
+// (4) unless what happens in it needs other. loop: true makes it a seamless
+// loop; without it the clip plays once and ends on a settled frame.
+export const MOTION_SLIDE_SECONDS = Object.freeze([2, 10]);
 
 const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const nonEmpty = (value) => typeof value === "string" && value.trim().length > 0;
@@ -92,7 +95,6 @@ export function carouselProblems(story) {
     const length = Number(scene.end) - Number(scene.start);
     if (slide.still_at !== undefined && !(typeof slide.still_at === "number" && slide.still_at >= 0 && (!Number.isFinite(length) || slide.still_at < length))) err(`${path}.still_at must be seconds into the slide, before it ends`);
     if (slide.medium === "motion") {
-      if (scene.loop !== true) err(`scenes[${i}] is a motion slide, so it must loop (loop: true)`);
       if (Number.isFinite(length) && (length < MOTION_SLIDE_SECONDS[0] || length > MOTION_SLIDE_SECONDS[1])) err(`scenes[${i}] is a motion slide of ${length} s; motion slides run ${MOTION_SLIDE_SECONDS[0]} to ${MOTION_SLIDE_SECONDS[1]} s`);
     }
     if (scene.in !== undefined && scene.in?.type !== "cut") err(`scenes[${i}].in must be {type: "cut"} or left out: each slide is shown on its own`);
