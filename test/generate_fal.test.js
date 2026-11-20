@@ -202,3 +202,9 @@ test('image step: a model that takes only aspect_ratio gets the brief\'s ratio, 
   assert.equal(submit.body.aspect_ratio, '16:9');
   assert.equal(submit.body.image_size, undefined);
 });
+
+test('video step: a ratio the model does not offer asks for the nearest one, never "auto"', async () => {
+  const mock = mockFal({ license: 'commercial' });
+  await provider(mock).submit({ ...BRIEF, image: { ...BRIEF.image, width: 1080, height: 1350 } }, 'video', 'final', { startFrame: PNG });
+  assert.equal(mock.requests.find((r) => r.method === 'POST').body.aspect_ratio, '9:16');
+});

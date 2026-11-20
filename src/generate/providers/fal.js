@@ -166,8 +166,12 @@ async function imageInput(image, props) {
 async function videoInput(brief, startFrame, duration, props) {
   if (!startFrame) throw new Error(`fal: the video step for ${brief.id} needs a startFrame (the approved keyframe)`);
   const input = { prompt: brief.video.prompt, image_url: await dataUri(startFrame), duration };
+  // The brief's ratio, else the nearest the model offers: "auto" from a 4:5 frame can resolve to a size a model refuses
+  // (fal-ai/wan/v2.2-5b, 2026-11), and the card covers and crops the clip anyway.
   const ratio = aspect(brief.image.width, brief.image.height);
-  if (props?.aspect_ratio?.enum?.includes(ratio)) input.aspect_ratio = ratio;
+  const offered = (props?.aspect_ratio?.enum ?? []).filter((value) => /^\d+:\d+$/.test(value));
+  const off = (value) => { const [w, h] = value.split(':').map(Number); return Math.abs(Math.log(w / h) - Math.log(brief.image.width / brief.image.height)); };
+  if (offered.length) input.aspect_ratio = offered.includes(ratio) ? ratio : offered.reduce((best, value) => (off(value) < off(best) ? value : best));
   if (brief.image.negative && props?.negative_prompt) input.negative_prompt = brief.image.negative;
   return input;
 }
