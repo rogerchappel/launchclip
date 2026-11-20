@@ -55,7 +55,15 @@
         "kind": "image",
         "params": {
           "src": "assets/photos/ridge-sun.jpg",
-          "dim": 0.6,
+          "gradient": {
+            "color": "ground",
+            "direction": "bottom",
+            "stops": [
+              0.6,
+              1
+            ],
+            "opacity": 0.88
+          },
           "blur": 0
         }
       },
@@ -83,7 +91,15 @@
         "kind": "image",
         "params": {
           "src": "assets/photos/ridge.jpg",
-          "dim": 0.6,
+          "gradient": {
+            "color": "ground",
+            "direction": "bottom",
+            "stops": [
+              0.6,
+              1
+            ],
+            "opacity": 0.88
+          },
           "blur": 0
         }
       },
@@ -110,7 +126,15 @@
         "kind": "image",
         "params": {
           "src": "assets/photos/ridge-dusk.jpg",
-          "dim": 0.6,
+          "gradient": {
+            "color": "ground",
+            "direction": "bottom",
+            "stops": [
+              0.6,
+              1
+            ],
+            "opacity": 0.88
+          },
           "blur": 0
         }
       },
@@ -137,7 +161,15 @@
         "kind": "image",
         "params": {
           "src": "assets/photos/ridge-sun.jpg",
-          "dim": 0.6,
+          "gradient": {
+            "color": "ground",
+            "direction": "bottom",
+            "stops": [
+              0.6,
+              1
+            ],
+            "opacity": 0.88
+          },
           "blur": 0
         }
       },
@@ -164,7 +196,15 @@
         "kind": "image",
         "params": {
           "src": "assets/photos/ridge.jpg",
-          "dim": 0.6,
+          "gradient": {
+            "color": "ground",
+            "direction": "bottom",
+            "stops": [
+              0.6,
+              1
+            ],
+            "opacity": 0.88
+          },
           "blur": 0
         }
       },
