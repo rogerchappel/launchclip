@@ -118,7 +118,10 @@ test("layout: grounds turn the brand over with readable type; photo surfaces and
   assert.deepEqual(numbered.scenes.map((scene) => scene.module), ["split-screen", "section-card", "section-card", "cta"]);
   assert.deepEqual(numbered.scenes.slice(1, 3).map((scene) => scene.params.number), [1, 2], "steps are numbered in slide order");
   assert.equal(numbered.scenes[0].params.body, "SWIPE FOR THE STEPS", "the cover asks for the swipe under its headline");
+  // Without a photo the cover is not the panel that draws the swipe line, so it takes the arrow label.
+  assert.equal(layoutCarousel("numbered-steps", [{ ...slides[0], photo: undefined }, ...slides.slice(1)], { brand }).scenes[0].params.eyebrow, "Swipe →");
   const note = layoutCarousel("plain-note", slides, { brand });
+  assert.match(note.scenes[0].params.quote, / →$/, "a note cover asks for the swipe at the end of its observation");
   assert.ok(note.scenes.slice(0, 3).every((scene) => JSON.stringify(scene.params).includes("me.test")), "the identity line on every slide");
   for (const [id, ground] of [["paper-story", "light"], ["plain-note", "light"], ["bold-statement", "brand"], ["plain-note-dark", "dark"]]) {
     const { colors } = layoutCarousel(id, slides, { brand }).story.brand;

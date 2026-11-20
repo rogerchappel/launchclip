@@ -114,7 +114,7 @@ export const CAROUSEL_TEMPLATES = Object.freeze({
     describe: "A white page: the brand's name and handle, then one short observation in plain sentence-case type, like a text post.",
     best_for: ["observation", "observations", "founder", "notes", "thought", "leadership", "opinion", "lessons", "learned", "thread"],
     avoid_when: ["statistics", "data", "columns", "checklist", "photo"],
-    arcs: ["quote", "single", "story", "listicle"], images: "optional", ground: "light", pure: true, background: "flat",
+    arcs: ["quote", "single", "story", "listicle"], images: "none", ground: "light", pure: true, background: "flat",
     grammar: { cover: "text-card", body: "text-card", payoff: "text-card", cta: "text-card" },
     surface: { cover: "light", body: "light", payoff: "light", cta: "light" },
     caps: { headline: 90, body: 48 },
@@ -124,7 +124,7 @@ export const CAROUSEL_TEMPLATES = Object.freeze({
     describe: "A near-black page with an identity line and one observation in plain sentence-case type.",
     best_for: ["observation", "observations", "founder", "reminder", "reminders", "contrast", "opinion", "hot", "take", "thread"],
     avoid_when: ["statistics", "data", "columns", "checklist", "photo"],
-    arcs: ["quote", "single", "story", "listicle"], images: "optional", ground: "dark", pure: true, background: "flat",
+    arcs: ["quote", "single", "story", "listicle"], images: "none", ground: "dark", pure: true, background: "flat",
     grammar: { cover: "text-card", body: "text-card", payoff: "text-card", cta: "text-card" },
     surface: { cover: "dark", body: "dark", payoff: "dark", cta: "dark" },
     caps: { headline: 90, body: 48 },
@@ -314,7 +314,8 @@ export function templateScores({ brief = "", arc = null, images = false } = {}) 
     if (arc && t.arcs.includes(arc)) score += 4;
     if (t.images === "needed") score += images ? 2 : -6;
     if (t.images === "wanted") score += images ? 1 : -2;
-    if (t.images === "none" && images) score -= 1;
+    // Photos handed in and a template that never draws them: the user's photos would be dropped.
+    if (t.images === "none" && images) score -= 4;
     return { id, score };
   });
 }
@@ -399,7 +400,8 @@ export function drawSlide(slide, grammar, template, { aspect = "4:5", cue = fals
   const label = words(slide.eyebrow) || byline || "";
   const asks = cue && !/\bswipe\b|→/i.test(`${headline} ${body} ${label}`);
   // A template with a swipe line asks under the headline instead of over it.
-  const swipe = asks && type.swipe ? type.swipe.toUpperCase() : null;
+  // Only the photo panel draws that line; any other cover takes the arrow label.
+  const swipe = asks && type.swipe && grammar === "image-panel" ? type.swipe.toUpperCase() : null;
   const eyebrow = asks && !swipe ? (label ? `${cut(label, 28)} →` : "Swipe →") : label || undefined;
   if (grammar === "full-bleed") {
     const width = aspect === "1:1" ? 24 : 22;
@@ -439,7 +441,8 @@ export function drawSlide(slide, grammar, template, { aspect = "4:5", cue = fals
   // A feed poster: every type slide of the template, the call to action included.
   if (type.poster && !slide.quote) return { module: "section-card", params: drop({ title: cut(headline, 48), kicker: eyebrow, sub: (body || (slide.role === "cta" ? words(slide.handle) : "")) ? cut(body || words(slide.handle), 90) : undefined, footer: name ? cut(name, 32) : undefined, page: page ?? undefined, variant: "poster" }) };
   // A note: the account's own words under its name and handle, as a text post (the call to action too).
-  if (type.note && (name || byline) && !slide.quote) return { module: "quote-card", params: drop({ quote: headline, author: cut(name || byline, 40), role: byline && name ? byline : undefined, variant: type.quote }) };
+  // quote-card has no label, so a note cover asks for the swipe at the end of its observation, as text posts do.
+  if (type.note && (name || byline) && !slide.quote) return { module: "quote-card", params: drop({ quote: asks ? `${headline} →` : headline, author: cut(name || byline, 40), role: byline && name ? byline : undefined, variant: type.quote }) };
   if (slide.role === "cta") return { module: "cta", params: drop({ action: cut(headline, 40), emphasis, detail: body || undefined, handle: words(slide.handle) || undefined, variant: type.cta }) };
   if (slide.quote) return { module: "quote-card", params: drop({ quote: words(slide.quote.text), author: words(slide.quote.author), role: words(slide.quote.role) || undefined, highlight: emphasisOf(slide, words(slide.quote.text)), variant: type.quote }) };
   if (body || type.case === "sentence") {
