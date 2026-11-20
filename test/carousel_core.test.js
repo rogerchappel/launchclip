@@ -40,20 +40,23 @@ test("arc rules: slide count and payoff", () => {
   assert.equal(CAROUSEL_ARCS.ad.slides[1], 5);
 });
 
-test("slide fields: role, medium, motion slides loop within 3-8 s, cuts only", () => {
+test("slide fields: role, medium, motion slides of 2-10 s that may loop, cuts only", () => {
   const story = sample();
   story.scenes[1].slide.medium = "motion";
   story.scenes[1].in = { type: "fade", dur: 0.4 };
   story.scenes[2].slide.extra = 1;
   delete story.scenes[4].slide;
   const errors = carouselProblems(story);
-  assert.ok(errors.some((e) => e.includes("must loop")));
+  assert.ok(!errors.some((e) => e.includes("scenes[1] is a motion slide")), "a 4 s motion slide without loop is fine");
   assert.ok(errors.some((e) => e.includes("scenes[1].in must be")));
   assert.ok(errors.some((e) => e.includes("slide.extra is not a slide field")));
   assert.ok(errors.some((e) => e.includes("scenes[4].slide must be")));
-  story.scenes[1].loop = true;
-  story.scenes[1].end = 14;
-  assert.ok(carouselProblems(story).some((e) => e.includes("motion slides run 3 to 8 s")));
+  story.scenes[1].end = story.scenes[1].start + 10;
+  assert.ok(!carouselProblems(story).some((e) => e.includes("motion slides run")));
+  story.scenes[1].end = story.scenes[1].start + 10.5;
+  assert.ok(carouselProblems(story).some((e) => e.includes("motion slides run 2 to 10 s")));
+  story.scenes[1].end = story.scenes[1].start + 1.5;
+  assert.ok(carouselProblems(story).some((e) => e.includes("motion slides run 2 to 10 s")));
 });
 
 test("carousel block: arc, goal, caption, destinations", () => {

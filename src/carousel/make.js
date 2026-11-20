@@ -1,10 +1,10 @@
 // launchclip carousel make "<brief>" (docs/CAROUSELS_RFC.md §11): plan the
 // carousel (src/carousel/plan.js), place the user's photos or generate slide
-// images, write the project, then run the render, check and export stages.
+// images (or, for a video carousel, footage clips), write the project, then run the render, check and export stages.
 //
 //   [--arc <id>|auto] [--dest instagram,linkedin,…] [--slides <n>]
-//   [--goal save|comment|follow|visit|install] [--images <dir>]
-//   [--generate <provider>[:<model>]] [--variants <n>] [--out <dir>] [--json]
+//   [--goal save|comment|follow|visit|install] [--images <dir>] [--clips <dir>]
+//   [--video] [--generate <provider>[:<model>]] [--variants <n>] [--out <dir>] [--json]
 //   plus make's --model, --style, --seed, --keyframe-candidates, --budget,
 //   --budget-daily, --max-generations.
 //
@@ -19,8 +19,11 @@ import { styleBrand } from "../storyboard_planner.js";
 import { resolveStyleV2 } from "../style_store.js";
 import { generateProjectStyle, promptConstraints, promptTone } from "../style_seed_store.js";
 import { planCarousel } from "./plan.js";
+import { slideFootage } from "./render.js";
+import { probeMedia } from "../media_trim.js";
 
 const PHOTO = /\.(jpe?g|png|webp)$/i;
+const CLIP = /\.(mp4|webm|mov|m4v)$/i;
 const STAGES = ["render", "check", "export"];
 
 export async function run(brief, flags = {}, io = {}) {
@@ -38,17 +41,24 @@ export async function run(brief, flags = {}, io = {}) {
 
   const model = io.client ?? (() => { const { spec } = selectMakeModel(flags.model, env); return createMakeClient(spec); })();
   const style = await projectStyle(project, brief, flags);
-  const photos = flags.images ? await copyPhotos(path.resolve(cwd, String(flags.images)), project) : [];
+  const photos = flags.images ? await copyMedia(path.resolve(cwd, String(flags.images)), project, PHOTO, "photos") : [];
   if (flags.images && !photos.length) throw new Error(`--images ${flags.images} has no .jpg, .png or .webp files`);
+  // --clips: the user's footage, each with its length so the plan keeps every card inside its clip.
+  const clips = flags.clips ? await Promise.all((await copyMedia(path.resolve(cwd, String(flags.clips)), project, CLIP, "clips")).map(async (src) => ({ src, seconds: Math.floor(Number((await (io.probe ?? probeMedia)(path.join(project, src))).format?.duration) * 100) / 100 }))) : [];
+  if (flags.clips && !clips.length) throw new Error(`--clips ${flags.clips} has no .mp4, .webm, .mov or .m4v files`);
+  // A video carousel (RFC §5.3): --video, or footage handed in.
+  const video = Boolean(flags.video) || clips.length > 0;
   say(`carousel: planning with ${model.provider} ${model.model} (PAID unless local)`);
-  const planned = await planCarousel({ client: model.client, brief, arc, goal: flags.goal ?? null, destinations, slides, photos, generate: Boolean(flags.generate), brand: styleBrand(style.pack), style: style.name, template: flags.template == null || flags.template === true || flags.template === "auto" ? null : String(flags.template), say });
+  const planned = await planCarousel({ client: model.client, brief, arc, goal: flags.goal ?? null, destinations, slides, photos, clips, video, generate: Boolean(flags.generate), brand: styleBrand(style.pack), style: style.name, template: flags.template == null || flags.template === true || flags.template === "auto" ? null : String(flags.template), say });
   const { story } = planned;
-  const report = { project, storyboard: "storyboard.json", arc: story.carousel.arc, goal: story.carousel.goal, destinations, slides: story.scenes.length, model: `${model.provider}:${model.model}`, style: style.name, plan_attempts: planned.attempts.map(({ ok, errors }) => ({ ok, errors })), images: null, variants: null, stages: {}, warnings: [...planned.warnings] };
+  const report = { project, storyboard: "storyboard.json", video, arc: story.carousel.arc, goal: story.carousel.goal, destinations, slides: story.scenes.length, model: `${model.provider}:${model.model}`, style: style.name, plan_attempts: planned.attempts.map(({ ok, errors }) => ({ ok, errors })), images: null, variants: null, stages: {}, warnings: [...planned.warnings] };
   if (destinations.some((id) => id !== destinations[0] && CAROUSEL_DESTINATIONS[id].aspect !== CAROUSEL_DESTINATIONS[destinations[0]].aspect)) report.warnings.push(`the slides are laid out for ${destinations[0]}; destinations at another aspect are reframed by render`);
 
-  if (flags.generate) report.images = await generateImages({ project, brief, story, plan: planned.plan, flags, variants, env, io, model, say });
+  if (flags.generate) report.images = await generateImages({ project, brief, story, plan: planned.plan, flags, variants, env, io, model, say, video });
   else if (variants > 1) report.warnings.push("--variants makes cover variants from generated images; add --generate <provider>");
   if (report.images?.variants) report.variants = report.images.variants;
+  // Which cards play footage and which are drawn, and how long each runs.
+  if (video) report.cards = story.scenes.map((scene) => ({ id: scene.id, seconds: scene.end - scene.start, kind: slideFootage(scene) ? "footage" : "drawn", ...(slideFootage(scene) ? { source: slideFootage(scene).src } : {}), loop: scene.loop === true }));
   await writeFile(path.join(project, "storyboard.json"), `${JSON.stringify(story, null, 2)}\n`);
   say(`carousel: ${story.scenes.length}-slide ${story.carousel.arc} plan written to ${path.join(project, "storyboard.json")}`);
 
@@ -88,33 +98,43 @@ async function projectStyle(project, brief, flags) {
   return { name: made.name, pack: made.pack };
 }
 
-async function copyPhotos(dir, project) {
-  const files = (await readdir(dir)).filter((name) => PHOTO.test(name)).sort();
-  await mkdir(path.join(project, "assets", "photos"), { recursive: true });
-  for (const name of files) await copyFile(path.join(dir, name), path.join(project, "assets", "photos", name));
-  return files.map((name) => `assets/photos/${name}`);
+async function copyMedia(dir, project, kind, folder) {
+  const files = (await readdir(dir)).filter((name) => kind.test(name)).sort();
+  await mkdir(path.join(project, "assets", folder), { recursive: true });
+  for (const name of files) await copyFile(path.join(dir, name), path.join(project, "assets", folder, name));
+  return files.map((name) => `assets/${folder}/${name}`);
 }
 
 /**
  * --generate: each slide the plan gave an `image` is a shot request that stops
  * at the keyframe (RFC §10), through make's generator, so the quote, budget,
  * keyframe candidates and audience-led concepts all apply. The cover's
- * candidates are the --variants covers (RFC §9.3).
+ * candidates are the --variants covers (RFC §9.3). In a video carousel the
+ * request goes on past the checked keyframe to a clip of the card's length
+ * (RFC §5.3), which lands at assets/generated/<slide>.mp4.
  */
-async function generateImages({ project, brief, story, plan, flags, variants, env, io, model, say }) {
+async function generateImages({ project, brief, story, plan, flags, variants, env, io, model, say, video = false }) {
   const wanted = (plan.slides ?? []).map((slide, i) => ({ slide, scene: story.scenes[i] })).filter(({ slide }) => typeof slide?.image === "string" && slide.image.trim());
   if (!wanted.length) return { made: [], missing: [], note: "the plan asked for no generated images" };
-  const ctxFor = (candidates) => ({ project, env, say, text: brief, format: story.format, model, adapters: { ask: io.ask }, options: { generate: flags.generate, keyframeCandidates: candidates, budget: flags.budget, budgetDaily: flags["budget-daily"], maxGenerations: flags["max-generations"] } });
-  const request = ({ slide, scene }) => ({ id: scene.id, type: "image", still: true, keyframeOnly: true, shows: slide.image.trim(), format: { width: story.format.width, height: story.format.height }, duration: 4 });
+  const ctxFor = (candidates) => ({ project, env, say, text: brief, format: story.format, model, adapters: { ask: io.ask }, options: { generate: flags.generate, generateImage: flags["generate-image"], generateVideo: flags["generate-video"], generateDraftVideo: flags["generate-draft-video"], keyframeCandidates: candidates, budget: flags.budget, budgetDaily: flags["budget-daily"], maxGenerations: flags["max-generations"] } });
+  const request = ({ slide, scene }) => (video
+    ? { id: scene.id, type: "video", shows: slide.image.trim(), format: { width: story.format.width, height: story.format.height }, duration: scene.end - scene.start }
+    : { id: scene.id, type: "image", still: true, keyframeOnly: true, shows: slide.image.trim(), format: { width: story.format.width, height: story.format.height }, duration: 4 });
   const made = [];
   const missing = [];
   let coverVariants = null;
   const place = async (entry, shot) => {
-    if (!shot?.file) { missing.push(entry.scene.id); return; }
-    const target = path.join(project, "assets", "generated", `${entry.scene.id}.png`);
+    if (!shot?.file || (video && shot.kind !== "video")) { missing.push(entry.scene.id); return; }
+    const target = path.join(project, "assets", "generated", `${entry.scene.id}.${video ? "mp4" : "png"}`);
     await mkdir(path.dirname(target), { recursive: true });
     await copyFile(shot.file, target);
     made.push({ slide: entry.scene.id, file: path.relative(project, target), source: shot.source ?? null });
+    // A generated clip is padded at both ends; the card starts past the padding.
+    if (video && shot.sourceStart) {
+      const { scene } = entry;
+      if (scene.plate?.kind === "video") scene.plate.params.start = shot.sourceStart;
+      else if (scene.params?.media && typeof scene.params.media === "object") scene.params.media.sourceStart = shot.sourceStart;
+    }
   };
   const cover = variants > 1 ? wanted.find((entry) => entry.scene.slide.role === "cover") : null;
   if (cover) {
@@ -128,7 +148,7 @@ async function generateImages({ project, brief, story, plan, flags, variants, en
     const generator = await makeGenerator(ctxFor(flags["keyframe-candidates"]), { brand: story.brand });
     try { for (const [entry, shot] of rest.map((entry) => [entry, generator.findShot(request(entry))])) await place(entry, await shot); } finally { await generator.close(); }
   }
-  if (missing.length) say(`generate: no image for ${missing.join(", ")}; those slides render once assets/generated/<slide>.png exists`);
+  if (missing.length) say(`generate: no ${video ? "clip" : "image"} for ${missing.join(", ")}; those slides render once assets/generated/<slide>.${video ? "mp4" : "png"} exists`);
   return { made, missing, ...(coverVariants ? { variants: coverVariants } : {}) };
 }
 

@@ -1,0 +1,157 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Oil a deck in one weekend (sample video carousel, 4:5)",
+  "notes": "Sample video carousel (docs/CAROUSELS_RFC.md \u00a75.3): five separate short clips, one per card. The cover is free type over a handed-in clip (a video plate); the second card is a 2 s drawn beat; the third plays a range of a longer clip (from 3 s) under a photo-scene's lines; the payoff is a drawn headline that plays once and holds its settled last frame; nothing loops. The clips are stand-ins already in the repo (examples/story/deck-materials-9x16).",
+  "lane": "motion",
+  "format": {
+    "kind": "carousel",
+    "width": 1080,
+    "height": 1350,
+    "fps": 30,
+    "duration": 18,
+    "platform": "instagram"
+  },
+  "carousel": {
+    "arc": "how-to",
+    "goal": "save",
+    "destinations": [
+      "instagram",
+      "meta-ads",
+      "tiktok"
+    ],
+    "caption": {
+      "hook": "One weekend, one coat, a deck that lasts.",
+      "body": "The order matters more than the brand of oil.",
+      "cta": "Save this for deck day.",
+      "tags": [
+        "deck",
+        "diy",
+        "timber"
+      ]
+    }
+  },
+  "brand": {
+    "colors": {
+      "bg": "#10140f",
+      "primary": "#e0a33a",
+      "accent": "#8fd3c8",
+      "ink": "#10140f",
+      "paper": "#f4efe6"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "audio": null,
+  "scenes": [
+    {
+      "id": "cover",
+      "module": "hook-title",
+      "plate": {
+        "kind": "video",
+        "params": {
+          "src": "assets/clips/deck.mp4",
+          "start": 1
+        }
+      },
+      "start": 0,
+      "end": 4,
+      "energy": 2,
+      "slide": {
+        "role": "cover",
+        "medium": "motion",
+        "alt": "Headline over timber boards: oil a deck in one weekend"
+      },
+      "params": {
+        "eyebrow": "Deck day",
+        "headline": "Oil a deck in one weekend",
+        "emphasis": "one weekend",
+        "kicker": "Swipe"
+      }
+    },
+    {
+      "id": "dry",
+      "module": "hook-title",
+      "start": 4,
+      "end": 6,
+      "energy": 2,
+      "slide": {
+        "role": "body",
+        "medium": "motion",
+        "alt": "Step one: start on dry wood"
+      },
+      "params": {
+        "eyebrow": "Step 1",
+        "headline": "Start on dry wood",
+        "emphasis": "dry"
+      }
+    },
+    {
+      "id": "thin",
+      "module": "photo-scene",
+      "start": 6,
+      "end": 10,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "motion",
+        "alt": "Oiled boards with the line: two thin coats beat one thick one"
+      },
+      "params": {
+        "media": {
+          "src": "assets/clips/oil.mp4",
+          "sourceStart": 3
+        },
+        "lines": [
+          {
+            "text": "Two thin coats"
+          },
+          {
+            "text": "beat one thick one",
+            "emphasis": true
+          }
+        ],
+        "align": "center",
+        "scrim": "full",
+        "move": "push-in",
+        "zoom": 0.04,
+        "title": "Oiled timber boards"
+      }
+    },
+    {
+      "id": "summary",
+      "module": "hook-title",
+      "start": 10,
+      "end": 15,
+      "energy": 1,
+      "slide": {
+        "role": "payoff",
+        "medium": "motion",
+        "alt": "Save this: dry wood, thin coats, a day to cure"
+      },
+      "params": {
+        "eyebrow": "Save this",
+        "headline": "Dry wood, thin coats, a day to cure",
+        "emphasis": "a day to cure"
+      }
+    },
+    {
+      "id": "cta",
+      "module": "cta",
+      "start": 15,
+      "end": 18,
+      "energy": 2,
+      "slide": {
+        "role": "cta",
+        "medium": "motion",
+        "alt": "Save it, then book a dry weekend"
+      },
+      "params": {
+        "action": "Save it, then book a dry weekend",
+        "emphasis": "Save"
+      }
+    }
+  ]
+}

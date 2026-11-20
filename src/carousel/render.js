@@ -15,9 +15,11 @@ import { hyperframesInvocation } from "../toolchain.js";
 import { hyperframesEnv } from "../renderers/hyperframes_env.js";
 import { encodeRemotionDelivery, remotionBrowserExecutable, renderRemotionSegments, renderRemotionStills } from "../renderers/remotion_segments.js";
 import { snapshotTime } from "../scripts/build-evidence.mjs";
+import { probeMedia } from "../media_trim.js";
 
 const RENDERERS = new Set(["remotion", "hyperframes"]);
 const SLIDE_FILE = /^\d{2,3}\.(png|jpg|mp4)$/;
+const VIDEO = /\.(mp4|webm|mov|m4v)$/i;
 
 export async function run(target, flags = {}, io = {}) {
   const report = await renderCarousel(target, flags, io.adapters);
@@ -43,6 +45,8 @@ export async function renderCarousel(target, flags = {}, adapters = {}) {
   const resolved = await runStoryCommand("resolve", storyFile, {});
   const story = resolved.story_resolved;
   if (!isCarousel(story)) throw new Error(`${storyFile} is not a carousel (format.kind "carousel"); render a video with launchclip finish`);
+  // A footage card plays its source from a start; a source that ends first would leave the card's tail empty.
+  const footage = await footageProblems(story, project, adapters.probe);
   const ids = flags.dest && flags.dest !== true ? String(flags.dest).split(",").map((id) => id.trim()).filter(Boolean) : story.carousel?.destinations ?? ["instagram"];
 
   const destinations = [];
@@ -52,7 +56,7 @@ export async function renderCarousel(target, flags = {}, adapters = {}) {
     try {
       const framed = reframe(story, id);
       entry.reframed = framed.reframed;
-      entry.errors.push(...framed.errors);
+      entry.errors.push(...framed.errors, ...footage);
       if (!entry.errors.length) {
         const problems = destinationProblems(framed.story, id);
         entry.errors.push(...problems.errors);
@@ -69,6 +73,33 @@ export async function renderCarousel(target, flags = {}, adapters = {}) {
   return { stage: "carousel", action: "render", renderer, project, story: storyFile, destinations };
 }
 
+/**
+ * A motion slide's footage, when it has one: a video plate under its type
+ * ({src, start}) or a footage module's video (params.media, from sourceStart).
+ * → {src, start} | null
+ */
+export function slideFootage(scene) {
+  const plate = scene?.plate;
+  if (plate?.kind === "video" && typeof plate.params?.src === "string") return { src: plate.params.src, start: Number(plate.params.start ?? 0) || 0 };
+  const media = scene?.params?.media;
+  const src = typeof media === "string" ? media : media?.src;
+  return typeof src === "string" && VIDEO.test(src) ? { src, start: Number(media?.sourceStart ?? 0) || 0 } : null;
+}
+
+/** "slide <id>: …" for each motion slide whose footage is missing or ends before the card does. probe (tests): file → ffprobe JSON. */
+export async function footageProblems(story, project, probe = probeMedia) {
+  const problems = [];
+  for (const scene of story.scenes.filter((entry) => entry.slide?.medium === "motion")) {
+    const footage = slideFootage(scene);
+    if (!footage) continue;
+    const length = scene.end - scene.start;
+    let duration;
+    try { duration = Number((await probe(path.join(project, footage.src))).format?.duration); } catch { problems.push(`slide ${scene.id}: cannot read its footage ${footage.src}`); continue; }
+    if (Number.isFinite(duration) && footage.start + length > duration + 1 / 30) problems.push(`slide ${scene.id}: its footage ${footage.src} runs ${duration.toFixed(2)} s, so from ${footage.start} s it cannot fill the ${length} s card; start earlier or shorten the card`);
+  }
+  return problems;
+}
+
 /** The story laid out on a destination's canvas, re-validated there: {story, reframed, errors}. */
 export function reframe(story, id) {
   const dest = CAROUSEL_DESTINATIONS[id];
@@ -81,11 +112,12 @@ export function reframe(story, id) {
 }
 
 /**
- * A motion slide as a video story of its own: its scene alone, from 0,
- * looping onto itself (ending.loop_to). Layers on story time (the ambient
- * blobs, a background's drift) then fit whole cycles into the clip, so its
- * last frame leads into its first (kit/core/story-loop.mjs); in the full
- * story they drift on across the cut. Its clip is the whole story.
+ * A motion slide as a video story of its own: its scene alone, from 0. With
+ * loop: true it loops onto itself (ending.loop_to): layers on story time (the
+ * ambient blobs, a background's drift) then fit whole cycles into the clip, so
+ * its last frame leads into its first (kit/core/story-loop.mjs). Without it
+ * the clip plays once and holds (ending.final "hold": the exit falls past the
+ * last frame, so that frame is settled). Its clip is the whole story.
  */
 export function motionStory(story, id) {
   const scene = story.scenes.find((entry) => entry.id === id);
@@ -97,14 +129,14 @@ export function motionStory(story, id) {
   // slide fields: one scene is not a carousel, and nothing renders them.
   const scenes = story.scenes.filter((entry) => entry.start >= scene.start && entry.end <= scene.end).map(({ slide: _slide, ...entry }) => ({ ...entry, start: entry.start - scene.start, end: entry.end - scene.start }));
   // A typed in: a plate at frame 0 with none enters fully visible (kit/core/modules.mjs
-  // openingSettled), and the loop's exit fades out, so the seam would blink.
+  // openingSettled), skipping its entrance, and a loop's seam would blink.
   scenes[scenes.findIndex((entry) => entry.id === id)].in = scene.in ?? { type: "cut", dur: Math.round(1e4 / fps) / 1e4 };
   return {
     ...rest,
     format: { ...format, duration: length },
     ...(story.resolved ? { resolved: { ...story.resolved, duration: length, frames: Math.round(length * fps) } } : {}),
     scenes,
-    ending: { loop_to: id }
+    ending: scene.loop === true ? { loop_to: id } : { final: "hold" }
   };
 }
 

@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import sharp from "sharp";
 import { remotionBundleDir } from "../src/renderers/remotion_segments.js";
-import { motionStory, reframe, renderCarousel } from "../src/carousel/render.js";
+import { footageProblems, motionStory, reframe, renderCarousel, slideFootage } from "../src/carousel/render.js";
 import { runStoryCommand, validateStory } from "../src/story_cli.js";
 import { choreographyGate } from "../src/movement_guardrails.js";
 import { slideStills } from "@launchclip/core/carousel.mjs";
@@ -150,6 +150,28 @@ test("motionStory: the slide alone as a valid video story that loops onto itself
     // Without the typed in, a plate at frame 0 enters fully visible and the loop blinks.
     assert.deepEqual(choreographyGate(solo).findings, [], id);
   }
+});
+
+test("motionStory: a card without loop plays once and holds a settled last frame", async () => {
+  const story = (await runStoryCommand("resolve", path.resolve("examples/carousel/motion-ad-1x1/storyboard.json"), {})).story_resolved;
+  delete story.scenes.find((scene) => scene.id === "product").loop;
+  const solo = motionStory(story, "product");
+  assert.deepEqual(validateStory(solo).errors, []);
+  assert.deepEqual(solo.ending, { final: "hold" });
+  assert.equal(solo.scenes[0].in.type, "cut", "still typed, so its entrance plays from frame 0");
+});
+
+test("footage cards: the video under the type, and a source too short for the card is refused", async () => {
+  const card = (extra) => ({ id: "shot", module: "motion-title", start: 4, end: 9, slide: { role: "body", medium: "motion", alt: "a shot" }, ...extra });
+  assert.deepEqual(slideFootage(card({ plate: { kind: "video", params: { src: "assets/clips/a.mp4", start: 2 } } })), { src: "assets/clips/a.mp4", start: 2 });
+  assert.deepEqual(slideFootage(card({ module: "clip", params: { media: { src: "assets/rec.mov", sourceStart: 30 } } })), { src: "assets/rec.mov", start: 30 });
+  assert.equal(slideFootage(card({ plate: { kind: "image", params: { src: "assets/a.jpg" } } })), null);
+  const probe = async (file) => ({ format: { duration: file.endsWith("short.mp4") ? "6" : "8" } });
+  const story = { scenes: [card({ plate: { kind: "video", params: { src: "assets/ok.mp4", start: 3 } } }), card({ id: "late", plate: { kind: "video", params: { src: "assets/short.mp4", start: 2 } } }), card({ id: "still", slide: { medium: "still" }, plate: { kind: "video", params: { src: "assets/short.mp4", start: 5 } } })] };
+  const problems = await footageProblems(story, "/p", probe);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /slide late: .* runs 6\.00 s, so from 2 s it cannot fill the 5 s card/);
+  assert.match((await footageProblems({ scenes: [story.scenes[0]] }, "/p", async () => { throw new Error("nope"); }))[0], /cannot read its footage/);
 });
 
 test("hyperframes: still slides in one snapshot, each motion slide its own story rendered whole and kept silent", async () => {
