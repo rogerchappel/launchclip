@@ -126,6 +126,31 @@ launchclip carousel make "Oil a deck in one weekend" --video --generate fal --bu
 
 `--clips <dir>` hands in footage (it implies `--video`); the planner sees each clip's length and keeps every card inside its clip. `--video` plans a video carousel without footage of your own. With `--generate`, each footage card gets a keyframe still first. That still is checked, with keyframe candidates and audience-led concepts when you ask for them, and then animated into a clip of the card's length. The quote, `--budget` and draft-video gates are the same as `make`'s, and no text is drawn into the clip. The planner sizes each card and marks it as footage or drawn, and the make report lists the cards. See `examples/carousel/video-cards-4x5` for a sample.
 
+### Generated backgrounds and panoramas
+
+With `--generate`, any template can sit on a generated background instead of its built-in ground, and neighbouring slides can share one generated panorama.
+
+```bash
+launchclip carousel make "Three habits for calmer mornings" --generate fal --background shared
+launchclip carousel make "Walk a ridge safely" --generate fal --panorama
+launchclip carousel make "Brew better coffee" --video --generate fal --background shared --budget 5usd
+```
+
+`--background` takes one of these modes:
+
+- `shared`: one background behind every slide, an image or, in a video carousel, one short clip as long as the longest card.
+- `per-slide`: each slide gets its own background, in one palette and setting.
+- `none`: the template's own ground. This is the default.
+- `auto`: the planner decides (the same as leaving the flag out). It picks a background when the template sets type on a plain ground and the topic has a place or mood worth showing.
+
+The background is a plate (`plate: {kind: "image" | "video"}`) on every slide that has no picture of its own. It sits under the template's reading layer, so the type keeps its contrast. A slide with a photo, footage or a brand-lit plate keeps that. The plan records the choice as `carousel.background: {mode, shows}`.
+
+`--panorama` lays one wide picture across 2 or 3 neighbouring slides (`carousel.panorama`), usually from the cover. The planner can also choose one for a place or a journey. The slides under it take no photo. The provider is asked for its widest ratio (21:9). The image is then scaled and centre-cropped to exactly the span's width × the slide height, so the slices meet at every seam. The template's reading layer is baked into the file, because the panorama draws no layer of its own. A carousel with a panorama renders with `camera: {mode: "cuts"}`, because a style's world camera would inset the slices. A video carousel has no panorama, because it would cover the footage cards.
+
+What a background or panorama shows is written as a background, not a subject: texture, atmosphere or a soft scene in the brand's colours, with clean space where the words sit, and no people, text, logos or names. These requests go through the same generator as the slide photos and in the same batch. That means one quote, one `--budget`, and the same keyframe candidates and audience-led concepts. For video, the image comes first, then the clip. Anything that is not made falls back to the template's ground, and the make report lists the files under `images.backgrounds`.
+
+See `examples/carousel/background-shared-4x5`, `panorama-generated-4x5` and `background-video-4x5`. Their images are stand-in textures, not model output.
+
 ## What export writes
 
 For each destination, in `carousel/<dest>/`:
