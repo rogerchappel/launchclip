@@ -15,7 +15,7 @@ import { execFile } from "node:child_process";
 import { copyFile, mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { CAROUSEL_ARC_IDS, CAROUSEL_BACKGROUND_MODES, CAROUSEL_DESTINATIONS, CAROUSEL_DESTINATION_IDS } from "@launchclip/core/carousel.mjs";
+import { CAROUSEL_ARC_IDS, CAROUSEL_BACKGROUND_MODES, CAROUSEL_DESTINATIONS, CAROUSEL_DESTINATION_IDS, MOTION_SLIDE_SECONDS } from "@launchclip/core/carousel.mjs";
 import { CAROUSEL_TEMPLATES, READING_LAYER } from "@launchclip/core/carousel-templates.mjs";
 import { createMakeClient, selectMakeModel } from "../make/models.js";
 import { makeGenerator } from "../make/generate.js";
@@ -65,6 +65,7 @@ export async function run(brief, flags = {}, io = {}) {
   if (!flags.generate && ((background && background !== "none") || flags.panorama)) report.warnings.push("--background and --panorama are generated; add --generate <provider>");
   if (flags.panorama && video) report.warnings.push("--panorama lays a still across slides, so a video carousel leaves it out");
   if (report.images?.variants) report.variants = report.images.variants;
+  for (const { slide, asked, got } of report.images?.fitted ?? []) report.warnings.push(`${slide}: the model returned ${got} s of clip for a ${asked} s card, so the card is shortened to ${got} s`);
   // Which cards play footage and which are drawn, and how long each runs.
   if (video) report.cards = story.scenes.map((scene) => ({ id: scene.id, seconds: scene.end - scene.start, kind: slideFootage(scene) ? "footage" : "drawn", ...(slideFootage(scene) ? { source: slideFootage(scene).src } : {}), loop: scene.loop === true }));
   await writeFile(path.join(project, "storyboard.json"), `${JSON.stringify(story, null, 2)}\n`);
@@ -135,8 +136,23 @@ async function generateImages({ project, brief, story, plan, flags, variants, en
   const made = [];
   const missing = [];
   let coverVariants = null;
-  const place = async (entry, shot) => {
+  const fitted = [];
+  const place = async (entry, shot, generator) => {
     if (!shot?.file || (video && shot.kind !== "video")) { missing.push(entry.scene.id); return; }
+    // Some video models return a fixed length whatever is asked (Wan 2.2 5B: about 3.4 s), so the card
+    // fits the clip it got: shortened to it down to MOTION_SLIDE_SECONDS[0], re-asked once longer below that.
+    if (video) {
+      const seconds = entry.scene.end - entry.scene.start;
+      let usable = await clipSeconds(shot, io);
+      if (usable < MOTION_SLIDE_SECONDS[0] && generator) {
+        say(`generate: the clip for ${entry.scene.id} is ${usable} s, under ${MOTION_SLIDE_SECONDS[0]} s; asking once more`);
+        shot = await generator.findShot({ ...request(entry), duration: Math.min(MOTION_SLIDE_SECONDS[1], seconds + 2) });
+        if (!shot?.file || shot.kind !== "video") { missing.push(entry.scene.id); return; }
+        usable = await clipSeconds(shot, io);
+      }
+      if (usable < MOTION_SLIDE_SECONDS[0]) { missing.push(entry.scene.id); say(`generate: the clip for ${entry.scene.id} is ${usable} s, too short for a card`); return; }
+      if (usable < seconds - 1e-6) { entry.scene.end = entry.scene.start + usable; fitted.push({ slide: entry.scene.id, asked: seconds, got: usable }); }
+    }
     const target = path.join(project, "assets", "generated", `${entry.scene.id}.${video ? "mp4" : "png"}`);
     await mkdir(path.dirname(target), { recursive: true });
     await copyFile(shot.file, target);
@@ -151,7 +167,7 @@ async function generateImages({ project, brief, story, plan, flags, variants, en
   const cover = variants > 1 ? wanted.find((entry) => entry.scene.slide.role === "cover") : null;
   if (cover) {
     const generator = await makeGenerator(ctxFor(variants), { brand: story.brand });
-    try { await place(cover, await generator.findShot(request(cover))); } finally { await generator.close(); }
+    try { await place(cover, await generator.findShot(request(cover)), generator); } finally { await generator.close(); }
     const dir = path.join(project, "assets", "shots", "generated", cover.scene.id);
     coverVariants = (await readdir(dir).catch(() => [])).filter((name) => /-c\d+\./.test(name)).sort().map((name) => path.relative(project, path.join(dir, name)));
   }
@@ -163,14 +179,27 @@ async function generateImages({ project, brief, story, plan, flags, variants, en
       // Asked all at once, so the batch is quoted and art-directed together.
       const shots = rest.map((entry) => [entry, generator.findShot(request(entry))]);
       const others = extras.map((job) => [job, generator.findShot(job.request)]);
-      for (const [entry, shot] of shots) await place(entry, await shot);
+      for (const [entry, shot] of shots) await place(entry, await shot, generator);
       for (const [job, shot] of others) backdrops.push(await job.place(await shot));
     } finally { await generator.close(); }
+  }
+  if (fitted.length) {
+    // Later cards move up to follow a shortened one.
+    let at = 0;
+    for (const scene of story.scenes) { const seconds = scene.end - scene.start; scene.start = at; scene.end = at = Math.round((at + seconds) * 1000) / 1000; }
+    story.format.duration = at;
+    say(`generate: ${fitted.map(({ slide, asked, got }) => `${slide} shortened from ${asked} s to ${got} s`).join(", ")} to fit the clip the model returned`);
   }
   if (missing.length) say(`generate: no ${video ? "clip" : "image"} for ${missing.join(", ")}; those slides render once assets/generated/<slide>.${video ? "mp4" : "png"} exists`);
   const lost = backdrops.filter((entry) => !entry.file).map((entry) => entry.id);
   if (lost.length) say(`generate: no ${lost.join(", ")}; those slides keep the template's own ground`);
-  return { made, missing, ...(extras.length ? { backgrounds: backdrops } : {}), ...(coverVariants ? { variants: coverVariants } : {}) };
+  return { made, missing, ...(fitted.length ? { fitted } : {}), ...(extras.length ? { backgrounds: backdrops } : {}), ...(coverVariants ? { variants: coverVariants } : {}) };
+}
+
+// A generated clip's playable length past its lead-in pad, to 0.01 s down.
+async function clipSeconds(shot, io) {
+  const duration = Number((await (io.probe ?? probeMedia)(shot.file)).format?.duration);
+  return Math.floor((duration - (shot.sourceStart ?? 0)) * 100) / 100;
 }
 
 const BACKGROUND_FILE = /^assets\/generated\/(?:.+-)?background\.(?:png|mp4)$/;
