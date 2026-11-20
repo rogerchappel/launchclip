@@ -362,3 +362,13 @@ test("make --background shared --panorama: one batch, the background file, and a
 test("--background takes shared, per-slide, none or auto", async () => {
   await assert.rejects(make("a brief", { background: "wall" }, fakeModel()), /--background must be shared, per-slide, none or auto/);
 });
+
+test("a plan that names its arc in prose keeps the arc it leads with, and a type-only slide's alt is its words", async () => {
+  const plan = listicle({ arc: "how-to: one step per slide, then a recipe to save" });
+  const model = fakeModel(plan);
+  const { report, story } = await make("fast teams", {}, model);
+  assert.equal(report.plan_attempts[0].ok, true, report.plan_attempts[0].errors.join("\n"));
+  assert.equal(story.carousel.arc, "how-to");
+  const words = planToStory({ slides: [{ id: "a", role: "cta", headline: "Save this list", body: "Before you record" }] }, { arc: "listicle", goal: "save", destinations: ["instagram"], brand: null, template: "bold-statement" });
+  assert.equal(words.scenes[0].slide.alt, "Save this list. Before you record");
+});

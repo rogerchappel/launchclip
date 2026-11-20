@@ -46,8 +46,9 @@ export function slideText(scene) {
   const headlines = blocks(HEADLINE_KEYS);
   const supports = blocks(SUPPORT_KEYS);
   const meta = blocks(META_KEYS);
-  // own: the slide's headline and supporting text, without the labels a template adds (byline, author, footer, page, a swipe line).
-  return { headlines, supports, meta, own: [...headlines, ...supports].filter((block) => !SWIPE_LINE.test(block.text)).map((block) => block.text).join(" "), all: [...headlines, ...supports, ...meta].map((block) => block.text).join(" ") };
+  // own: the slide's headline and supporting text, without the labels a template adds (byline, author, footer, page, a swipe line)
+  // or a photo-scene's title, its alt text when lines carry the words.
+  return { headlines, supports, meta, own: [...headlines, ...supports].filter((block) => !SWIPE_LINE.test(block.text) && !(block.key === "title" && params.lines !== undefined)).map((block) => block.text).join(" "), all: [...headlines, ...supports, ...meta].map((block) => block.text).join(" ") };
 }
 
 const NUMBER_WORDS = new Set(["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "fifteen", "twenty", "hundred", "thousand", "million", "billion", "half", "double", "triple"]);
@@ -193,7 +194,8 @@ export function carouselPlanFindings(story) {
   const goal = carousel.goal;
   if (goal && CTA_WORDS[goal]) {
     const cta = slides.findIndex((scene) => scene.slide?.role === "cta");
-    if (cta === -1) add("cta-match", null, "warn", `the goal is ${goal} but no slide is the cta (slide.role "cta")`);
+    // A one-slide post asks in its caption.
+    if (cta === -1) { if (slides.length > 1) add("cta-match", null, "warn", `the goal is ${goal} but no slide is the cta (slide.role "cta")`); }
     else if (!CTA_WORDS[goal].test(texts[cta].all)) add("cta-match", cta + 1, "fail", `the goal is ${goal} but the cta slide says "${texts[cta].all}"`);
     const caption = carousel.caption?.cta;
     if (typeof caption === "string" && caption.trim() && !CTA_WORDS[goal].test(caption)) add("cta-match", null, "warn", `the goal is ${goal} but the caption's cta says "${caption}"`);

@@ -50,6 +50,11 @@ test("one-idea: a template's byline, author and footer do not count against the 
   assert.deepEqual(rules(carouselPlanFindings(story), "one-idea"), []);
   story.scenes[0].params.quote += " every single week";
   assert.match(rules(carouselPlanFindings(story), "one-idea")[0].reason, /^13 words/);
+  // A footage cover: photo-scene's title is its alt text, the lines are what is drawn, so the words count once.
+  const footage = clean();
+  footage.scenes[0].module = "photo-scene";
+  footage.scenes[0].params = { media: "assets/a.mp4", title: "Start a project in under one minute", lines: [{ text: "Start a project in" }, { text: "under one minute →" }] };
+  assert.deepEqual(rules(carouselPlanFindings(footage), "one-idea"), []);
   // numbered-steps sets its swipe line as the cover panel's body.
   const steps = clean();
   steps.scenes[0].module = "split-screen";
