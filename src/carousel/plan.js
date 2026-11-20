@@ -252,6 +252,8 @@ export function planToStory(plan, { arc, goal, destinations, brand, style = null
       caption: { hook: String(caption.hook ?? ""), body: String(caption.body ?? ""), cta: String(caption.cta ?? ""), tags: Array.isArray(caption.tags) ? caption.tags.map(String).filter((tag) => tag.trim()).map((tag) => tag.replace(/^#/, "")) : [] }
     },
     ...(style ? { style } : {}),
+    // A style's world camera places each slide's layer on its canvas, which insets the panorama's slices.
+    ...(span ? { camera: { mode: "cuts" } } : {}),
     ...layout?.story,
     brand: layout?.story.brand ?? brand,
     audio: null,

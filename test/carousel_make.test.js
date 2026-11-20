@@ -278,6 +278,7 @@ test("a panorama spans its slides, which take no background; an image under it g
   const plan = textPlan({ background: { mode: "shared", image: "warm dawn haze" }, panorama: { image: "a wide valley at dawn", slides: [1, 3] } });
   const story = planToStory(plan, { arc: "listicle", goal: "save", destinations: ["instagram"], brand: null, template: "plain-note", extras: { background: null, panorama: null } });
   assert.deepEqual(story.carousel.panorama, { src: "assets/generated/panorama.png", slides: [1, 3] });
+  assert.deepEqual(story.camera, { mode: "cuts" }, "slices meet only without the world camera");
   assert.deepEqual(story.scenes.map((scene) => scene.plate?.params.src ?? null), [null, null, null, "assets/generated/background.png", "assets/generated/background.png"]);
   assert.deepEqual(extrasErrors(plan, story), []);
   // A bad span falls back to the first three slides; a missing image is an error.
