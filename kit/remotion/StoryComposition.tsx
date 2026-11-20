@@ -320,10 +320,12 @@ const SeamElements: React.FC<{ seams: any[] }> = ({ seams }) => (
 // background blobs (plates only, not in world mode); drift = the hold-drift
 // wrapper.
 type CameraProps = { placement?: any; transparent?: boolean; parallax?: any[] };
-const SceneLayer: React.FC<{ startFrame: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean | number; field?: any[] | null; backdrop?: any; light?: any[] | null; drift?: any; behave?: any; zoom?: any[]; continuity?: any; children: React.ReactNode } & CameraProps> = ({ startFrame, tweens, plate, background, freeze, field, backdrop, light, drift, behave, zoom, continuity, placement, transparent, parallax, children }) => {
+const SceneLayer: React.FC<{ startFrame: number; start?: number; tweens: any[]; plate: boolean; background: string; freeze?: boolean | number; field?: any[] | null; backdrop?: any; light?: any[] | null; drift?: any; behave?: any; zoom?: any[]; continuity?: any; children: React.ReactNode } & CameraProps> = ({ startFrame, tweens, plate, background, freeze, field, backdrop, light, drift, behave, zoom, continuity, placement, transparent, parallax, children, start }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const t = (startFrame + frame) / fps;
+  // A start between frames mounts on the frame before it; sample no earlier than the start,
+  // so that frame shows the incoming transition's first state, not the settled layer.
+  const t = Math.max((startFrame + frame) / fps, start ?? -Infinity);
   const state = layerStateAt(t, tweens, getEase);
   const style = layerStyle(state);
   // push-blur's directional smear (transitions.mjs smearX / smearY): an SVG
@@ -739,7 +741,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
     // World mode: one ambient field, in the camera's parallax depth layer.
     const sceneLayer = ({ entry, render, model }: any) => (
       <Sequence key={entry.id} name={`${entry.id} · ${entry.scene.module}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps}>
-        <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background}
+        <SceneLayer startFrame={frames(entry.start)} start={entry.start} tweens={entry.tweens} plate={entry.plate} background={background}
           field={entry.plate && !world ? fieldFor(entry.scene) : null} backdrop={entry.plate && !world ? backdropFor(entry.scene) : null} light={entry.plate && !world ? lightFor(entry.scene) : null} drift={sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} behave={sceneBehaviour(story, entry.scene, model, { start: entry.start, end: entry.renderEnd })} zoom={zoomFor(entry, model)} continuity={slideContinuity(story, entry.scene.id)}
           placement={entry.plate || entry.rides ? plan.placements[entry.rides ?? entry.id] : undefined} transparent={world && (entry.plate || Boolean(entry.rides))}
           parallax={entry.plate || entry.rides ? undefined : overlayOps(plan, { start: entry.start, end: entry.renderEnd })}>
@@ -802,7 +804,7 @@ const StoryPicture: React.FC<StoryProps> = (props) => {
   // no hold drift, as in the HyperFrames compiler.
   const sceneElement = ({ entry, render, model }: any, part?: "behind" | "front") => (
     <Sequence key={part === "behind" ? `${entry.id}-behind` : entry.id} name={`${entry.id} · ${entry.scene.module}${part === "behind" ? " (behind)" : ""}`} from={frames(entry.start)} durationInFrames={Math.max(1, frames(entry.renderEnd) - frames(entry.start))} premountFor={fps} style={lookPlaneStyle(look, entry.scene.id) as React.CSSProperties}>
-      <SceneLayer startFrame={frames(entry.start)} tweens={entry.tweens} plate={entry.plate} background={background} field={entry.plate ? fieldFor(entry.scene) : null} backdrop={entry.plate ? backdropFor(entry.scene) : null} light={entry.plate ? lightFor(entry.scene) : null} drift={part === "behind" ? undefined : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} behave={part === "behind" ? undefined : sceneBehaviour(story, entry.scene, model, { start: entry.start, end: entry.renderEnd })} zoom={part === "behind" ? undefined : zoomFor(entry, model)} continuity={part === "behind" ? undefined : slideContinuity(story, entry.scene.id)}>
+      <SceneLayer startFrame={frames(entry.start)} start={entry.start} tweens={entry.tweens} plate={entry.plate} background={background} field={entry.plate ? fieldFor(entry.scene) : null} backdrop={entry.plate ? backdropFor(entry.scene) : null} light={entry.plate ? lightFor(entry.scene) : null} drift={part === "behind" ? undefined : sceneDrift(story, entry.scene, model, { window: { start: entry.start, end: entry.renderEnd }, geometry })} behave={part === "behind" ? undefined : sceneBehaviour(story, entry.scene, model, { start: entry.start, end: entry.renderEnd })} zoom={part === "behind" ? undefined : zoomFor(entry, model)} continuity={part === "behind" ? undefined : slideContinuity(story, entry.scene.id)}>
         <SceneStartFrame.Provider value={frames(entry.start)}>{render(part)}</SceneStartFrame.Provider>
       </SceneLayer>
     </Sequence>
