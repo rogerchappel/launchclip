@@ -219,3 +219,17 @@ test("a video carousel: cards sized 2-10 s, handed-in and generated footage unde
     await readFile(path.join(out, "assets", "generated", "made.mp4"));
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test("a footage card the template has no photo layout for is the template's full-bleed slide over the clip", () => {
+  const plan = { slides: [
+    { id: "cover", role: "cover", headline: "Start a project in under a minute", alt: "Headline over the app", seconds: 3, clip: "assets/clips/app.mp4" },
+    { id: "pick", role: "body", headline: "Pick a template", body: "Then invite your team", alt: "Over the app", seconds: 4, clip: "assets/clips/app.mp4", clip_start: 2 }
+  ] };
+  const story = planToStory(plan, { arc: "how-to", goal: "save", destinations: ["instagram"], brand: null, template: "numbered-steps", video: true });
+  const [cover, pick] = story.scenes;
+  assert.equal(cover.module, "photo-scene");
+  assert.equal(cover.params.title, "Start a project in under a minute", "the cover keeps its headline for the check");
+  assert.ok(cover.params.lines.every((line) => line.text.length <= 22), JSON.stringify(cover.params.lines));
+  assert.match(cover.params.lines.at(-1).text, /→/, "the cover asks for the swipe");
+  assert.deepEqual(pick.params.media, { src: "assets/clips/app.mp4", sourceStart: 2 });
+});

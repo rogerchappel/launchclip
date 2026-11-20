@@ -8,7 +8,7 @@ import { validateModuleParams } from "@launchclip/core/module-schemas.mjs";
 import { resolveModule, sceneRenderEnd } from "@launchclip/core/modules.mjs";
 import { dropParam } from "../storyboard_planner.js";
 import { moduleCatalogue } from "@launchclip/core/planning-prompt.mjs";
-import { CAROUSEL_GRAMMARS, CAROUSEL_TEMPLATES, layoutCarousel, pickTemplate, slideCaps, templateCopyProblems } from "@launchclip/core/carousel-templates.mjs";
+import { CAROUSEL_GRAMMARS, CAROUSEL_TEMPLATES, drawSlide, layoutCarousel, pickTemplate, slideCaps, templateCopyProblems } from "@launchclip/core/carousel-templates.mjs";
 import { carouselPlanFindings } from "@launchclip/core/carousel-check.mjs";
 
 // Modules that need what a carousel does not have (footage, a presenter, a
@@ -140,7 +140,7 @@ function videoInstructions(clips, generate) {
   const [min, max] = MOTION_SLIDE_SECONDS;
   return [
     `This is a video carousel: every slide is its own short silent video, and the reader swipes to the next. Set each slide's "seconds" (${min} to ${max}) by what happens in it: about ${min} for a single beat (a hook line, a punchline), 3 to 5 for most slides (${SLIDE_SECONDS} when nothing calls for more), up to ${max} only when the motion needs the time. Set "loop": true only on a slide worth watching twice whose motion returns to its start; otherwise it plays once and holds its last frame.`,
-    "A footage slide plays a video under its words; the others are drawn (type and graphics that animate). Most slides of a video carousel are footage when there is footage to use.",
+    `A footage slide plays a video under its words; the others are drawn (type and graphics that animate). Most slides of a video carousel are footage when there is footage to use. A footage slide's words are set over the clip, so keep them short: a headline at most ${told(CAROUSEL_GRAMMARS["full-bleed"].caps.headline)} characters and a line at most ${told(CAROUSEL_GRAMMARS["full-bleed"].caps.body)}, or the headline alone.`,
     ...(clips.length ? [`The user's clips, with their lengths (set a footage slide's "clip" to one, as written, and "clip_start" to the second it starts from, so clip_start + seconds stays inside the clip): ${clips.map((clip) => `${clip.src} (${clip.seconds} s)`).join(", ")}.`] : []),
     ...(generate ? ['A slide may have generated footage: set "image" to the opening frame in plain lower-case words (a scene, no brand, person name, text or logo); it is made as a still, checked, then animated into the slide\'s clip. Every generated slide shares one setting, kind of people and time of day. Leave "image" null on drawn slides.'] : [])
   ];
@@ -154,15 +154,16 @@ const clamp = (value, [min, max], fallback) => (Number.isFinite(Number(value)) ?
  * plays the video, a type slide sets its text over a video plate, and any
  * other layout becomes a photo-scene with the slide's words as its lines.
  */
-function footageScene(scene, slide, clip) {
+function footageScene(scene, slide, clip, { template = null, aspect = "4:5", cue = false } = {}) {
   if (scene.module === "photo-scene") return { ...scene, params: { ...scene.params, media: { src: clip.src, sourceStart: clip.start } } };
   if (scene.plate?.kind === "image" && scene.plate.params?.src === clip.src) {
     const { blur, dim } = scene.plate.params;
     return { ...scene, plate: { kind: "video", params: { src: clip.src, start: clip.start, ...(blur != null ? { blur } : {}), ...(dim != null ? { dim } : {}) } } };
   }
-  const lines = [slide.headline, slide.body].filter((text) => typeof text === "string" && text.trim()).map((text) => ({ text: text.trim() }));
+  // The template's full-bleed layout: its words wrapped to the photo width, its title, and the cover's swipe cue.
   const { plate: _plate, ...rest } = scene;
-  return { ...rest, module: "photo-scene", params: { media: { src: clip.src, sourceStart: clip.start }, lines, align: "center", scrim: "full" } };
+  const { params } = drawSlide(slide, "full-bleed", CAROUSEL_TEMPLATES[template] ?? CAROUSEL_TEMPLATES["cinematic-dark"], { aspect, cue });
+  return { ...rest, module: "photo-scene", params: { ...params, media: { src: clip.src, sourceStart: clip.start } } };
 }
 
 /** The model's plan → a carousel story. Tooling owns the format, brand, style, timing and medium. */
@@ -193,7 +194,7 @@ export function planToStory(plan, { arc, goal, destinations, brand, style = null
       slide: { role: slide?.role, medium: video ? "motion" : "still", alt: typeof slide?.alt === "string" ? slide.alt : "" },
       params: layout && !slide?.module ? layout.scenes[i].params : slide?.params && typeof slide.params === "object" ? slide.params : {}
     };
-    return video && slide?.clip ? footageScene(scene, slide, { src: slide.clip, start: clamp(slide.clip_start, [0, 3600], 0) }) : scene;
+    return video && slide?.clip ? footageScene(scene, slide, { src: slide.clip, start: clamp(slide.clip_start, [0, 3600], 0) }, { template, aspect: dest.aspect, cue: i === 0 && slides.length > 1 }) : scene;
   });
   const caption = plan?.caption && typeof plan.caption === "object" ? plan.caption : {};
   return {
