@@ -28,6 +28,7 @@
 import {fitText, r2, rt} from './catalog-b-base.mjs';
 import {abs, el, set, tw} from './catalog-b-view.mjs';
 import {createFootageBase} from './catalog-c.mjs';
+import {readingColor, readingGradient, readingGradientErrors} from './reading-gradient.mjs';
 import {grammarDuration, grammarEase, grammarStagger} from './grammar.mjs';
 import {PASSAGE_PARAMS, mediaPassage, passageParams} from './media-passage.mjs';
 import {contrast, mix} from './panels.mjs';
@@ -73,7 +74,7 @@ export function kenBurnsAt(move, p, {zoom, focus, canvas}) {
 }
 
 function resolvePhotoScene(params, ctx) {
-  const b = createFootageBase('photo-scene', params, ctx, {allowed: ['media', 'move', 'zoom', 'focus', 'scrim', 'lines', 'align', 'title', 'enter', 'exit'], required: ['media'], minDuration: T.minDuration});
+  const b = createFootageBase('photo-scene', params, ctx, {allowed: ['media', 'move', 'zoom', 'focus', 'scrim', 'gradient', 'lines', 'align', 'title', 'enter', 'exit'], required: ['media'], minDuration: T.minDuration});
   const {check, canvas, safe, fps, start, end, duration, u, colors, theme} = b;
   const p = b.params;
   const media = localMedia(check, p.media, 'params.media');
@@ -87,7 +88,10 @@ function resolvePhotoScene(params, ctx) {
   const title = p.title === undefined ? null : check.str(p.title, 'params.title', 60);
   const align = p.align === undefined ? 'left' : check.oneOf(p.align, 'params.align', ALIGNS);
   const linesIn = p.lines === undefined ? [] : check.arr(p.lines, 'params.lines', 1, 3);
-  const scrim = p.scrim === undefined ? (linesIn.length ? (align === 'center' ? 'full' : 'bottom') : 'none') : check.oneOf(p.scrim, 'params.scrim', SCRIMS);
+  // A reading gradient (kit/core/reading-gradient.mjs) takes the scrim's place: solid under the lines, clear elsewhere.
+  const gradient = p.gradient ?? null;
+  if (gradient) { const errors = readingGradientErrors(gradient, 'params.gradient'); if (errors.length) check.fail('params.gradient', errors.join('; ')); }
+  const scrim = gradient ? 'gradient' : p.scrim === undefined ? (linesIn.length ? (align === 'center' ? 'full' : 'bottom') : 'none') : check.oneOf(p.scrim, 'params.scrim', SCRIMS);
   if (linesIn.length && scrim === 'none') check.fail('params.scrim', 'must be bottom, left or full when the scene has text lines, so they read over any photo');
 
   // Text lines: a block in the lower safe zone (above the caption band),
@@ -122,7 +126,7 @@ function resolvePhotoScene(params, ctx) {
   const hex = (value) => /^#[0-9a-f]{6}$/i.test(String(value ?? ''));
   const brand = [colors.bg, theme.paper, colors.ink].filter(hex);
   const darkest = brand.length ? brand.reduce((best, c) => (contrast(c, '#ffffff') > contrast(best, '#ffffff') ? c : best)) : FOOTAGE_TEXT.fallback;
-  const scrimColor = contrast(darkest, '#ffffff') >= FOOTAGE_TEXT.grade ? darkest : FOOTAGE_TEXT.fallback;
+  const scrimColor = gradient ? readingColor(gradient, colors) : contrast(darkest, '#ffffff') >= FOOTAGE_TEXT.grade ? darkest : FOOTAGE_TEXT.fallback;
   const ink = [theme.paper, colors.ink, colors.bg].filter(hex).find((c) => contrast(c, scrimColor) >= 4.5) ?? '#ffffff';
   // An emphasis line: the primary or accent that reads at 4.5:1 on the grade, else the primary lifted toward the ink until it does.
   let accentInk = [colors.primary, colors.accent].filter(hex).find((c) => contrast(c, scrimColor) >= 4.5) ?? null;
@@ -152,7 +156,7 @@ function resolvePhotoScene(params, ctx) {
   // The photo and scrim bleed past the canvas, so a world camera's drift and breathing never show their edge.
   const content = {media, move, zoom, focus, scrim, align, title, lines, samples, bleed: u(64), enter: passage.enter, exit: passage.exit,
     origin: {x: r2(focus.x * canvas.width), y: r2(focus.y * canvas.height)},
-    scrimColor, rise: u(36), lineLand: T.lineLand,
+    scrimColor, scrimBackground: gradient ? readingGradient(gradient, colors) : null, rise: u(36), lineLand: T.lineLand,
     lineEase: grammarEase(ctx.grammar, 'power3.out', {props: ['y']}), fadeEase: grammarEase(ctx.grammar, 'power2.out', {props: ['opacity']})};
   const model = b.finish(content, {rect: block, role: lines.length ? 'text' : 'decor', minTextPx: lines.length ? Math.min(...lines.map(line => line.size)) : null,
     motion: {enterEnd: rt(start + fadeIn), exitStart: rt(end - fadeOut), enterFrom: {opacity: passage.enter === 'fade' ? 0 : 1}, exitTo: {opacity: passage.exit === 'fade' ? 0 : 1}, enterEase: 'power2.out', exitEase: 'power2.in'}});
@@ -181,7 +185,7 @@ export function photoSceneView(model) {
     ? el('video', `${id}-media`, style, [], {src: c.media.src, muted: '', playsinline: ''})
     : el('img', `${id}-media`, style, [], {src: c.media.src, alt: c.title ?? ''});
   const kids = [];
-  if (c.scrim !== 'none') kids.push(el('div', `${id}-scrim`, abs(-B, -B, canvas.width + 2 * B, canvas.height + 2 * B, {background: SCRIM_GRADIENT[c.scrim](c.scrimColor)})));
+  if (c.scrim !== 'none') kids.push(el('div', `${id}-scrim`, abs(-B, -B, canvas.width + 2 * B, canvas.height + 2 * B, {background: c.scrimBackground ?? SCRIM_GRADIENT[c.scrim](c.scrimColor)})));
   for (const line of c.lines) {
     kids.push(el('div', `${id}-line-${line.index}`, abs(line.box.x, line.box.y, line.box.width, line.box.height, {margin: 0, whiteSpace: 'nowrap', textAlign: c.align,
       fontFamily: fonts.display, fontWeight: FOOTAGE_TEXT.weight, fontSize: line.size, lineHeight: '1.12', color: line.color, textShadow: `0 ${4 * model.unit}px ${24 * model.unit}px #00000080`, opacity: 0}), [line.text]));
@@ -234,6 +238,7 @@ export const photoScene = {
     zoom: '0.02–0.25, how far the move scales (default 0.08: 1 → 1.08)',
     focus: '{x, y} 0.15–0.85 fractions of the frame the push centres on (default {x: 0.5, y: 0.5})',
     scrim: 'none|bottom|left|full (default bottom with lines, full when centred, none without lines)',
+    gradient: '{color?: ground|primary, tint? 0–0.6, direction?: bottom|top|both|full, stops?: [solid, clear], opacity? 0.3–1}: a brand-coloured reading gradient in place of the scrim (kit/core/reading-gradient.mjs)',
     lines: '[{text ≤ 40, at?, emphasis?: true colours it primary}] 1–3 (or strings), rising in stagger apart; at most one line each',
     align: 'left|center (default left)',
     title: 'string ≤ 60, the photo\'s alt text (optional)',
