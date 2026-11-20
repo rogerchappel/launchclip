@@ -288,7 +288,7 @@ export const statCard = {
 // byline), bubble (the quote in a speech bubble that pops from its tail at
 // the byline) and centered (a big mark that drops in over the quote set in
 // the display face, a rule and the name).
-export const QUOTE_VARIANTS = Object.freeze(['mark', 'pull', 'bubble', 'centered']);
+export const QUOTE_VARIANTS = Object.freeze(['mark', 'pull', 'bubble', 'centered', 'post']);
 
 function resolveQuote(params, ctx) {
   const b = createCardBase('quote-card', params, ctx, {allowed: ['quote', 'author', 'role', 'source', 'highlight', 'at'], required: ['quote', 'author'], variants: QUOTE_VARIANTS});
@@ -343,8 +343,21 @@ function resolveQuote(params, ctx) {
     return {mode: 'centered', mark, markGap, text, name, sub, ruleGap, rule, nameGap, subGap,
       height: r2(mark + markGap + text.lines * text.size * 1.12 + ruleGap + rule + nameGap + name.size * 1.2 + (sub ? subGap + sub.lines * sub.size * 1.3 : 0))};
   };
-  const shaped = {pull, bubble, centered}[b.variant];
-  const measure = (width, maxHeight) => pick([...(shaped ? b.scales.map(k => () => shaped(width, k)) : []), ...[...b.scales, 0.6].map(k => () => variant(width, k))], maxHeight);
+  // post: a plain text post. The byline (the name in bold, the role under it
+  // in grey) at the top, then the words in a regular weight, set from the top
+  // of the region with the rest of the page left empty.
+  const post = (width, k) => {
+    const name = fitText(check, 'params.author', author, {family: 'body', width, preferred: b.min.key, min: b.min.key, maxLines: 1});
+    const sub = fitMeta(width, k), subGap = u(4), top = u(56 * k), textGap = u(84 * k);
+    // The words stay small, as a text post's do: the page around them is the design.
+    const text = fitQuote(width, Math.min(1, k), 'body', 54, portrait ? 10 : 6);
+    const quoteH = r2(text.lines * text.size * 1.25);
+    return {mode: 'post', name, sub, subGap, top, textGap, text, quoteH, height: r2(top + name.size * 1.2 + (sub ? subGap + sub.lines * sub.size * 1.3 : 0) + textGap + quoteH)};
+  };
+  const shaped = {pull, bubble, centered, post}[b.variant];
+  const picked = (width, maxHeight) => pick([...(shaped ? b.scales.map(k => () => shaped(width, k)) : []), ...[...b.scales, 0.6].map(k => () => variant(width, k))], maxHeight);
+  // A post holds the whole region, so it reads from the top rather than centred.
+  const measure = (width, maxHeight) => { const L = picked(width, maxHeight); return L?.mode === 'post' ? {...L, height: r2(Math.max(L.height, maxHeight))} : L; };
   const box = b.place(measure, {maxWidth: u(portrait ? 900 : b.variant === 'mark' ? 1300 : 1400)});
   const L = box.layout;
   const t0 = b.timeOf('quote', p.at, 'params.at', 0.15);
@@ -401,6 +414,17 @@ function byline(model, by, align = 'left') {
 }
 
 const QUOTE_VIEWS = {
+  post(model) {
+    const {id, fonts} = model;
+    const c = model.content, L = c.layout, B = c.box;
+    return [el('div', null, abs(B.x, B.y, B.width, L.height, {display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingTop: L.top, boxSizing: 'border-box'}), [
+      flow(`${id}-author`, B.width, undefined, {...hidden, display: 'flex', flexDirection: 'column', gap: L.subGap}, [
+        flowText(null, B.width, {fontFamily: fonts.body, fontWeight: 750, fontSize: L.name.size, lineHeight: '1.2', color: c.textColor}, c.author),
+        c.meta ? flowText(null, B.width, {fontFamily: fonts.body, fontWeight: 400, fontSize: L.sub.size, lineHeight: '1.3', color: c.metaColor}, c.meta) : null
+      ].filter(Boolean)),
+      flowText(`${id}-quote`, B.width, {...hidden, marginTop: L.textGap, fontFamily: fonts.body, fontWeight: 400, fontSize: L.text.size, lineHeight: '1.25', color: c.textColor, textWrap: 'pretty'}, c.quote)
+    ])];
+  },
   pull(model) {
     const {id, fonts} = model;
     const c = model.content, L = c.layout, B = c.box;
@@ -468,6 +492,11 @@ function quoteTimeline(model, ops) {
   const {id, start, unit} = model;
   const c = model.content, mode = c.layout.mode;
   if (QUOTE_VIEWS[mode]) {
+    if (mode === 'post') {
+      rise(ops, model, `${id}-author`, start, {distance: 10});
+      rise(ops, model, `${id}-quote`, c.t0, {distance: 16, duration: 0.5});
+      return;
+    }
     if (mode === 'pull') {
       set(ops, `${id}-mark`, start, {scaleX: 1, scaleY: 0});
       tw(ops, `${id}-mark`, rt(Math.max(start, c.t0 - 0.15)), 0.6, 'power3.out', {scaleY: 0}, {scaleY: 1});

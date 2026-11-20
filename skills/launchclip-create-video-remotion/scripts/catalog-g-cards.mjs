@@ -7,7 +7,7 @@
 // rows (catalog-g-base.mjs column/row/flow), so the browser's real text
 // heights decide the spacing in both renderers.
 
-import {fitText, r2, rt} from './catalog-b-base.mjs';
+import {contrastRatio, fitText, r2, rt} from './catalog-b-base.mjs';
 import {abs, el, set, tw} from './catalog-b-view.mjs';
 import {CARD_PARAMS, after, at, bob, cardTiming, column, createCardBase, flow, flowText, iconParam, iconTile, pick, pop, rise, row, solidFill, spread, tintBehind, wrapWords} from './catalog-g-base.mjs';
 import {CONCEPT_LOOKS, CONCEPT_LOOK_VIEWS, ICON_ROW_LOOKS, ICON_ROW_LOOK_VIEWS, conceptLookContent, conceptLookTimeline, conceptLooks, iconRowLookContent, iconRowLookTimeline, iconRowLooks} from './catalog-g-looks.mjs';
@@ -546,11 +546,14 @@ export const iconRow = {
 // original), split (a big chapter number beside a rule, the text set left),
 // tab (the kicker and number on a solid tab, the title rising line by line
 // over a drawn rule) and frame (corner brackets around the kicker and title,
-// the number on a disc at the foot).
-export const SECTION_VARIANTS = Object.freeze(['centered', 'split', 'tab', 'frame']);
+// the number on a disc at the foot) and poster (a feed slide: the title in
+// heavy display capitals in the lower middle of the page, an optional line
+// under it, and a footer of two rules, a name and a page number along the foot;
+// sub, footer and page are drawn by this variant only).
+export const SECTION_VARIANTS = Object.freeze(['centered', 'split', 'tab', 'frame', 'poster']);
 
 function resolveSection(params, ctx) {
-  const b = createCardBase('section-card', params, ctx, {allowed: ['title', 'kicker', 'number', 'icon', 'at'], required: ['title'], variants: SECTION_VARIANTS});
+  const b = createCardBase('section-card', params, ctx, {allowed: ['title', 'kicker', 'number', 'icon', 'sub', 'footer', 'page', 'at'], required: ['title'], variants: SECTION_VARIANTS});
   const {check, u, portrait, colors, theme} = b;
   const p = b.params;
   const title = check.str(p.title, 'params.title', 48);
@@ -558,6 +561,9 @@ function resolveSection(params, ctx) {
   const number = p.number === undefined ? null : check.int(p.number, 'params.number', 1, 99);
   const glyph = iconParam(check, p.icon, 'params.icon');
   if (number !== null && glyph) check.fail('params.icon', 'cannot be used with params.number; pick one');
+  const sub = p.sub === undefined ? null : check.str(p.sub, 'params.sub', 90);
+  const footer = p.footer === undefined ? null : check.str(p.footer, 'params.footer', 32).toUpperCase();
+  const page = p.page === undefined ? null : check.str(p.page, 'params.page', 8);
   const kickerColor = b.resolveColor('primary', 'kicker colour (brand.colors.primary)', 'primary');
   const numberText = number === null ? null : String(number).padStart(2, '0');
   const fitKick = (width, k) => (kicker ? fitText(check, 'params.kicker', kicker, {family: 'meta', width, preferred: u(34 * Math.max(1, k * 0.9)), min: b.min.meta, maxLines: 1}) : null);
@@ -600,8 +606,25 @@ function resolveSection(params, ctx) {
     const frameH = r2(pad * 2 + (kick ? kick.size * 1.3 + kickGap : 0) + t.lines * t.size * 1.04 + disc * 0.3);
     return {mode: 'frame', pad, corner, inner, kick, kickGap, title: t, disc, frameH, height: r2(frameH + disc / 2)};
   };
+  // poster: the whole region, the block centred low (a feed slide's lower
+  // middle), the footer along its foot.
+  const poster = (width, k, maxHeight) => {
+    const kick = fitKick(width, k), kickGap = u(22 * k);
+    const t = fitText(check, 'params.title', title.toUpperCase(), {family: 'display', width, preferred: u((portrait ? 96 : 88) * Math.min(1, k)), min: u(56), maxLines: 4});
+    const s = sub ? fitText(check, 'params.sub', sub, {family: 'body', width: r2(width * 0.82), preferred: Math.max(b.min.key, u(42)), min: b.min.key, maxLines: 3}) : null;
+    const subGap = u(30 * k);
+    const foot = footer || page ? fitText(check, 'params.footer', footer ?? page, {family: 'meta', width: r2(width * 0.4), preferred: Math.max(b.min.meta, u(26)), min: b.min.meta, maxLines: 1}) : null;
+    const footH = foot ? r2(foot.size * 1.4) : 0, footGap = u(48 * k);
+    const blockH = r2((kick ? kick.size * 1.3 + kickGap : 0) + t.lines * t.size * 1.02 + (s ? subGap + s.lines * s.size * 1.3 : 0));
+    const height = r2(Math.max(maxHeight, blockH + footGap + footH));
+    if (blockH + footGap + footH > maxHeight + 1e-6) return {mode: 'poster', height: blockH + footGap + footH};
+    const top = r2(Math.min(height * 0.66 - blockH / 2, height - footH - footGap - blockH));
+    return {mode: 'poster', kick, kickGap, title: t, sub: s, subGap, foot, footH, blockH, top: Math.max(0, top), height};
+  };
   const shaped = {split, tab, frame}[b.variant];
-  const measure = (width, maxHeight) => pick([...(shaped ? b.scales.map(k => () => shaped(width, k)) : []), ...b.scales.map(k => () => centered(width, k))], maxHeight);
+  const measure = (width, maxHeight) => b.variant === 'poster'
+    ? pick([...b.scales.map(k => () => poster(width, k, maxHeight)), ...b.scales.map(k => () => centered(width, k))], maxHeight)
+    : pick([...(shaped ? b.scales.map(k => () => shaped(width, k)) : []), ...b.scales.map(k => () => centered(width, k))], maxHeight);
   const box = b.place(measure, {maxWidth: u(portrait ? 900 : b.variant === 'centered' ? 1300 : 1400)});
   const t0 = b.timeOf('title', p.at, 'params.at', 0.25);
   const kickAt = rt(Math.max(b.start, t0 - 0.25));
@@ -611,6 +634,11 @@ function resolveSection(params, ctx) {
   const solid = solidFill(b, 'primary', 4.5);
   const content = {box: {x: box.x, y: box.y, width: box.width}, layout: L, title, kicker, number: numberText, icon: glyph,
     kickerColor, ruleColor: colors.primary, titleColor: theme.foreground, numberColor: colors.primary, t0, kickAt};
+  if (L.mode === 'poster') {
+    // Light type over a photo keeps a soft shadow so its edges hold on bright frames.
+    const light = contrastRatio(theme.foreground, '#000000') > contrastRatio(theme.foreground, '#ffffff');
+    Object.assign(content, {title: title.toUpperCase(), sub, footer, page, kickerColor: theme.foreground, ruleColor: theme.foreground, shadow: light ? `0 ${r2(2 * b.unit)}px ${r2(14 * b.unit)}px rgba(0,0,0,0.42)` : 'none'});
+  }
   if (L.mode === 'tab') Object.assign(content, {tabFill: solid.fill, tabInk: solid.ink, lines: wrapWords(title, L.title.size, 'display', box.width), ruleColor: theme.border});
   if (L.mode === 'frame') Object.assign(content, {discFill: solid.fill, discInk: solid.ink});
   return b.finish(content, {minTextPx: L.title.size});
@@ -631,6 +659,28 @@ function sectionView(model) {
 }
 
 const SECTION_VIEWS = {
+  poster(model) {
+    const {id, fonts, unit} = model;
+    const c = model.content, L = c.layout, B = c.box;
+    const kids = [];
+    const block = [];
+    if (c.kicker) block.push(flowText(`${id}-kicker`, B.width, {...hidden, marginBottom: L.kickGap, fontFamily: fonts.meta, fontSize: L.kick.size, lineHeight: '1.3', letterSpacing: '0.18em', color: c.kickerColor, opacity: 0, textAlign: 'center'}, c.kicker));
+    block.push(flowText(`${id}-title`, B.width, {...hidden, fontFamily: fonts.display, fontWeight: 900, fontSize: L.title.size, lineHeight: '1.02', letterSpacing: '-0.01em', color: c.titleColor, textAlign: 'center', textShadow: c.shadow}, c.title));
+    if (c.sub) block.push(flowText(`${id}-sub`, r2(B.width * 0.82), {...hidden, marginTop: L.subGap, fontFamily: fonts.body, fontWeight: 500, fontSize: L.sub.size, lineHeight: '1.3', color: c.titleColor, textAlign: 'center', textShadow: c.shadow}, c.sub));
+    kids.push(el('div', null, abs(0, L.top, B.width, L.blockH, {display: 'flex', flexDirection: 'column', alignItems: 'center'}), block));
+    if (L.foot) {
+      const y = r2(L.height - L.footH), mid = r2(L.footH / 2), rule = r2(Math.max(1, 2 * unit));
+      // Two rules either side of the name, clear of it, and the page number past the right one.
+      const ruleW = r2(B.width * 0.28);
+      kids.push(el('div', `${id}-footer`, abs(0, y, B.width, L.footH, {...hidden}), [
+        el('div', null, abs(r2(B.width * 0.08), r2(mid - rule / 2), ruleW, rule, {background: c.ruleColor, opacity: 0.65})),
+        el('div', null, abs(r2(B.width * 0.64), r2(mid - rule / 2), ruleW, rule, {background: c.ruleColor, opacity: 0.65})),
+        c.footer ? el('div', null, abs(0, 0, B.width, L.footH, {display: 'flex', alignItems: 'center', justifyContent: 'center', margin: 0, fontFamily: fonts.meta, fontWeight: 600, fontSize: L.foot.size, letterSpacing: '0.18em', color: c.titleColor, whiteSpace: 'nowrap'}), [c.footer]) : null,
+        c.page ? el('div', null, abs(r2(B.width * 0.9), 0, r2(B.width * 0.1), L.footH, {display: 'flex', alignItems: 'center', justifyContent: 'flex-end', margin: 0, fontFamily: fonts.meta, fontSize: L.foot.size, color: c.titleColor, whiteSpace: 'nowrap'}), [c.page]) : null
+      ].filter(Boolean)));
+    }
+    return [el('div', null, abs(B.x, B.y, B.width, L.height), kids)];
+  },
   split(model) {
     const {id, fonts} = model;
     const c = model.content, L = c.layout, B = c.box;
@@ -688,6 +738,13 @@ const SECTION_VIEWS = {
 function sectionTimeline(model, ops) {
   const {id, start, unit} = model;
   const c = model.content, mode = c.layout.mode;
+  if (mode === 'poster') {
+    if (c.kicker) rise(ops, model, `${id}-kicker`, c.kickAt, {distance: 14});
+    rise(ops, model, `${id}-title`, c.t0, {distance: 30, duration: 0.5});
+    if (c.sub) rise(ops, model, `${id}-sub`, rt(c.t0 + 0.2), {distance: 16});
+    if (c.layout.foot) rise(ops, model, `${id}-footer`, c.kickAt, {distance: 8});
+    return;
+  }
   if (mode === 'split') {
     if (c.layout.lead) {
       set(ops, `${id}-head`, start, {opacity: 0, x: 0, y: r2(80 * unit)});
@@ -731,7 +788,7 @@ function sectionTimeline(model, ops) {
 export const sectionCard = {
   id: 'section-card',
   describe: 'A section opener in the brand frame: a kicker ("Part 2", "The fix"), a rule that draws out and a big section title, with an optional chapter number or icon. For the start of each section of a longer video.',
-  params: {title: 'section title ≤ 48', kicker: 'string ≤ 28 (optional, uppercased)', number: 'chapter number 1–99 (optional)', icon: 'icon name (optional; not with number)', at: 'title time', ...CARD_PARAMS},
+  params: {title: 'section title ≤ 48', kicker: 'string ≤ 28 (optional, uppercased)', number: 'chapter number 1–99 (optional)', icon: 'icon name (optional; not with number)', sub: 'poster only: a line under the title ≤ 90 (optional)', footer: 'poster only: a name along the foot ≤ 32 (optional)', page: 'poster only: a page number at the foot ≤ 8 (optional)', at: 'title time', ...CARD_PARAMS},
   events: ['kicker', 'title'],
   timing: cardTiming(['the kicker and rule land up to 0.25 s before the title (with no at, at 0.25 s)']),
   mood: ['editorial', 'launch', 'cinematic'],

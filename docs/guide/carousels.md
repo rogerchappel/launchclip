@@ -39,14 +39,18 @@ Ten templates follow feed styles that have been proven in production, rebuilt on
 
 ![Every template's sample at 4:5](../images/carousel-templates.jpg)
 
+The five styles a host app offers today, side by side with its own previews (left), our cover and a body slide:
+
+![The five offered styles next to ours](../images/carousel-templates-proven-five.jpg)
+
 | Template | The look | For |
 |---|---|---|
 | `caption-block` | The photo on top, a solid panel under it with condensed capitals; a short checklist under a slimmer photo | Education and checklists with photos |
-| `cinematic-dark` | Photos edge to edge under a dark reading layer, heavy centred capitals | Practical advice, coaching, motivation |
+| `cinematic-dark` | Photos edge to edge under a dark reading layer, heavy capitals in the lower middle, a small line under them, the brand name and page number along the foot | Practical advice, coaching, motivation |
 | `cinematic-light` | The same under a soft light wash | The same, calmer |
-| `plain-note` | A white page: one observation in plain sentence case, signed with the account's handle | Founder notes, opinions |
-| `plain-note-dark` | The same on near-black, the punchline lit | Reminders, hot takes |
-| `numbered-steps` | A photo-led cover with the promise on black, then one big numbered step per slide, the checklist as numbered lines | How-tos, routines, frameworks |
+| `plain-note` | A white page like a text post: the brand's name and handle at the top, one short observation under them in a regular weight | Founder notes, opinions |
+| `plain-note-dark` | The same on near-black | Reminders, hot takes |
+| `numbered-steps` | A photo over a black band with the promise in heavy capitals and a swipe line, then one big numbered step per slide, the checklist as numbered lines | How-tos, routines, frameworks |
 | `paper-story` | Warm paper, a serif headline over a framed photo, a caption under it | Product and founder stories |
 | `bold-statement` | The brand colour as the page, oversized capitals, one phrase lit | Values, manifestos, statements |
 | `pull-quote` | Serif pull quotes on paper, a large quotation mark in the accent | Quotes and testimonials |
@@ -89,7 +93,7 @@ Without `--template`, each template scores the brief: +2 for each `best_for` wor
 
 The samples are in `examples/carousel/<template>-4x5` (plus `numbered-steps-9x16`), written by `node scripts/carousel-template-samples.mjs`. Their photos are stand-ins already in the repo. Remotion and HyperFrames draw the templates the same way:
 
-![numbered-steps, paper-story and cinematic-dark: Remotion above, HyperFrames below](../images/carousel-templates-parity.jpg)
+![cinematic-dark, plain-note-dark and numbered-steps: Remotion above, HyperFrames below](../images/carousel-templates-parity.jpg)
 
 ## Destinations
 

@@ -42,7 +42,8 @@
       "display": "big-shoulders-display",
       "body": "dm-sans",
       "meta": "jetbrains-mono"
-    }
+    },
+    "name": "Slow Mornings"
   },
   "audio": null,
   "scenes": [
@@ -62,7 +63,7 @@
         "variant": "top",
         "share": 0.5,
         "kicker": "Field guide →",
-        "title": "3 morning habits that survive a busy week",
+        "title": "3 MORNING HABITS THAT SURVIVE A BUSY WEEK",
         "align": "left"
       }
     },
@@ -82,7 +83,7 @@
         "variant": "top",
         "share": 0.45,
         "kicker": "01",
-        "title": "Get outside before the screen",
+        "title": "GET OUTSIDE BEFORE THE SCREEN",
         "align": "left",
         "body": "Ten minutes of daylight sets the clock for the day."
       }
@@ -103,7 +104,7 @@
         "variant": "top",
         "share": 0.45,
         "kicker": "02",
-        "title": "Pick one task before the inbox",
+        "title": "PICK ONE TASK BEFORE THE INBOX",
         "align": "left",
         "body": "Write it on paper, not in the app."
       }
@@ -123,7 +124,7 @@
         "media": "assets/photos/ridge-sun.jpg",
         "variant": "top",
         "share": 0.32,
-        "title": "Save this checklist",
+        "title": "SAVE THIS CHECKLIST",
         "align": "left",
         "items": [
           "Daylight first",

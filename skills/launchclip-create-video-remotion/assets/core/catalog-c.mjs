@@ -40,7 +40,7 @@
 import {formatBound, withinBounds} from './bounds.mjs';
 import {motionBlurPx, springValue} from './motion.mjs';
 import {grammarEase, grammarStagger, grammarTweens} from './grammar.mjs';
-import {CATALOG_B_STYLE, carouselZone, contrastRatio, fitText, glyphBoxes, makeCheck, mixColor, r2, rt, textWidth} from './catalog-b-base.mjs';
+import {CATALOG_B_STYLE, carouselZone, contrastRatio, fitText, glyphBoxes, makeCheck, mixColor, r2, rt, setBrandTextScale, textWidth} from './catalog-b-base.mjs';
 import {abs, el, sampleTime, set, svgRoot, transformString, tw} from './catalog-b-view.mjs';
 import {profileGeometry} from './layout-check.mjs';
 import {subjectCoverShare} from './subject.mjs';
@@ -95,6 +95,8 @@ export function createFootageBase(moduleId, params, ctx, {allowed, required = []
     colors[key] = colorsIn[key].toLowerCase();
   }
   const fontsIn = ctx.brand?.fonts ?? {};
+  // fitText reads this scene's brand width scale; without it, the last module built's leaks in.
+  setBrandTextScale(fontsIn);
   const fonts = {display: fontStack(fontsIn.display, 'display', check, 'brand.fonts.display'), body: fontStack(fontsIn.body, 'body', check, 'brand.fonts.body'), meta: fontStack(fontsIn.meta, 'meta', check, 'brand.fonts.meta')};
   const theme = {surface: colors.bg, foreground: colors.paper, muted: mixColor(colors.paper, colors.bg, 0.62), border: mixColor(colors.paper, colors.bg, 0.18), accentText: colors.ink,
     primary: colors.primary, accent: colors.accent, ink: colors.ink, paper: colors.paper, bg: colors.bg, panel: mixColor(colors.paper, colors.bg, 0.06)};

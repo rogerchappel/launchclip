@@ -274,3 +274,14 @@ test('media layouts: the planner offers them for footage lines, with "use when" 
   const full = planningPrompt({lane: 'motion'});
   for (const {id} of MEDIA_LAYOUTS) assert.match(full, new RegExp(`### ${id}`), id);
 });
+
+test('media layouts: title size does not depend on the module built before', async () => {
+  const {setBrandTextScale} = await import('@launchclip/core/catalog-b-base.mjs');
+  const wide = {...brand, fonts: {...brand.fonts, display: 'space-grotesk'}};
+  const params = {media: STILL, title: 'Why slide-ons ride smoother on corrugations'};
+  const titleSize = (leaked) => {
+    setBrandTextScale(leaked);
+    return MODULES['split-screen'].resolve(params, {id: 's', format: FORMATS['1:1'], start: 0, duration: 4, brand: wide}).content.texts.find(t => t.key === 'title').size;
+  };
+  assert.equal(titleSize({}), titleSize(wide.fonts));
+});
