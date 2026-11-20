@@ -36,6 +36,7 @@
 // contrast or resolve() throws; blur is 0 at settle.
 import {formatBound, withinBounds} from './bounds.mjs';
 import {profileGeometry} from './layout-check.mjs';
+import {carouselZone} from './catalog-b-base.mjs';
 import {fontFamilyName, fontStack, fontWidthScale} from './fonts.mjs';
 import {countUp, splitWords, tween} from './motion.mjs';
 import {grammarDuration, grammarEase, grammarStagger, grammarTweens} from './grammar.mjs';
@@ -280,7 +281,8 @@ function stage(ctx, {captions}) {
   const portrait = height > width;
   const geometry = profileGeometry({width, height}, portrait ? 'shorts' : 'landscape');
   const k = Math.min(width, height) / 1080;
-  const safe = geometry.safeZone, band = geometry.captionBand;
+  // A carousel slide lays out inside its destinations' margins (carouselZone).
+  const safe = carouselZone(ctx, {width, height}) ?? geometry.safeZone, band = geometry.captionBand;
   const zone = {...safe};
   // Captions stay visible: keep a 40 px gutter above the caption band.
   if (captions) zone.height = Math.max(0, band.y - 40 * k - safe.y);

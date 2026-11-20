@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -243,6 +243,23 @@ test("the sample's declared boxes at 4:5 and 9:16", () => {
   assert.ok(four.every((box) => !box.error && box.texts.length));
   const tall = declaredTextBoxes(story, { width: 1080, height: 1920 });
   assert.ok(tall[0].texts[0].rect.y !== four[0].texts[0].rect.y, "laid out again for the taller canvas");
+});
+
+test("every carousel sample's declared text clears safe-zone on instagram, linkedin, tiktok and meta-ads", () => {
+  const dir = new URL("../examples/carousel/", import.meta.url);
+  const failures = [];
+  for (const name of readdirSync(dir)) {
+    const file = new URL(`${name}/storyboard.json`, dir);
+    if (!existsSync(file)) continue;
+    const story = JSON.parse(readFileSync(file, "utf8"));
+    // A sample with explicit 4:5 rects (a seam panorama) is held to its own destinations only.
+    const dests = new Set([...(story.carousel?.destinations ?? []), ...(story.scenes.some((scene) => scene.params?.rect) ? [] : ["instagram", "linkedin", "tiktok", "meta-ads"])]);
+    for (const id of dests) {
+      const dest = CAROUSEL_DESTINATIONS[id];
+      for (const finding of geometryFindings(declaredTextBoxes(story, dest), dest)) if (finding.rule === "safe-zone") failures.push(`${name} ${id} slide ${finding.slide}: ${finding.reason}`);
+    }
+  }
+  assert.deepEqual(failures, []);
 });
 
 // Synthetic slides: a flat background with ink bars in a rect.
