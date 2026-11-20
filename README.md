@@ -16,6 +16,7 @@ Built for founders launching a product, and anyone who'd rather ship than spend 
 - **It fixes its own work.** Before you see anything, it checks the render (layout, timing, motion, audio, legibility) and repairs what it finds.
 - **Change it by chatting.** *"Make the intro punchier."* Only the changed part re-renders.
 - **Raw footage? The base edit is done.** Silences, bad takes and filler words are removed, and the audio is cleaned up. Great for podcasts and talking heads.
+- **Carousels too.** The same engine makes swipeable carousels and single-image posts, with captions and alt text, for Instagram, TikTok, LinkedIn and more ([guide](docs/guide/carousels.md)).
 
 ## No API keys needed
 

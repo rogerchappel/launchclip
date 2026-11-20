@@ -4,6 +4,20 @@
 
 ### Added
 
+- **Carousels and single-image posts.** `launchclip carousel make "<brief>"`
+  turns a brief into a carousel story (scenes are slides, `format.kind:
+  "carousel"`), then `carousel render`, `check` and `export` make the files
+  for each destination: Instagram, TikTok photo mode, LinkedIn (a PDF and
+  images), Facebook, X, Threads and Meta carousel ads (with a card sheet).
+  Each still slide is its scene's settled frame; video carousels are one
+  short clip per card (2 to 10 s, footage or drawn, looping only when asked).
+  Templates follow proven feed styles on your brand, laid out by six layout
+  grammars; the check covers the cover's promise, type size, contrast on the
+  rendered pixels, safe margins in pixels, alt text and copy quality; slides
+  can sit on generated photos, backgrounds or a panorama under a
+  brand-coloured reading gradient, and seams carry an element from one slide
+  to the next. Both renderers draw it (docs/CAROUSELS_RFC.md,
+  docs/guide/carousels.md).
 - **Generation briefs.** `launchclip generate brief <project> [--shot <id>]
   [--json]` prints, for every footage shot request in a storyboard, the
   brief a generation provider would be given: a keyframe prompt (`shows`

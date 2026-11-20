@@ -1,7 +1,9 @@
 # RFC: Carousels and single-image posts
 
-Status: draft for review; nothing here is scheduled
-Date: 2026-11-20 (revised 2026-11-20: video carousels are separate short clips, §5.3)
+Status: built. Phases 1 to 7 shipped (#756 to #775), with templates, video cards,
+the reading gradient and generated backgrounds added along the way; the user
+guide is [guide/carousels.md](guide/carousels.md). Open items are in §13.
+Date: 2026-11-20 (revised 2026-11-20: video carousels are separate short clips, §5.3; status updated when built)
 Builds on: [KIT_CONTRACTS.md](KIT_CONTRACTS.md) (the scene modules),
 [COLLECTIONS_RFC.md](COLLECTIONS_RFC.md) §3.5 (destination presets),
 [GENERATED_FOOTAGE_RFC.md](GENERATED_FOOTAGE_RFC.md) (generated stills and
@@ -336,6 +338,13 @@ PDF where the destination takes one, `caption.md`, `alt.json` and
 uses the same commands, as videos do.
 
 ## 12. Phases
+
+All seven have shipped. Beyond them, the build added templates faithful to
+proven feed styles with six layout grammars (`kit/core/carousel-templates.mjs`),
+copy-quality rules and pixel safe margins in the check, video cards of 2 to
+10 seconds from footage or drawn modules, a brand-coloured reading gradient
+over photos and video, and generated backgrounds and panoramas. `reframe` (§11)
+became part of `render`, which lays each destination out again.
 
 1. **Stills from a story.** `format.kind: "carousel"`, the settled-frame
    render in Remotion, the `listicle`, `quote` and `single` arcs, Instagram and
