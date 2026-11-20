@@ -2,7 +2,7 @@
 // Pure Node: no provider calls. Contract for the generator (wave 2 wires it into make):
 //
 //   Ledger: <project>/qa/generation-log.jsonl, one JSON line per attempt:
-//     {shot, step: "image"|"video", tier: "draft"|"final", attempt, provider, model, seed,
+//     {shot, step: "image"|"video", tier: "draft"|"final", attempt, provider, asked_model?, model, seed,
 //      brief_hash, bible_hash?, changed?, cost: {amount, unit}, seconds?, file?,
 //      verdict: "accepted"|"rejected"|"failed", reason?, licence?, at}
 //     appendLedger(project, entry, {now?}) → the line written (adds `at`)
@@ -18,7 +18,8 @@
 //   Budget is enforced on recorded spend plus the next call's quote (§10). A unit with no budget is
 //   refused, except "seconds" (local time, not money). A budget is a units map: {usd: 5}.
 //
-//   Retries: nextAttempt(project, shot, step) → the next attempt number, or null once MAX_ATTEMPTS were made.
+//   Retries: nextAttempt(project, shot, step, model?) → the next attempt number, or null once MAX_ATTEMPTS were
+//   made with that model (asked_model, else model); with no model, every attempt at the shot and step counts.
 //   Costs: ledgerCosts(project) → {line_items, by_unit}; line items have the cost tracker's shape
 //     (launchclip.costs.v1), so MAKE.json can add them to its costs.
 import { createHash } from "node:crypto";
@@ -150,11 +151,16 @@ export async function spendGate({ project, provider, quote, budget = {}, daily =
   return gate.ok ? { ok: true, priced, reasons: [] } : { ok: false, priced, reasons: [`the budget is reached (${gate.reasons.join("; ")})`] };
 }
 
-/** Attempts count per shot and step, across tiers. */
-export async function nextAttempt(project, shot, step) {
+/**
+ * Attempts count per shot and step, across tiers, and per model when one is given: switching to
+ * another model gets a fresh cap (its spend still counts in the budget). Numbers keep rising
+ * across models, so each attempt keeps its own files.
+ */
+export async function nextAttempt(project, shot, step, model = null) {
   const made = (await readLedger(project)).filter((entry) => entry.shot === shot && entry.step === step);
-  const next = Math.max(0, ...made.map((entry) => Number(entry.attempt) || 0)) + 1;
-  return next > MAX_ATTEMPTS ? null : next;
+  const same = model == null ? made : made.filter((entry) => (entry.asked_model ?? entry.model) === model);
+  if (new Set(same.map((entry) => Number(entry.attempt) || 0)).size >= MAX_ATTEMPTS) return null;
+  return Math.max(0, ...made.map((entry) => Number(entry.attempt) || 0)) + 1;
 }
 
 /**

@@ -11,6 +11,7 @@ import {formatBound, withinBounds} from './bounds.mjs';
 import {getEase} from './motion.mjs';
 import {grammarDuration, grammarEase} from './grammar.mjs';
 import {profileGeometry} from './layout-check.mjs';
+import {CAROUSEL_DESTINATIONS} from './carousel.mjs';
 import {fontFamilyName, fontStack as registryStack, fontWidthScale} from './fonts.mjs';
 
 export const SAMPLE_LEAD = 0.0005;
@@ -370,13 +371,17 @@ function fontStack(name, role, check, path) {
 }
 
 // A carousel slide that is not 9:16 sits in a feed, not under a Shorts UI: its
-// modules lay out inside the feed's margins (the strictest 4:5 and 1:1
-// destination margins in carousel.mjs: 5% each side and the top, 8% the
-// bottom). A 9:16 slide keeps the Shorts zone.
-export const FEED_SAFE = Object.freeze({top: 0.05, bottom: 0.08, left: 0.05, right: 0.05});
+// modules lay out inside the strictest margins of the destinations that share
+// its aspect (CAROUSEL_DESTINATIONS[*].safe, the px `carousel check` holds text
+// to), scaled to the canvas. A 9:16 slide keeps the Shorts zone, which clears
+// TikTok's margins.
 export function carouselZone(ctx, {width, height}) {
   if (!ctx?.noCaptions || height / width >= 1.5) return null;
-  return {x: width * FEED_SAFE.left, y: height * FEED_SAFE.top, width: width * (1 - FEED_SAFE.left - FEED_SAFE.right), height: height * (1 - FEED_SAFE.top - FEED_SAFE.bottom)};
+  const dests = Object.values(CAROUSEL_DESTINATIONS).filter(d => Math.abs(d.width / d.height - width / height) < 0.01);
+  if (!dests.length) return null;
+  const side = (key, size) => Math.max(...dests.map(d => d.safe[key] / (key === 'top' || key === 'bottom' ? d.height : d.width))) * size;
+  const top = side('top', height), bottom = side('bottom', height), left = side('left', width), right = side('right', width);
+  return {x: left, y: top, width: width - left - right, height: height - top - bottom};
 }
 
 export function createBase(moduleId, params, ctx, {allowed, required = [], hidesCaptions = false, frameSafe = false}) {

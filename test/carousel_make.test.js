@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { isEditorialKind } from "@launchclip/core/modules.mjs";
 import { run } from "../src/carousel/make.js";
+import { EDGE_PAD_SECONDS } from "../src/generate/brief.js";
 import { planToStory, slideModules, slideRange } from "../src/carousel/plan.js";
 
 const slide = (id, role, module, params, alt = `${id} slide`) => ({ id, role, module, params, alt });
@@ -123,6 +124,14 @@ test("stages that are not built yet are pending; the plan still succeeds", async
   assert.deepEqual([second.report.stages.render.status, second.report.stages.check.status, second.report.stages.export.status], ["done", "done", "pending"]);
   assert.deepEqual(ran, ["out"]);
   await assert.rejects(make("fast teams", {}, fakeModel(listicle()), { ...stubStages, render: async () => { throw new Error("chromium crashed"); } }), /carousel render failed .*chromium crashed/);
+  // A destination that fails inside render: the stage is partial (or failed when all do), named, and the exit is non-zero.
+  const renderOf = (...statuses) => ({ ...stubStages, render: async () => ({ destinations: statuses.map(([id, status]) => ({ id, status })) }) });
+  try {
+    const partial = await make("fast teams", { dest: "instagram,linkedin" }, fakeModel(listicle()), renderOf(["instagram", "rendered"], ["linkedin", "failed"]));
+    assert.deepEqual([partial.report.stages.render.status, partial.report.stages.render.failed, partial.report.status, process.exitCode], ["partial", ["linkedin"], "stage-failed", 1]);
+    const failed = await make("fast teams", {}, fakeModel(listicle()), renderOf(["instagram", "failed"]));
+    assert.equal(failed.report.stages.render.status, "failed");
+  } finally { process.exitCode = 0; }
 });
 
 test("an optional param a slide's module refuses is taken off without a repair call", async () => {
@@ -217,6 +226,48 @@ test("a video carousel: cards sized 2-10 s, handed-in and generated footage unde
     const start = made.plate?.params.start ?? made.params.media.sourceStart;
     assert.ok(start > 0);
     await readFile(path.join(out, "assets", "generated", "made.mp4"));
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("a generated clip shorter than its card: the card fits the clip, or is asked once more under 2 s", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "carousel-fit-"));
+  try {
+    const script = path.join(dir, "gen.mjs");
+    await writeFile(script, GENERATE);
+    const plan = {
+      title: "Pour-over at home", arc: "listicle", goal: "save",
+      caption: { hook: "Pour-over is easy.", body: "Three steps.", cta: "Save this for later.", tags: ["coffee"] },
+      slides: [
+        { id: "cover", role: "cover", headline: "3 steps to a better pour-over", alt: "Headline over a pour", seconds: 5, image: "water pouring over coffee in a glass dripper" },
+        { id: "grind", role: "body", headline: "Grind just before you brew", alt: "Headline", seconds: 3 },
+        { id: "bloom", role: "body", headline: "Let it bloom for thirty seconds", alt: "Headline", seconds: 3 },
+        { id: "summary", role: "payoff", headline: "Fresh, bloomed, slow", alt: "Summary", seconds: 3 },
+        { id: "cta", role: "cta", headline: "Save this for your next brew", alt: "Save prompt", seconds: 3 }
+      ]
+    };
+    // The stub reports each generated clip's length: the lead-in pad plus what the model "returned".
+    const make = async (lengths) => {
+      const out = path.join(dir, `out-${lengths.join("-")}`);
+      let call = 0;
+      const probe = async () => ({ format: { duration: EDGE_PAD_SECONDS + lengths[Math.min(call++, lengths.length - 1)] } });
+      const report = await run("pour-over at home", { out, json: true, seed: "7f3a91c2", arc: "listicle", template: "cinematic-dark", video: true, generate: `cmd:${JSON.stringify(process.execPath)} ${JSON.stringify(script)}`, budget: "2usd" }, { client: fakeModel(plan), stages: stubStages, probe, stdout: { write() {} }, stderr: { write() {} }, env: {} });
+      return { report, story: JSON.parse(await readFile(path.join(out, "storyboard.json"), "utf8")), calls: call };
+    };
+    // Wan 2.2 5B: about 3.4 s whatever is asked. The 5 s cover becomes 3.4 s and the rest move up.
+    const short = await make([3.4]);
+    assert.deepEqual(short.story.scenes.map((scene) => [scene.start, scene.end]), [[0, 3.4], [3.4, 6.4], [6.4, 9.4], [9.4, 12.4], [12.4, 15.4]]);
+    assert.equal(short.story.format.duration, 15.4);
+    assert.deepEqual(short.report.images.fitted, [{ slide: "cover", asked: 5, got: 3.4 }]);
+    assert.ok(short.report.warnings.some((warning) => /cover: the model returned 3.4 s of clip for a 5 s card/.test(warning)), short.report.warnings.join("\n"));
+    assert.equal(short.report.cards[0].seconds, 3.4);
+    // Under 2 s it asks once more (a new brief, so a new clip) and fits the card to that.
+    const tiny = await make([1.5, 2.6]);
+    assert.equal(tiny.calls, 2);
+    assert.deepEqual(tiny.report.images.fitted, [{ slide: "cover", asked: 5, got: 2.6 }]);
+    // Still under 2 s: the slide waits for a clip, as a missing one does.
+    const none = await make([1.5, 1.2]);
+    assert.deepEqual(none.report.images.missing, ["cover"]);
+    assert.equal(none.story.scenes[0].end, 5);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 

@@ -10,7 +10,7 @@ The design is in the [carousels RFC](../CAROUSELS_RFC.md). A sample project is i
 launchclip carousel make "Five habits of fast teams, as a listicle to save" --dest instagram,linkedin
 ```
 
-`make` plans the carousel, renders it and checks it. Each of the other commands runs one step on a project you already have:
+`make` plans the carousel, renders it and checks it. If a destination fails to render, make marks the render step `partial` (or `failed` if every destination did), names the destinations, and exits non-zero. Each of the other commands runs one step on a project you already have:
 
 ```bash
 launchclip carousel render ./my-carousel --dest instagram,linkedin
@@ -110,7 +110,7 @@ It goes wherever a photo or video sits under type:
 
 A template's `reading` is `{gradient, blur}` (or the flat `{dim, blur}`), plus `panel`, the fade an image-panel photo uses into its panel. `cinematic-dark` and `cinematic-light` are solid over the lower 60% and clear at the top. `numbered-steps` fades its cover photo into the black panel, and its footage steps sit on a gradient solid over the lower 72%. `caption-block` and `photo-essay` fade the photo into the panel over the last 30% and 22% of its height. Keep the type on the solid end. `check` measures contrast on the rendered pixels, so type on the clear end fails.
 
-A carousel slide that isn't 9:16 lays out inside the feed's margins (5% each side and at the top, 8% at the bottom), not under a Shorts-style interface, and with no captions band. 9:16 slides keep the Shorts safe zone.
+A carousel slide that isn't 9:16 lays out inside its destinations' margins, the same pixels `carousel check` holds text to (96 px top and bottom and 72 px each side at 4:5, 72 px all round at 1:1), not under a Shorts-style interface, and with no captions band. 9:16 slides keep the Shorts safe zone.
 
 ### The automatic pick
 
@@ -181,7 +181,7 @@ See these samples:
 - `video-generated-4x5`: a real generated cover card, a flux keyframe animated by `fal-ai/wan/v2.2-5b/image-to-video`.
 - `background-video-4x5`: a shared video background. Its clips are stand-in textures, not model output.
 
-A video model may return a clip shorter than the card asked for. Wan 2.2 5B returns about 3.4 s whatever length you ask for. Render refuses a card whose clip ends early, so keep cards on such a model to 3 s.
+A video model may return a clip shorter than the card asked for. Wan 2.2 5B returns about 3.4 s whatever length you ask for. `carousel make` checks each clip it gets and shortens the card to fit, moving the later cards up, and says so in its report. If a clip is under 2 s, make asks for it once more; if it's still too short, the slide waits for a clip. A failed attempt counts against its model only, so switching to another video model gets a fresh three tries.
 
 ## What export writes
 
