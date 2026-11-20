@@ -220,7 +220,10 @@ export function planToStory(plan, { arc, goal, destinations, brand, style = null
       slide: { role: slide?.role, medium: video ? "motion" : "still", alt: typeof slide?.alt === "string" ? slide.alt : "" },
       params: layout && !slide?.module ? layout.scenes[i].params : slide?.params && typeof slide.params === "object" ? slide.params : {}
     };
-    return video && slide?.clip ? footageScene(scene, slide, { src: slide.clip, start: clamp(slide.clip_start, [0, 3600], 0) }, { template, aspect: dest.aspect, cue: i === 0 && slides.length > 1 }) : scene;
+    const drawn = video && slide?.clip ? footageScene(scene, slide, { src: slide.clip, start: clamp(slide.clip_start, [0, 3600], 0) }, { template, aspect: dest.aspect, cue: i === 0 && slides.length > 1 }) : scene;
+    // A slide on a plate (its photo, its clip, the template's light) keeps its background on: a seeded style pack
+    // can set ambient.background false, which would drop every plate and leave the type on a bare page.
+    return drawn.plate || layout?.story.plate ? { ...drawn, ambient: { ...drawn.ambient, background: true } } : drawn;
   });
   // A generated background (make --background, with --generate): the forced mode, else the plan's.
   const mode = !extras ? "none" : extras.background ?? (CAROUSEL_BACKGROUND_MODES.includes(plan?.background?.mode) ? plan.background.mode : "none");

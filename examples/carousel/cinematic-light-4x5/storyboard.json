@@ -82,6 +82,9 @@
         "footer": "Calm Mornings",
         "page": "01",
         "variant": "poster"
+      },
+      "ambient": {
+        "background": true
       }
     },
     {
@@ -117,6 +120,9 @@
         "footer": "Calm Mornings",
         "page": "02",
         "variant": "poster"
+      },
+      "ambient": {
+        "background": true
       }
     },
     {
@@ -152,6 +158,9 @@
         "footer": "Calm Mornings",
         "page": "03",
         "variant": "poster"
+      },
+      "ambient": {
+        "background": true
       }
     },
     {
@@ -187,6 +196,9 @@
         "footer": "Calm Mornings",
         "page": "04",
         "variant": "poster"
+      },
+      "ambient": {
+        "background": true
       }
     },
     {
@@ -222,6 +234,9 @@
         "footer": "Calm Mornings",
         "page": "05",
         "variant": "poster"
+      },
+      "ambient": {
+        "background": true
       }
     }
   ],
