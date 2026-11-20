@@ -9,6 +9,8 @@ import { continuityProblems } from "./carousel-continuity.mjs";
 export const CAROUSEL_ROLES = Object.freeze(["cover", "body", "payoff", "cta"]);
 export const CAROUSEL_MEDIA = Object.freeze(["still", "motion"]);
 export const CAROUSEL_GOALS = Object.freeze(["save", "comment", "follow", "visit", "install"]);
+// carousel.background: a generated background under the slides' reading layer (one shared, one per slide, or none).
+export const CAROUSEL_BACKGROUND_MODES = Object.freeze(["shared", "per-slide", "none"]);
 
 // slides: [min, max] the arc expects; payoff: the arc promises a list, steps or
 // data, so it needs a payoff slide (RFC §5.2, §6 `payoff`).
@@ -66,10 +68,10 @@ export function carouselProblems(story) {
   const err = (message) => errors.push(message);
   if (story.format.kind !== "carousel") { err('format.kind must be "carousel" or left out (a video)'); return errors; }
   const carousel = story.carousel;
-  if (!isObject(carousel)) err("carousel must be {arc, goal?, caption?, destinations?, seams?, panorama?, template?}");
+  if (!isObject(carousel)) err("carousel must be {arc, goal?, caption?, destinations?, seams?, panorama?, template?, background?}");
   const arc = isObject(carousel) ? carousel.arc : undefined;
   if (isObject(carousel)) {
-    for (const key of Object.keys(carousel)) if (!["arc", "goal", "caption", "destinations", "seams", "panorama", "template"].includes(key)) err(`carousel.${key} is not a carousel field (arc, goal, caption, destinations, seams, panorama, template)`);
+    for (const key of Object.keys(carousel)) if (!["arc", "goal", "caption", "destinations", "seams", "panorama", "template", "background"].includes(key)) err(`carousel.${key} is not a carousel field (arc, goal, caption, destinations, seams, panorama, template, background)`);
     if (!CAROUSEL_ARC_IDS.includes(arc)) err(`carousel.arc must be one of ${CAROUSEL_ARC_IDS.join(", ")}`);
     if (carousel.goal !== undefined && !CAROUSEL_GOALS.includes(carousel.goal)) err(`carousel.goal must be one of ${CAROUSEL_GOALS.join(", ")}`);
     if (carousel.caption !== undefined) {
@@ -111,6 +113,9 @@ export function carouselProblems(story) {
   }
   // Swipe continuity: seams and the panorama (kit/core/carousel-continuity.mjs, RFC §6.1).
   errors.push(...continuityProblems(story));
+  // The generated background (carousel make --background): what was asked for; the files are the slides' plates.
+  const background = isObject(carousel) ? carousel.background : undefined;
+  if (background !== undefined && !(isObject(background) && CAROUSEL_BACKGROUND_MODES.includes(background.mode) && Object.keys(background).every((key) => ["mode", "shows"].includes(key)) && (background.shows === undefined || nonEmpty(background.shows)))) err(`carousel.background must be {mode: ${CAROUSEL_BACKGROUND_MODES.join(" | ")}, shows?: what it shows}`);
   return errors;
 }
 
