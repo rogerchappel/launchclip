@@ -36,6 +36,9 @@ function strings(value) {
   return [];
 }
 
+// A line that only asks for the swipe ("SWIPE FOR THE STEPS"): a cue, not the slide's copy.
+const SWIPE_LINE = /^\s*swipe\b[^.!?]{0,32}$/i;
+
 /** A slide's text from its module params: {headlines: [..], supports: [..], meta: [..], all: "..."}; each entry one block. */
 export function slideText(scene) {
   const params = isObject(scene?.params) ? scene.params : {};
@@ -43,8 +46,8 @@ export function slideText(scene) {
   const headlines = blocks(HEADLINE_KEYS);
   const supports = blocks(SUPPORT_KEYS);
   const meta = blocks(META_KEYS);
-  // own: the slide's headline and supporting text, without the labels a template repeats (byline, author, footer, page).
-  return { headlines, supports, meta, own: [...headlines, ...supports].map((block) => block.text).join(" "), all: [...headlines, ...supports, ...meta].map((block) => block.text).join(" ") };
+  // own: the slide's headline and supporting text, without the labels a template adds (byline, author, footer, page, a swipe line).
+  return { headlines, supports, meta, own: [...headlines, ...supports].filter((block) => !SWIPE_LINE.test(block.text)).map((block) => block.text).join(" "), all: [...headlines, ...supports, ...meta].map((block) => block.text).join(" ") };
 }
 
 const NUMBER_WORDS = new Set(["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "fifteen", "twenty", "hundred", "thousand", "million", "billion", "half", "double", "triple"]);

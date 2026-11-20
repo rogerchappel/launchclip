@@ -50,6 +50,11 @@ test("one-idea: a template's byline, author and footer do not count against the 
   assert.deepEqual(rules(carouselPlanFindings(story), "one-idea"), []);
   story.scenes[0].params.quote += " every single week";
   assert.match(rules(carouselPlanFindings(story), "one-idea")[0].reason, /^13 words/);
+  // numbered-steps sets its swipe line as the cover panel's body.
+  const steps = clean();
+  steps.scenes[0].module = "split-screen";
+  steps.scenes[0].params = { media: "assets/a.jpg", variant: "top", title: "HOW TO BREW POUR-OVER COFFEE AT HOME IN FIVE STEPS", body: "SWIPE FOR THE STEPS" };
+  assert.deepEqual(rules(carouselPlanFindings(steps), "one-idea"), []);
 });
 
 test("continuity: a slide that switches its look warns", () => {
