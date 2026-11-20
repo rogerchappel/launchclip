@@ -50,7 +50,7 @@ async function make(brief, flags, model, stages = stubStages) {
 test("auto arc: the model picks it, the plan names the arcs, and the arc's goal is the default", async () => {
   const model = fakeModel(listicle({ arc: "how-to" }));
   const { report, story } = await make("how to ship faster", {}, model);
-  assert.match(model.requests[0].instructions, /Pick the arc/);
+  assert.match(model.requests[0].instructions, /reads as a how-to carousel; keep that arc unless/);
   assert.equal(story.carousel.arc, "how-to");
   assert.equal(story.carousel.goal, "save");
   assert.equal(report.arc, "how-to");
