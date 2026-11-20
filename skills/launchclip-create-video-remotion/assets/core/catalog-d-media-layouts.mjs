@@ -212,7 +212,7 @@ function textFits(b, entry, width) {
 /** Pushes laid text entries onto the model, with their layout parts. over: ids of footage they sit on. */
 function addTexts(b, laid, {over = [], partId = 'text', color = paperOnBg(b), shadow = false} = {}) {
   for (const entry of laid) {
-    b.texts.push({key: entry.key, text: entry.text, box: entry.box, size: entry.size, family: entry.family, lineHeight: entry.lineHeight, lines: entry.lines, align: entry.align,
+    b.texts.push({key: entry.key, text: entry.text, box: entry.box, size: entry.size, family: entry.family, lineHeight: entry.lineHeight, lines: entry.lines, align: entry.align, ...(entry.weight ? {weight: entry.weight} : {}),
       color: entry.color ?? color, at: entry.at, bullet: entry.kind === 'item' ? {size: b.u(18), color: b.colors.primary} : null, count: entry.count ?? null, shadow});
     if (entry.at > b.lastReveal) b.lastReveal = entry.at;
   }
@@ -359,6 +359,8 @@ function resolveSplit(params, ctx) {
   const events = b.events.length;
   let laid;
   try { laid = ctx?.noCaptions && b.shape === 'portrait' ? stack(128) : stack(); } catch { b.events.length = events; laid = stack(); }
+  // ...and in the display face's heaviest weight, as a feed panel's title is set.
+  if (ctx?.noCaptions) for (const entry of laid) if (entry.key === 'title') entry.weight = 900;
   addTexts(b, laid);
   // The seam: an accent line that wipes across, or a soft blend of the footage into the panel.
   const seam = side === 'top' ? mediaRect.height : side === 'bottom' ? mediaRect.y : side === 'left' ? mediaRect.width : mediaRect.x;
@@ -757,7 +759,7 @@ export function mediaLayoutView(model) {
     if (win.ring?.at) kids.push(el('div', `${id}-ring-${i}`, abs(win.rect.x, win.rect.y, win.rect.width, win.rect.height, {boxSizing: 'border-box', borderRadius: win.radius, border: `${win.ring.width}px solid ${win.ring.color}`, opacity: 0})));
   });
   for (const t of c.texts) {
-    const style = {margin: 0, boxSizing: 'border-box', fontFamily: fonts[t.family] ?? fonts.body, fontSize: t.size, lineHeight: String(r2(t.lineHeight)), color: t.color, textAlign: t.align, opacity: 0, transformOrigin: '50% 50%',
+    const style = {margin: 0, boxSizing: 'border-box', fontFamily: fonts[t.family] ?? fonts.body, ...(t.weight ? {fontWeight: t.weight} : {}), fontSize: t.size, lineHeight: String(r2(t.lineHeight)), color: t.color, textAlign: t.align, opacity: 0, transformOrigin: '50% 50%',
       whiteSpace: t.lines > 1 ? 'normal' : 'nowrap', ...(t.shadow ? {textShadow: `0 ${4 * model.unit}px ${24 * model.unit}px #00000099`} : {})};
     if (t.pill) Object.assign(style, {background: t.pill.fill, borderRadius: t.pill.radius, padding: `${t.pill.padY}px ${t.pill.padX}px`});
     const children = [t.count ? formatCount(t.count, 0) : t.text];

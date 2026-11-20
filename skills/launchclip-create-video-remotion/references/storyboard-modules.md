@@ -1210,12 +1210,15 @@ params:
 - kicker: string ≤ 28 (optional, uppercased)
 - number: chapter number 1–99 (optional)
 - icon: icon name (optional; not with number)
+- sub: poster only: a line under the title ≤ 90 (optional)
+- footer: poster only: a name along the foot ≤ 32 (optional)
+- page: poster only: a page number at the foot ≤ 8 (optional)
 - at: title time
 - variant: one of the module's VARIANTS, its designed look (optional; default: the style's variants[module], else the first); usually leave it to the style
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: kicker, title
-variants: centered (default), split, tab, frame
+variants: centered (default), split, tab, frame, poster
 
 ### object-card (keeps captions)
 A simple illustrated object built from the icon set and brand shapes (boat, box, calendar, laptop, rocket, smartphone, chart, shield, mail, trophy, lightbulb, globe, team, gift), with a caption and an optional label. For naming a product, a deliverable or an idea as a thing ("it ships in a box", "your calendar, handled").
@@ -1259,7 +1262,7 @@ params:
 - surface: card | plate (default: card over footage, plate on a plate or insert)
 - rect: {x, y, width, height} canvas px inside the safe zone (optional; default: placed by lane) [guided and bespoke tiers only]
 events: quote, author, highlight
-variants: mark (default), pull, bubble, centered
+variants: mark (default), pull, bubble, centered, post
 
 ### excerpt (keeps captions)
 A real excerpt in a window: 1–8 lines of code or text exactly as written in the source (README, docs, an article, a commit), revealed line by line; marked lines get a highlight sweep while the rest dim. The source line is required. Never paraphrase or invent lines.
