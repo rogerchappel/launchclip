@@ -121,7 +121,7 @@ export function templateGuide(id, { photos = false } = {}) {
     const wanted = template.grammar[role];
     const grammar = CAROUSEL_GRAMMARS[wanted]?.needsImage && !photos ? "text-card" : wanted;
     const caps = slideCaps(template, grammar);
-    const head = chars(type.note ? 90 : type.poster ? 48 : role === "cta" ? Math.min(caps.headline, CTA_HEADLINE) : caps.headline);
+    const head = chars(role === "cta" ? CTA_HEADLINE : type.note ? 90 : type.poster ? 48 : caps.headline);
     const photo = CAROUSEL_GRAMMARS[grammar].needsImage ? "; give it a photo" : "";
     if (role === "cover") return `the promise as the headline alone, at most ${head}${type.note ? ", sentence case" : ""}${photo}`;
     if (role === "payoff" && grammar === "proof-stat") return "the brief's key figure as stat, else the summary as items";
@@ -129,9 +129,9 @@ export function templateGuide(id, { photos = false } = {}) {
     if (grammar === "steps") return "the checklist as items (2 to 6), a headline over them";
     if (grammar === "image-panel") return `a photo over a panel: the headline (at most ${head}) and a line (at most ${chars(caps.body)}) or 2 to 4 short items${photo}`;
     if (grammar === "framed-image") return `a framed photo: the headline (at most ${head}) above it and a caption line (at most ${chars(caps.body)}) under it${photo}`;
+    if (role === "cta") return `the ask as the headline (at most ${head}), an optional line under it, the handle or link as handle`;
     if (type.note) return `one observation in the account's own voice, as the headline alone (at most ${head}, sentence case); no body line, it is not drawn`;
     if (type.poster) return `heavy capitals: the headline (at most ${head}) and an optional line under it (at most ${chars(90)})`;
-    if (role === "cta") return `the ask as the headline (at most ${head}), an optional line under it, the handle or link as handle`;
     return `the headline (at most ${head}) and an optional line under it (at most ${chars(caps.body)})`;
   };
   return [
@@ -369,7 +369,9 @@ export async function planCarousel({ client, brief, arc = null, goal = null, des
     try { plan = parsePlan(result); } catch (error) { errors = [`carousel_json is not valid JSON: ${message(error)}`]; }
     let story = null;
     if (plan) {
-      const picked = arc ?? plan.arc;
+      // A plan that names its arc in prose ("Ad: freelancer receipt friction …") keeps the arc id it leads with, else the guess.
+      const lead = String(plan.arc ?? "").split(/[^a-z-]/i)[0].toLowerCase();
+      const picked = arc ?? (CAROUSEL_ARCS[plan.arc] ? plan.arc : CAROUSEL_ARCS[lead] ? lead : guess);
       if (!CAROUSEL_ARCS[picked]) errors = [`arc must be one of ${CAROUSEL_ARC_IDS.join(", ")}; got ${picked}`];
       else {
         // The auto arc's count range is the picked arc's, inside the destinations'.
@@ -397,6 +399,8 @@ function plainText(slide) {
   if (!slide || typeof slide !== "object" || slide.module) return slide;
   const out = { ...slide };
   for (const key of SLIDE_TEXT) out[key] = plainLine(out[key]);
+  // A type-only slide's alt text is its words; a slide with a picture needs the model's description.
+  if (!out.alt && !out.photo && !out.clip && !out.image) out.alt = [out.eyebrow, out.headline, out.body, ...(Array.isArray(out.items) ? out.items : [])].filter((text) => typeof text === "string" && text).join(". ");
   if (Array.isArray(out.items)) out.items = out.items.map(plainLine);
   for (const key of ["stat", "quote"]) if (out[key] && typeof out[key] === "object") out[key] = Object.fromEntries(Object.entries(out[key]).map(([k, v]) => [k, plainLine(v)]));
   return out;
