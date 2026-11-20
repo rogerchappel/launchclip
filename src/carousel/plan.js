@@ -2,13 +2,13 @@
 // carousel story (docs/CAROUSELS_RFC.md §4, §5, §7), tooling checks it, and
 // one repair call gets the errors when it fails. The model client is make's
 // (src/make/models.js), so tests pass a fake with runStructured().
-import { CAROUSEL_ARCS, CAROUSEL_ARC_IDS, CAROUSEL_DESTINATIONS, CAROUSEL_GOALS, MOTION_SLIDE_SECONDS, SLIDE_SECONDS, destinationProblems } from "@launchclip/core/carousel.mjs";
+import { CAROUSEL_ARCS, CAROUSEL_ARC_IDS, CAROUSEL_BACKGROUND_MODES, CAROUSEL_DESTINATIONS, CAROUSEL_GOALS, MOTION_SLIDE_SECONDS, SLIDE_SECONDS, destinationProblems } from "@launchclip/core/carousel.mjs";
 import { STORY_SCHEMA, resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { validateModuleParams } from "@launchclip/core/module-schemas.mjs";
 import { resolveModule, sceneRenderEnd } from "@launchclip/core/modules.mjs";
 import { dropParam } from "../storyboard_planner.js";
 import { moduleCatalogue } from "@launchclip/core/planning-prompt.mjs";
-import { CAROUSEL_GRAMMARS, CAROUSEL_TEMPLATES, CTA_HEADLINE, drawSlide, layoutCarousel, pickTemplate, slideCaps, templateCopyProblems } from "@launchclip/core/carousel-templates.mjs";
+import { CAROUSEL_GRAMMARS, CAROUSEL_TEMPLATES, CTA_HEADLINE, drawSlide, layoutCarousel, pickTemplate, slideCaps, surfacePlate, templateCopyProblems } from "@launchclip/core/carousel-templates.mjs";
 import { carouselPlanFindings } from "@launchclip/core/carousel-check.mjs";
 
 // Modules that need what a carousel does not have (footage, a presenter, a
@@ -77,7 +77,7 @@ export function slideRange({ arc = null, destinations, slides = null }) {
 
 /** The planning instructions, in this repo's own words. */
 // shortcut: the list budgets are measured at 4:5 (1080×1350) with the default brand; derive them from moduleFit per canvas if other aspects need different numbers.
-export function planInstructions({ arc, guess = null, goal, destinations, range, modules, photos, generate, template = null, video = false, clips = [] }) {
+export function planInstructions({ arc, guess = null, goal, destinations, range, modules, photos, generate, template = null, video = false, clips = [], extras = null }) {
   const dest = CAROUSEL_DESTINATIONS[destinations[0]];
   const exact = range.exact ?? (range.min === range.max ? range.min : null);
   const count = exact === 1 ? "exactly 1 slide: the cover is the whole post, with no cta slide; the caption carries the ask" : exact != null ? `exactly ${exact} slides` : `${range.min} to ${range.max} slides`;
@@ -87,7 +87,7 @@ export function planInstructions({ arc, guess = null, goal, destinations, range,
     "You plan a carousel: a set of slides people swipe through in a social feed. Return one JSON object in carousel_json.",
     "",
     "Shape:",
-    '{"title": string, "arc": string, "goal": string, "caption": {"hook": string, "body": string, "cta": string, "tags": [string]}, "slides": [{"id": kebab-case, "role": "cover"|"body"|"payoff"|"cta", "headline": string, "body"?: string, "items"?: [string], "stat"?: {"value", "label", "source"}, "quote"?: {"text", "author", "role"?}, "eyebrow"?: string, "emphasis"?: string, "handle"?: string' + (photos?.length ? ', "photo"?: one of the photos' : "") + ', "alt": string' + (generate ? ', "image": string|null' : "") + (video ? ', "seconds": number, "loop"?: boolean' + (clips.length ? ', "clip"?: one of the clips, "clip_start"?: number' : "") : "") + "}]}",
+    '{"title": string, "arc": string, "goal": string, "caption": {"hook": string, "body": string, "cta": string, "tags": [string]}' + (extras ? ', "background"?: {"mode": "shared"|"per-slide"|"none", "image"?: string}' + (extras.panorama !== false && !video ? ', "panorama"?: {"image": string, "slides": [from, to]}' : "") : "") + ', "slides": [{"id": kebab-case, "role": "cover"|"body"|"payoff"|"cta", "headline": string, "body"?: string, "items"?: [string], "stat"?: {"value", "label", "source"}, "quote"?: {"text", "author", "role"?}, "eyebrow"?: string, "emphasis"?: string, "handle"?: string' + (photos?.length ? ', "photo"?: one of the photos' : "") + ', "alt": string' + (generate ? ', "image": string|null' : "") + (extras ? ', "background"?: string' : "") + (video ? ', "seconds": number, "loop"?: boolean' + (clips.length ? ', "clip"?: one of the clips, "clip_start"?: number' : "") : "") + "}]}",
     `You write each slide's words; tooling lays them out with a carousel template. Set only the fields a slide needs: a list or a checklist as items (2 to 6); a figure as stat, with its source; a quote with the person who said it; a pair as a headline that opens on the first marker and a body that opens on the second ("Myth: …" / "Fact: …", "Before: …" / "After: …", "Don't: …" / "Do: …"), each side at most ${told(CAROUSEL_GRAMMARS["two-region"].caps.body)} characters after its marker; eyebrow is a small label (a step number or section), emphasis a word of the headline to colour, handle the account or link on the cta slide.`,
     "",
     arcs,
@@ -107,6 +107,7 @@ export function planInstructions({ arc, guess = null, goal, destinations, range,
     "",
     ...(photos?.length ? [`The user's photos (set a slide's photo to one, as written): ${photos.join(", ")}. Use them: every slide whose layout takes a photo gets one that fits it, judged by the file name, and a story carousel has one on most slides. A photo of something else (a screenshot on a hiking slide) is worse than none.`] : []),
     ...(video ? videoInstructions(clips, generate) : []),
+    ...(extras ? extrasInstructions(extras, { video, count: range.exact ?? range.max }) : []),
     ...(generate && !video ? ['Slides may have a generated photo: set "image" to what it shows in plain lower-case words (a scene, no brand, person name, text or logo). Every photo slide shares one setting, kind of people and time of day. Leave "image" null on other slides.'] : [])
   ];
   return lines.join("\n");
@@ -151,6 +152,26 @@ function videoInstructions(clips, generate) {
   ];
 }
 
+// What a generated background or panorama shows: atmosphere for the words to sit on, never a subject.
+const BACKDROP_WORDS = "in plain lower-case words: a texture, an atmosphere or a soft scene in the brand's colours, with clean open space where the words sit; a background, not a subject: no people, text, logos, brands or names";
+
+/**
+ * A generated background and panorama (make --background / --panorama, with --generate). extras: {background:
+ * mode|null, panorama: true|false|null}; null leaves the choice to the plan.
+ */
+function extrasInstructions({ background = null, panorama = null }, { video, count }) {
+  const lines = [];
+  const what = video ? "a short looping video" : "an image";
+  if (background === "shared") lines.push(`Every slide sits on one generated background, ${what} under the words: set background {"mode": "shared", "image": what it shows, ${BACKDROP_WORDS}}.`);
+  else if (background === "per-slide") lines.push(`Each slide sits on its own generated background, ${what} under the words: set background {"mode": "per-slide"} and each slide's "background" to what it shows, ${BACKDROP_WORDS}. They share one palette, setting and light, so the carousel reads as one.`);
+  else if (background === null) lines.push(`A carousel may sit on generated backgrounds (${what} under the words of every slide that has no photo): background {"mode": "shared", "image": …} for one behind every slide, "per-slide" with each slide's own "background", else {"mode": "none"}. Choose one when the template sets type on a plain ground and the topic has a place or mood worth showing; leave it "none" when photos carry the carousel or the plain page is the look. Write each ${BACKDROP_WORDS}.`);
+  if (video || panorama === false || count < 2) return lines;
+  const span = `2 or 3 neighbouring slides, usually from the cover ([1, 3]); the slides under it take no "image" and no photo, so the panorama shows`;
+  if (panorama) lines.push(`Neighbouring slides share one wide generated panorama that runs across them as the reader swipes: set panorama {"image": what it shows, a wide scene that reads left to right, ${BACKDROP_WORDS}, "slides": [from, to]}, ${span}.`);
+  else lines.push(`You may lay one wide generated panorama across neighbouring slides, so the swipe feels like one picture: panorama {"image": …, "slides": [from, to]}, ${span}. Use it for a place or a journey; leave it out otherwise. The ${BACKDROP_WORDS.replace("in plain", "image is in plain")}.`);
+  return lines;
+}
+
 const VIDEO_FILE = /\.(mp4|webm|mov|m4v)$/i;
 const clamp = (value, [min, max], fallback) => (Number.isFinite(Number(value)) ? Math.min(max, Math.max(min, Number(value))) : fallback);
 
@@ -172,7 +193,7 @@ function footageScene(scene, slide, clip, { template = null, aspect = "4:5", cue
 }
 
 /** The model's plan → a carousel story. Tooling owns the format, brand, style, timing and medium. */
-export function planToStory(plan, { arc, goal, destinations, brand, style = null, template = null, video = false }) {
+export function planToStory(plan, { arc, goal, destinations, brand, style = null, template = null, video = false, extras = null }) {
   const dest = CAROUSEL_DESTINATIONS[destinations[0]];
   // A generated image lands at assets/generated/<slide id>.png (make.js), so that is the slide's photo;
   // in a video carousel it is animated into assets/generated/<slide id>.mp4, the slide's clip.
@@ -201,6 +222,20 @@ export function planToStory(plan, { arc, goal, destinations, brand, style = null
     };
     return video && slide?.clip ? footageScene(scene, slide, { src: slide.clip, start: clamp(slide.clip_start, [0, 3600], 0) }, { template, aspect: dest.aspect, cue: i === 0 && slides.length > 1 }) : scene;
   });
+  // A generated background (make --background, with --generate): the forced mode, else the plan's.
+  const mode = !extras ? "none" : extras.background ?? (CAROUSEL_BACKGROUND_MODES.includes(plan?.background?.mode) ? plan.background.mode : "none");
+  const shows = typeof plan?.background?.image === "string" && plan.background.image.trim() ? plainLine(plan.background.image) : null;
+  // The panorama: still carousels only (it would cover a footage card), over the plan's span or the first slides.
+  const span = extras && !video && scenes.length > 1 && extras.panorama !== false && (extras.panorama || plan?.panorama) ? panoramaSpan(plan?.panorama?.slides, scenes.length) : null;
+  if (mode !== "none") scenes.forEach((scene, i) => {
+    const own = typeof slides[i]?.background === "string" && slides[i].background.trim();
+    // A slide with its own picture (a photo, footage, a brand plate) or under the panorama keeps it.
+    if (scene.plate || scene.module === "photo-scene" || PHOTO_MODULES.includes(scene.module) || (span && i >= span[0] - 1 && i <= span[1] - 1) || !(mode === "shared" ? shows : own || shows)) return;
+    const src = `assets/generated/${mode === "shared" ? "background" : `${scene.id}-background`}.${video ? "mp4" : "png"}`;
+    // Under the template's own reading layer, as a photo behind type is.
+    const plate = surfacePlate(CAROUSEL_TEMPLATES[template] ?? {}, "on-image", { photo: src }, layout?.scenes[i]?.grammar ?? "text-card");
+    if (plate) scene.plate = video ? { kind: "video", params: { ...plate.params, start: 0 } } : plate;
+  });
   const caption = plan?.caption && typeof plan.caption === "object" ? plan.caption : {};
   return {
     schema: STORY_SCHEMA,
@@ -212,6 +247,8 @@ export function planToStory(plan, { arc, goal, destinations, brand, style = null
       goal: goal ?? plan?.goal,
       destinations,
       ...(template ? { template } : {}),
+      ...(mode !== "none" ? { background: { mode, ...(shows ? { shows } : {}) } } : {}),
+      ...(span ? { panorama: { src: PANORAMA_SRC, slides: span } } : {}),
       caption: { hook: String(caption.hook ?? ""), body: String(caption.body ?? ""), cta: String(caption.cta ?? ""), tags: Array.isArray(caption.tags) ? caption.tags.map(String).filter((tag) => tag.trim()).map((tag) => tag.replace(/^#/, "")) : [] }
     },
     ...(style ? { style } : {}),
@@ -220,6 +257,25 @@ export function planToStory(plan, { arc, goal, destinations, brand, style = null
     audio: null,
     scenes
   };
+}
+
+// Where make writes the generated panorama plate.
+export const PANORAMA_SRC = "assets/generated/panorama.png";
+const panoramaSpan = (given, count) => (Array.isArray(given) && Number.isInteger(given[0]) && Number.isInteger(given[1]) && given[0] >= 1 && given[1] > given[0] && given[1] <= count ? given : [1, Math.min(3, count)]);
+
+/** What a generated background or panorama still needs from the plan: [] when nothing. */
+export function extrasErrors(plan, story) {
+  const errors = [];
+  const { background, panorama } = story.carousel;
+  if (background?.mode === "shared" && !background.shows) errors.push('background is shared, so background.image must say what it shows');
+  if (background?.mode === "per-slide" && !background.shows && !(plan?.slides ?? []).some((slide) => typeof slide?.background === "string" && slide.background.trim())) errors.push('background is per-slide, so give each slide without a photo its "background"');
+  if (panorama) {
+    if (!(typeof plan?.panorama?.image === "string" && plan.panorama.image.trim())) errors.push("panorama.image must say what the wide picture shows");
+    story.scenes.slice(panorama.slides[0] - 1, panorama.slides[1]).forEach((scene, i) => {
+      if (scene.plate || PHOTO_MODULES.includes(scene.module)) errors.push(`slide ${panorama.slides[0] + i} (${scene.id}) is under the panorama, so it takes no "image" or photo`);
+    });
+  }
+  return errors;
 }
 
 /** Every reason a planned carousel story cannot go to render. [] when it can. */
@@ -283,7 +339,7 @@ export function storyErrors(story, { modules, range, warnings = [], clips = [] }
  * → {story, plan (the model's object, with image requests), attempts: [{ok, errors, usage}], range, warnings}
  * Throws when the repaired plan still fails, listing the errors.
  */
-export async function planCarousel({ client, brief, arc = null, goal = null, destinations, slides = null, photos = [], clips = [], video = false, generate = false, brand, style = null, template = null, say = () => {} }) {
+export async function planCarousel({ client, brief, arc = null, goal = null, destinations, slides = null, photos = [], clips = [], video = false, generate = false, background = null, panorama = null, brand, style = null, template = null, say = () => {} }) {
   if (arc && !CAROUSEL_ARCS[arc]) throw new Error(`--arc must be auto or one of ${CAROUSEL_ARC_IDS.join(", ")}`);
   if (goal && !CAROUSEL_GOALS.includes(goal)) throw new Error(`--goal must be one of ${CAROUSEL_GOALS.join(", ")}`);
   const range = slideRange({ arc, destinations, slides });
@@ -298,7 +354,9 @@ export async function planCarousel({ client, brief, arc = null, goal = null, des
   const guess = arc ?? guessArc(brief);
   const first = pick(guess);
   const templateFor = (picked) => (template || picked === guess || CAROUSEL_TEMPLATES[first].arcs.includes(picked) ? first : pick(picked));
-  const instructions = planInstructions({ arc, guess, goal: goalFor(guess), destinations, range, modules, photos, generate, video, clips, template: first });
+  // Generated backgrounds and the panorama come with --generate: the flags force them, else the plan chooses.
+  const extras = generate ? { background, panorama } : null;
+  const instructions = planInstructions({ arc, guess, goal: goalFor(guess), destinations, range, modules, photos, generate, video, clips, template: first, extras });
   const attempts = [];
   const warnings = [];
   let input = `Brief: ${brief}\n`;
@@ -315,10 +373,10 @@ export async function planCarousel({ client, brief, arc = null, goal = null, des
         // The auto arc's count range is the picked arc's, inside the destinations'.
         const own = arc ? range : slideRange({ arc: picked, destinations, slides });
         const chosen = templateFor(picked);
-        story = planToStory(plan, { arc: picked, goal: goalFor(guess), destinations, brand, style, template: chosen, video });
+        story = planToStory(plan, { arc: picked, goal: goalFor(guess), destinations, brand, style, template: chosen, video, extras });
         warnings.length = 0;
         const content = (Array.isArray(plan.slides) ? plan.slides : []).filter((slide) => slide && typeof slide === "object" && !slide.module);
-        errors = [...(content.length ? templateCopyProblems(chosen, content) : []), ...storyErrors(story, { modules, range: own, warnings, clips })];
+        errors = [...(content.length ? templateCopyProblems(chosen, content) : []), ...storyErrors(story, { modules, range: own, warnings, clips }), ...extrasErrors(plan, story)];
       }
     }
     attempts.push({ ok: !errors.length, errors, usage: result?.usage ?? null });
