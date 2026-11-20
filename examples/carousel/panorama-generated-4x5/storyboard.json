@@ -1,0 +1,143 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Walk the ridge",
+  "lane": "motion",
+  "format": {
+    "kind": "carousel",
+    "width": 1080,
+    "height": 1350,
+    "fps": 30,
+    "duration": 20,
+    "platform": "instagram"
+  },
+  "carousel": {
+    "arc": "listicle",
+    "goal": "save",
+    "destinations": [
+      "instagram"
+    ],
+    "template": "bold-statement",
+    "panorama": {
+      "src": "assets/generated/panorama.png",
+      "slides": [
+        1,
+        3
+      ]
+    },
+    "caption": {
+      "hook": "A ridge walk is three decisions.",
+      "body": "Start early, pace the climb, turn back on time.",
+      "cta": "Save this before your next walk.",
+      "tags": [
+        "hiking",
+        "outdoors",
+        "walking"
+      ]
+    }
+  },
+  "camera": {
+    "mode": "cuts"
+  },
+  "background": {
+    "kind": "flat"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#f3a317",
+      "primary": "#161620",
+      "accent": "#161620",
+      "ink": "#ededf5",
+      "paper": "#161620"
+    },
+    "fonts": {
+      "display": "instrument-serif",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    },
+    "palette": "as-given"
+  },
+  "audio": null,
+  "scenes": [
+    {
+      "id": "cover",
+      "module": "hook-title",
+      "start": 0,
+      "end": 4,
+      "energy": 2,
+      "slide": {
+        "role": "cover",
+        "medium": "still",
+        "alt": "The promise over the left of a wide ridge at dawn"
+      },
+      "params": {
+        "headline": "3 rules for a safe ridge walk",
+        "eyebrow": "Swipe \u2192",
+        "variant": "flush"
+      }
+    },
+    {
+      "id": "early",
+      "module": "hook-title",
+      "start": 4,
+      "end": 8,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Rule one over the middle of the ridge panorama"
+      },
+      "params": {
+        "headline": "Start before the sun",
+        "variant": "flush"
+      }
+    },
+    {
+      "id": "pace",
+      "module": "hook-title",
+      "start": 8,
+      "end": 12,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Rule two over the right of the ridge panorama"
+      },
+      "params": {
+        "headline": "Climb at talking pace",
+        "variant": "flush"
+      }
+    },
+    {
+      "id": "summary",
+      "module": "hook-title",
+      "start": 12,
+      "end": 16,
+      "energy": 1,
+      "slide": {
+        "role": "payoff",
+        "medium": "still",
+        "alt": "Summary of the three rules"
+      },
+      "params": {
+        "headline": "Early, steady, back on time",
+        "variant": "flush"
+      }
+    },
+    {
+      "id": "cta",
+      "module": "cta",
+      "start": 16,
+      "end": 20,
+      "energy": 2,
+      "slide": {
+        "role": "cta",
+        "medium": "still",
+        "alt": "Save this post"
+      },
+      "params": {
+        "action": "Save this for your next walk",
+        "variant": "flush"
+      }
+    }
+  ]
+}

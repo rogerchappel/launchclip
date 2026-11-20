@@ -1,0 +1,206 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Calmer mornings",
+  "lane": "motion",
+  "format": {
+    "kind": "carousel",
+    "width": 1080,
+    "height": 1350,
+    "fps": 30,
+    "duration": 24,
+    "platform": "instagram"
+  },
+  "carousel": {
+    "arc": "listicle",
+    "goal": "save",
+    "destinations": [
+      "instagram"
+    ],
+    "template": "plain-note",
+    "background": {
+      "mode": "shared",
+      "shows": "soft morning light falling across a pale linen wall, gentle shadows of a window frame, calm and airy"
+    },
+    "caption": {
+      "hook": "Small changes, calmer mornings.",
+      "body": "Three habits that take under five minutes. None need an app.",
+      "cta": "Save this for tomorrow morning.",
+      "tags": [
+        "mornings",
+        "habits",
+        "routine"
+      ]
+    }
+  },
+  "background": {
+    "kind": "flat"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#fcfcfe",
+      "primary": "#966614",
+      "accent": "#6d62b5",
+      "ink": "#fcfcfe",
+      "paper": "#0b0b10"
+    },
+    "fonts": {
+      "display": "instrument-serif",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    },
+    "palette": "as-given"
+  },
+  "audio": null,
+  "scenes": [
+    {
+      "id": "cover",
+      "module": "motion-title",
+      "start": 0,
+      "end": 4,
+      "energy": 2,
+      "slide": {
+        "role": "cover",
+        "medium": "still",
+        "alt": "The promise: three habits for calmer mornings, over soft morning light"
+      },
+      "params": {
+        "text": "3 small habits that make mornings calmer",
+        "kicker": "Swipe \u2192",
+        "align": "left",
+        "variant": "fade-through"
+      },
+      "plate": {
+        "kind": "image",
+        "params": {
+          "src": "assets/generated/background.png",
+          "dim": 0.6,
+          "blur": 6
+        }
+      }
+    },
+    {
+      "id": "light",
+      "module": "motion-title",
+      "start": 4,
+      "end": 8,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Habit one: daylight before the phone"
+      },
+      "params": {
+        "text": "Open the curtains before you open your phone",
+        "align": "left",
+        "variant": "fade-through"
+      },
+      "plate": {
+        "kind": "image",
+        "params": {
+          "src": "assets/generated/background.png",
+          "dim": 0.6,
+          "blur": 6
+        }
+      }
+    },
+    {
+      "id": "water",
+      "module": "motion-title",
+      "start": 8,
+      "end": 12,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Habit two: water while the kettle boils"
+      },
+      "params": {
+        "text": "Drink a full glass of water while the kettle boils",
+        "align": "left",
+        "variant": "fade-through"
+      },
+      "plate": {
+        "kind": "image",
+        "params": {
+          "src": "assets/generated/background.png",
+          "dim": 0.6,
+          "blur": 6
+        }
+      }
+    },
+    {
+      "id": "plan",
+      "module": "motion-title",
+      "start": 12,
+      "end": 16,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "still",
+        "alt": "Habit three: one line for the day"
+      },
+      "params": {
+        "text": "Write the one thing today has to hold",
+        "align": "left",
+        "variant": "fade-through"
+      },
+      "plate": {
+        "kind": "image",
+        "params": {
+          "src": "assets/generated/background.png",
+          "dim": 0.6,
+          "blur": 6
+        }
+      }
+    },
+    {
+      "id": "summary",
+      "module": "motion-title",
+      "start": 16,
+      "end": 20,
+      "energy": 1,
+      "slide": {
+        "role": "payoff",
+        "medium": "still",
+        "alt": "Summary of the three habits"
+      },
+      "params": {
+        "text": "Light first, then water, then one line on paper",
+        "align": "left",
+        "variant": "fade-through"
+      },
+      "plate": {
+        "kind": "image",
+        "params": {
+          "src": "assets/generated/background.png",
+          "dim": 0.6,
+          "blur": 6
+        }
+      }
+    },
+    {
+      "id": "cta",
+      "module": "cta",
+      "start": 20,
+      "end": 24,
+      "energy": 2,
+      "slide": {
+        "role": "cta",
+        "medium": "still",
+        "alt": "Save this post"
+      },
+      "params": {
+        "action": "Save this for tomorrow morning",
+        "variant": "flush"
+      },
+      "plate": {
+        "kind": "image",
+        "params": {
+          "src": "assets/generated/background.png",
+          "dim": 0.6,
+          "blur": 6
+        }
+      }
+    }
+  ]
+}
