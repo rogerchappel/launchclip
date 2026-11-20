@@ -1,6 +1,6 @@
 # Carousels and single-image posts
 
-A carousel is a story whose scenes are slides. Each slide is a still (the scene's settled frame, after every entrance and before any exit) or a short motion loop. The same plan goes to each place you post it, laid out again for that platform's canvas, with a post caption and alt text for each.
+A carousel is a story whose scenes are slides. Each slide is a still (the scene's settled frame, after every entrance and before any exit) or a short clip of its own. The same plan goes to each place you post it, laid out again for that platform's canvas, with a post caption and alt text for each.
 
 The design is in the [carousels RFC](../CAROUSELS_RFC.md). A sample project is in [`examples/carousel/listicle-4x5`](../../examples/carousel/listicle-4x5/storyboard.json).
 
@@ -113,7 +113,18 @@ These limits come from public guidance as of November 2026. Check each platform'
 
 Where a destination takes images only, a motion slide is sent as its still, and the export says so.
 
-A motion slide is a scene of 3 to 8 seconds with `loop: true`. Its clip is silent and exactly the scene's length, and its last frame leads back into its first, background included. Its still is a frame of that clip and doubles as the poster. See `examples/carousel/motion-ad-1x1` for an ad whose second slide moves.
+A motion slide is a scene of 2 to 10 seconds, rendered as its own silent clip of exactly the scene's length. With `loop: true` its last frame leads back into its first, background included. Without it the clip plays once and ends on a settled frame. Its still is a frame of that clip and doubles as the poster. See `examples/carousel/motion-ad-1x1` for an ad whose second slide loops.
+
+### Video carousels
+
+A video carousel is a set of separate short videos: each card is its own clip, and a swipe moves to the next one. Most cards run 3 to 5 seconds, a single beat about 2, and a card whose motion needs the time up to 10. A card is either *drawn* (type and graphics that animate) or *footage* (a video under free type). A footage card is a `photo-scene` whose `media` is a video (`{src, sourceStart}` plays a range of a longer recording), or a type module over a video plate (`plate: {kind: "video", params: {src, start}}`). Render refuses a card whose clip ends before the card does.
+
+```bash
+launchclip carousel make "Oil a deck in one weekend" --clips ./broll
+launchclip carousel make "Oil a deck in one weekend" --video --generate fal --budget 5usd
+```
+
+`--clips <dir>` hands in footage (it implies `--video`); the planner sees each clip's length and keeps every card inside its clip. `--video` plans a video carousel without footage of your own. With `--generate`, each footage card gets a keyframe still first. That still is checked, with keyframe candidates and audience-led concepts when you ask for them, and then animated into a clip of the card's length. The quote, `--budget` and draft-video gates are the same as `make`'s, and no text is drawn into the clip. The planner sizes each card and marks it as footage or drawn, and the make report lists the cards. See `examples/carousel/video-cards-4x5` for a sample.
 
 ## What export writes
 

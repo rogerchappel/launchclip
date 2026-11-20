@@ -168,8 +168,9 @@ Platforms allow far longer cards, but a short card keeps the swipe going. So:
   it the card plays once and holds its last frame; feeds replay a card anyway,
   so a hard cut back to the first frame is acceptable, but a held last frame
   must be a settled one.
-- **Length**: 2 to 10 seconds per card (`MOTION_SLIDE_SECONDS`, today 3 to
-  8), 4 by default. The planner sizes each card to what happens in it.
+- **Length**: 2 to 10 seconds per card (`MOTION_SLIDE_SECONDS`), 4 by
+  default. The planner sizes each card to what happens in it (shipped:
+  `carousel make --video` / `--clips`).
 - **Defaults**: silent, text set by the engine over the clip (never
   drawn into a generated clip), the settled frame as the poster.
 - **One sound bed across cards** is out of scope: each card is a separate file

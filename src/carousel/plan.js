@@ -2,7 +2,7 @@
 // carousel story (docs/CAROUSELS_RFC.md §4, §5, §7), tooling checks it, and
 // one repair call gets the errors when it fails. The model client is make's
 // (src/make/models.js), so tests pass a fake with runStructured().
-import { CAROUSEL_ARCS, CAROUSEL_ARC_IDS, CAROUSEL_DESTINATIONS, CAROUSEL_GOALS, SLIDE_SECONDS, destinationProblems } from "@launchclip/core/carousel.mjs";
+import { CAROUSEL_ARCS, CAROUSEL_ARC_IDS, CAROUSEL_DESTINATIONS, CAROUSEL_GOALS, MOTION_SLIDE_SECONDS, SLIDE_SECONDS, destinationProblems } from "@launchclip/core/carousel.mjs";
 import { STORY_SCHEMA, resolveStory, validateStory } from "@launchclip/core/story.mjs";
 import { validateModuleParams } from "@launchclip/core/module-schemas.mjs";
 import { resolveModule, sceneRenderEnd } from "@launchclip/core/modules.mjs";
@@ -75,7 +75,7 @@ export function slideRange({ arc = null, destinations, slides = null }) {
 
 /** The planning instructions, in this repo's own words. */
 // shortcut: the list budgets are measured at 4:5 (1080×1350) with the default brand; derive them from moduleFit per canvas if other aspects need different numbers.
-export function planInstructions({ arc, guess = null, goal, destinations, range, modules, photos, generate, template = null }) {
+export function planInstructions({ arc, guess = null, goal, destinations, range, modules, photos, generate, template = null, video = false, clips = [] }) {
   const dest = CAROUSEL_DESTINATIONS[destinations[0]];
   const count = range.exact != null ? `exactly ${range.exact} slides` : `${range.min} to ${range.max} slides`;
   const arcs = arc ? `The arc is ${arc}: ${CAROUSEL_ARCS[arc].describe}.` : `The brief reads as a ${guess} carousel; keep that arc unless another clearly fits better:\n${CAROUSEL_ARC_IDS.map((id) => `- ${id} (${CAROUSEL_ARCS[id].slides.join("-")} slides): ${CAROUSEL_ARCS[id].describe}`).join("\n")}`;
@@ -84,7 +84,7 @@ export function planInstructions({ arc, guess = null, goal, destinations, range,
     "You plan a carousel: a set of slides people swipe through in a social feed. Return one JSON object in carousel_json.",
     "",
     "Shape:",
-    '{"title": string, "arc": string, "goal": string, "caption": {"hook": string, "body": string, "cta": string, "tags": [string]}, "slides": [{"id": kebab-case, "role": "cover"|"body"|"payoff"|"cta", "headline": string, "body"?: string, "items"?: [string], "stat"?: {"value", "label", "source"}, "quote"?: {"text", "author", "role"?}, "eyebrow"?: string, "emphasis"?: string, "handle"?: string' + (photos?.length ? ', "photo"?: one of the photos' : "") + ', "alt": string' + (generate ? ', "image": string|null' : "") + "}]}",
+    '{"title": string, "arc": string, "goal": string, "caption": {"hook": string, "body": string, "cta": string, "tags": [string]}, "slides": [{"id": kebab-case, "role": "cover"|"body"|"payoff"|"cta", "headline": string, "body"?: string, "items"?: [string], "stat"?: {"value", "label", "source"}, "quote"?: {"text", "author", "role"?}, "eyebrow"?: string, "emphasis"?: string, "handle"?: string' + (photos?.length ? ', "photo"?: one of the photos' : "") + ', "alt": string' + (generate ? ', "image": string|null' : "") + (video ? ', "seconds": number, "loop"?: boolean' + (clips.length ? ', "clip"?: one of the clips, "clip_start"?: number' : "") : "") + "}]}",
     "You write each slide's words; tooling lays them out with a carousel template. Set only the fields a slide needs: a list or a checklist as items (2 to 6 of at most 32 characters); a figure as stat, with its source; a quote with the person who said it; a pair as a headline that opens on the first marker and a body that opens on the second (\"Myth: …\" / \"Fact: …\", \"Before: …\" / \"After: …\", \"Don't: …\" / \"Do: …\"); eyebrow is a small label (at most 24 characters, a step number or section), emphasis a word of the headline to colour, handle the account or link on the cta slide.",
     "",
     arcs,
@@ -103,7 +103,8 @@ export function planInstructions({ arc, guess = null, goal, destinations, range,
     ...(template ? ["", ...templateGuide(template, { photos: photos?.length > 0 || generate })] : []),
     "",
     ...(photos?.length ? [`The user's photos (set a slide's photo to one, as written): ${photos.join(", ")}. A story carousel uses them on most slides.`] : []),
-    ...(generate ? ['Slides may have a generated photo: set "image" to what it shows in plain lower-case words (a scene, no brand, person name, text or logo). Every photo slide shares one setting, kind of people and time of day. Leave "image" null on other slides.'] : [])
+    ...(video ? videoInstructions(clips, generate) : []),
+    ...(generate && !video ? ['Slides may have a generated photo: set "image" to what it shows in plain lower-case words (a scene, no brand, person name, text or logo). Every photo slide shares one setting, kind of people and time of day. Leave "image" null on other slides.'] : [])
   ];
   return lines.join("\n");
 }
@@ -134,28 +135,72 @@ export function templateGuide(id, { photos = false } = {}) {
   ];
 }
 
+// A video carousel (RFC §5.3): each slide is its own short clip, footage or drawn.
+function videoInstructions(clips, generate) {
+  const [min, max] = MOTION_SLIDE_SECONDS;
+  return [
+    `This is a video carousel: every slide is its own short silent video, and the reader swipes to the next. Set each slide's "seconds" (${min} to ${max}) by what happens in it: about ${min} for a single beat (a hook line, a punchline), 3 to 5 for most slides (${SLIDE_SECONDS} when nothing calls for more), up to ${max} only when the motion needs the time. Set "loop": true only on a slide worth watching twice whose motion returns to its start; otherwise it plays once and holds its last frame.`,
+    "A footage slide plays a video under its words; the others are drawn (type and graphics that animate). Most slides of a video carousel are footage when there is footage to use.",
+    ...(clips.length ? [`The user's clips, with their lengths (set a footage slide's "clip" to one, as written, and "clip_start" to the second it starts from, so clip_start + seconds stays inside the clip): ${clips.map((clip) => `${clip.src} (${clip.seconds} s)`).join(", ")}.`] : []),
+    ...(generate ? ['A slide may have generated footage: set "image" to the opening frame in plain lower-case words (a scene, no brand, person name, text or logo); it is made as a still, checked, then animated into the slide\'s clip. Every generated slide shares one setting, kind of people and time of day. Leave "image" null on drawn slides.'] : [])
+  ];
+}
+
+const VIDEO_FILE = /\.(mp4|webm|mov|m4v)$/i;
+const clamp = (value, [min, max], fallback) => (Number.isFinite(Number(value)) ? Math.min(max, Math.max(min, Number(value))) : fallback);
+
+/**
+ * A footage slide over its clip ({src, start}): the template's photo-scene
+ * plays the video, a type slide sets its text over a video plate, and any
+ * other layout becomes a photo-scene with the slide's words as its lines.
+ */
+function footageScene(scene, slide, clip) {
+  if (scene.module === "photo-scene") return { ...scene, params: { ...scene.params, media: { src: clip.src, sourceStart: clip.start } } };
+  if (scene.plate?.kind === "image" && scene.plate.params?.src === clip.src) {
+    const { blur, dim } = scene.plate.params;
+    return { ...scene, plate: { kind: "video", params: { src: clip.src, start: clip.start, ...(blur != null ? { blur } : {}), ...(dim != null ? { dim } : {}) } } };
+  }
+  const lines = [slide.headline, slide.body].filter((text) => typeof text === "string" && text.trim()).map((text) => ({ text: text.trim() }));
+  const { plate: _plate, ...rest } = scene;
+  return { ...rest, module: "photo-scene", params: { media: { src: clip.src, sourceStart: clip.start }, lines, align: "center", scrim: "full" } };
+}
+
 /** The model's plan → a carousel story. Tooling owns the format, brand, style, timing and medium. */
-export function planToStory(plan, { arc, goal, destinations, brand, style = null, template = null }) {
+export function planToStory(plan, { arc, goal, destinations, brand, style = null, template = null, video = false }) {
   const dest = CAROUSEL_DESTINATIONS[destinations[0]];
-  // A generated image lands at assets/generated/<slide id>.png (make.js), so that is the slide's photo.
-  const slides = (Array.isArray(plan?.slides) ? plan.slides : []).map(plainText).map((slide, i) => (typeof slide?.image === "string" && slide.image.trim() && !slide.photo ? { ...slide, photo: `assets/generated/${slide.id || `slide-${i + 1}`}.png` } : slide));
+  // A generated image lands at assets/generated/<slide id>.png (make.js), so that is the slide's photo;
+  // in a video carousel it is animated into assets/generated/<slide id>.mp4, the slide's clip.
+  const generated = (slide, i, ext) => `assets/generated/${slide.id || `slide-${i + 1}`}.${ext}`;
+  const slides = (Array.isArray(plan?.slides) ? plan.slides : []).map(plainText).map((slide, i) => {
+    if (!slide || typeof slide !== "object") return slide;
+    const image = typeof slide.image === "string" && slide.image.trim();
+    if (video && (image || (typeof slide.clip === "string" && VIDEO_FILE.test(slide.clip)))) return { ...slide, clip: image && !slide.clip ? generated(slide, i, "mp4") : slide.clip, photo: image && !slide.clip ? generated(slide, i, "mp4") : slide.clip };
+    return image && !slide.photo ? { ...slide, photo: generated(slide, i, "png") } : slide;
+  });
   // A slide the plan gives as content (no module) is laid out by the template; a slide with a module stays as written.
   const layout = template ? layoutCarousel(template, slides.map((slide) => (slide && typeof slide === "object" ? slide : {})), { aspect: dest.aspect, brand }) : null;
-  const scenes = slides.map((slide, i) => ({
-    id: typeof slide?.id === "string" && slide.id ? slide.id : `slide-${i + 1}`,
-    ...(layout && !slide?.module ? { module: layout.scenes[i].module, ...(layout.scenes[i].plate ? { plate: layout.scenes[i].plate } : {}) } : { module: slide?.module }),
-    start: i * SLIDE_SECONDS,
-    end: (i + 1) * SLIDE_SECONDS,
-    energy: ["cover", "cta"].includes(slide?.role) ? 2 : 1,
-    slide: { role: slide?.role, medium: "still", alt: typeof slide?.alt === "string" ? slide.alt : "" },
-    params: layout && !slide?.module ? layout.scenes[i].params : slide?.params && typeof slide.params === "object" ? slide.params : {}
-  }));
+  // A still slide runs SLIDE_SECONDS; a video carousel's slide runs its own seconds (2 to 10).
+  let at = 0;
+  const scenes = slides.map((slide, i) => {
+    const seconds = video ? clamp(slide?.seconds, MOTION_SLIDE_SECONDS, SLIDE_SECONDS) : SLIDE_SECONDS;
+    const scene = {
+      id: typeof slide?.id === "string" && slide.id ? slide.id : `slide-${i + 1}`,
+      ...(layout && !slide?.module ? { module: layout.scenes[i].module, ...(layout.scenes[i].plate ? { plate: layout.scenes[i].plate } : {}) } : { module: slide?.module }),
+      start: at,
+      end: (at += seconds),
+      energy: ["cover", "cta"].includes(slide?.role) ? 2 : 1,
+      ...(video && slide?.loop === true ? { loop: true } : {}),
+      slide: { role: slide?.role, medium: video ? "motion" : "still", alt: typeof slide?.alt === "string" ? slide.alt : "" },
+      params: layout && !slide?.module ? layout.scenes[i].params : slide?.params && typeof slide.params === "object" ? slide.params : {}
+    };
+    return video && slide?.clip ? footageScene(scene, slide, { src: slide.clip, start: clamp(slide.clip_start, [0, 3600], 0) }) : scene;
+  });
   const caption = plan?.caption && typeof plan.caption === "object" ? plan.caption : {};
   return {
     schema: STORY_SCHEMA,
     title: typeof plan?.title === "string" && plan.title ? plan.title : "Carousel",
     lane: "motion",
-    format: { kind: "carousel", width: dest.width, height: dest.height, fps: 30, duration: Math.max(1, scenes.length) * SLIDE_SECONDS, platform: destinations[0] },
+    format: { kind: "carousel", width: dest.width, height: dest.height, fps: 30, duration: scenes.length ? at : SLIDE_SECONDS, platform: destinations[0] },
     carousel: {
       arc: arc ?? plan?.arc,
       goal: goal ?? plan?.goal,
@@ -172,7 +217,7 @@ export function planToStory(plan, { arc, goal, destinations, brand, style = null
 }
 
 /** Every reason a planned carousel story cannot go to render. [] when it can. */
-export function storyErrors(story, { modules, range, warnings = [] }) {
+export function storyErrors(story, { modules, range, warnings = [], clips = [] }) {
   const ids = modules.map((module) => module.id);
   // Its "not a known module" is said below with the reason (not a slide module).
   const errors = validateStory(story, { modules: ids, moduleParams: validateModuleParams }).errors.filter((line) => !line.includes("is not a known module"));
@@ -182,6 +227,14 @@ export function storyErrors(story, { modules, range, warnings = [] }) {
     if (!ids.includes(scene.module)) errors.push(`scenes[${i}] (${scene.id}) uses ${scene.module}, which is not a slide module; use one listed under Modules`);
     if (!scene.slide.alt.trim()) errors.push(`scenes[${i}] (${scene.id}) needs alt text that says what the slide shows`);
   });
+  // A footage slide stays inside its clip: clip_start + seconds within the clip's length.
+  for (const scene of story.scenes) {
+    const src = scene.plate?.kind === "video" ? scene.plate.params?.src : scene.params?.media?.src;
+    const clip = clips.find((entry) => entry.src === src);
+    if (!clip) continue;
+    const start = Number(scene.plate?.kind === "video" ? scene.plate.params.start : scene.params.media.sourceStart) || 0;
+    if (start + scene.end - scene.start > clip.seconds + 1e-6) errors.push(`${scene.id}: ${clip.src} is ${clip.seconds} s long, so clip_start ${start} + ${round(scene.end - scene.start)} s runs past its end; start earlier or shorten the slide`);
+  }
   if (!story.carousel.caption.hook.trim()) errors.push("caption.hook is empty: write the post's first line");
   if (!story.carousel.caption.cta.trim()) errors.push("caption.cta is empty: ask the reader to do the goal");
   for (const id of story.carousel.destinations) errors.push(...destinationProblems(story, id).errors);
@@ -224,22 +277,22 @@ export function storyErrors(story, { modules, range, warnings = [] }) {
  * → {story, plan (the model's object, with image requests), attempts: [{ok, errors, usage}], range, warnings}
  * Throws when the repaired plan still fails, listing the errors.
  */
-export async function planCarousel({ client, brief, arc = null, goal = null, destinations, slides = null, photos = [], generate = false, brand, style = null, template = null, say = () => {} }) {
+export async function planCarousel({ client, brief, arc = null, goal = null, destinations, slides = null, photos = [], clips = [], video = false, generate = false, brand, style = null, template = null, say = () => {} }) {
   if (arc && !CAROUSEL_ARCS[arc]) throw new Error(`--arc must be auto or one of ${CAROUSEL_ARC_IDS.join(", ")}`);
   if (goal && !CAROUSEL_GOALS.includes(goal)) throw new Error(`--goal must be one of ${CAROUSEL_GOALS.join(", ")}`);
   const range = slideRange({ arc, destinations, slides });
   if (slides != null && range.exact !== slides) say(`plan: --slides ${slides} is outside what ${arc ?? "the arcs"} and ${destinations.join(", ")} allow; making ${range.exact}`);
-  const modules = slideModules({ photos: photos.length > 0 || generate });
+  const modules = slideModules({ photos: photos.length > 0 || clips.length > 0 || generate });
   // Without --goal, the arc's usual goal: the given arc's, else the guessed one's, which is what the prompt asks for.
   const goalFor = (picked) => goal ?? DEFAULT_GOAL[picked] ?? "follow";
   // The template: --template, else the brief's best fit for the arc, varied by the style's seed (picked again for an auto arc).
-  const pick = (picked) => pickTemplate({ template, brief, arc: picked, images: photos.length > 0 || generate, seed: style ?? "" });
+  const pick = (picked) => pickTemplate({ template, brief, arc: picked, images: photos.length > 0 || clips.length > 0 || generate, seed: style ?? "" });
   // An auto arc is guessed from the brief, so the template and its rules are in the first prompt. When the model
   // picks another arc, the template stays if it suits that arc too.
   const guess = arc ?? guessArc(brief);
   const first = pick(guess);
   const templateFor = (picked) => (template || picked === guess || CAROUSEL_TEMPLATES[first].arcs.includes(picked) ? first : pick(picked));
-  const instructions = planInstructions({ arc, guess, goal: goalFor(guess), destinations, range, modules, photos, generate, template: first });
+  const instructions = planInstructions({ arc, guess, goal: goalFor(guess), destinations, range, modules, photos, generate, video, clips, template: first });
   const attempts = [];
   const warnings = [];
   let input = `Brief: ${brief}\n`;
@@ -256,10 +309,10 @@ export async function planCarousel({ client, brief, arc = null, goal = null, des
         // The auto arc's count range is the picked arc's, inside the destinations'.
         const own = arc ? range : slideRange({ arc: picked, destinations, slides });
         const chosen = templateFor(picked);
-        story = planToStory(plan, { arc: picked, goal: goalFor(guess), destinations, brand, style, template: chosen });
+        story = planToStory(plan, { arc: picked, goal: goalFor(guess), destinations, brand, style, template: chosen, video });
         warnings.length = 0;
         const content = (Array.isArray(plan.slides) ? plan.slides : []).filter((slide) => slide && typeof slide === "object" && !slide.module);
-        errors = [...(content.length ? templateCopyProblems(chosen, content) : []), ...storyErrors(story, { modules, range: own, warnings })];
+        errors = [...(content.length ? templateCopyProblems(chosen, content) : []), ...storyErrors(story, { modules, range: own, warnings, clips })];
       }
     }
     attempts.push({ ok: !errors.length, errors, usage: result?.usage ?? null });
@@ -290,4 +343,5 @@ function parsePlan(result) {
   return plan;
 }
 
+const round = (value) => Math.round(value * 100) / 100;
 const message = (error) => String(error?.message ?? error).split("\n")[0];

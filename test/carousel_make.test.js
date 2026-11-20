@@ -1,6 +1,6 @@
 // launchclip carousel make with a stubbed model (src/carousel/make.js, plan.js).
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -170,4 +170,52 @@ test("slide copy is one plain line: no line breaks or angle brackets reach a mod
   const text = JSON.stringify(story.scenes[0].params);
   assert.ok(!/[<>]|\\n/.test(text), text);
   assert.match(text, /Open studio day/);
+});
+
+// A generate command: a fixed price, the fixture still for a keyframe and a 6 s fixture clip for the video.
+const FIXTURES = path.join(path.dirname(new URL(import.meta.url).pathname), "fixtures", "parity", "assets");
+const GENERATE = `import { createInterface } from "node:readline";
+createInterface({ input: process.stdin }).on("line", (line) => {
+  const { id, op, step } = JSON.parse(line);
+  const file = step === "video" ? ${JSON.stringify(path.join(FIXTURES, "shots", "blocks-static.mp4"))} : ${JSON.stringify(path.join(FIXTURES, "testsrc.png"))};
+  console.log(JSON.stringify(op === "quote" ? { id, amount: 0.25, unit: "usd" } : { id, file, model: "test-" + step, licence: "test fixture" }));
+});`;
+
+test("a video carousel: cards sized 2-10 s, handed-in and generated footage under free type, drawn cards, no forced loop", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "carousel-video-"));
+  try {
+    const clips = path.join(dir, "clips");
+    await mkdir(clips);
+    await copyFile(path.join(FIXTURES, "shots", "blocks-static.mp4"), path.join(clips, "blocks.mp4"));
+    const script = path.join(dir, "gen.mjs");
+    await writeFile(script, GENERATE);
+    const plan = {
+      title: "Three ways to stack blocks", arc: "listicle", goal: "save",
+      caption: { hook: "Stacking blocks is a skill.", body: "Three ways that hold.", cta: "Save this for later.", tags: ["blocks"] },
+      slides: [
+        { id: "cover", role: "cover", headline: "3 ways to stack blocks that hold", alt: "Headline over a shot of blocks", seconds: 4, clip: "assets/clips/blocks.mp4", clip_start: 9 },
+        { id: "beat", role: "body", headline: "Start wide at the base", alt: "Headline on the brand ground", seconds: 1 },
+        { id: "made", role: "body", headline: "Lock every second row", alt: "Headline over generated footage", seconds: 5, image: "wooden blocks stacked on a table in soft light" },
+        { id: "summary", role: "payoff", headline: "Wide, locked, light on top", alt: "The summary", seconds: 14 },
+        { id: "cta", role: "cta", headline: "Save this for your next build", alt: "Save prompt", seconds: 3 }
+      ]
+    };
+    const model = fakeModel((request) => { assert.match(request.instructions, /video carousel/); assert.match(request.instructions, /assets\/clips\/blocks\.mp4 \(6 s\)/); return plan; }, { ...plan, slides: plan.slides.map((entry) => (entry.id === "cover" ? { ...entry, clip_start: 1 } : entry)) });
+    const out = path.join(dir, "out");
+    const report = await run("three ways to stack blocks", { out, json: true, seed: "7f3a91c2", arc: "listicle", template: "cinematic-dark", clips, generate: `cmd:${JSON.stringify(process.execPath)} ${JSON.stringify(script)}`, budget: "2usd" }, { client: model, stages: stubStages, stdout: { write() {} }, stderr: { write() {} }, env: {} });
+    // The first plan ran the cover's clip past its end (9 s + 4 s of a 6 s clip); the repair fixed it.
+    assert.match(report.plan_attempts[0].errors.join("\n"), /cover: assets\/clips\/blocks\.mp4 is 6 s long/);
+    const story = JSON.parse(await readFile(path.join(out, "storyboard.json"), "utf8"));
+    assert.ok(story.scenes.every((scene) => scene.slide.medium === "motion"));
+    assert.deepEqual(story.scenes.map((scene) => scene.end - scene.start), [4, 2, 5, 10, 3], "seconds clamped to 2-10");
+    assert.equal(story.format.duration, 24);
+    assert.ok(story.scenes.every((scene) => scene.loop === undefined), "a card loops only when the plan asks");
+    assert.deepEqual(report.cards.map((card) => [card.id, card.kind, card.source ?? null]), [["cover", "footage", "assets/clips/blocks.mp4"], ["beat", "drawn", null], ["made", "footage", "assets/generated/made.mp4"], ["summary", "drawn", null], ["cta", "drawn", null]]);
+    // The generated clip went through the keyframe first, and the card starts past its padding.
+    assert.equal(report.images.made[0].source.made_with, "cmd:test-image → cmd:test-video");
+    const made = story.scenes[2];
+    const start = made.plate?.params.start ?? made.params.media.sourceStart;
+    assert.ok(start > 0);
+    await readFile(path.join(out, "assets", "generated", "made.mp4"));
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
