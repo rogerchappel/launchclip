@@ -260,7 +260,8 @@ export function slideFigure(slide) {
   for (const [text, other] of [[slide?.headline, slide?.body], [slide?.body, slide?.headline]]) {
     const match = FIGURE.exec(words(text));
     if (!match) continue;
-    const head = /^[$€£¥]?\s?[\d,.]+\s?(?:%|x|×|k|m|bn|b)?/i.exec(match[0])[0].trim();
+    // A word unit stays whole ("52 minutes"); a short one only as a whole word ("3x", "$2m"), not the "m" of "minutes".
+    const head = /[a-z]{3,}$/i.test(match[0]) && match[0].length <= 12 ? match[0] : /^[$€£¥]?\s?[\d,.]+(?:\s?(?:%|×|(?:x|k|m|bn|b)\b))?/i.exec(match[0])[0].trim();
     const label = (words(text).replace(match[0], match[0].slice(head.length)).replace(/\s+/g, " ").replace(/^[\s,:;–—-]+|[\s,:;–—-]+$/g, "")) || words(other);
     return { value: head, label, source: words(slide?.source) || null };
   }
@@ -285,7 +286,8 @@ export function slideGrammar(slide, template = null) {
   const image = Boolean(words(slide?.photo));
   if (slide?.role === "cta" || slide?.quote) return "text-card";
   if (slidePair(slide)) return "two-region";
-  if (slideFigure(slide)) return "proof-stat";
+  // A cover is the promise in words: a number in it ("in 20 minutes") does not make it a stat card.
+  if (slide?.role !== "cover" && slideFigure(slide)) return "proof-stat";
   const wanted = template?.grammar?.[slide?.role];
   // A short list with a photo stays in the template's photo panel (split-screen holds 2–4 short items).
   const items = slideItems(slide);

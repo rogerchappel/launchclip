@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { CAROUSEL_ARC_IDS, carouselProblems } from "@launchclip/core/carousel.mjs";
-import { CAROUSEL_GRAMMARS, CAROUSEL_TEMPLATES, CAROUSEL_TEMPLATE_IDS, MIN_BODY_PX, MIN_HEADLINE_PX, contrastRatio, layoutCarousel, lightBrand, pickTemplate, slideCaps, slideGrammar, templateCopyProblems, templateProblems, templateScores } from "@launchclip/core/carousel-templates.mjs";
+import { CAROUSEL_GRAMMARS, CAROUSEL_TEMPLATES, CAROUSEL_TEMPLATE_IDS, MIN_BODY_PX, MIN_HEADLINE_PX, contrastRatio, layoutCarousel, lightBrand, pickTemplate, slideCaps, slideFigure, slideGrammar, templateCopyProblems, templateProblems, templateScores } from "@launchclip/core/carousel-templates.mjs";
 import { validateStory } from "@launchclip/core/story.mjs";
 import { validateModuleParams } from "@launchclip/core/module-schemas.mjs";
 import { declaredTextBoxes } from "../src/carousel/check.js";
@@ -40,6 +40,9 @@ test("grammar picking: a pair, a figure, a list, the cover, a photo, then the te
   assert.equal(slideGrammar({ role: "body", headline: "3.4× more rollbacks on Fridays" }), "proof-stat");
   assert.equal(slideGrammar({ role: "body", headline: "Saved", stat: { value: "12 h", label: "a week" } }), "proof-stat");
   assert.equal(slideGrammar({ role: "body", headline: "3 habits that make teams ship faster" }), "text-card", "a count of habits is not a proof figure");
+  assert.equal(slideGrammar({ role: "cover", headline: "A weekly review in 20 minutes" }), "text-card", "a cover stays the promise");
+  assert.deepEqual(slideFigure({ headline: "Median commute saved: 52 minutes a day" }), { value: "52 minutes", label: "Median commute saved: a day", source: null }, "a word unit stays whole");
+  assert.equal(slideFigure({ headline: "$2m raised" }).value, "$2m");
   assert.equal(slideGrammar({ role: "payoff", headline: "Save this", items: ["One", "Two"] }), "steps");
   assert.equal(slideGrammar({ role: "body", headline: "The routine", body: "First stretch, then jog, finally cool down" }), "steps");
   assert.equal(slideGrammar({ role: "cover", headline: "The year I ran", photo: "assets/a.jpg" }), "full-bleed");
