@@ -36,6 +36,9 @@ function strings(value) {
   return [];
 }
 
+// A line that only asks for the swipe ("SWIPE FOR THE STEPS"): a cue, not the slide's copy.
+const SWIPE_LINE = /^\s*swipe\b[^.!?]{0,32}$/i;
+
 /** A slide's text from its module params: {headlines: [..], supports: [..], meta: [..], all: "..."}; each entry one block. */
 export function slideText(scene) {
   const params = isObject(scene?.params) ? scene.params : {};
@@ -43,7 +46,8 @@ export function slideText(scene) {
   const headlines = blocks(HEADLINE_KEYS);
   const supports = blocks(SUPPORT_KEYS);
   const meta = blocks(META_KEYS);
-  return { headlines, supports, meta, all: [...headlines, ...supports, ...meta].map((block) => block.text).join(" ") };
+  // own: the slide's headline and supporting text, without the labels a template adds (byline, author, footer, page, a swipe line).
+  return { headlines, supports, meta, own: [...headlines, ...supports].filter((block) => !SWIPE_LINE.test(block.text)).map((block) => block.text).join(" "), all: [...headlines, ...supports, ...meta].map((block) => block.text).join(" ") };
 }
 
 const NUMBER_WORDS = new Set(["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "fifteen", "twenty", "hundred", "thousand", "million", "billion", "half", "double", "triple"]);
@@ -142,7 +146,7 @@ export function carouselPlanFindings(story) {
     if (text.headlines.length > 1) add("one-idea", i + 1, "fail", `${text.headlines.length} headlines (${text.headlines.map((block) => block.key).join(", ")}); one per slide`);
     if (text.supports.length > 1) add("one-idea", i + 1, "fail", `${text.supports.length} supporting blocks (${text.supports.map((block) => block.key).join(", ")}); one per slide`);
     const budget = roleOf(i) === "cover" ? COVER_WORD_BUDGET : BODY_WORD_BUDGET;
-    const count = words(text.all).length;
+    const count = words(text.own).length;
     if (count > budget) add("one-idea", i + 1, "fail", `${count} words; a ${roleOf(i) === "cover" ? "cover" : "slide"} reads in ${budget} or fewer`);
   });
 
@@ -275,7 +279,7 @@ function copyFindings(slides, texts, caption) {
   repeated(bodyOf, "body text");
 
   // word-budget: the deck as a whole
-  const total = texts.reduce((sum, text) => sum + words(text.all).length, 0);
+  const total = texts.reduce((sum, text) => sum + words(text.own).length, 0);
   const low = Math.max(MIN_DECK_WORDS, WORDS_PER_SLIDE[0] * slides.length), high = WORDS_PER_SLIDE[1] * slides.length;
   if (slides.length && total < low) add("word-budget", null, "warn", `${total} words across ${slides.length} slides; under ${low}, the slides say too little to be worth a swipe`);
   if (total > high) add("word-budget", null, "fail", `${total} words across ${slides.length} slides; over ${high}, it reads as a document, not a carousel`);

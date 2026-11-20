@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { CAROUSEL_ARC_IDS, carouselProblems } from "@launchclip/core/carousel.mjs";
-import { CAROUSEL_GRAMMARS, CAROUSEL_TEMPLATES, CAROUSEL_TEMPLATE_IDS, MIN_BODY_PX, MIN_HEADLINE_PX, contrastRatio, layoutCarousel, lightBrand, pickTemplate, slideCaps, slideGrammar, templateCopyProblems, templateProblems, templateScores } from "@launchclip/core/carousel-templates.mjs";
+import { CAROUSEL_GRAMMARS, CAROUSEL_TEMPLATES, CAROUSEL_TEMPLATE_IDS, MIN_BODY_PX, MIN_HEADLINE_PX, contrastRatio, layoutCarousel, lightBrand, pickTemplate, slideCaps, slideFigure, slideGrammar, templateCopyProblems, templateProblems, templateScores } from "@launchclip/core/carousel-templates.mjs";
 import { validateStory } from "@launchclip/core/story.mjs";
 import { validateModuleParams } from "@launchclip/core/module-schemas.mjs";
 import { declaredTextBoxes } from "../src/carousel/check.js";
@@ -40,6 +40,9 @@ test("grammar picking: a pair, a figure, a list, the cover, a photo, then the te
   assert.equal(slideGrammar({ role: "body", headline: "3.4× more rollbacks on Fridays" }), "proof-stat");
   assert.equal(slideGrammar({ role: "body", headline: "Saved", stat: { value: "12 h", label: "a week" } }), "proof-stat");
   assert.equal(slideGrammar({ role: "body", headline: "3 habits that make teams ship faster" }), "text-card", "a count of habits is not a proof figure");
+  assert.equal(slideGrammar({ role: "cover", headline: "A weekly review in 20 minutes" }), "text-card", "a cover stays the promise");
+  assert.deepEqual(slideFigure({ headline: "Median commute saved: 52 minutes a day" }), { value: "52 minutes", label: "Median commute saved: a day", source: null }, "a word unit stays whole");
+  assert.equal(slideFigure({ headline: "$2m raised" }).value, "$2m");
   assert.equal(slideGrammar({ role: "payoff", headline: "Save this", items: ["One", "Two"] }), "steps");
   assert.equal(slideGrammar({ role: "body", headline: "The routine", body: "First stretch, then jog, finally cool down" }), "steps");
   assert.equal(slideGrammar({ role: "cover", headline: "The year I ran", photo: "assets/a.jpg" }), "full-bleed");
@@ -63,6 +66,9 @@ test("caps: a template's caps sit inside each grammar's, and copy over them is s
     const caps = slideCaps(CAROUSEL_TEMPLATES[id], grammar);
     assert.ok(caps.headline <= CAROUSEL_GRAMMARS[grammar].caps.headline && caps.body <= CAROUSEL_GRAMMARS[grammar].caps.body);
   }
+  // The cta module sets its ask on one line of 40, so a longer one is said for the repair rather than cut with an ellipsis.
+  assert.match(templateCopyProblems("bold-statement", [{ id: "cta", role: "cta", headline: "Follow for more reminders to keep going daily" }]).join(" "), /holds 40/);
+  assert.deepEqual(templateCopyProblems("cinematic-dark", [{ id: "cta", role: "cta", headline: "Follow for more reminders to keep going" }]), [], "a poster draws its cta in its own layout");
   const errors = templateCopyProblems("numbered-steps", [
     { id: "a", role: "cover", headline: "x".repeat(49) },
     { id: "b", role: "payoff", headline: "List", items: ["one", "two", "three", "four", "five", "six", "seven"] },
@@ -115,7 +121,10 @@ test("layout: grounds turn the brand over with readable type; photo surfaces and
   assert.deepEqual(numbered.scenes.map((scene) => scene.module), ["split-screen", "section-card", "section-card", "cta"]);
   assert.deepEqual(numbered.scenes.slice(1, 3).map((scene) => scene.params.number), [1, 2], "steps are numbered in slide order");
   assert.equal(numbered.scenes[0].params.body, "SWIPE FOR THE STEPS", "the cover asks for the swipe under its headline");
+  // Without a photo the cover is not the panel that draws the swipe line, so it takes the arrow label.
+  assert.equal(layoutCarousel("numbered-steps", [{ ...slides[0], photo: undefined }, ...slides.slice(1)], { brand }).scenes[0].params.eyebrow, "Swipe →");
   const note = layoutCarousel("plain-note", slides, { brand });
+  assert.match(note.scenes[0].params.quote, / →$/, "a note cover asks for the swipe at the end of its observation");
   assert.ok(note.scenes.slice(0, 3).every((scene) => JSON.stringify(scene.params).includes("me.test")), "the identity line on every slide");
   for (const [id, ground] of [["paper-story", "light"], ["plain-note", "light"], ["bold-statement", "brand"], ["plain-note-dark", "dark"]]) {
     const { colors } = layoutCarousel(id, slides, { brand }).story.brand;
@@ -124,6 +133,12 @@ test("layout: grounds turn the brand over with readable type; photo surfaces and
     assert.ok(contrastRatio(colors.ink, colors.primary) >= 3, `${id}: ink reads on a primary fill`);
   }
   assert.equal(layoutCarousel("bold-statement", slides, { brand }).story.brand.colors.bg, "#ffb020", "the primary is the page");
+  // A mid-tone primary: white type reads at 4.5:1 but its 62% muted labels would not, so the page deepens until they do.
+  for (const primary of ["#007e5d", "#0079a5"]) {
+    const { colors } = layoutCarousel("bold-statement", slides, { brand: { colors: { ...brand.colors, primary } } }).story.brand;
+    const muted = `#${[16, 8, 0].map((s) => Math.round(((parseInt(colors.bg.slice(1), 16) >> s) & 255) * 0.38 + ((parseInt(colors.paper.slice(1), 16) >> s) & 255) * 0.62).toString(16).padStart(2, "0")).join("")}`;
+    assert.ok(contrastRatio(muted, colors.bg) >= 3, `${primary}: muted labels read on the page (${colors.bg})`);
+  }
   assert.equal(lightBrand({ colors: {} }).colors.bg, undefined, "no colours, nothing to turn over");
   assert.throws(() => layoutCarousel("numbered-steps", slides, { aspect: "16:9" }), /lays out at 4:5, 1:1, 9:16/);
 });

@@ -35,11 +35,26 @@ test("one-idea: one headline, one supporting block, word budgets", () => {
   story.scenes[1].params.body = "and a third";
   assert.match(rules(carouselPlanFindings(story), "one-idea")[0].reason, /2 supporting blocks/);
   const long = clean();
-  long.scenes[0].params.headline = "3 habits that make every single team on earth ship much faster";
+  long.scenes[0].params.headline = "3 habits that make every single team on earth ship much faster now";
   const found = rules(carouselPlanFindings(long), "one-idea");
   assert.equal(found[0].slide, 1);
   assert.match(found[0].reason, /reads in 12 or fewer/);
   assert.deepEqual(slideText(story.scenes[3]).supports.map((block) => block.key), ["items"]);
+});
+
+test("one-idea: a template's byline, author and footer do not count against the cover", () => {
+  const story = clean();
+  // 10 words of headline, as a plain-note cover sets it, under the brand's name and handle.
+  story.scenes[0].module = "quote-card";
+  story.scenes[0].params = { quote: "Seven small habits that let tiny teams ship work fast", author: "Acme Studio Labs", role: "@acme", variant: "post" };
+  assert.deepEqual(rules(carouselPlanFindings(story), "one-idea"), []);
+  story.scenes[0].params.quote += " every single week";
+  assert.match(rules(carouselPlanFindings(story), "one-idea")[0].reason, /^13 words/);
+  // numbered-steps sets its swipe line as the cover panel's body.
+  const steps = clean();
+  steps.scenes[0].module = "split-screen";
+  steps.scenes[0].params = { media: "assets/a.jpg", variant: "top", title: "HOW TO BREW POUR-OVER COFFEE AT HOME IN FIVE STEPS", body: "SWIPE FOR THE STEPS" };
+  assert.deepEqual(rules(carouselPlanFindings(steps), "one-idea"), []);
 });
 
 test("continuity: a slide that switches its look warns", () => {

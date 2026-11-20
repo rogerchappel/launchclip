@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { isEditorialKind } from "@launchclip/core/modules.mjs";
 import { run } from "../src/carousel/make.js";
-import { slideModules, slideRange } from "../src/carousel/plan.js";
+import { planToStory, slideModules, slideRange } from "../src/carousel/plan.js";
 
 const slide = (id, role, module, params, alt = `${id} slide`) => ({ id, role, module, params, alt });
 const listicle = (extra = {}) => ({
@@ -50,7 +50,7 @@ async function make(brief, flags, model, stages = stubStages) {
 test("auto arc: the model picks it, the plan names the arcs, and the arc's goal is the default", async () => {
   const model = fakeModel(listicle({ arc: "how-to" }));
   const { report, story } = await make("how to ship faster", {}, model);
-  assert.match(model.requests[0].instructions, /Pick the arc/);
+  assert.match(model.requests[0].instructions, /reads as a how-to carousel; keep that arc unless/);
   assert.equal(story.carousel.arc, "how-to");
   assert.equal(story.carousel.goal, "save");
   assert.equal(report.arc, "how-to");
@@ -164,6 +164,14 @@ test("a plan of slide content is laid out by a template: --template, or picked f
   assert.match(report.plan_attempts[0].errors.join("\n"), /headline is 70 characters; the numbered-steps template's step slide holds 48/);
 });
 
+test("slide copy is one plain line: no line breaks or angle brackets reach a module", () => {
+  const plan = { slides: [{ id: "only", role: "cover", headline: "Open studio\nday", body: "Saturday <10am to 4pm>\n22 Wharf Street", alt: "the date", items: undefined }] };
+  const story = planToStory(plan, { arc: "single", goal: "visit", destinations: ["instagram"], brand: null, template: "plain-note" });
+  const text = JSON.stringify(story.scenes[0].params);
+  assert.ok(!/[<>]|\\n/.test(text), text);
+  assert.match(text, /Open studio day/);
+});
+
 // A generate command: a fixed price, the fixture still for a keyframe and a 6 s fixture clip for the video.
 const FIXTURES = path.join(path.dirname(new URL(import.meta.url).pathname), "fixtures", "parity", "assets");
 const GENERATE = `import { createInterface } from "node:readline";
@@ -210,4 +218,18 @@ test("a video carousel: cards sized 2-10 s, handed-in and generated footage unde
     assert.ok(start > 0);
     await readFile(path.join(out, "assets", "generated", "made.mp4"));
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("a footage card the template has no photo layout for is the template's full-bleed slide over the clip", () => {
+  const plan = { slides: [
+    { id: "cover", role: "cover", headline: "Start a project in under a minute", alt: "Headline over the app", seconds: 3, clip: "assets/clips/app.mp4" },
+    { id: "pick", role: "body", headline: "Pick a template", body: "Then invite your team", alt: "Over the app", seconds: 4, clip: "assets/clips/app.mp4", clip_start: 2 }
+  ] };
+  const story = planToStory(plan, { arc: "how-to", goal: "save", destinations: ["instagram"], brand: null, template: "numbered-steps", video: true });
+  const [cover, pick] = story.scenes;
+  assert.equal(cover.module, "photo-scene");
+  assert.equal(cover.params.title, "Start a project in under a minute", "the cover keeps its headline for the check");
+  assert.ok(cover.params.lines.every((line) => line.text.length <= 22), JSON.stringify(cover.params.lines));
+  assert.match(cover.params.lines.at(-1).text, /→/, "the cover asks for the swipe");
+  assert.deepEqual(pick.params.media, { src: "assets/clips/app.mp4", sourceStart: 2 });
 });

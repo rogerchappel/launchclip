@@ -57,7 +57,7 @@
         "alt": "A deadline you keep to yourself is only a wish."
       },
       "params": {
-        "quote": "A deadline you keep to yourself is only a wish.",
+        "quote": "A deadline you keep to yourself is only a wish. →",
         "author": "Weekly Ship",
         "role": "@weekly.ship",
         "variant": "post"
