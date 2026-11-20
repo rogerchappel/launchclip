@@ -1451,7 +1451,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 - `carousel make`: Plan, render and check a carousel or a single-image post from a brief (docs/CAROUSELS_RFC.md): a story whose scenes are slides, each a still (the slide's settled frame) or a short motion loop, with a post caption and alt text per destination.
 
   ```text
-  launchclip carousel make "<brief>" [--arc <id>|auto] [--template <id>|auto] [--dest instagram,linkedin,...] [--slides <n>] [--goal save|comment|follow|visit|install] [--images <dir>] [--clips <dir>] [--video] [--generate <provider>[:<model>]] [--variants <n>] [--out <dir>] [--json] # plan, render and check a carousel or single-image post (docs/CAROUSELS_RFC.md)
+  launchclip carousel make "<brief>" [--arc <id>|auto] [--template <id>|auto] [--dest instagram,linkedin,...] [--slides <n>] [--goal save|comment|follow|visit|install] [--images <dir>] [--clips <dir>] [--video] [--generate <provider>[:<model>]] [--background shared|per-slide|none] [--panorama] [--variants <n>] [--out <dir>] [--json] # plan, render and check a carousel or single-image post (docs/CAROUSELS_RFC.md)
   ```
 
 - `carousel render`: Render each slide of a carousel project: the still at the slide's settled frame, and a loop for each motion slide, laid out again for each destination's canvas, into carousel/<dest>/.

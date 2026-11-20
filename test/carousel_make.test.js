@@ -233,3 +233,80 @@ test("a footage card the template has no photo layout for is the template's full
   assert.match(cover.params.lines.at(-1).text, /→/, "the cover asks for the swipe");
   assert.deepEqual(pick.params.media, { src: "assets/clips/app.mp4", sourceStart: 2 });
 });
+
+// Generated backgrounds and the panorama (make --background / --panorama).
+const textPlan = (extra = {}) => ({
+  title: "Quiet mornings", arc: "listicle", goal: "save",
+  caption: { hook: "Mornings set the day.", body: "Three small habits.", cta: "Save this for tomorrow.", tags: ["mornings"] },
+  slides: [
+    { id: "cover", role: "cover", headline: "3 quiet habits for calmer mornings", alt: "Headline" },
+    { id: "light", role: "body", headline: "Open the curtains first", alt: "Headline" },
+    { id: "water", role: "body", headline: "Drink a glass of water", alt: "Headline" },
+    { id: "summary", role: "payoff", headline: "Light, water, a slow start", alt: "Summary" },
+    { id: "cta", role: "cta", headline: "Save this for tomorrow", alt: "Save prompt" }
+  ],
+  ...extra
+});
+
+test("a shared generated background sits under every type slide, behind the template's reading layer", async () => {
+  const { carouselProblems } = await import("@launchclip/core/carousel.mjs");
+  const plan = textPlan({ background: { mode: "shared", image: "soft morning light on a linen wall" } });
+  const story = planToStory(plan, { arc: "listicle", goal: "save", destinations: ["instagram"], brand: null, template: "plain-note", extras: { background: null, panorama: null } });
+  assert.deepEqual(story.carousel.background, { mode: "shared", shows: "soft morning light on a linen wall" });
+  for (const scene of story.scenes) assert.equal(scene.plate?.params.src, "assets/generated/background.png", scene.id);
+  assert.equal(story.scenes[0].plate.kind, "image");
+  assert.ok(story.scenes[0].plate.params.dim >= 0.4, "under a reading layer");
+  assert.deepEqual(carouselProblems(story), []);
+  // Without --generate (no extras) the plan's background is ignored.
+  assert.ok(planToStory(plan, { arc: "listicle", goal: "save", destinations: ["instagram"], brand: null, template: "plain-note" }).scenes.every((scene) => !scene.plate));
+  assert.match(carouselProblems({ ...story, carousel: { ...story.carousel, background: { mode: "wall" } } }).join("\n"), /carousel.background must be/);
+});
+
+test("per-slide video backgrounds are looping-length video plates; a footage card keeps its clip", () => {
+  const plan = textPlan({ slides: textPlan().slides.map((slide, i) => ({ ...slide, seconds: 3 + i, background: `slow mist over water, take ${i + 1}` })) });
+  plan.slides[1] = { ...plan.slides[1], clip: "assets/clips/a.mp4" };
+  const story = planToStory(plan, { arc: "listicle", goal: "save", destinations: ["instagram"], brand: null, template: "plain-note", video: true, extras: { background: "per-slide", panorama: true } });
+  assert.equal(story.scenes[0].plate.kind, "video");
+  assert.equal(story.scenes[0].plate.params.src, "assets/generated/cover-background.mp4");
+  assert.equal(story.scenes[0].plate.params.start, 0);
+  assert.notEqual(story.scenes[1].plate?.params.src ?? story.scenes[1].params.media?.src, "assets/generated/light-background.mp4");
+  assert.equal(story.carousel.panorama, undefined, "a video carousel takes no panorama");
+});
+
+test("a panorama spans its slides, which take no background; an image under it goes to the repair", async () => {
+  const { extrasErrors } = await import("../src/carousel/plan.js");
+  const plan = textPlan({ background: { mode: "shared", image: "warm dawn haze" }, panorama: { image: "a wide valley at dawn", slides: [1, 3] } });
+  const story = planToStory(plan, { arc: "listicle", goal: "save", destinations: ["instagram"], brand: null, template: "plain-note", extras: { background: null, panorama: null } });
+  assert.deepEqual(story.carousel.panorama, { src: "assets/generated/panorama.png", slides: [1, 3] });
+  assert.deepEqual(story.scenes.map((scene) => scene.plate?.params.src ?? null), [null, null, null, "assets/generated/background.png", "assets/generated/background.png"]);
+  assert.deepEqual(extrasErrors(plan, story), []);
+  // A bad span falls back to the first three slides; a missing image is an error.
+  const loose = planToStory({ ...plan, panorama: { slides: [4, 2] } }, { arc: "listicle", goal: "save", destinations: ["instagram"], brand: null, template: "plain-note", extras: { background: "none", panorama: true } });
+  assert.deepEqual(loose.carousel.panorama.slides, [1, 3]);
+  assert.match(extrasErrors({ ...plan, panorama: {} }, loose).join("\n"), /panorama.image/);
+  loose.scenes[1].plate = { kind: "image", params: { src: "assets/generated/light.png" } };
+  assert.match(extrasErrors(plan, loose).join("\n"), /slide 2 \(light\) is under the panorama/);
+});
+
+test("make --background shared --panorama: one batch, the background file, and a panorama plate of exactly span × width", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "carousel-backdrops-"));
+  try {
+    const script = path.join(dir, "gen.mjs");
+    await writeFile(script, GENERATE);
+    const plan = textPlan({ background: { mode: "shared", image: "soft morning light on a linen wall" }, panorama: { image: "a wide valley at dawn with open sky", slides: [1, 3] } });
+    const model = fakeModel((request) => { assert.match(request.instructions, /one generated background/); assert.match(request.instructions, /one wide generated panorama/); return plan; });
+    const out = path.join(dir, "out");
+    const report = await run("three quiet habits for calmer mornings", { out, json: true, seed: "7f3a91c2", arc: "listicle", template: "plain-note", background: "shared", panorama: true, generate: `cmd:${JSON.stringify(process.execPath)} ${JSON.stringify(script)}`, budget: "2usd" }, { client: model, stages: stubStages, stdout: { write() {} }, stderr: { write() {} }, env: {} });
+    assert.deepEqual(report.images.backgrounds.map((entry) => entry.file), ["assets/generated/background.png", "assets/generated/panorama.png"]);
+    const story = JSON.parse(await readFile(path.join(out, "storyboard.json"), "utf8"));
+    assert.deepEqual(story.carousel.panorama.slides, [1, 3]);
+    const { probeMedia } = await import("../src/media_trim.js");
+    const stream = (await probeMedia(path.join(out, "assets", "generated", "panorama.png"))).streams[0];
+    assert.deepEqual([stream.width, stream.height], [3 * 1080, 1350]);
+    await readFile(path.join(out, "assets", "generated", "background.png"));
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("--background takes shared, per-slide, none or auto", async () => {
+  await assert.rejects(make("a brief", { background: "wall" }, fakeModel()), /--background must be shared, per-slide, none or auto/);
+});
