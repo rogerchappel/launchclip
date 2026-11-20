@@ -114,7 +114,7 @@ test("layout: grounds turn the brand over with readable type; photo surfaces and
   const brand = { colors: { bg: "#13151a", primary: "#ffb020", accent: "#ff6b5f", ink: "#13151a", paper: "#f5f1e8" } };
   const slides = [{ id: "c", role: "cover", headline: "Big promise", photo: "assets/p.jpg" }, { id: "b", role: "body", headline: "Point one" }, { id: "b2", role: "body", headline: "Point two", photo: "assets/p.jpg" }, { id: "x", role: "cta", headline: "Follow", handle: "me.test", photo: "assets/p.jpg" }];
   const cinematic = layoutCarousel("cinematic-dark", slides, { brand });
-  assert.deepEqual(cinematic.scenes[0].plate, { kind: "image", params: { src: "assets/p.jpg", dim: 0.6, blur: 0 } }, "the photo crisp under a 0.6 reading layer");
+  assert.deepEqual(cinematic.scenes[0].plate, { kind: "image", params: { src: "assets/p.jpg", gradient: CAROUSEL_TEMPLATES["cinematic-dark"].reading.gradient, blur: 0 } }, "the photo crisp under the template's reading gradient");
   assert.equal(cinematic.scenes[1].plate, undefined, "no photo: the ground");
   assert.deepEqual(cinematic.story.background, { kind: "flat" });
   const numbered = layoutCarousel("numbered-steps", slides, { brand });

@@ -83,7 +83,32 @@ A template sets the carousel's ground, and a carousel has one:
 - `brand` makes the brand's primary the page.
 - `pure` takes a dark or light ground to a near-black or near-white page in the brand's hue.
 
-Type, accent and the colour on a primary fill (a call-to-action pill) are moved until they read on that ground. Each role then sits on the ground, on a plate lit in the brand colour, or `on-image`: the slide's photo behind a reading layer (0.6 for the cinematic templates, 0.74 under a numbered step). Colours always come from the brand or the style pack. No template names a hex.
+Type, accent and the colour on a primary fill (a call-to-action pill) are moved until they read on that ground. Each role then sits on the ground, on a plate lit in the brand colour, or `on-image`: the slide's photo behind a reading layer. Colours always come from the brand or the style pack. No template names a hex.
+
+### The reading gradient
+
+The reading layer is a gradient in the brand's colour rather than a flat dim. It's solid where the type sits and fades to clear, so the photo or footage shows through the rest of the slide. Both renderers draw the same CSS gradient, built once in `kit/core/reading-gradient.mjs`:
+
+```json
+"gradient": { "color": "ground", "tint": 0, "direction": "bottom", "stops": [0.62, 0.95], "opacity": 0.9 }
+```
+
+| Field | Meaning |
+|---|---|
+| `color` | `ground` (the page colour) or `primary`, never a hex |
+| `tint` | 0 to 0.6: how much of the other colour mixes in (a ground tinted by the primary, or the primary deepened toward the ground) |
+| `direction` | `bottom`, `top`, `both` (solid at the top and bottom edges, clear in the middle) or `full` (flat) |
+| `stops` | `[solid, clear]` as fractions of the slide from that edge: solid up to the first, clear from the second |
+| `opacity` | 0.3 to 1: the solid end's alpha |
+
+It goes wherever a photo or video sits under type:
+
+- An image or video plate (`plate: {kind: "video", params: {src, gradient}}`) replaces the plate's flat `dim`. A video plate raises the solid end to the contrast floor on bright footage.
+- `photo-scene` takes `gradient` in place of its `scrim`.
+- `split-screen` takes `fade`, a gradient anchored at the photo's seam so the photo fades into its panel.
+- `carousel.panorama.reading` lays it over each slide's slice. It runs top to bottom, so the slices still meet at every seam.
+
+A template's `reading` is `{gradient, blur}` (or the flat `{dim, blur}`), plus `panel`, the fade an image-panel photo uses into its panel. `cinematic-dark` and `cinematic-light` are solid over the lower 60% and clear at the top. `numbered-steps` fades its cover photo into the black panel, and its footage steps sit on a gradient solid over the lower 72%. `caption-block` and `photo-essay` fade the photo into the panel over the last 30% and 22% of its height. Keep the type on the solid end. `check` measures contrast on the rendered pixels, so type on the clear end fails.
 
 A carousel slide that isn't 9:16 lays out inside the feed's margins (5% each side and at the top, 8% at the bottom), not under a Shorts-style interface, and with no captions band. 9:16 slides keep the Shorts safe zone.
 
@@ -191,4 +216,4 @@ Two treatments pull the eye to the next slide. Both work in Remotion and HyperFr
 "panorama": { "src": "assets/panorama.jpg", "slides": [1, 4] }
 ```
 
-`slides` is the first and last slide it covers (1-based). The plate is scaled once to cover that many slide widths by the slide height, centred, and each slide shows its own width of it, so the slides line up pixel for pixel side by side. A plate already that size (here 4 × 1080 by 1350) is drawn unscaled. Keep the type on each slide clear of the busiest parts of the plate; `check` measures contrast on the rendered slides.
+`slides` is the first and last slide it covers (1-based). The plate is scaled once to cover that many slide widths by the slide height, centred, and each slide shows its own width of it, so the slides line up pixel for pixel side by side. A plate already that size (here 4 × 1080 by 1350) is drawn unscaled. Keep the type on each slide clear of the busiest parts of the plate; `check` measures contrast on the rendered slides. Add `"reading": {…}` (a [reading gradient](#the-reading-gradient)) to lay a brand-coloured gradient over every slice.

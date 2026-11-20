@@ -55,7 +55,10 @@
 // (0–1, the footage's brightest level once blurred, as measured; 1, white,
 // when unknown). Its dim is raised to the floor at which paper text keeps
 // 4.5:1 on a pixel at peak (videoPlateFloor), so a card over footage stays
-// readable whatever the footage does.
+// readable whatever the footage does. Either takes gradient (a reading
+// gradient, kit/core/reading-gradient.mjs) in place of the flat dim: solid
+// where the type sits, fading to clear; a video holds its solid end to the
+// floor.
 //
 // Where the plate comes from (scenePlateSpec), first match wins:
 //   scenes[i].backdrop  a plate, or "none" for the story's background
@@ -90,6 +93,7 @@
 import { AMBIENT_PRESETS, ambientSeed, fieldLevel, hashString, seededRandom } from './ambient.mjs';
 import { LOGO_SRC, safeAlpha, svgUrl } from './backgrounds.mjs';
 import { contrast, mix } from './panels.mjs';
+import { readingColor, readingGradient, readingGradientErrors, readingSpec } from './reading-gradient.mjs';
 
 export const PLATE_KINDS = Object.freeze(['silk', 'smoke', 'bokeh', 'veil', 'facets', 'halftone', 'grain', 'blooms', 'light-leak', 'spotlight', 'studio', 'beams', 'prism', 'bands', 'panes', 'arcs', 'ripples', 'flow-lines', 'pinstripe', 'dot-field', 'linen', 'brush', 'wash', 'image', 'video']);
 // The kinds whose every tone keeps paper text at 4.5:1 (see the header).
@@ -146,12 +150,14 @@ export const VIDEO_TREATMENTS = Object.freeze({
 export const VIDEO_PLATE_CONTRAST = 4.5;
 // The darkest a floor may push the overlay: past it the footage is gone.
 const VIDEO_DIM_MAX = 0.92;
+// A reading gradient (kit/core/reading-gradient.mjs) in place of the flat dim.
+const GRADIENT_PARAM = Object.freeze({ gradient: true });
 // Params only one kind takes: an image's file (required), blur and dim; a
 // video's file (required), start, treatment, blur, dim and peak (a null
 // default comes from the treatment).
 export const PLATE_KIND_PARAMS = Object.freeze({
-  image: Object.freeze({ src: Object.freeze({ path: 'image' }), blur: range(0, 80, 24), dim: range(0, 1, 0.55) }),
-  video: Object.freeze({ src: Object.freeze({ path: 'video' }), start: range(0, 86400, 0), treatment: Object.freeze({ values: Object.keys(VIDEO_TREATMENTS), default: 'dim' }), blur: range(0, 80, null), dim: range(0, 1, null), peak: range(0, 1, 1) })
+  image: Object.freeze({ src: Object.freeze({ path: 'image' }), blur: range(0, 80, 24), dim: range(0, 1, 0.55), gradient: GRADIENT_PARAM }),
+  video: Object.freeze({ src: Object.freeze({ path: 'video' }), start: range(0, 86400, 0), treatment: Object.freeze({ values: Object.keys(VIDEO_TREATMENTS), default: 'dim' }), blur: range(0, 80, null), dim: range(0, 1, null), peak: range(0, 1, 1), gradient: GRADIENT_PARAM })
 });
 // Each kind's own tint when params.tint is absent: neutral reads as silver
 // (paper), the others as light in the brand's primary.
@@ -210,6 +216,7 @@ export function plateErrors(plate, path = 'plate', { allowNone = false, allowCyc
     if (!spec) { errors.push(`${path}.params.${key} is not supported (allowed: ${[...Object.keys(PLATE_PARAMS), ...Object.keys(own), 'tint'].join(', ')})`); continue; }
     if (spec.path === 'image') { if (!plateImageSrc(given)) errors.push(`${path}.params.${key} must be a project-relative .png, .jpg, .webp or .avif path (no URL, no leading /, no ..)`); continue; }
     if (spec.path === 'video') { if (!plateVideoSrc(given)) errors.push(`${path}.params.${key} must be a project-relative .mp4, .webm or .mov path (no URL, no leading /, no ..)`); continue; }
+    if (spec.gradient) { errors.push(...readingGradientErrors(given, `${path}.params.${key}`)); continue; }
     if (spec.values) { if (!spec.values.includes(given)) errors.push(`${path}.params.${key} must be one of ${spec.values.join(', ')}`); continue; }
     if (!(typeof given === 'number' && given >= spec.min && given <= spec.max)) errors.push(`${path}.params.${key} must be a number from ${spec.min} to ${spec.max}`);
   }
@@ -249,7 +256,7 @@ export function resolvePlate(plate) {
   if (!isObject(spec) || !PLATE_KINDS.includes(spec.kind) || plateErrors(spec, 'plate', { allowCycle: true }).length) return null;
   const params = {};
   for (const [key, entry] of Object.entries(PLATE_PARAMS)) params[key] = spec.params?.[key] ?? entry.default;
-  for (const [key, entry] of Object.entries(PLATE_KIND_PARAMS[spec.kind] ?? {})) params[key] = spec.params?.[key] ?? entry.default;
+  for (const [key, entry] of Object.entries(PLATE_KIND_PARAMS[spec.kind] ?? {})) if (!entry.gradient || spec.params?.[key]) params[key] = spec.params?.[key] ?? entry.default;
   if (spec.kind === 'video') for (const key of ['blur', 'dim']) params[key] ??= VIDEO_TREATMENTS[params.treatment][key];
   params.tint = spec.params?.tint ?? PLATE_DEFAULT_TINT[spec.kind];
   return { kind: spec.kind, params };
@@ -1052,8 +1059,10 @@ function image({ u, colors, params, travel, period, layers, tones, over }) {
   const scale = period(40) < Infinity ? { kind: 'wave', center: 1.03, amp: 0.025, period: round(period(40), 4), phase: 0 } : undefined;
   const axes = { x: wave(travel(26 * u), period(46), 1), y: wave(travel(14 * u), period(37), 0), scale };
   layers.push({ id: 'image', box: b, src: params.src, svg, style: {}, axes: Object.fromEntries(Object.entries(axes).filter(([, axis]) => axis)) });
-  layers.push({ id: 'dim', box: over(0), svg: null, style: { background: colors.bg, opacity: round(params.dim, 3) }, axes: {} });
-  for (const ink of ['#ffffff', '#000000']) tones.add(mix(ink, colors.bg, params.dim));
+  // A reading gradient: its solid end carries the type, so that is the tone it reports.
+  const g = params.gradient ? readingSpec(params.gradient) : null;
+  layers.push({ id: 'dim', box: over(0), svg: null, style: g ? { background: readingGradient(g, colors) } : { background: colors.bg, opacity: round(params.dim, 3) }, axes: {} });
+  for (const ink of ['#ffffff', '#000000']) tones.add(g ? mix(ink, readingColor(g, colors), g.opacity) : mix(ink, colors.bg, params.dim));
 }
 
 /**
@@ -1093,13 +1102,15 @@ function video(ctx) {
   const scale = period(40) < Infinity ? { kind: 'wave', center: 1.03, amp: 0.025, period: round(period(40), 4), phase: 0 } : undefined;
   const axes = { x: wave(travel(20 * u), period(46), 1), y: wave(travel(10 * u), period(37), 0), scale };
   layers.push({ id: 'video', box: b, src: params.src, video: { src: params.src, start: params.start }, svg: null, style: blur > 0.25 ? { filter: `blur(${round(blur)}px)` } : {}, axes: Object.fromEntries(Object.entries(axes).filter(([, axis]) => axis)) });
-  const tint = params.treatment === 'tint' ? tintOver(colors, params.tint === 'neutral' ? colors.paper : colors[params.tint], params.peak) : null;
-  const overlays = tint ? [tint, colors.bg] : [colors.bg];
-  const floor = videoPlateFloor({ paper: colors.paper, overlays, peak: params.peak, want: params.dim });
+  const g = params.gradient ? readingSpec(params.gradient) : null;
+  const tint = !g && params.treatment === 'tint' ? tintOver(colors, params.tint === 'neutral' ? colors.paper : colors[params.tint], params.peak) : null;
+  const overlays = g ? [readingColor(g, colors)] : tint ? [tint, colors.bg] : [colors.bg];
+  // A gradient's solid end is held to the floor (the type sits there); the rest fades to the footage.
+  const floor = videoPlateFloor({ paper: colors.paper, overlays, peak: params.peak, want: g ? g.opacity : params.dim });
   ctx.params = { ...params, dim: floor.dim };
   ctx.contrast = { floor: VIDEO_PLATE_CONTRAST, ratio: floor.ratio, ok: floor.ok, raised: floor.dim > params.dim };
   const background = tint ? `linear-gradient(160deg, ${tint} 0%, ${mix(tint, colors.bg, 0.5)} 45%, ${colors.bg} 100%)` : colors.bg;
-  layers.push({ id: 'dim', box: over(0), svg: null, style: { background, opacity: floor.dim }, axes: {} });
+  layers.push({ id: 'dim', box: over(0), svg: null, style: g ? { background: readingGradient({ ...g, opacity: Math.min(1, floor.dim) }, colors) } : { background, opacity: floor.dim }, axes: {} });
   const v = Math.round(params.peak * 255).toString(16).padStart(2, '0');
   for (const color of overlays) for (const ink of [`#${v}${v}${v}`, '#000000']) tones.add(mix(ink, color, floor.dim));
 }
