@@ -28,6 +28,8 @@
 // Smallest type at 1080 wide (scale by width / 1080).
 export const MIN_HEADLINE_PX = 52;
 export const MIN_BODY_PX = 46;
+// The most a call to action's headline holds: the cta module sets it on one line.
+export const CTA_HEADLINE = 40;
 // The default reading layer over a photo under text: how much of the ground covers it.
 export const READING_LAYER = 0.6;
 
@@ -313,7 +315,8 @@ export function templateScores({ brief = "", arc = null, images = false } = {}) 
     let score = 2 * t.best_for.filter((word) => seen.has(word)).length - 3 * t.avoid_when.filter((word) => seen.has(word)).length;
     if (arc && t.arcs.includes(arc)) score += 4;
     if (t.images === "needed") score += images ? 2 : -6;
-    if (t.images === "wanted") score += images ? 1 : -2;
+    // A photo-led template without photos loses its look, so it falls out of the close picks.
+    if (t.images === "wanted") score += images ? 1 : -3;
     // Photos handed in and a template that never draws them: the user's photos would be dropped.
     if (t.images === "none" && images) score -= 4;
     return { id, score };
@@ -354,6 +357,8 @@ export function templateCopyProblems(templateId, slides) {
     const name = `slides[${i}] (${slide?.id ?? i + 1})`;
     const grammar = slideGrammar(slide, template);
     const caps = slideCaps(template, grammar);
+    // The cta module holds a shorter headline than the grammar (a poster or a note draws its cta in its own layout).
+    if (slide?.role === "cta" && grammar === "text-card" && !template.type.poster && !template.type.note) caps.headline = Math.min(caps.headline, CTA_HEADLINE);
     const pair = grammar === "two-region" ? slidePair(slide) : null;
     if (!words(slide?.headline) && !slide?.quote) errors.push(`${name} needs a headline`);
     if (!pair) {
@@ -443,7 +448,7 @@ export function drawSlide(slide, grammar, template, { aspect = "4:5", cue = fals
   // A note: the account's own words under its name and handle, as a text post (the call to action too).
   // quote-card has no label, so a note cover asks for the swipe at the end of its observation, as text posts do.
   if (type.note && (name || byline) && !slide.quote) return { module: "quote-card", params: drop({ quote: asks ? `${headline} →` : headline, author: cut(name || byline, 40), role: byline && name ? byline : undefined, variant: type.quote }) };
-  if (slide.role === "cta") return { module: "cta", params: drop({ action: cut(headline, 40), emphasis, detail: body || undefined, handle: words(slide.handle) || undefined, variant: type.cta }) };
+  if (slide.role === "cta") return { module: "cta", params: drop({ action: cut(headline, CTA_HEADLINE), emphasis, detail: body || undefined, handle: words(slide.handle) || undefined, variant: type.cta }) };
   if (slide.quote) return { module: "quote-card", params: drop({ quote: words(slide.quote.text), author: words(slide.quote.author), role: words(slide.quote.role) || undefined, highlight: emphasisOf(slide, words(slide.quote.text)), variant: type.quote }) };
   if (body || type.case === "sentence") {
     // motion-title lights whole words (1–3), so a phrase goes in word by word.

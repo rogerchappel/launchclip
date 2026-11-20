@@ -8,7 +8,7 @@ import { validateModuleParams } from "@launchclip/core/module-schemas.mjs";
 import { resolveModule, sceneRenderEnd } from "@launchclip/core/modules.mjs";
 import { dropParam } from "../storyboard_planner.js";
 import { moduleCatalogue } from "@launchclip/core/planning-prompt.mjs";
-import { CAROUSEL_GRAMMARS, CAROUSEL_TEMPLATES, drawSlide, layoutCarousel, pickTemplate, slideCaps, templateCopyProblems } from "@launchclip/core/carousel-templates.mjs";
+import { CAROUSEL_GRAMMARS, CAROUSEL_TEMPLATES, CTA_HEADLINE, drawSlide, layoutCarousel, pickTemplate, slideCaps, templateCopyProblems } from "@launchclip/core/carousel-templates.mjs";
 import { carouselPlanFindings } from "@launchclip/core/carousel-check.mjs";
 
 // Modules that need what a carousel does not have (footage, a presenter, a
@@ -42,6 +42,8 @@ export function guessArc(brief) {
 
 // What the planner is told a cap is: under the template's, so a plan that counts loosely still fits.
 const told = (cap) => Math.floor(cap * 0.85);
+// A cap as the model reads it best: characters, and the words that fill them (about six characters a word).
+const chars = (cap) => `${told(cap)} characters (about ${Math.max(1, Math.floor(told(cap) / 6))} words)`;
 
 export const CAROUSEL_PLAN_SCHEMA = Object.freeze({
   type: "object",
@@ -77,7 +79,8 @@ export function slideRange({ arc = null, destinations, slides = null }) {
 // shortcut: the list budgets are measured at 4:5 (1080×1350) with the default brand; derive them from moduleFit per canvas if other aspects need different numbers.
 export function planInstructions({ arc, guess = null, goal, destinations, range, modules, photos, generate, template = null, video = false, clips = [] }) {
   const dest = CAROUSEL_DESTINATIONS[destinations[0]];
-  const count = range.exact != null ? `exactly ${range.exact} slides` : `${range.min} to ${range.max} slides`;
+  const exact = range.exact ?? (range.min === range.max ? range.min : null);
+  const count = exact === 1 ? "exactly 1 slide: the cover is the whole post, with no cta slide; the caption carries the ask" : exact != null ? `exactly ${exact} slides` : `${range.min} to ${range.max} slides`;
   const arcs = arc ? `The arc is ${arc}: ${CAROUSEL_ARCS[arc].describe}.` : `The brief reads as a ${guess} carousel; keep that arc unless another clearly fits better:\n${CAROUSEL_ARC_IDS.map((id) => `- ${id} (${CAROUSEL_ARCS[id].slides.join("-")} slides): ${CAROUSEL_ARCS[id].describe}`).join("\n")}`;
   const caps = template ? CAROUSEL_TEMPLATES[template].caps : { headline: 48, body: 50 };
   const lines = [
@@ -85,20 +88,20 @@ export function planInstructions({ arc, guess = null, goal, destinations, range,
     "",
     "Shape:",
     '{"title": string, "arc": string, "goal": string, "caption": {"hook": string, "body": string, "cta": string, "tags": [string]}, "slides": [{"id": kebab-case, "role": "cover"|"body"|"payoff"|"cta", "headline": string, "body"?: string, "items"?: [string], "stat"?: {"value", "label", "source"}, "quote"?: {"text", "author", "role"?}, "eyebrow"?: string, "emphasis"?: string, "handle"?: string' + (photos?.length ? ', "photo"?: one of the photos' : "") + ', "alt": string' + (generate ? ', "image": string|null' : "") + (video ? ', "seconds": number, "loop"?: boolean' + (clips.length ? ', "clip"?: one of the clips, "clip_start"?: number' : "") : "") + "}]}",
-    "You write each slide's words; tooling lays them out with a carousel template. Set only the fields a slide needs: a list or a checklist as items (2 to 6 of at most 32 characters); a figure as stat, with its source; a quote with the person who said it; a pair as a headline that opens on the first marker and a body that opens on the second (\"Myth: …\" / \"Fact: …\", \"Before: …\" / \"After: …\", \"Don't: …\" / \"Do: …\"); eyebrow is a small label (at most 24 characters, a step number or section), emphasis a word of the headline to colour, handle the account or link on the cta slide.",
+    `You write each slide's words; tooling lays them out with a carousel template. Set only the fields a slide needs: a list or a checklist as items (2 to 6); a figure as stat, with its source; a quote with the person who said it; a pair as a headline that opens on the first marker and a body that opens on the second ("Myth: …" / "Fact: …", "Before: …" / "After: …", "Don't: …" / "Do: …"), each side at most ${told(CAROUSEL_GRAMMARS["two-region"].caps.body)} characters after its marker; eyebrow is a small label (a step number or section), emphasis a word of the headline to colour, handle the account or link on the cta slide.`,
     "",
     arcs,
     `Make ${count}. The canvas is ${dest.width}×${dest.height} (${dest.aspect}) for ${destinations.join(", ")}.`,
     `The goal is ${goal}: the cta slide (the last) and caption.cta ask the reader to ${GOAL_CTA[goal]}, and nothing else. The cta headline says ${GOAL_WORDS[goal]} in so many words.`,
     "",
     "What makes a carousel work:",
-    "- The cover is the only slide the feed shows. Its headline makes one specific promise in 4 to 10 words: a number and what it gets you, a named result, or a sharp question. Not the topic (\"Sleep myths\"), the promise (\"4 sleep myths that cost you rest\"). The cover has no body line, no stat and no list; tooling adds the swipe cue.",
+    "- The cover is the only slide the feed shows. Its headline makes one specific promise in 4 to 10 words, inside the template's cap: a number and what it gets you, a named result, or a sharp question. Not the topic (\"Sleep myths\"), the promise (\"4 sleep myths that cost you rest\"). The cover has no body line, no stat and no list; tooling adds the swipe cue.",
     "- One idea per slide: a headline and at most one line or list under it, 25 words in all. If an idea needs two reads, split it. Each slide says something the others do not.",
     "- Roles: the first slide is the cover; one cta slide, last (a 1- or 2-slide post may end on its message instead). A list, steps, story, data or before-after carousel puts a payoff slide just before the cta: the checklist, the summary or the result, written so it is worth saving on its own.",
     "- Write like a person who knows the subject: concrete nouns, numbers from the brief, verbs. No stock phrases (\"game-changer\", \"unlock your potential\", \"the power of\"), no labels (\"Slide 2:\", \"Tip:\"), no ellipses, no line ending on \"and\" or \"the\".",
     "- alt: what the slide shows for a screen reader (its words and picture), never a file name.",
     "- The caption: hook is the post's first line, a second hook in 4 to 14 words that does not copy the cover (under " + dest.captionPreview + " characters). body is 2 to 4 sentences that add what the slides leave out: the why, an example, a caveat. cta matches the cta slide. tags: " + (destinations.some((id) => CAROUSEL_DESTINATIONS[id].tags) ? "3 to 5 topical tags without #." : "an empty list (these destinations do not use tags)."),
-    `- Text that does not fit is refused, so count characters: a headline at most ${told(caps.headline)}, a line under it at most ${told(caps.body)}, list items at most ${told(32)}, an eyebrow at most 20. When a check says text is too long, cut it well under the limit.`,
+    `- Text that does not fit is refused, so count characters: a headline at most ${chars(caps.headline)}, a line under it at most ${chars(caps.body)}, list items at most ${chars(32)}, an eyebrow at most 20. When a check says text is too long, cut it well under the limit.`,
     "- Use only facts the brief gives or that are common knowledge; never invent statistics, customers or quotes.",
     ...(template ? ["", ...templateGuide(template, { photos: photos?.length > 0 || generate })] : []),
     "",
@@ -113,25 +116,27 @@ export function planInstructions({ arc, guess = null, goal, destinations, range,
 export function templateGuide(id, { photos = false } = {}) {
   const template = CAROUSEL_TEMPLATES[id];
   const { type } = template;
-  const cap = (role, grammar) => { const caps = slideCaps(template, grammar); return { head: told(caps.headline), body: told(caps.body) }; };
   const says = (role) => {
     const wanted = template.grammar[role];
     const grammar = CAROUSEL_GRAMMARS[wanted]?.needsImage && !photos ? "text-card" : wanted;
-    const { head, body } = cap(role, grammar);
-    if (role === "payoff" && grammar === "proof-stat") return `the brief's key figure as stat, else the summary as items`;
-    if (grammar === "step") return `one step: the headline is the step (at most ${head} characters), no body line; the slides number themselves`;
-    if (grammar === "steps") return `the checklist as items (2 to 6), a headline over them`;
-    if (grammar === "image-panel") return `a photo over a panel: the headline (at most ${head} characters) and a line (at most ${body}) or 2 to 4 short items`;
-    if (grammar === "framed-image") return `a framed photo: the headline (at most ${head} characters) above it and a caption line (at most ${body}) under it`;
-    if (type.note) return `one observation in the account's own voice, as the headline alone (at most ${told(90)} characters, sentence case); no body line, it is not drawn`;
-    if (type.poster) return `heavy capitals: the headline (at most ${told(48)} characters) and an optional line under it (at most ${told(90)})`;
-    if (role === "cta") return `the ask as the headline (at most ${told(40)} characters), an optional line under it, the handle or link as handle`;
-    return `the headline (at most ${head} characters) and an optional line under it (at most ${body})`;
+    const caps = slideCaps(template, grammar);
+    const head = chars(type.note ? 90 : type.poster ? 48 : role === "cta" ? Math.min(caps.headline, CTA_HEADLINE) : caps.headline);
+    const photo = CAROUSEL_GRAMMARS[grammar].needsImage ? "; give it a photo" : "";
+    if (role === "cover") return `the promise as the headline alone, at most ${head}${type.note ? ", sentence case" : ""}${photo}`;
+    if (role === "payoff" && grammar === "proof-stat") return "the brief's key figure as stat, else the summary as items";
+    if (grammar === "step") return `one step: the headline is the step, at most ${head}, no body line; the slides number themselves`;
+    if (grammar === "steps") return "the checklist as items (2 to 6), a headline over them";
+    if (grammar === "image-panel") return `a photo over a panel: the headline (at most ${head}) and a line (at most ${chars(caps.body)}) or 2 to 4 short items${photo}`;
+    if (grammar === "framed-image") return `a framed photo: the headline (at most ${head}) above it and a caption line (at most ${chars(caps.body)}) under it${photo}`;
+    if (type.note) return `one observation in the account's own voice, as the headline alone (at most ${head}, sentence case); no body line, it is not drawn`;
+    if (type.poster) return `heavy capitals: the headline (at most ${head}) and an optional line under it (at most ${chars(90)})`;
+    if (role === "cta") return `the ask as the headline (at most ${head}), an optional line under it, the handle or link as handle`;
+    return `the headline (at most ${head}) and an optional line under it (at most ${chars(caps.body)})`;
   };
   return [
     `The template is ${id}: ${template.describe}`,
     "What each slide takes in it (a myth/fact or before/after pair, a stat or a list on a body slide takes its own layout):",
-    ...["cover", "body", "payoff", "cta"].map((role) => `- ${role}: ${says(role)}${CAROUSEL_GRAMMARS[template.grammar[role]]?.needsImage && photos ? "; give it a photo" : ""}.`)
+    ...["cover", "body", "payoff", "cta"].map((role) => `- ${role}: ${says(role)}.`)
   ];
 }
 

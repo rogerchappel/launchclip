@@ -66,6 +66,9 @@ test("caps: a template's caps sit inside each grammar's, and copy over them is s
     const caps = slideCaps(CAROUSEL_TEMPLATES[id], grammar);
     assert.ok(caps.headline <= CAROUSEL_GRAMMARS[grammar].caps.headline && caps.body <= CAROUSEL_GRAMMARS[grammar].caps.body);
   }
+  // The cta module sets its ask on one line of 40, so a longer one is said for the repair rather than cut with an ellipsis.
+  assert.match(templateCopyProblems("bold-statement", [{ id: "cta", role: "cta", headline: "Follow for more reminders to keep going daily" }]).join(" "), /holds 40/);
+  assert.deepEqual(templateCopyProblems("cinematic-dark", [{ id: "cta", role: "cta", headline: "Follow for more reminders to keep going" }]), [], "a poster draws its cta in its own layout");
   const errors = templateCopyProblems("numbered-steps", [
     { id: "a", role: "cover", headline: "x".repeat(49) },
     { id: "b", role: "payoff", headline: "List", items: ["one", "two", "three", "four", "five", "six", "seven"] },
