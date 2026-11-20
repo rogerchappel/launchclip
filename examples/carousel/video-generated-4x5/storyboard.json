@@ -1,0 +1,147 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Brew better coffee",
+  "lane": "motion",
+  "format": {
+    "kind": "carousel",
+    "width": 1080,
+    "height": 1350,
+    "fps": 30,
+    "duration": 17,
+    "platform": "instagram"
+  },
+  "carousel": {
+    "arc": "listicle",
+    "goal": "save",
+    "destinations": [
+      "instagram"
+    ],
+    "template": "cinematic-dark",
+    "caption": {
+      "hook": "Better coffee is three numbers.",
+      "body": "Grind, ratio and water heat do most of the work.",
+      "cta": "Save this for your next brew.",
+      "tags": [
+        "coffee",
+        "brewing",
+        "home"
+      ]
+    }
+  },
+  "background": {
+    "kind": "flat"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#07070a",
+      "primary": "#f3a317",
+      "accent": "#9787fc",
+      "ink": "#07070a",
+      "paper": "#f8f8fb"
+    },
+    "fonts": {
+      "display": "instrument-serif",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    },
+    "palette": "as-given"
+  },
+  "audio": null,
+  "scenes": [
+    {
+      "id": "cover",
+      "module": "section-card",
+      "plate": {
+        "kind": "video",
+        "params": {
+          "src": "assets/generated/cover.mp4",
+          "start": 0.3,
+          "blur": 0,
+          "dim": 0.6
+        }
+      },
+      "start": 0,
+      "end": 3,
+      "energy": 2,
+      "slide": {
+        "role": "cover",
+        "medium": "motion",
+        "alt": "The promise over generated footage of a pour-over"
+      },
+      "params": {
+        "title": "3 numbers for better coffee",
+        "kicker": "Swipe \u2192",
+        "page": "01",
+        "variant": "poster"
+      }
+    },
+    {
+      "id": "grind",
+      "module": "section-card",
+      "start": 3,
+      "end": 6,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "motion",
+        "alt": "Step one on a drawn card over drifting steam"
+      },
+      "params": {
+        "title": "Grind like coarse sand",
+        "page": "02",
+        "variant": "poster"
+      }
+    },
+    {
+      "id": "ratio",
+      "module": "section-card",
+      "start": 6,
+      "end": 10,
+      "energy": 1,
+      "slide": {
+        "role": "body",
+        "medium": "motion",
+        "alt": "Step two over generated footage of a kitchen scale"
+      },
+      "params": {
+        "title": "One gram to sixteen",
+        "page": "03",
+        "variant": "poster"
+      }
+    },
+    {
+      "id": "summary",
+      "module": "section-card",
+      "start": 10,
+      "end": 14,
+      "energy": 1,
+      "slide": {
+        "role": "payoff",
+        "medium": "motion",
+        "alt": "Summary of the three numbers"
+      },
+      "params": {
+        "title": "Coarse, one to sixteen, just off the boil",
+        "page": "04",
+        "variant": "poster"
+      }
+    },
+    {
+      "id": "cta",
+      "module": "section-card",
+      "start": 14,
+      "end": 17,
+      "energy": 2,
+      "slide": {
+        "role": "cta",
+        "medium": "motion",
+        "alt": "Save this post"
+      },
+      "params": {
+        "title": "Save this for your next brew",
+        "page": "05",
+        "variant": "poster"
+      }
+    }
+  ]
+}

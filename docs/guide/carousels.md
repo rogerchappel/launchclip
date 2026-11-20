@@ -174,7 +174,14 @@ The background is a plate (`plate: {kind: "image" | "video"}`) on every slide th
 
 What a background or panorama shows is written as a background, not a subject: texture, atmosphere or a soft scene in the brand's colours, with clean space where the words sit, and no people, text, logos or names. These requests go through the same generator as the slide photos and in the same batch. That means one quote, one `--budget`, and the same keyframe candidates and audience-led concepts. For video, the image comes first, then the clip. Anything that is not made falls back to the template's ground, and the make report lists the files under `images.backgrounds`.
 
-See `examples/carousel/background-shared-4x5`, `panorama-generated-4x5` and `background-video-4x5`. Their images are stand-in textures, not model output.
+See these samples:
+
+- `examples/carousel/background-shared-4x5`: a real shared background, from fal flux schnell.
+- `panorama-generated-4x5`: a real panorama, from fal flux schnell.
+- `video-generated-4x5`: a real generated cover card, a flux keyframe animated by `fal-ai/wan/v2.2-5b/image-to-video`.
+- `background-video-4x5`: a shared video background. Its clips are stand-in textures, not model output.
+
+A video model may return a clip shorter than the card asked for. Wan 2.2 5B returns about 3.4 s whatever length you ask for. Render refuses a card whose clip ends early, so keep cards on such a model to 3 s.
 
 ## What export writes
 
