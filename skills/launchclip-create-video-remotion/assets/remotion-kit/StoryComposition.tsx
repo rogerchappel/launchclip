@@ -303,6 +303,7 @@ export const WorldField: React.FC<{ blobs: any[]; tiles: any[]; t: number }> = (
 const PanoramaSlice: React.FC<{ plan: any }> = ({ plan }) => (
   <AbsoluteFill style={{ overflow: "hidden", pointerEvents: "none" }} aria-hidden>
     <Img src={assetUrl(plan.src)} style={{ position: "absolute", left: plan.left, top: 0, width: plan.width, height: plan.height, maxWidth: "none", objectFit: "cover", objectPosition: "50% 50%" }} />
+    {plan.reading ? <AbsoluteFill style={{ background: plan.reading }} /> : null}
   </AbsoluteFill>
 );
 const SeamElements: React.FC<{ seams: any[] }> = ({ seams }) => (

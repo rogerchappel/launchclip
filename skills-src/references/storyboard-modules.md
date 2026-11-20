@@ -930,6 +930,7 @@ params:
 - zoom: 0.02–0.25, how far the move scales (default 0.08: 1 → 1.08)
 - focus: {x, y} 0.15–0.85 fractions of the frame the push centres on (default {x: 0.5, y: 0.5})
 - scrim: none|bottom|left|full (default bottom with lines, full when centred, none without lines)
+- gradient: {color?: ground|primary, tint? 0–0.6, direction?: bottom|top|both|full, stops?: [solid, clear], opacity? 0.3–1}: a brand-coloured reading gradient in place of the scrim (kit/core/reading-gradient.mjs)
 - lines: [{text ≤ 40, at?, emphasis?: true colours it primary}] 1–3 (or strings), rising in stagger apart; at most one line each
 - align: left|center (default left)
 - title: string ≤ 60, the photo's alt text (optional)
@@ -989,6 +990,7 @@ params:
 - variant: top|bottom|left|right: where the footage sits (default top; on a 16:9 frame top → left, bottom → right)
 - share: 0.3–0.65, the footage's share of the frame (default 0.4 top on 9:16, else 0.5)
 - divider: line|blend (default line): an accent line that wipes across the seam, or the footage fading into the panel
+- fade: {color?: ground|primary, tint? 0–0.6, stops?: [solid, clear], opacity? 0.3–1}: a brand-coloured reading gradient over the footage, solid at the seam and clear from stops[1] of the footage (implies the blend; kit/core/reading-gradient.mjs)
 - kicker: string ≤ 32, a small label over the title (optional)
 - title: string ≤ 60, up to two lines (the line, in a few words)
 - body: string ≤ 90, one or two lines under the title (optional; one of body, stat, items)
