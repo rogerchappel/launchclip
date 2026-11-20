@@ -375,8 +375,8 @@ export function templateCopyProblems(templateId, slides) {
     const name = `slides[${i}] (${slide?.id ?? i + 1})`;
     const grammar = slideGrammar(slide, template);
     const caps = slideCaps(template, grammar);
-    // The cta module holds a shorter headline than the grammar (a poster or a note draws its cta in its own layout).
-    if (slide?.role === "cta" && grammar === "text-card" && !template.type.poster && !template.type.note) caps.headline = Math.min(caps.headline, CTA_HEADLINE);
+    // A call to action is short in every template: the cta module sets it on one line, and a note without a handle draws it there.
+    if (slide?.role === "cta") caps.headline = Math.min(caps.headline, CTA_HEADLINE);
     const pair = grammar === "two-region" ? slidePair(slide) : null;
     if (!words(slide?.headline) && !slide?.quote) errors.push(`${name} needs a headline`);
     if (!pair) {

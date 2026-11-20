@@ -68,7 +68,9 @@ test("caps: a template's caps sit inside each grammar's, and copy over them is s
   }
   // The cta module sets its ask on one line of 40, so a longer one is said for the repair rather than cut with an ellipsis.
   assert.match(templateCopyProblems("bold-statement", [{ id: "cta", role: "cta", headline: "Follow for more reminders to keep going daily" }]).join(" "), /holds 40/);
-  assert.deepEqual(templateCopyProblems("cinematic-dark", [{ id: "cta", role: "cta", headline: "Follow for more reminders to keep going" }]), [], "a poster draws its cta in its own layout");
+  assert.deepEqual(templateCopyProblems("cinematic-dark", [{ id: "cta", role: "cta", headline: "Follow for more reminders to keep going" }]), [], "39 characters fit");
+  // A plain note with no handle draws its cta in the cta module, so a note's cta is held to 40 too.
+  assert.match(templateCopyProblems("plain-note", [{ id: "cta", role: "cta", headline: "Save this before your next productivity review" }]).join(" "), /holds 40/);
   const errors = templateCopyProblems("numbered-steps", [
     { id: "a", role: "cover", headline: "x".repeat(49) },
     { id: "b", role: "payoff", headline: "List", items: ["one", "two", "three", "four", "five", "six", "seven"] },
