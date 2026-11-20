@@ -766,8 +766,8 @@ export function parseFlags(args) {
       flags[name] = true;
       continue;
     }
-    // carousel make --video is a switch; elsewhere --video names a file.
-    if (name === "video" && (!args[index + 1] || args[index + 1].startsWith("--"))) {
+    // carousel make --video and --panorama are switches; elsewhere --video names a file.
+    if ((name === "video" || name === "panorama") && (!args[index + 1] || args[index + 1].startsWith("--"))) {
       flags[name] = true;
       continue;
     }
