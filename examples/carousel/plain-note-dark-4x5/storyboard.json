@@ -40,6 +40,7 @@
       "body": "inter",
       "meta": "jetbrains-mono"
     },
+    "name": "Weekly Ship",
     "palette": "as-given"
   },
   "audio": null,
@@ -57,9 +58,9 @@
       },
       "params": {
         "quote": "A deadline you keep to yourself is only a wish.",
-        "author": "weekly.ship",
-        "highlight": "wish",
-        "variant": "pull"
+        "author": "Weekly Ship",
+        "role": "@weekly.ship",
+        "variant": "post"
       }
     },
     {
@@ -75,9 +76,9 @@
       },
       "params": {
         "quote": "A deadline you announce is a plan. Say it out loud.",
-        "author": "weekly.ship",
-        "highlight": "announce",
-        "variant": "pull"
+        "author": "Weekly Ship",
+        "role": "@weekly.ship",
+        "variant": "post"
       }
     },
     {
@@ -93,14 +94,14 @@
       },
       "params": {
         "quote": "The first version is for learning, not for impressing anyone. Ship it.",
-        "author": "weekly.ship",
-        "highlight": "learning",
-        "variant": "pull"
+        "author": "Weekly Ship",
+        "role": "@weekly.ship",
+        "variant": "post"
       }
     },
     {
       "id": "cta",
-      "module": "cta",
+      "module": "quote-card",
       "start": 12,
       "end": 16,
       "energy": 2,
@@ -110,10 +111,10 @@
         "alt": "Follow for a note a day"
       },
       "params": {
-        "action": "Follow for a note a day",
-        "emphasis": "Follow",
-        "handle": "weekly.ship",
-        "variant": "flush"
+        "quote": "Follow for a note a day",
+        "author": "Weekly Ship",
+        "role": "@weekly.ship",
+        "variant": "post"
       }
     }
   ],

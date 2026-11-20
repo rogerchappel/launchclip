@@ -114,7 +114,7 @@ test("layout: grounds turn the brand over with readable type; photo surfaces and
   const numbered = layoutCarousel("numbered-steps", slides, { brand });
   assert.deepEqual(numbered.scenes.map((scene) => scene.module), ["split-screen", "section-card", "section-card", "cta"]);
   assert.deepEqual(numbered.scenes.slice(1, 3).map((scene) => scene.params.number), [1, 2], "steps are numbered in slide order");
-  assert.equal(numbered.scenes[0].params.kicker, "Swipe →", "the cover asks for the swipe");
+  assert.equal(numbered.scenes[0].params.body, "SWIPE FOR THE STEPS", "the cover asks for the swipe under its headline");
   const note = layoutCarousel("plain-note", slides, { brand });
   assert.ok(note.scenes.slice(0, 3).every((scene) => JSON.stringify(scene.params).includes("me.test")), "the identity line on every slide");
   for (const [id, ground] of [["paper-story", "light"], ["plain-note", "light"], ["bold-statement", "brand"], ["plain-note-dark", "dark"]]) {

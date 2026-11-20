@@ -17,10 +17,10 @@ const s = (id, role, fields) => ({ id, role, alt: fields.alt ?? [fields.eyebrow,
 
 const numberedSteps = {
   arc: "how-to", goal: "save",
-  brand: { colors: colors("#0d0d0f", "#f2c14e", "#f06b4f", "#f4f4f4"), fonts: fonts("oswald", "plus-jakarta-sans") },
+  brand: { colors: colors("#0d0d0f", "#f2c14e", "#f06b4f", "#f4f4f4"), fonts: fonts("oswald", "plus-jakarta-sans"), name: "Field Notes" },
   caption: { hook: "A brief takes an hour. Skipping it costs a week.", body: "Four steps, one page, before the first commit.", cta: "Save this for your next kickoff.", tags: ["product", "writing", "planning"] },
   slides: [
-    s("cover", "cover", { headline: "Write the brief before you build", body: "Four steps, one page", photo: "ridge-dusk" }),
+    s("cover", "cover", { headline: "How to write the brief before you build", photo: "ridge-dusk" }),
     s("step-1", "body", { headline: "Name the problem in one sentence" }),
     s("step-2", "body", { headline: "Say who it is for, by name" }),
     s("step-3", "body", { headline: "Write what done looks like" }),
@@ -32,7 +32,7 @@ const numberedSteps = {
 export const SAMPLES = {
   "caption-block": {
     arc: "listicle", goal: "save",
-    brand: { colors: colors("#3f1c22", "#f06b4f", "#f2c14e", "#fff1d8"), fonts: fonts("big-shoulders-display", "dm-sans") },
+    brand: { colors: colors("#3f1c22", "#f06b4f", "#f2c14e", "#fff1d8"), fonts: fonts("big-shoulders-display", "dm-sans"), name: "Slow Mornings" },
     caption: { hook: "Most morning routines fail by Wednesday.", body: "Three that survive a busy week.", cta: "Save this for Monday.", tags: ["habits", "mornings"] },
     slides: [
       s("cover", "cover", { eyebrow: "Field guide", headline: "3 morning habits that survive a busy week", photo: "ridge-sun" }),
@@ -44,10 +44,10 @@ export const SAMPLES = {
   },
   "cinematic-dark": {
     arc: "listicle", goal: "follow",
-    brand: { colors: colors("#0b0b0d", "#edebe7", "#f2c14e", "#ffffff"), fonts: fonts("inter", "dm-sans") },
+    brand: { colors: colors("#0b0b0d", "#edebe7", "#f2c14e", "#ffffff"), fonts: fonts("inter", "dm-sans"), name: "Steady Coach" },
     caption: { hook: "Motivation is a bad plan.", body: "Three rules that work on the days it does not show up.", cta: "Follow for one rule a week.", tags: ["discipline", "habits", "coaching"] },
     slides: [
-      s("cover", "cover", { headline: "Train the habit, not the goal", photo: "ridge" }),
+      s("cover", "cover", { headline: "Train the habit, not the goal", body: "Start small.", photo: "ridge" }),
       s("small", "body", { headline: "Make it too small to skip", body: "Ten minutes you keep beat an hour you dread.", photo: "ridge-dusk" }),
       s("same", "body", { headline: "Same time, same place", body: "Decide once, then stop deciding.", photo: "ridge-sun" }),
       s("miss", "payoff", { headline: "Never miss twice", body: "One off day is life. Two is a new habit.", photo: "ridge" }),
@@ -56,10 +56,10 @@ export const SAMPLES = {
   },
   "cinematic-light": {
     arc: "how-to", goal: "save",
-    brand: { colors: colors("#17191b", "#2f5d50", "#b8401f", "#ffffff"), fonts: fonts("inter", "dm-sans") },
+    brand: { colors: colors("#17191b", "#2f5d50", "#b8401f", "#ffffff"), fonts: fonts("inter", "dm-sans"), name: "Calm Mornings" },
     caption: { hook: "Calm mornings are built the night before.", body: "Three things to do before bed.", cta: "Save it for tonight.", tags: ["wellness", "sleep"] },
     slides: [
-      s("cover", "cover", { headline: "A calmer morning starts tonight", photo: "ridge-sun" }),
+      s("cover", "cover", { headline: "A calmer morning starts tonight", body: "Three small things.", photo: "ridge-sun" }),
       s("lay-out", "body", { headline: "Lay out tomorrow's first hour", body: "Clothes, kettle, the one task. Nothing to decide.", photo: "ridge" }),
       s("screens", "body", { headline: "Put the phone in another room", body: "The alarm clock was invented for a reason.", photo: "ridge-dusk" }),
       s("wrap", "payoff", { headline: "Write tomorrow's one task down", body: "Your head lets go of what paper holds.", photo: "ridge-sun" }),
@@ -68,15 +68,15 @@ export const SAMPLES = {
   },
   "plain-note": {
     arc: "single", goal: "follow",
-    brand: { colors: colors("#ffffff", "#17191b", "#1d6fd8", "#ffffff", "#17191b"), fonts: fonts("inter", "inter") },
+    brand: { colors: colors("#ffffff", "#17191b", "#1d6fd8", "#ffffff", "#17191b"), fonts: fonts("inter", "inter"), name: "Founder Notes" },
     caption: { hook: "Something I wish I had heard at the start.", body: "", cta: "Follow for more notes like this.", tags: [] },
     slides: [
-      s("note", "cover", { headline: "Startups rarely die from competition. They die building the wrong thing.", emphasis: "wrong", handle: "founder.notes" })
+      s("note", "cover", { headline: "Most startups die building the wrong thing, very well.", handle: "founder.notes" })
     ]
   },
   "plain-note-dark": {
     arc: "quote", goal: "follow",
-    brand: { colors: colors("#08090a", "#f7f7f7", "#f2c14e", "#f7f7f7"), fonts: fonts("inter", "inter") },
+    brand: { colors: colors("#08090a", "#f7f7f7", "#f2c14e", "#f7f7f7"), fonts: fonts("inter", "inter"), name: "Weekly Ship" },
     caption: { hook: "Notes on shipping, from a year of doing it weekly.", body: "", cta: "Follow for a note a day.", tags: [] },
     slides: [
       s("one", "cover", { headline: "A deadline you keep to yourself is only a wish.", emphasis: "wish" }),

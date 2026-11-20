@@ -72,7 +72,9 @@ const CONTENT_GRAMMARS = ["two-region", "proof-stat", "steps"];
 // per role, ticks (a payoff checklist ticks rather than numbers), byline (the
 // carousel's handle as a small label on every slide), note (a type slide is the
 // account's own observation, set as a pull quote signed by that handle;
-// punchline lights its emphasis), mark (how the emphasis is drawn) and each
+// poster: a type slide is a feed poster (heavy capitals in the lower middle,
+// a line under them, the brand name and page number along the foot); swipe:
+// the cover's swipe line under its headline), mark (how the emphasis is drawn) and each
 // module's designed variant.
 const T = (entry) => Object.freeze(entry);
 const type = (fields) => ({ align: "left", case: "caps", ticks: true, hook: "flush", cta: "flush", stat: "giant", list: "stack", compare: "halves", quote: "mark", title: "soft-blur-in", step: "centered", ...fields });
@@ -95,8 +97,8 @@ export const CAROUSEL_TEMPLATES = Object.freeze({
     arcs: ["listicle", "how-to", "story", "quote", "single"], images: "needed", ground: "dark", pure: true, background: "flat", reading: { dim: 0.6, blur: 0 },
     grammar: { cover: "text-card", body: "text-card", payoff: "text-card", cta: "text-card" },
     surface: { cover: "on-image", body: "on-image", payoff: "on-image", cta: "on-image" },
-    caps: { headline: 60, body: 70 },
-    type: type({ align: "center", hook: "centered", cta: "centered", title: "focus-blur-resolve" })
+    caps: { headline: 48, body: 80 },
+    type: type({ align: "center", poster: true, hook: "centered", cta: "centered", title: "focus-blur-resolve" })
   }),
   "cinematic-light": T({
     describe: "Documentary photos edge to edge under a soft light wash, direct coaching copy in heavy centred capitals.",
@@ -105,28 +107,28 @@ export const CAROUSEL_TEMPLATES = Object.freeze({
     arcs: ["listicle", "how-to", "story", "quote", "single"], images: "needed", ground: "light", pure: true, background: "flat", reading: { dim: 0.6, blur: 0 },
     grammar: { cover: "text-card", body: "text-card", payoff: "text-card", cta: "text-card" },
     surface: { cover: "on-image", body: "on-image", payoff: "on-image", cta: "on-image" },
-    caps: { headline: 60, body: 70 },
-    type: type({ align: "center", hook: "centered", cta: "centered", title: "focus-blur-resolve" })
+    caps: { headline: 48, body: 80 },
+    type: type({ align: "center", poster: true, hook: "centered", cta: "centered", title: "focus-blur-resolve" })
   }),
   "plain-note": T({
-    describe: "A white page with an identity line, then one observation in plain sentence-case type: a founder's note in the feed.",
+    describe: "A white page: the brand's name and handle, then one short observation in plain sentence-case type, like a text post.",
     best_for: ["observation", "observations", "founder", "notes", "thought", "leadership", "opinion", "lessons", "learned", "thread"],
     avoid_when: ["statistics", "data", "columns", "checklist", "photo"],
     arcs: ["quote", "single", "story", "listicle"], images: "optional", ground: "light", pure: true, background: "flat",
     grammar: { cover: "text-card", body: "text-card", payoff: "text-card", cta: "text-card" },
     surface: { cover: "light", body: "light", payoff: "light", cta: "light" },
     caps: { headline: 90, body: 48 },
-    type: type({ case: "sentence", byline: true, note: true, title: "fade-through", quote: "pull" })
+    type: type({ case: "sentence", byline: true, note: true, title: "fade-through", quote: "post" })
   }),
   "plain-note-dark": T({
-    describe: "A near-black page with an identity line and one observation in plain sentence-case type, the punchline lit.",
+    describe: "A near-black page with an identity line and one observation in plain sentence-case type.",
     best_for: ["observation", "observations", "founder", "reminder", "reminders", "contrast", "opinion", "hot", "take", "thread"],
     avoid_when: ["statistics", "data", "columns", "checklist", "photo"],
     arcs: ["quote", "single", "story", "listicle"], images: "optional", ground: "dark", pure: true, background: "flat",
     grammar: { cover: "text-card", body: "text-card", payoff: "text-card", cta: "text-card" },
     surface: { cover: "dark", body: "dark", payoff: "dark", cta: "dark" },
     caps: { headline: 90, body: 48 },
-    type: type({ case: "sentence", byline: true, note: true, punchline: true, title: "fade-through", quote: "pull" })
+    type: type({ case: "sentence", byline: true, note: true, title: "fade-through", quote: "post" })
   }),
   "numbered-steps": T({
     describe: "A photo-led cover with the promise on black, then one big numbered step per slide, the checklist as short numbered lines.",
@@ -136,7 +138,7 @@ export const CAROUSEL_TEMPLATES = Object.freeze({
     grammar: { cover: "image-panel", body: "step", payoff: "steps", cta: "text-card" },
     surface: { cover: "dark", body: "dark", payoff: "dark", cta: "dark" },
     caps: { headline: 48, body: 60 },
-    type: type({ align: "center", hook: "centered", cta: "centered", ticks: false, share: { cover: 0.5 } })
+    type: type({ align: "center", hook: "centered", cta: "centered", ticks: false, swipe: "Swipe for the steps", share: { cover: 0.5 } })
   }),
   "paper-story": T({
     describe: "Warm paper pages: a serif headline above a framed photo, a caption under it; a considered product or founder story.",
@@ -387,14 +389,16 @@ const drop = (params) => Object.fromEntries(Object.entries(params).filter(([, va
  * its small label, or a last line on a photo). number: the slide's step number.
  * byline: the small identity label a template sets on every slide.
  */
-export function drawSlide(slide, grammar, template, { aspect = "4:5", cue = false, number = 1, byline = null } = {}) {
+export function drawSlide(slide, grammar, template, { aspect = "4:5", cue = false, number = 1, byline = null, name = null, page = null } = {}) {
   const type = template.type;
   const headline = words(slide.headline);
   const body = words(slide.body);
   const image = words(slide.photo) || null;
   const label = words(slide.eyebrow) || byline || "";
   const asks = cue && !/\bswipe\b|→/i.test(`${headline} ${body} ${label}`);
-  const eyebrow = asks ? (label ? `${cut(label, 28)} →` : "Swipe →") : label || undefined;
+  // A template with a swipe line asks under the headline instead of over it.
+  const swipe = asks && type.swipe ? type.swipe.toUpperCase() : null;
+  const eyebrow = asks && !swipe ? (label ? `${cut(label, 28)} →` : "Swipe →") : label || undefined;
   if (grammar === "full-bleed") {
     const width = aspect === "1:1" ? 24 : 22;
     const head = lines(headline, width, body ? 2 : 3).map((text, i, all) => ({ text, ...(i === all.length - 1 ? { emphasis: true } : {}) }));
@@ -408,7 +412,8 @@ export function drawSlide(slide, grammar, template, { aspect = "4:5", cue = fals
     const figure = slideFigure(slide);
     const extra = items.length >= 2 ? { items: items.slice(0, 4) } : figure && !body ? { stat: drop({ value: figure.value, label: cut(figure.label, 40) }) } : { body: body || undefined };
     const share = Math.min(type.share?.[slide.role] ?? 0.47, aspect === "1:1" ? 0.5 : 0.62);
-    return { module: "split-screen", params: drop({ media: image, variant: "top", share, kicker: eyebrow, title: headline, align: type.align, ...extra }) };
+    const panel = swipe ? { body: swipe } : extra;
+    return { module: "split-screen", params: drop({ media: image, variant: "top", share, kicker: eyebrow, title: type.case === "caps" ? headline.toUpperCase() : headline, align: type.align, ...panel }) };
   }
   if (grammar === "framed-image") return { module: "landscape-card", params: drop({ media: image, kicker: eyebrow, title: headline, caption: body || undefined }) };
   if (grammar === "two-region") {
@@ -429,9 +434,11 @@ export function drawSlide(slide, grammar, template, { aspect = "4:5", cue = fals
   if (grammar === "step") return { module: "section-card", params: drop({ title: headline, kicker: cut(words(slide.eyebrow) || "Step", 28), number: Math.min(99, number), variant: type.step }) };
   // text-card
   const emphasis = emphasisOf(slide, headline);
+  // A feed poster: every type slide of the template, the call to action included.
+  if (type.poster && !slide.quote) return { module: "section-card", params: drop({ title: cut(headline, 48), kicker: eyebrow, sub: (body || (slide.role === "cta" ? words(slide.handle) : "")) ? cut(body || words(slide.handle), 90) : undefined, footer: name ? cut(name, 32) : undefined, page: page ?? undefined, variant: "poster" }) };
+  // A note: the account's own words under its name and handle, as a text post (the call to action too).
+  if (type.note && (name || byline) && !slide.quote) return { module: "quote-card", params: drop({ quote: headline, author: cut(name || byline, 40), role: byline && name ? byline : undefined, variant: type.quote }) };
   if (slide.role === "cta") return { module: "cta", params: drop({ action: cut(headline, 40), emphasis, detail: body || undefined, handle: words(slide.handle) || undefined, variant: type.cta }) };
-  // A note: the account's own words, signed by its handle (never someone else's name).
-  if (type.note && byline && !slide.quote) return { module: "quote-card", params: drop({ quote: headline, author: byline, role: body ? cut(body, 48) : undefined, highlight: type.punchline ? emphasis : undefined, variant: type.quote }) };
   if (slide.quote) return { module: "quote-card", params: drop({ quote: words(slide.quote.text), author: words(slide.quote.author), role: words(slide.quote.role) || undefined, highlight: emphasisOf(slide, words(slide.quote.text)), variant: type.quote }) };
   if (body || type.case === "sentence") {
     // motion-title lights whole words (1–3), so a phrase goes in word by word.
@@ -521,13 +528,15 @@ export function layoutCarousel(templateId, slides, { aspect = "4:5", brand = nul
   if (!ASPECTS.includes(aspect)) throw new Error(`a carousel template lays out at ${ASPECTS.join(", ")}; got ${aspect}`);
   const list = Array.isArray(slides) ? slides : [];
   const handle = words((list.find((slide) => slide?.role === "cta" && words(slide.handle)) ?? list.find((slide) => words(slide?.handle)))?.handle);
-  const byline = template.type.byline && handle ? cut(handle.startsWith("@") || handle.includes(".") ? handle : `@${handle}`, 24) : null;
+  const byline = template.type.byline && handle ? cut(handle.startsWith("@") ? handle : `@${handle}`, 24) : null;
+  // The brand's name for a byline or a footer: brand.name, else the handle without its @.
+  const name = words(brand?.name) || (handle ? handle.replace(/^@/, "") : "") || null;
   let steps = 0;
   const scenes = list.map((slide, i) => {
     const grammar = slideGrammar(slide, template);
     if (grammar === "step") steps += 1;
     const surface = template.surface[slide.role] ?? template.ground;
-    const { module, params } = drawSlide(slide, grammar, template, { aspect, cue: i === 0 && list.length > 1, number: steps, byline: slide.role === "cta" && list.length > 1 ? null : byline });
+    const { module, params } = drawSlide(slide, grammar, template, { aspect, cue: i === 0 && list.length > 1, number: steps, byline: slide.role === "cta" && list.length > 1 && !template.type.note ? null : byline, name, page: String(i + 1).padStart(2, "0") });
     const plate = surfacePlate(template, surface, slide, grammar);
     return { id: words(slide.id) || `slide-${i + 1}`, grammar, surface, module, params, ...(plate ? { plate } : {}) };
   });

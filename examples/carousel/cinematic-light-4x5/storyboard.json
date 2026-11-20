@@ -43,13 +43,14 @@
       "body": "dm-sans",
       "meta": "jetbrains-mono"
     },
+    "name": "Calm Mornings",
     "palette": "as-given"
   },
   "audio": null,
   "scenes": [
     {
       "id": "cover",
-      "module": "hook-title",
+      "module": "section-card",
       "plate": {
         "kind": "image",
         "params": {
@@ -64,17 +65,20 @@
       "slide": {
         "role": "cover",
         "medium": "still",
-        "alt": "A calmer morning starts tonight. over a photo"
+        "alt": "A calmer morning starts tonight. Three small things.. over a photo"
       },
       "params": {
-        "headline": "A calmer morning starts tonight",
-        "eyebrow": "Swipe →",
-        "variant": "centered"
+        "title": "A calmer morning starts tonight",
+        "kicker": "Swipe →",
+        "sub": "Three small things.",
+        "footer": "Calm Mornings",
+        "page": "01",
+        "variant": "poster"
       }
     },
     {
       "id": "lay-out",
-      "module": "motion-title",
+      "module": "section-card",
       "plate": {
         "kind": "image",
         "params": {
@@ -92,15 +96,16 @@
         "alt": "Lay out tomorrow's first hour. Clothes, kettle, the one task. Nothing to decide.. over a photo"
       },
       "params": {
-        "text": "Lay out tomorrow's first hour",
+        "title": "Lay out tomorrow's first hour",
         "sub": "Clothes, kettle, the one task. Nothing to decide.",
-        "align": "center",
-        "variant": "focus-blur-resolve"
+        "footer": "Calm Mornings",
+        "page": "02",
+        "variant": "poster"
       }
     },
     {
       "id": "screens",
-      "module": "motion-title",
+      "module": "section-card",
       "plate": {
         "kind": "image",
         "params": {
@@ -118,15 +123,16 @@
         "alt": "Put the phone in another room. The alarm clock was invented for a reason.. over a photo"
       },
       "params": {
-        "text": "Put the phone in another room",
+        "title": "Put the phone in another room",
         "sub": "The alarm clock was invented for a reason.",
-        "align": "center",
-        "variant": "focus-blur-resolve"
+        "footer": "Calm Mornings",
+        "page": "03",
+        "variant": "poster"
       }
     },
     {
       "id": "wrap",
-      "module": "motion-title",
+      "module": "section-card",
       "plate": {
         "kind": "image",
         "params": {
@@ -144,15 +150,16 @@
         "alt": "Write tomorrow's one task down. Your head lets go of what paper holds.. over a photo"
       },
       "params": {
-        "text": "Write tomorrow's one task down",
+        "title": "Write tomorrow's one task down",
         "sub": "Your head lets go of what paper holds.",
-        "align": "center",
-        "variant": "focus-blur-resolve"
+        "footer": "Calm Mornings",
+        "page": "04",
+        "variant": "poster"
       }
     },
     {
       "id": "cta",
-      "module": "cta",
+      "module": "section-card",
       "plate": {
         "kind": "image",
         "params": {
@@ -170,10 +177,11 @@
         "alt": "Save it for tonight. over a photo"
       },
       "params": {
-        "action": "Save it for tonight",
-        "emphasis": "Save",
-        "handle": "calmmornings.test",
-        "variant": "centered"
+        "title": "Save it for tonight",
+        "sub": "calmmornings.test",
+        "footer": "Calm Mornings",
+        "page": "05",
+        "variant": "poster"
       }
     }
   ],
