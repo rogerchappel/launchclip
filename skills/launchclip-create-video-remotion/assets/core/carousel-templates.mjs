@@ -511,8 +511,12 @@ export function brandGroundBrand(brand) {
   if (!sorted.length) return brand;
   const type = [sorted[0], sorted.at(-1)].sort((a, b) => contrastRatio(b, primary) - contrastRatio(a, primary))[0];
   const ink = contrastRatio(type, primary) >= 4.5 ? type : luminance(primary) > 0.18 ? "#111111" : "#fafafa";
-  const accent = HEX.test(colors.accent ?? "") && contrastRatio(colors.accent, primary) >= 3 ? onGround(colors.accent, primary, ink) : ink;
-  return { ...brand, palette: "as-given", colors: withInk({ ...colors, bg: primary, paper: ink, primary: accent, accent }, [primary, ink, ...sorted]) };
+  // The renderers set small labels in muted type (the ink at 62% over the page) and refuse it under 3:1,
+  // so a mid-tone primary is deepened (or lifted) away from the ink until that reads.
+  let bg = primary;
+  for (let t = 0.05; contrastRatio(mixHex(bg, ink, 0.62), bg) < 3.2 && t <= 1.0001; t += 0.05) bg = mixHex(primary, luminance(ink) > 0.18 ? "#000000" : "#ffffff", Math.min(1, t));
+  const accent = HEX.test(colors.accent ?? "") && contrastRatio(colors.accent, bg) >= 3 ? onGround(colors.accent, bg, ink) : ink;
+  return { ...brand, palette: "as-given", colors: withInk({ ...colors, bg, paper: ink, primary: accent, accent }, [bg, ink, ...sorted]) };
 }
 
 /**

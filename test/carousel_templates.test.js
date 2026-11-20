@@ -124,6 +124,12 @@ test("layout: grounds turn the brand over with readable type; photo surfaces and
     assert.ok(contrastRatio(colors.ink, colors.primary) >= 3, `${id}: ink reads on a primary fill`);
   }
   assert.equal(layoutCarousel("bold-statement", slides, { brand }).story.brand.colors.bg, "#ffb020", "the primary is the page");
+  // A mid-tone primary: white type reads at 4.5:1 but its 62% muted labels would not, so the page deepens until they do.
+  for (const primary of ["#007e5d", "#0079a5"]) {
+    const { colors } = layoutCarousel("bold-statement", slides, { brand: { colors: { ...brand.colors, primary } } }).story.brand;
+    const muted = `#${[16, 8, 0].map((s) => Math.round(((parseInt(colors.bg.slice(1), 16) >> s) & 255) * 0.38 + ((parseInt(colors.paper.slice(1), 16) >> s) & 255) * 0.62).toString(16).padStart(2, "0")).join("")}`;
+    assert.ok(contrastRatio(muted, colors.bg) >= 3, `${primary}: muted labels read on the page (${colors.bg})`);
+  }
   assert.equal(lightBrand({ colors: {} }).colors.bg, undefined, "no colours, nothing to turn over");
   assert.throws(() => layoutCarousel("numbered-steps", slides, { aspect: "16:9" }), /lays out at 4:5, 1:1, 9:16/);
 });
