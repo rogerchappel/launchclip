@@ -8,6 +8,10 @@ import { isEditorialKind } from "@launchclip/core/modules.mjs";
 import { run } from "../src/carousel/make.js";
 import { EDGE_PAD_SECONDS } from "../src/generate/brief.js";
 import { planToStory, slideModules, slideRange } from "../src/carousel/plan.js";
+import { ffmpegMissing, mediaSkip } from "./helpers/media.js";
+
+// Pixel reads and footage cards drive FFmpeg: media tests (the plain test jobs have no ffmpeg).
+const needsFfmpeg = mediaSkip(ffmpegMissing());
 
 const slide = (id, role, module, params, alt = `${id} slide`) => ({ id, role, module, params, alt });
 const listicle = (extra = {}) => ({
@@ -190,7 +194,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   console.log(JSON.stringify(op === "quote" ? { id, amount: 0.25, unit: "usd" } : { id, file, model: "test-" + step, licence: "test fixture" }));
 });`;
 
-test("a video carousel: cards sized 2-10 s, handed-in and generated footage under free type, drawn cards, no forced loop", async () => {
+test("a video carousel: cards sized 2-10 s, handed-in and generated footage under free type, drawn cards, no forced loop", { skip: needsFfmpeg }, async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "carousel-video-"));
   try {
     const clips = path.join(dir, "clips");
@@ -340,7 +344,7 @@ test("a panorama spans its slides, which take no background; an image under it g
   assert.match(extrasErrors(plan, loose).join("\n"), /slide 2 \(light\) is under the panorama/);
 });
 
-test("make --background shared --panorama: one batch, the background file, and a panorama plate of exactly span × width", async () => {
+test("make --background shared --panorama: one batch, the background file, and a panorama plate of exactly span × width", { skip: needsFfmpeg }, async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "carousel-backdrops-"));
   try {
     const script = path.join(dir, "gen.mjs");

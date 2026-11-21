@@ -6,11 +6,11 @@ description: Create an end-to-end cinematic Remotion video, authored in React an
 # LaunchClip Create Video (Remotion)
 
 Create a reviewable video with the current agent's included reasoning and local
-Remotion tooling. `storyboard.json` is the artefact you author: the bundled
-`LaunchclipStory` composition renders it with frame-pure React modules. Treat
-this skill as the agent-native counterpart to `launchclip produce`, not as a
-wrapper around it. Its sibling, `launchclip-create-video`, renders the same
-storyboard with HyperFrames; the creative funnel and gates are identical.
+Remotion tooling. You author `storyboard.json`; the bundled `LaunchclipStory`
+composition renders it in frame-pure React. This skill is the agent-native
+counterpart to `launchclip produce`, not a wrapper around it. Its sibling
+`launchclip-create-video` renders the same storyboard with HyperFrames,
+through the same funnel and gates.
 
 ## Quick path
 
@@ -18,12 +18,11 @@ The minimum, in order, for a new story (a 30–60 s Short or promo). Every step
 names the reference that holds its detail; load a reference only when you
 reach its step. `launchclip <command> --help` prints any command's usage.
 
-There is also a CLI equivalent with no agent session: `launchclip make
-"<prompt>" [--assets <dir>]` routes the inputs to a lane, writes the script
-and storyboard with an API model (OpenAI or Anthropic key), and runs finish
-headlessly ("Make a video headlessly" in the launchclip-cli reference). Use it
-when the user wants a hands-off draft or has no agent subscription; use this
-skill when they want the bespoke, reviewed path below.
+The CLI equivalent with no agent session: `launchclip make "<prompt>"
+[--assets <dir>]` writes the script and storyboard with an API model (OpenAI
+or Anthropic key) and runs finish headlessly ("Make a video headlessly" in the
+launchclip-cli reference). Use it for a hands-off draft or with no agent
+subscription; use this skill for the bespoke, reviewed path below.
 
 **Characters telling a story** (an animated short, a skit, people talking to
 each other) take the animation branch: after step 1, follow
@@ -33,12 +32,10 @@ list, the animatic `ANIMATIC.json`), stop for the user after the bible and
 after the animatic, then rejoin at step 5. Headless:
 `launchclip make "<prompt>" --animation`.
 
-**A carousel or a single-image post** (swipeable slides, not a video) is
-`launchclip carousel make "<brief>" [--arc <id>|auto] [--dest
-instagram,linkedin] [--goal save|comment|follow|visit|install] [--images
-<dir>]`: it plans the slides, caption and alt text into `storyboard.json`
-(scenes are slides, `format.kind: "carousel"`), then renders, checks and
-exports per destination. To change a slide, edit `storyboard.json` and run
+**A carousel or a single-image post** (slides, not a video):
+`launchclip carousel make "<brief>"` plans the slides, caption and alt text
+into `storyboard.json`, then renders, checks and exports per destination
+(`--help` lists the flags). After an edit, run
 `launchclip carousel render|check|export <project>`. Rules: docs/CAROUSELS_RFC.md.
 
 1. **Brief.** Ask at most three grouped questions (story, delivery, materials
@@ -156,9 +153,8 @@ Read a reference when its step comes up, not all at once.
   the creative funnel (concept tournament, retention story, candidates,
   critic) with the receipt schemas `cinematic-check` validates.
 - [references/standalone-remotion.md](references/standalone-remotion.md) is
-  the self-contained runtime contract: project layout, the `storyboard.json` →
-  `LaunchclipStory` pipeline, the frame-pure rule, and the verification,
-  preview, and render commands.
+  the self-contained runtime contract: project layout, `storyboard.json` →
+  `LaunchclipStory`, the frame-pure rule, and the check and render commands.
 - [references/storyboard-modules.md](references/storyboard-modules.md): every
   module, its params and events, transitions, grammar and camera, anchors and
   the safe-zone and caption rules.

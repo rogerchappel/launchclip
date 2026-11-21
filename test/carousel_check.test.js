@@ -8,6 +8,10 @@ import { fileURLToPath } from "node:url";
 import { carouselPlanFindings, cutOff, namesSomething, slideText } from "@launchclip/core/carousel-check.mjs";
 import { CAROUSEL_DESTINATIONS } from "@launchclip/core/carousel.mjs";
 import { declaredTextBoxes, geometryFindings, measuredContrast, readPixels, run } from "../src/carousel/check.js";
+import { ffmpegMissing, mediaSkip } from "./helpers/media.js";
+
+// Pixel reads and footage cards drive FFmpeg: media tests (the plain test jobs have no ffmpeg).
+const needsFfmpeg = mediaSkip(ffmpegMissing());
 
 const sample = () => JSON.parse(readFileSync(new URL("../examples/carousel/listicle-4x5/storyboard.json", import.meta.url), "utf8"));
 const rules = (findings, rule) => findings.filter((finding) => finding.rule === rule);
@@ -293,7 +297,7 @@ test("measuredContrast: ink against the box's background", () => {
 // and red type on a dark red glow, which outnumbers the type.
 const REAL = fileURLToPath(new URL("./fixtures/carousel/habit-slide-text-box.png", import.meta.url));
 
-test("contrast on a real render: the glow behind the type is not the ink", { timeout: 30000 }, async () => {
+test("contrast on a real render: the glow behind the type is not the ink", { timeout: 30000, skip: needsFfmpeg }, async () => {
   const rect = { x: 0, y: 0, width: 215, height: 204 };
   const real = measuredContrast(await readPixels(REAL, 215, 204), rect);
   assert.ok(real > 10, `white type on the dark glow reads well over AA (${real})`);
@@ -307,7 +311,7 @@ test("contrast on a real render: the glow behind the type is not the ink", { tim
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("readPixels reads a PNG back at a size", { timeout: 30000 }, async () => {
+test("readPixels reads a PNG back at a size", { timeout: 30000, skip: needsFfmpeg }, async () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "carousel-px-"));
   try {
     const file = path.join(dir, "a.png");
@@ -318,7 +322,7 @@ test("readPixels reads a PNG back at a size", { timeout: 30000 }, async () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("carousel check on a project: plan only without a render, then pixel rules on render.json", { timeout: 60000 }, async () => {
+test("carousel check on a project: plan only without a render, then pixel rules on render.json", { timeout: 60000, skip: needsFfmpeg }, async () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "carousel-check-"));
   const exitCode = process.exitCode;
   try {
@@ -362,7 +366,7 @@ test("carousel check on a project: plan only without a render, then pixel rules 
   }
 });
 
-test("cover-thumbnail: a small cover headline fails at feed size", { timeout: 60000 }, async () => {
+test("cover-thumbnail: a small cover headline fails at feed size", { timeout: 60000, skip: needsFfmpeg }, async () => {
   const dir = mkdtempSync(path.join(os.tmpdir(), "carousel-thumb-"));
   const exitCode = process.exitCode;
   try {

@@ -49,7 +49,7 @@ export const SceneOverlay: React.FC<SceneOverlayProps> = ({ story, sceneId, loop
   const span = React.useMemo(() => sceneOverlayWindow(story, sceneId, loop), [story, sceneId, loop]);
   const element = React.useMemo(() => resolveSceneElement(span.scene, story, { end: span.loop ? undefined : span.end, customModules }), [span, story, customModules]);
   const startFrame = Math.round(span.start * fps);
-  const style = layerStyle(layerStateAt((startFrame + frame) / fps, span.tweens, getEase));
+  const style = layerStyle(layerStateAt(Math.max((startFrame + frame) / fps, span.start), span.tweens, getEase));
   const content = span.loop
     ? <Freeze frame={0}>{element.render()}</Freeze>
     : <SceneStartFrame.Provider value={startFrame}>{element.render(part)}</SceneStartFrame.Provider>;

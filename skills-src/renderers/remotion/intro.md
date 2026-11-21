@@ -6,8 +6,8 @@ description: Create an end-to-end cinematic Remotion video, authored in React an
 # LaunchClip Create Video (Remotion)
 
 Create a reviewable video with the current agent's included reasoning and local
-Remotion tooling. `storyboard.json` is the artefact you author: the bundled
-`LaunchclipStory` composition renders it with frame-pure React modules. Treat
-this skill as the agent-native counterpart to `launchclip produce`, not as a
-wrapper around it. Its sibling, `launchclip-create-video`, renders the same
-storyboard with HyperFrames; the creative funnel and gates are identical.
+Remotion tooling. You author `storyboard.json`; the bundled `LaunchclipStory`
+composition renders it in frame-pure React. This skill is the agent-native
+counterpart to `launchclip produce`, not a wrapper around it. Its sibling
+`launchclip-create-video` renders the same storyboard with HyperFrames,
+through the same funnel and gates.
