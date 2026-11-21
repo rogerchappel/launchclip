@@ -457,7 +457,12 @@ export const SHORT_VIDEO_RULES = Object.freeze([
   'Concrete pictures: every sentence names something the viewer can picture (an object, a place, a person, a number with its unit), so each one can own a scene; no sentence rests on an abstraction alone.',
   'Write to the footage: when the assets list what the footage shows, picture each sentence with something in that list. Do not promise a demonstration no asset shows (a product being applied, a close-up of a material, a before-and-after); say it over footage that exists, or leave it out.',
   'Specific, never hedged: say the number, the name, the rule and the consequence the brief gives ("$53,000 per email", "oil it every 12 months"), in firm words. No "can help", "may need", "might", "possibly", "in some cases" or "it depends". When the brief has no figure, stay qualitative but firm ("untreated pine rots", not "it may start to deteriorate"); never invent the figure.',
-  'Over 30 s, keep them to the end: open a loop in the first quarter (a payoff promised for later: "the last one is the cheapest fix", "one fix I\'ll give you at the end") and close it before the call to action; put one pattern interrupt near the middle, a short line that reframes what came before.',
+  'Specific, never vague: in every sentence, ask whether a number, a name or a date from the brief could replace a broad summary ("45 days ago", not "a while back"; "five hours a week", not "a lot of time"). Open on one specific thing, never a category ("this one invoice rule", not "the only tools you need"). When the brief has no specific, leave the line plain; never invent one.',
+  'Each line earns the next: read the script one line at a time, as the viewer does, and check that every line makes the next one necessary. A line that answers before the question exists, or gives no reason to hear the next, gets rewritten or cut; a strong payoff behind a flat line is never heard.',
+  'Deliver early: the first real payoff (a useful fact, a surprise, the event itself) lands by about 8 s, not only the promise of one. Get to the event; the premise is not the content.',
+  'Over 30 s, keep them to the end: open a loop in the first quarter (a payoff promised for later: "the last one is the cheapest fix", "one fix I\'ll give you at the end") and close it before the call to action; put one pattern interrupt near the middle, a short line that reframes what came before. Open the next question before the last one closes: after the hook\'s promise is paid, at about 60–70% of the script, give the viewer a new reason to stay, so they never feel done before the end.',
+  'Disarm the doubt: name to yourself the one reason this video gives a viewer to scroll ("this is an ad", "this needs skills I don\'t have", "this only works with a big budget", "I\'ve seen this") and answer it in a short aside where the doubt lands. One doubt, one line; skip it when none applies.',
+  'No formula: before writing, put the core idea in ten words or fewer; if it takes more, it is not clear yet. If the script would still work with the subject swapped out, it is a template: rewrite it from what this viewer wants to know about this subject. Cut any line that is interesting but does not serve the hook\'s promise, however good it is.',
   'A call to action built into the story, never bolted on: when the plan names a comment keyword, end on it; otherwise give a reason to follow or save that follows from the last idea ("save this before your next build"). Never promise to send something the brief does not offer.'
 ]);
 
@@ -545,6 +550,10 @@ export function scriptFormatsReference() {
     '## Rules for every format',
     '',
     ...scriptRuleLines().map((line) => `- ${line}`),
+    '',
+    `## Short videos (${SHORT_VIDEO_SECONDS} s or less)`,
+    '',
+    ...SHORT_VIDEO_RULES.map((line) => `- ${line}`),
     ''
   ];
   return `${lines.join('\n').trimEnd()}\n`;

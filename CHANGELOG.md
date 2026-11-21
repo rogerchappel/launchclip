@@ -4,6 +4,14 @@
 
 ### Added
 
+- **Sharper short-video scripts.** The script prompt for videos of 90 s or
+  less now asks for a specific in place of every broad summary, each line
+  earning the next, a first payoff by about 8 s, a new question at about
+  60–70%, one short aside that answers the viewer's likely doubt, and a
+  ten-word core idea checked with a subject-swap test. The script check adds
+  `vague` and `late-loop` warnings, and the skills' script-formats reference
+  now lists the short-video rules.
+
 - **Carousels and single-image posts.** `launchclip carousel make "<brief>"`
   turns a brief into a carousel story (scenes are slides, `format.kind:
   "carousel"`), then `carousel render`, `check` and `export` make the files
