@@ -297,6 +297,20 @@ test("a short video over 30 s should open a loop and re-hook mid-way (warnings)"
   assert.ok(ids(report, "warnings").includes("rehook-missing"));
 });
 
+test("a short video over 30 s should open a new question between 50% and 80% (warning)", () => {
+  assert.ok(!ids(checkScript({ narration: STAKES, duration: 45, brief: DECK_BRIEF, ctaKeyword: "deck" }), "warnings").includes("late-loop"));
+  const flat = STAKES.replace("Here's the catch. All three are invisible", "All three are invisible");
+  assert.ok(ids(checkScript({ narration: flat, duration: 45, brief: DECK_BRIEF, ctaKeyword: "deck" }), "warnings").includes("late-loop"));
+});
+
+test("vague: a broad summary in a short video is a warning; a long video is not checked", () => {
+  assert.ok(!ids(checkScript({ narration: STAKES, duration: 45, brief: DECK_BRIEF, ctaKeyword: "deck" }), "warnings").includes("vague"));
+  const vague = STAKES.replace("before its fifth summer", "a while back, and it cost a lot of money");
+  const report = checkScript({ narration: vague, duration: 45, brief: DECK_BRIEF, ctaKeyword: "deck" });
+  assert.match(report.warnings.find((item) => item.id === "vague").message, /"a while back", "a lot of money"/);
+  assert.ok(!ids(checkScript({ narration: vague, duration: 300, brief: DECK_BRIEF, format: "long-form" }), "warnings").includes("vague"));
+});
+
 test("cta-keyword and cta-choice: the host's keyword or the series' options are asked for at the end", () => {
   assert.ok(!ids(checkScript({ narration: STAKES, duration: 45, brief: DECK_BRIEF, ctaKeyword: "DECK" })).includes("cta-keyword"));
   const other = checkScript({ narration: STAKES, duration: 45, brief: DECK_BRIEF, ctaKeyword: "boards" });

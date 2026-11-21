@@ -125,6 +125,8 @@ const HEDGE_UNDER = /\b(?:under|less than|below|up to|at most|fewer than)\s*$/i;
 const HEDGE = /\b(?:can help|may help|might help|could help|may need|might need|may want to|might want to|may be (?:worth|able)|might be worth|can sometimes|may sometimes|could potentially|potentially|possibly|arguably|in some cases|it depends|to some extent|somewhat|kind of|sort of|more or less)\b/gi;
 // A later payoff promised early ("the last one is…", "I'll give you at the end").
 const OPEN_LOOP = /\b(?:at the end|by the end|till the end|until the end|stick around|keep watching|the last (?:one|thing|step|mistake|tip|item)|number (?:three|four|five|six|seven|[3-9]) is|i'?ll (?:give|show|tell|send) you|here'?s (?:how|why|what)|you'?ll see why|wait (?:for|until))\b/i;
+// Broad summaries where a number, name or date would land ("a while back" → "45 days ago").
+const VAGUE = /\b(?:a while (?:back|ago)|some time ago|the other day|recently|a lot of (?:time|money|people|work)|lots of (?:time|money|people)|a ton of|tons of|so much (?:time|money)|many people|most people|a big (?:account|company|client|budget)|a huge (?:amount|number))\b/gi;
 // A line that reframes or re-hooks mid-script.
 const REHOOK = /\b(?:but here'?s|here'?s the (?:catch|thing|twist|part|kicker)|the (?:word|catch|twist|trick|secret|kicker|real (?:problem|cost|reason|risk)) is|plot twist|which means|that'?s (?:why|how|the part)|so the real|and that'?s not even|it gets worse|nobody (?:checks|tells you|talks about))\b/i;
 
@@ -390,7 +392,16 @@ export function checkScript(input = {}) {
       if (!sentences.some((sentence) => share(sentence) < 0.3 && OPEN_LOOP.test(sentence.text))) add(warnings, "open-loop", "Nothing in the first 30% promises a later payoff (heuristic).", "Open a loop early (\"the last one is the cheapest fix\", \"one fix I'll give you at the end\") and close it before the call to action.", spanOf(sentences[1] ?? hook));
       const middle = sentences.filter((sentence) => share(sentence) >= 0.3 && share(sentence) <= 0.85);
       if (middle.length && !middle.some((sentence) => REHOOK.test(sentence.text) || countWords(sentence.text) <= 4)) add(warnings, "rehook-missing", "Nothing between 30% and 85% re-hooks or reframes (heuristic).", "Add one short pattern interrupt near the middle: a line that reframes what came before (\"The word is per.\", \"All three fail the same way: water sits on the cut end.\").", spanOf(middle[0]));
+      // A fresh loop after the promise is paid, so the viewer never feels done before the end.
+      const late = sentences.filter((sentence) => share(sentence) >= 0.5 && share(sentence) <= 0.8);
+      if (late.length && !late.some((sentence) => OPEN_LOOP.test(sentence.text) || REHOOK.test(sentence.text) || sentence.text.trim().endsWith("?"))) add(warnings, "late-loop", "Nothing between 50% and 80% opens a new question (heuristic).", "After the hook's promise is paid, at about 60–70%, give a new reason to stay (\"but the third one costs the most\", a question the ending answers) before the last loop closes.", spanOf(late[0]));
     }
+  }
+
+  // --- Short videos: broad summaries a specific could replace (soft).
+  if (short) {
+    const vague = [...narration.matchAll(VAGUE)];
+    if (vague.length) add(warnings, "vague", `${[...new Set(vague.map((match) => `"${match[0].toLowerCase()}"`))].join(", ")} summarise where a specific would land.`, "Use the number, name or date the brief gives (\"45 days ago\", not \"a while back\"); if the brief has none, say it plainly and never invent one.", spanOf(sentenceAt(sentences, vague[0].index)));
   }
 
   // --- Reading grade (soft): Flesch-Kincaid with a local syllable heuristic.
