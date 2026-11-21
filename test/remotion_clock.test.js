@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { sceneSeconds } from "../kit/remotion/clock.ts";
-import { layerStateAt } from "../kit/core/transitions.mjs";
+import { layerStateAt } from "@launchclip/core/transitions.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 

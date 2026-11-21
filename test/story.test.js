@@ -49,8 +49,8 @@ test("src/story.js re-exports the kit core", () => {
   assert.equal(storyApi.STORY_SCHEMA, "launchclip.story.v1");
 });
 
-test("kit/core/story.mjs imports only import-free siblings (palette.mjs, then oklch.mjs; carousel.mjs, then carousel-continuity.mjs)", async () => {
-  const imports = { "story.mjs": ["./palette.mjs", "./carousel.mjs"], "palette.mjs": ["./oklch.mjs"], "oklch.mjs": [], "carousel.mjs": ["./carousel-continuity.mjs"], "carousel-continuity.mjs": [] };
+test("kit/core/story.mjs imports only import-free siblings (palette.mjs, then oklch.mjs; carousel.mjs, then carousel-templates.mjs and carousel-continuity.mjs, both on reading-gradient.mjs, then panels.mjs)", async () => {
+  const imports = { "story.mjs": ["./palette.mjs", "./carousel.mjs", "./reading-gradient.mjs"], "reading-gradient.mjs": ["./panels.mjs"], "panels.mjs": [], "palette.mjs": ["./oklch.mjs"], "oklch.mjs": [], "carousel.mjs": ["./carousel-templates.mjs", "./carousel-continuity.mjs"], "carousel-templates.mjs": ["./reading-gradient.mjs"], "carousel-continuity.mjs": ["./reading-gradient.mjs"] };
   for (const [file, allowed] of Object.entries(imports)) {
     const source = await readFile(path.join(root, "kit/core", file), "utf8");
     assert.deepEqual([...source.matchAll(/^\s*import\s[^;]*?from\s+["']([^"']+)["']/gm)].map((match) => match[1]), allowed, file);
