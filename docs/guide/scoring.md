@@ -4,7 +4,13 @@
 
 ## Build a rubric for your industry
 
-You do not have to write the rubric from a blank page, or browse social media for examples. Start from keywords:
+You do not have to write the rubric from a blank page, or browse social media for examples. One command goes from a keyword to a drafted rubric with its evidence ([guide](scoring-niche.md)):
+
+```bash
+launchclip score niche "home baking"
+```
+
+It runs these steps, which you can also run one at a time:
 
 1. **Find your niche's creators and collect their posts** ([guide](scoring-discover.md)). Needs an Apify account.
 
