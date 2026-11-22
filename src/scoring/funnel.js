@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { mapLimit } from "../concurrency.js";
 import { createStructuredClient } from "../model_provider.js";
 import { parseRubric, scoreItems } from "../scorer.js";
+import { predict } from "./fit.js";
 import { DEFAULT_HOOK_SIMILARITY_LIMIT, hookSimilarity } from "../visual_history.js";
 
 // What a batch is told to lead with. Batch i takes slant i and, once the
@@ -63,7 +64,7 @@ export function dropExactDuplicates(items, seen = new Set()) {
  * batch failing throws. Fewer than `count` come back when batches repeat
  * each other or fail.
  */
-export async function writeHooks({ topic, brief = "", count, model = process.env.LAUNCHCLIP_MAKE_MODEL, batchSize = 25, concurrency = 8, client, onBatchError } = {}) {
+export async function writeHooks({ topic, brief = "", count, model = process.env.LAUNCHCLIP_MAKE_MODEL, batchSize = 25, concurrency = 8, requirements = [], client, onBatchError } = {}) {
   if (!String(topic ?? "").trim()) throw new Error("writeHooks needs a topic");
   if (!(count >= 1) || !(batchSize >= 1)) throw new Error(`writeHooks needs count and batchSize of 1 or more; got ${count} and ${batchSize}`);
   if (!client && !model) throw new Error("writeHooks needs a writing model: pass --model provider:model or set LAUNCHCLIP_MAKE_MODEL");
@@ -75,7 +76,7 @@ export async function writeHooks({ topic, brief = "", count, model = process.env
     const reader = READERS[Math.floor(index / HOOK_SLANTS.length) % READERS.length];
     try {
       const result = await writer.runStructured({
-        instructions: `You write opening lines (hooks) for short videos and carousels. Write ${batchSize} distinct hooks on the topic. Each is one sentence a person would say out loud, under 20 words, with no hashtags, emoji or quotation marks. For this batch: ${slant}. Write for ${reader}. No two hooks may share an opening phrase. Invent no statistics about real people or companies.`,
+        instructions: `You write opening lines (hooks) for short videos and carousels. Write ${batchSize} distinct hooks on the topic. Each is one sentence a person would say out loud, under 20 words, with no hashtags, emoji or quotation marks. For this batch: ${slant}. Write for ${reader}. No two hooks may share an opening phrase. Invent no statistics about real people or companies.${requirements.length ? ` Every hook must follow these rules:\n- ${requirements.join("\n- ")}` : ""}`,
         input: `Topic: ${String(topic).trim()}${brief.trim() ? `\n\nBrief:\n${brief.trim()}` : ""}`,
         schema: HOOKS_SCHEMA,
         schemaName: "launchclip_hook_batch",
@@ -152,6 +153,35 @@ export function assembleHooks({ parts, count, seed = "" } = {}) {
 // The measure `launchclip history check` flags repeated hooks with: 0–1 overlap of content words.
 const alike = (a, b) => hookSimilarity({ hook: { text: a } }, { hook: { text: b } });
 
+/**
+ * What a rubric gates a kind on, as rules a writer can follow. Without them
+ * the writer does not know the rubric, and most of what it writes fails it.
+ */
+export function rubricRequirements(rubric, kind = "hook") {
+  return Object.values(rubric.questions)
+    .filter((question) => question.type === "noul" && (question.on == null || [question.on].flat().includes(kind)))
+    .map((question) => `${question.want === false ? "Never" : "Always"}: ${question.criteria?.true ?? question.instructions}`);
+}
+
+/**
+ * Slots per type from the brand's own results (rows with own: true, a tag and
+ * an outlier): of the types with 3 or more posts, the best third gets one
+ * more slot and the worst third one fewer. → {type: slots}
+ */
+export function quotaFromResults(rows, { perType = 3, tag = "hook_type", seed = "" } = {}) {
+  const logs = {};
+  for (const row of rows) if (row.own && row.outlier > 0 && row.tags?.[tag] != null) (logs[String(row.tags[tag])] ??= []).push(Math.log(row.outlier));
+  const draws = Object.entries(logs).filter(([, values]) => values.length >= 3).map(([type, values]) => {
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const sd = Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1)) || 1;
+    // Thompson sampling: each type is judged on a draw from what its results allow, so a type with few posts still gets tried.
+    const z = Math.sqrt(-2 * Math.log((draw(seed, `u1:${type}`) + 1) / 2 ** 32)) * Math.cos(2 * Math.PI * (draw(seed, `u2:${type}`) / 2 ** 32));
+    return [type, mean + (sd / Math.sqrt(values.length)) * z];
+  }).sort((a, b) => b[1] - a[1]);
+  const third = Math.floor(draws.length / 3);
+  return Object.fromEntries(draws.map(([type], index) => [type, index < third ? perType + 1 : index >= draws.length - third ? Math.max(1, perType - 1) : perType]));
+}
+
 function meanPass(item) {
   const shares = Object.values(item.answers ?? {}).map((answer) => answer?.p).filter(Number.isFinite);
   return shares.length ? shares.reduce((sum, p) => sum + p, 0) / shares.length : 0;
@@ -162,7 +192,7 @@ function meanPass(item) {
  * hooks, as text. A filter and a spread, not a ranking by quality.
  * → {picked: [item + {type, wildcard?}], dropped: {failed, near_recent, near_duplicate, over_quota}} (dropped holds ids)
  */
-export function shortlist(scoredItems, { perType = 3, wildcards = 2, tag = "hook_type", recent = [], similarityLimit = DEFAULT_HOOK_SIMILARITY_LIMIT, seed = "" } = {}) {
+export function shortlist(scoredItems, { perType = 3, wildcards = 2, tag = "hook_type", recent = [], similarityLimit = DEFAULT_HOOK_SIMILARITY_LIMIT, seed = "", quota = {}, rank = null } = {}) {
   const dropped = { failed: [], near_recent: [], near_duplicate: [], over_quota: [] };
   const near = (item, texts) => texts.some((text) => alike(item.text, text) >= similarityLimit);
   const open = [];
@@ -172,7 +202,8 @@ export function shortlist(scoredItems, { perType = 3, wildcards = 2, tag = "hook
     else open.push(item);
   }
   // Fewest unsure answers first, then the higher mean pass probability; ties keep the order given.
-  open.sort((a, b) => (a.unsure?.length ?? 0) - (b.unsure?.length ?? 0) || meanPass(b) - meanPass(a));
+  // rank: a fitted model's prediction per id (src/scoring/fit.js); when given, real results order the list before the scorer does.
+  open.sort((a, b) => (rank?.[b.id] ?? 0) - (rank?.[a.id] ?? 0) || (a.unsure?.length ?? 0) - (b.unsure?.length ?? 0) || meanPass(b) - meanPass(a));
   const picked = [];
   const kept = {};
   const spare = [];
@@ -180,7 +211,7 @@ export function shortlist(scoredItems, { perType = 3, wildcards = 2, tag = "hook
     const type = String(item.tags?.[tag] ?? "untagged");
     if (near(item, picked.map((entry) => entry.text))) dropped.near_duplicate.push(item.id);
     // The quota is per type because picking the overall top of one scorer makes everything sound alike.
-    else if ((kept[type] ?? 0) >= perType) spare.push({ ...item, type });
+    else if ((kept[type] ?? 0) >= (quota[type] ?? perType)) spare.push({ ...item, type });
     else {
       kept[type] = (kept[type] ?? 0) + 1;
       picked.push({ ...item, type });
@@ -197,7 +228,7 @@ export function shortlist(scoredItems, { perType = 3, wildcards = 2, tag = "hook
   return { picked, dropped };
 }
 
-const USAGE = "<topic|brief.md> [--count <n>] [--assemble <parts.json>] [--rubric <rubric.json>] [--recent <hooks.txt>] [--per-type <n>] [--wildcards <n>] [--model <provider:model>] [--scorer-model <id>] [--seed <text>] [--out <dir>]";
+const USAGE = "<topic|brief.md> [--count <n>] [--assemble <parts.json>] [--rubric <rubric.json>] [--recent <hooks.txt>] [--per-type <n>] [--wildcards <n>] [--model <provider:model>] [--scorer-model <id>] [--concurrency <n>] [--results <own.tagged.jsonl>] [--fit <model.json>] [--seed <text>] [--out <dir>]";
 const STARTER_RUBRIC = fileURLToPath(new URL("../../docs/guide/scoring-rubric.json", import.meta.url));
 
 function wholeNumber(flags, name, fallback, least) {
@@ -251,7 +282,7 @@ export async function runFunnel(target, flags = {}, io = {}) {
     return response;
   };
   const written = writes ? await timed("write", () => writeHooks({
-    topic, brief, count, model,
+    topic, brief, count, model, requirements: rubricRequirements(rubric),
     client: io.client ?? (model ? createStructuredClient(model, { fetch: costed }) : undefined),
     onBatchError: (error, index) => warnings.push(`writing batch ${index + 1} failed: ${error.message}`)
   })) : [];
@@ -264,13 +295,26 @@ export async function runFunnel(target, flags = {}, io = {}) {
 
   const report = await timed("score", () => scoreItems(candidates, rubric, {
     model: flags["scorer-model"],
+    concurrency: wholeNumber(flags, "concurrency", 32, 1),
     context: isBrief ? { brief } : { topic },
     ...(io.fetch ? { fetch: io.fetch } : {}),
     ...(io.apiKey ? { apiKey: io.apiKey } : {})
   }));
   await writeFile(path.join(out, "scored.json"), `${JSON.stringify({ ...report, rubric: rubricFile }, null, 2)}\n`);
 
-  const options = { perType, wildcards, recent, seed, ...(flags.tag ? { tag: String(flags.tag) } : {}) };
+  const tag = flags.tag ? String(flags.tag) : "hook_type";
+  const jsonl = async (file) => (await readFile(path.resolve(String(file)), "utf8")).split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line));
+  // Stage 6: the brand's own results move slots between types, and a fitted model that has earned it orders the list.
+  const quota = flags.results ? quotaFromResults(await jsonl(flags.results), { perType, tag, seed }) : {};
+  let rank = null;
+  if (flags.fit) {
+    const fitted = JSON.parse(await readFile(path.resolve(String(flags.fit)), "utf8"));
+    const missing = [...new Set(fitted.schema.columns.map((column) => column.key))].filter((key) => !rubric.questions[key]);
+    if (!fitted.usable) warnings.push(`--fit ${flags.fit} is not usable yet (${fitted.reasons.join("; ")}), so it did not order the shortlist`);
+    else if (missing.length) warnings.push(`--fit ${flags.fit} was trained on questions this rubric does not ask (${missing.join(", ")}), so it did not order the shortlist`);
+    else rank = Object.fromEntries(predict(fitted, report.items).map((entry) => [entry.id, entry.predicted_outlier]));
+  }
+  const options = { perType, wildcards, recent, seed, tag, quota, rank };
   const chosen = await timed("shortlist", () => shortlist(report.items, options));
   await writeFile(path.join(out, "shortlist.json"), `${JSON.stringify({ topic, per_type: perType, wildcards, seed, recent: recent.length, ...chosen }, null, 2)}\n`);
   await writeFile(path.join(out, "shortlist.txt"), chosen.picked.map((item) => `${item.text}\n`).join(""));
@@ -296,6 +340,8 @@ export async function runFunnel(target, flags = {}, io = {}) {
     // write is what the router reported; a host that reports no cost counts as 0.
     cost_usd: { write: dollars(writeCost), score: report.cost_usd, total: dollars(writeCost + report.cost_usd) },
     warnings,
+    quota,
+    ranked_by_results: Boolean(rank),
     shortlist: chosen.picked.map((item) => ({ id: item.id, type: item.type, text: item.text, ...(item.wildcard ? { wildcard: true } : {}) }))
   };
 }

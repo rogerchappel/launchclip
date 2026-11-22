@@ -376,6 +376,8 @@ export async function runLibrary(action, target, flags = {}, io = {}) {
     const input = action === "fetch" && flags.input ? JSON.parse(await readFile(path.resolve(String(flags.input)), "utf8")) : {};
     const posts = await importPosts(action === "fetch" ? await fetchApify({ actor: target, input, ...(io.fetch ? { fetch: io.fetch } : {}) }) : String(target), { platform: flags.platform });
     const file = out ?? path.resolve("library.jsonl");
+    // --own marks the brand's own posts: the fitted layer can weigh them above a competitor's (src/scoring/fit.js).
+    if (flags.own) for (const post of posts) post.own = true;
     const merged = new Map([...(existsSync(file) ? await readJsonl(file) : []), ...posts].map((post) => [`${post.platform}:${post.id}`, post]));
     await writeJsonl(file, [...merged.values()]);
     return { action, out: file, count: merged.size, added: posts.length };
