@@ -81,6 +81,8 @@ launchclip score niche "horse racing" --name horse-racing
 
 One command runs discover, evidence, draft and report, in that order. It can be stopped and run again: each step skips what is already done. Each step is also its own command, for a scheduler.
 
+**Widening the keywords.** One keyword finds one corner of an industry. After the first search, the command lists more keywords from two free sources: the hashtags that several of the found creators share, and the sub-areas a writing model names for the niche (events, roles, audiences, neighbouring topics). On the first real library, "horse racing" led to thoroughbred, jockey, racehorse, two named race meetings, a famous horse, and the neighbouring sports. The list is saved in `niche.json` with a marker for each: in the niche, neighbouring, or off topic. You confirm it, or `--widen` takes the in-niche ones without asking. Each keyword's creators are capped, so one corner cannot fill the library, and the report shows results by keyword.
+
 **Evidence, without downloading any video (the default).** The same scrape that returns the caption also returns, at no extra charge:
 
 | Evidence | From | Gives |
@@ -134,6 +136,7 @@ Not built. A post has a format (how it is built) and a topic (what it is about).
 - **Several keywords, several industries.** `library discover` already takes a keyword list. Each library keeps its niche name, and the niche map is made per niche.
 - **`score library compare <a> <b>`** lists formats that go with above-normal results in niche A and are rare or absent in niche B. Those are candidates to import, not findings.
 - **A general trending feed is a source of creators and formats, never of proof.** Third-party actors exist for TikTok's trending and top-ads lists. They return hits only, so they are used as the keyword search is: to find creators, whose whole recent feeds are then collected, and to suggest format names for the shared rubric.
+- **The niche report says what to try.** Each niche's `report.md` ends with "Worth testing here": formats from the other niches on the machine, and from a general trending library if one was collected, that do well there and are rare here, each with example posts. Neighbouring keywords from stage 8 are the nearest source, since their audiences overlap.
 - **Imports are tested, not trusted.** An imported format gets the shortlist's wildcard slots (stage 4), and the brand's own results decide whether it keeps them (stage 6). Nothing shows that a format which wins in one industry wins in another.
 
 ## Limits to design around
