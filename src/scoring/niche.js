@@ -128,7 +128,8 @@ export async function runNiche(target, flags = {}, io = {}) {
   let video = null;
   if (flags["with-video"]) {
     say("Video: a sample of each creator's best and worst");
-    video = await steps.video(rows, { dir: folder, onStep: (text) => say(`  ${text}`) });
+    // No transcription here: a speech model invents words on music-only posts, and those would be read as spoken hooks.
+    video = await steps.video(rows, { dir: folder, transcribe: false, onStep: (step) => say(`  ${step.row?.id}: ${step.ok ? "done" : step.error}`) });
     rows = video.rows;
     await writeJsonl(files.library, rows);
   }
