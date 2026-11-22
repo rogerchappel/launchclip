@@ -35,6 +35,7 @@ Run the brand's rubric on every hook, script and carousel slide before any rende
 
 ### 3. Competitor video library (research)
 
+- Collecting the library: a scraping service such as Apify can search TikTok and Instagram by keyword, hashtag or account and return each video with its caption and public numbers (views, likes, comments, shares, posting date). It is an optional source with your own key. A folder of files with a spreadsheet of numbers works too.
 - You point LaunchClip at a set of videos from your niche. It reads each one with a video-capable scorer and tags it: hook type, what the first frame shows, pacing, format, angle, call to action, and around fifty more.
 - It joins the tags to each video's public numbers, measured against that channel's own typical video, so a small channel's hit counts as a hit.
 - The output is a map of the niche: which hook types and angles are crowded, which are open, and which beat their channel's norm.
@@ -44,6 +45,7 @@ Run the brand's rubric on every hook, script and carousel slide before any rende
 ### 4. Generate wide, keep it varied
 
 - Write hundreds or thousands of hooks and angles per topic.
+- Writing is the slow step, and a scorer can't write. Two ways to keep it quick: a small, fast writing model producing batches in parallel, with the larger model saved for the shortlist; and **assembly**, where hooks are built from parts (opening pattern, angle, audience, number, payoff) taken from the competitor library and the brand's research, and the scorer picks which combinations fit. Assembly needs no writing model at all and can produce thousands of candidates in seconds.
 - Gate them (stage 2), tag them (the same tags as stage 3), and drop near-duplicates of the brand's recent posts.
 - Keep the top few **per hook type**, not the overall top, and hold a slot or two for unscored wildcards. Picking the overall top of one scorer makes everything sound the same.
 - You pick from the shortlist.
@@ -52,6 +54,7 @@ Run the brand's rubric on every hook, script and carousel slide before any rende
 
 - The hosted models can't be fine-tuned. The training happens outside them: each video's answers become a row of features, and a small model learns which features go with above-normal results.
 - It trains first on the competitor library, because a new brand has no results of its own, then shifts weight to the brand's own posts as they build up.
+- Public numbers are a rough signal: views depend on follower count, posting time and paid promotion as well as the video. Results are measured against each channel's own norm and by age of the post, and paid posts are left out where they can be told apart.
 - It stays off until it beats chance on videos it hasn't seen. Expect that to need a few hundred videos with results.
 - Drafts are scored from a low-resolution preview render, not the script alone, so a draft is read the same way the training videos were.
 
