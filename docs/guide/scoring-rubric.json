@@ -1,0 +1,74 @@
+{
+  "pass_at": 0.7,
+  "questions": {
+    "names_audience": {
+      "type": "noul",
+      "on": ["hook", "cover"],
+      "instructions": "Does the text say who it is for, by naming a kind of person, role or situation?",
+      "criteria": {
+        "true": "A reader can tell who is being addressed (\"founders\", \"if you run payroll\", \"new runners\").",
+        "false": "It could be addressed to anyone."
+      }
+    },
+    "concrete_detail": {
+      "type": "noul",
+      "on": ["hook", "cover"],
+      "instructions": "Does the text contain a specific number, name, time span or result?",
+      "criteria": {
+        "true": "It states a figure, a named thing or a measurable outcome.",
+        "false": "It stays general (\"better results\", \"save time\")."
+      }
+    },
+    "opens_with_filler": {
+      "type": "noul",
+      "want": false,
+      "on": ["hook", "cover"],
+      "instructions": "Does the text open with a greeting, an introduction of the speaker, or a question that only names the topic?",
+      "criteria": {
+        "true": "It starts with \"Hey guys\", \"In this video\", \"Welcome back\", \"Are you using X?\" or similar.",
+        "false": "It starts on the claim, the problem or the result."
+      }
+    },
+    "unsupported_claim": {
+      "type": "noul",
+      "want": false,
+      "instructions": "Does the text use a guarantee or a superlative about itself: guaranteed, the best, the only, the first, number one, or a result promised to everyone?",
+      "criteria": {
+        "true": "It contains one of those claims.",
+        "false": "It contains none of them. A specific result or figure on its own is not one."
+      }
+    },
+    "one_idea": {
+      "type": "noul",
+      "on": "slide",
+      "instructions": "Does this slide make exactly one point?",
+      "criteria": {
+        "true": "One idea a reader could repeat in a sentence.",
+        "false": "Two or more separate points, or no clear point."
+      }
+    },
+    "clarity": {
+      "type": "score",
+      "min": 1,
+      "instructions": "How easy is the text to understand on one quick read by someone new to the subject?",
+      "criteria": [
+        "Needs a second read to work out what is meant.",
+        "Clear on one read.",
+        "Clear on one read and could be repeated from memory."
+      ]
+    },
+    "hook_type": {
+      "type": "choice",
+      "on": ["hook", "cover"],
+      "instructions": "Which kind of opening is this?",
+      "criteria": {
+        "bold_claim": "States a strong or surprising claim.",
+        "mistake": "Names a mistake the reader is making.",
+        "number": "Leads with a figure or a counted list.",
+        "question": "Asks a question the reader wants answered.",
+        "story": "Starts a personal story or a specific moment.",
+        "other": "None of these."
+      }
+    }
+  }
+}
