@@ -288,3 +288,40 @@ export function fit(rows, { target = "outlier", lambda, folds = 5, seed = 1, wei
     reasons
   };
 }
+
+function checkModel(model) {
+  if (model?.version !== FIT_VERSION || !Array.isArray(model.coefficients) || model.coefficients.length !== model.schema?.columns?.length) throw new Error(`not a fitted model this version reads (version ${FIT_VERSION}): fit it again`);
+}
+
+/**
+ * items: scored items, a `launchclip score` report, or tagged rows.
+ * → [{id, predicted_outlier, percentile}] in the order given. percentile is
+ * against the model's predictions for the posts it was trained on (0 to 100).
+ */
+export function predict(model, items, { force = false } = {}) {
+  checkModel(model);
+  if (!model.usable && !force) throw new Error(`this model is not usable, so its predictions would be guesses: ${model.reasons.join("; ")}. Pass force to predict anyway.`);
+  const { X, ids } = featurise(Array.isArray(items) ? items : items?.items, model.schema);
+  return X.map((x, index) => {
+    const log = apply(model, x);
+    return { id: ids[index], predicted_outlier: round(Math.exp(log)), percentile: Math.max(0, model.fitted_percentiles.filter((value) => value <= log).length - 1) };
+  });
+}
+
+export const ASSOCIATION_NOTE = "These are associations in this library, not causes: a feature can go with good results without producing them.";
+
+/** → {note, features: [{feature, key, value?, coefficient, direction, text}]}, largest standardised coefficient first. */
+export function explain(model, { top = 10 } = {}) {
+  checkModel(model);
+  const features = model.schema.columns
+    .map((column, index) => ({ column, coefficient: model.coefficients[index] }))
+    .filter(({ coefficient }) => coefficient !== 0)
+    .sort((a, b) => Math.abs(b.coefficient) - Math.abs(a.coefficient))
+    .slice(0, top)
+    .map(({ column, coefficient }) => {
+      const what = { number: `a higher ${column.key}`, is: `${column.key} being "${column.value}"`, other: `${column.key} being a rare value`, missing: `no answer for ${column.key}` }[column.kind];
+      const direction = coefficient > 0 ? "above" : "below";
+      return { feature: column.name, key: column.key, ...(column.kind === "is" ? { value: column.value } : {}), coefficient: round(coefficient), direction, text: `${what} goes with ${direction}-normal results` };
+    });
+  return { note: ASSOCIATION_NOTE, features };
+}

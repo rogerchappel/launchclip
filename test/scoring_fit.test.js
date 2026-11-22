@@ -2,7 +2,7 @@
 // source, no network, no real posts.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { featurise, fit, foldsFor, spearman } from "../src/scoring/fit.js";
+import { explain, featurise, fit, foldsFor, predict, spearman } from "../src/scoring/fit.js";
 
 function seeded(seed) {
   let state = seed >>> 0;
@@ -130,4 +130,30 @@ test("fit: constant and duplicated columns, weights and ties do not break the ma
   assert.equal(spearman([1, 2, 3, 4], [4, 3, 2, 1]), -1);
   assert.equal(spearman([1, 1, 1], [1, 2, 3]), 0, "a constant side has no rank correlation");
   assert.ok(Math.abs(spearman([1, 2, 2, 3], [1, 2, 3, 4]) - 0.9487) < 1e-4, "ties share their average rank");
+});
+
+const draft = (id, strong, hook) => ({ id, kind: "hook", text: id, answers: { strong_open: { value: strong }, filler: { value: 0.5 }, clarity: { value: 1 }, hook_type: { value: hook } } });
+
+test("predict: ranks drafts by the driver, and refuses a model that is not usable unless forced", () => {
+  const model = JSON.parse(JSON.stringify(fit(library(400), { seed: 3 })));
+  const [strong, weak] = predict(model, { items: [draft("strong", 0.95, "number"), draft("weak", 0.05, "story")] });
+  assert.equal(strong.id, "strong");
+  assert.ok(strong.predicted_outlier > 1 && weak.predicted_outlier < 1, JSON.stringify([strong, weak]));
+  assert.ok(strong.percentile > 80 && weak.percentile < 20);
+  assert.equal(predict(model, library(400)).filter((row) => row.percentile >= 50).length > 150, true, "percentiles are against the training library");
+
+  const noise = fit(library(120, { signal: 0 }));
+  assert.throws(() => predict(noise, [draft("a", 0.5, "story")]), /not usable.*only 120 posts.*force/s);
+  assert.equal(predict(noise, [draft("a", 0.5, "story")], { force: true }).length, 1);
+  assert.throws(() => predict({ version: 99 }, []), /not a fitted model/);
+});
+
+test("explain: the driver comes first, with its direction, and the associations caveat", () => {
+  const { note, features } = explain(fit(library(400), { seed: 3 }), { top: 3 });
+  assert.match(note, /associations in this library, not causes/);
+  assert.equal(features.length, 3);
+  assert.deepEqual({ key: features[0].key, direction: features[0].direction }, { key: "strong_open", direction: "above" });
+  assert.equal(features[0].text, "a higher strong_open goes with above-normal results");
+  const number = explain(fit(library(400), { seed: 3 })).features.find((feature) => feature.feature === "hook_type=number");
+  assert.equal(number.text, 'hook_type being "number" goes with above-normal results');
 });
