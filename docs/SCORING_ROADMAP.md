@@ -1,6 +1,6 @@
 # Scoring roadmap
 
-Status: every stage has a first version for a hosted model, under [`launchclip score`](guide/scoring.md). Not built: the local model, scoring a draft from a preview render, and a per-post bandit (stage 6 moves shortlist slots between hook types). A rubric can be drafted from a library found by keyword (`score library discover`, `score rubric draft`). Keyword discovery and the rubric drafter have had one small real run on TikTok (5 creators, 93 posts: too few to keep a gate). Not yet tried on real data: Instagram discovery, a library large enough to keep a gate, and the fitted layer on real posts. Background and sources: [research report](../reports/JEV%20scoring%20model%20for%20content.md).
+Status: every stage has a first version for a hosted model, under [`launchclip score`](guide/scoring.md). Not built: reading the video itself (stage 8), the test for when a rubric is done (stage 9), formats across industries (stage 10), the local model, scoring a draft from a preview render, and a per-post bandit (stage 6 moves shortlist slots between hook types). A rubric can be drafted from a library found by keyword (`score library discover`, `score rubric draft`). Keyword discovery and the rubric drafter have had one small real run on TikTok (5 creators, 93 posts: too few to keep a gate). Not yet tried on real data: Instagram discovery, a library large enough to keep a gate, and the fitted layer on real posts. Background and sources: [research report](../reports/JEV%20scoring%20model%20for%20content.md).
 
 ## The idea
 
@@ -70,6 +70,47 @@ Import results for posted videos and carousels. When variants are posted, later 
 - **One post on three platforms is one piece of content with three results**, not three pieces. Each platform's result is kept separately, which shows what works where, but the count of distinct posts is what the fitted layer learns from.
 - **Several accounts means several angles**, not copies. Give each account its own audience or angle and it becomes a clean test of that angle. Posting the same carousel from several accounts on one platform teaches nothing new and is the kind of duplication platforms penalise.
 - Posting and scheduling are out of scope here. LaunchClip produces the batch and reads the results back.
+
+### 8. Read the video, cheaply
+
+Not built. The first real library (407 TikTok posts from one keyword) showed that caption wording alone separates nothing: none of 30 drafted questions passed. The hook, the script, the visuals and the pacing are in the video, so the library has to read it, and it has to stay cheap at hundreds to thousands of videos.
+
+`launchclip score library signals <library.jsonl>` adds, per post:
+
+| Signal | How | Model cost |
+|---|---|---|
+| Pacing | Local, with ffmpeg: length, number of cuts, cuts a second, seconds to the first cut | None |
+| Script and spoken hook | The platform's own subtitles when the scrape returns them, else local transcription. The first sentence is the hook. Words a second and seconds to the first word are computed | None |
+| Visuals | One contact sheet a video: frames at 0, 1 and 3 seconds and at each of the next few cuts, tiled into one image and scored by the image scorer | One small image a post |
+
+- **Download a sample, not the library.** For each creator, their best few and worst few posts by outlier (default 5 and 5). That is the contrast the drafter needs, at about a third of the downloads.
+- **Fetch soon after discovery.** Video links expire. The download step is its own stage with a cache keyed by post id, so a rerun never downloads or scores a post twice.
+- **Numbers are features, not questions.** Cuts a second and seconds to the first word go to the drafter and the fitted layer as numbers, banded into low, middle and high within the library. No model is asked to judge pacing.
+- **What a contact sheet cannot see:** motion, sound, music, and how an edit feels. It judges the opening frame, on-screen text, framing and whether a person is on camera.
+- The video-watching scorer (stage 1) stays as an option for a small audit sample, to check that the cheap signals agree with it.
+
+The drafter then proposes questions per part (hook, script, visuals) and tests each as it does now.
+
+### 9. When a rubric is done
+
+A rubric is never finished, but a version is ready to use when all of these hold:
+
+1. **Enough posts to judge.** 100 or more held-out posts a question (already enforced).
+2. **It survives a second sample.** Draft on one discovery run, then test the kept questions on a fresh run with other creators. A question is kept only if its direction holds in both.
+3. **It stops changing.** Adding the next 100 posts changes no kept question.
+4. **It predicts held-out posts.** The kept questions together rank held-out posts better than a shuffled baseline (the fitted layer's own test).
+
+`score rubric draft` reports these as a short status: posts judging, questions kept, questions that held on the second sample, and whether the last batch changed anything. Expect a few hundred to a thousand posts for a niche. Formats drift, so a rubric is redrafted on fresh posts every month or two, and a brand's own results replace the library as soon as there are enough of them.
+
+### 10. Formats across industries
+
+Not built. A post has a format (how it is built) and a topic (what it is about). The format is what can move between industries.
+
+- **One format rubric for every library.** A shared set of choice questions about structure, answered from the signals in stage 8: the kind of opening, the structure (list, before and after, story, reaction, demonstration), who is on screen, how text is used.
+- **Several keywords, several industries.** `library discover` already takes a keyword list. Each library keeps its niche name, and the niche map is made per niche.
+- **`score library compare <a> <b>`** lists formats that go with above-normal results in niche A and are rare or absent in niche B. Those are candidates to import, not findings.
+- **A general trending feed is a source of creators and formats, never of proof.** Third-party actors exist for TikTok's trending and top-ads lists. They return hits only, so they are used as the keyword search is: to find creators, whose whole recent feeds are then collected, and to suggest format names for the shared rubric.
+- **Imports are tested, not trusted.** An imported format gets the shortlist's wildcard slots (stage 4), and the brand's own results decide whether it keeps them (stage 6). Nothing shows that a format which wins in one industry wins in another.
 
 ## Limits to design around
 
