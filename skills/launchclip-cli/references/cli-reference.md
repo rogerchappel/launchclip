@@ -1785,6 +1785,12 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip script check <project|script.txt|storyboard.json|NARRATION.json|SCRIPT.json> [--duration <seconds>] [--brief <file>]... [--wpm <words a minute>] [--profile <id|profile.json>] [--format short-form|long-form|explainer|data-explainer|story|promo] [--goal reach|convert] [--awareness unaware|problem|solution|product|most] [--product <name>] [--cta "..."] [--audience consumer|b2b] [--json]
   ```
 
+- `score`: Ask a fast decision model the closed questions in a rubric about every hook, script or carousel slide, and gate on the answers. Needs OPENROUTER_API_KEY; the model is the rubric's, --model, LAUNCHCLIP_SCORER_MODEL, or typesafe/jev-1.13. A text file is one item a line (of --kind, default hook); a JSON or JSONL list holds strings or {text, id?, kind?}; a script file gives its first sentence as a hook and the whole as a script; a project folder gives a carousel's slides (cover, then slide) and its SCRIPT.json, with <project>/rubric.json as the rubric. A rubric question is {type: noul|choice|score, instructions, criteria} plus on (the kinds it is asked of), want (noul: false when yes is the failure), min (score: lowest passing level) or allow (choice: passing options); a choice without allow or a score without min is a tag. An item fails (exit 1) when a question's passing probability is at or below 1 - pass_at (default 0.7), and is marked for review when one falls in between. --brief adds a brief to what the model reads; --passed writes the passing texts, one a line; --out writes the report.
+
+  ```text
+  launchclip score <project|hooks.txt|items.json|SCRIPT.json> --rubric <rubric.json> [--kind <kind>] [--brief <file>] [--model <id>] [--concurrency <n>] [--passed <file>] [--out <file>] [--json]
+  ```
+
 - `history check`: Compare every pair of videos in a history dir (its launchclip-history.json, plus any project folder inside it with a storyboard.json) and flag pairs whose hooks or structure (module sequence) are too close, or that are too alike overall (hook, opening, modules, background, captions, cover, palette). Exits 1 when a pair is flagged; --json for agents.
 
   ```text

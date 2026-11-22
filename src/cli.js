@@ -21,7 +21,7 @@ import { commandHelp, helpText, USAGE_GROUPS, wantsHelp } from "./cli_usage.js";
 import { parseSubjectInvocation } from "./subject/cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "queue", "library", "skills", "style", "profile", "skeletons", "cast", "bible", "handin", "generate", "carousel", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "preview", "publish-manifest", "make", "research", "history", "fx", "voice", "export", "cutdown", "reel", "sfx", "sound", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "queue", "library", "skills", "style", "profile", "skeletons", "cast", "bible", "handin", "generate", "carousel", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "preview", "publish-manifest", "make", "research", "history", "fx", "voice", "export", "cutdown", "reel", "sfx", "sound", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "score", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -508,6 +508,12 @@ export async function runCli(argv, io = {}) {
       const report = await runScriptCheck(scriptCheckInvocation.file, flags);
       stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatScriptCheck(report, { label: report.source }));
       if (!report.ok) throw new Error(`launchclip script check: ${report.errors.length} error(s) in ${report.source}`);
+      return;
+    } else if (command === "score") {
+      const { runScore, formatScore } = await import("./score_cli.js");
+      const report = await runScore(firstArg, flags);
+      stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatScore(report));
+      if (report.status === "failed") throw new Error(`launchclip score: ${report.counts.failed} of ${report.items.length} failed the rubric`);
       return;
     } else if (command === "script") {
       result = await writeTeleprompter(required(firstArg, "workspace path"), flags);
