@@ -4,7 +4,8 @@
 // carousel plan (src/carousel/make.js) led by its hook, and every plan's
 // slides are held to the rubric (src/scorer.js).
 //
-// Plans only by default: --render also renders, checks and exports each one,
+// --model is the hook writer's; the carousel planner is make's own model, or
+// --make-model. Plans only by default: --render also renders, checks and exports each one,
 // which is heavy. Posting and scheduling are not done here.
 //
 // io: {client (make's model client), funnel ({client, fetch, apiKey}), make
@@ -30,12 +31,15 @@ export async function runBatch(target, flags = {}, io = {}) {
   const made = [];
   let cost = funnel.cost_usd.total;
   // One at a time: each plan is a long model call, and a render (with --render) must not share the machine.
-  for (const [index, pick] of funnel.shortlist.slice(0, carousels).entries()) {
+  // The day's picks go round the hook types (each type's first pick, then each type's second), so a small batch is still a spread.
+  const nth = funnel.shortlist.map((pick, index) => funnel.shortlist.slice(0, index).filter((before) => before.type === pick.type).length);
+  const picks = funnel.shortlist.map((pick, index) => ({ pick, index })).sort((a, b) => nth[a.index] - nth[b.index] || a.index - b.index).map((entry) => entry.pick);
+  for (const [index, pick] of picks.slice(0, carousels).entries()) {
     const project = path.join(out, `${String(index + 1).padStart(2, "0")}-${pick.type}`);
     const entry = { hook: pick.text, type: pick.type, project, ...(pick.wildcard ? { wildcard: true } : {}) };
     try {
       const brief = `${pick.text}\n\nOpen the carousel on that line, word for word, as the cover.\n\nTopic: ${funnel.topic}`;
-      const makeFlags = { ...(flags.dest ? { dest: flags.dest } : {}), ...(flags.style ? { style: flags.style } : {}), ...(flags.slides ? { slides: flags.slides } : {}), ...(flags.model ? { model: flags.model } : {}), out: project, json: true };
+      const makeFlags = { ...(flags.dest ? { dest: flags.dest } : {}), ...(flags.style ? { style: flags.style } : {}), ...(flags.slides ? { slides: flags.slides } : {}), ...(flags["make-model"] ? { model: flags["make-model"] } : {}), out: project, json: true };
       await make(brief, makeFlags, { stdout: { write() {} }, stderr: io.stderr, ...(io.client ? { client: io.client } : {}), ...(flags.render ? {} : { stages: { render: skipped, check: skipped, export: skipped } }) });
       const report = await scoreItems(await readItems(project), rubric, { model: flags["scorer-model"], context: { topic: funnel.topic }, ...(io.fetch ? { fetch: io.fetch } : {}), ...(io.apiKey ? { apiKey: io.apiKey } : {}) });
       await writeFile(path.join(project, "score.json"), `${JSON.stringify(report, null, 2)}\n`);
@@ -59,6 +63,6 @@ export function formatBatch(summary) {
     const state = entry.status === "error" ? `ERROR  ${entry.error}` : entry.status === "passed" ? "passed" : `${entry.status}: ${[...entry.failed.map((id) => `${id} failed`), ...entry.review.map((id) => `${id} to review`)].join(", ")}`;
     lines.push(`${path.basename(entry.project)}  "${entry.hook}"\n    ${state}`);
   }
-  lines.push(`${summary.carousels.length} carousel plan(s) in ${summary.out}${summary.rendered ? ", rendered" : "; render one with launchclip carousel render <project>"}. Cost $${summary.cost_usd}.`);
+  lines.push(`${summary.carousels.filter((entry) => entry.status !== "error").length} of ${summary.carousels.length} carousel plan(s) written in ${summary.out}${summary.rendered ? ", rendered" : "; render one with launchclip carousel render <project>"}. Cost $${summary.cost_usd}.`);
   return `${lines.join("\n")}\n`;
 }
