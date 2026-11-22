@@ -109,7 +109,7 @@ test("runCompare tags an untagged library, writes the tags back and prints the c
   const calls = [];
   let out = "";
   const stdout = { write: (text) => { out += text; } };
-  const result = await runCompare(files, { rubric: path.join(dir, "rubric.json") }, { stdout, fetch: fakeModel(calls) });
+  const result = await runCompare(files, { rubric: path.join(dir, "rubric.json") }, { stdout, fetch: fakeModel(calls), apiKey: "k" });
   assert.equal(calls.length, 40);
   assert.deepEqual([result.a.name, result.a.tagged, result.b.name, result.b.tagged, result.cost_usd], ["cooking", 40, "cycling", 50, 0.4]);
   assert.deepEqual(result.candidates.map((candidate) => candidate.value), ["question"]);

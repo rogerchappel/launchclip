@@ -159,7 +159,7 @@ export async function runCompare(args = [], flags = {}, io = {}) {
     const file = path.resolve(String(target));
     if (!existsSync(file)) throw new Error(`${file} not found`);
     const before = (await readFile(file, "utf8")).split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line));
-    const { rows, cost_usd: spent } = await tagFormats(before, { rubric, model: flags.model, ...(io.fetch ? { fetch: io.fetch } : {}) });
+    const { rows, cost_usd: spent } = await tagFormats(before, { rubric, model: flags.model, ...(io.fetch ? { fetch: io.fetch } : {}), ...(io.apiKey ? { apiKey: io.apiKey } : {}) });
     cost += spent;
     if (rows.some((row, index) => row !== before[index])) {
       // Written beside the library and renamed, so a stop mid-write leaves the old file whole.
