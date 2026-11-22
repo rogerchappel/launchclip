@@ -16,8 +16,11 @@
 //
 // Captions and scraped fields are other people's text. They are sent to the
 // model as data and nothing here acts on an answer.
+import { existsSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { mapLimit } from "../concurrency.js";
+import { ask, judge, questionsFor } from "../scorer.js";
 
 export const APIFY_URL = "https://api.apify.com/v2";
 
@@ -207,5 +210,73 @@ export function withOutliers(rows, { now = Date.now() } = {}) {
       else if (norm === null && setNorm > 0 && perFollower(row) !== null) outlier = round3(perFollower(row) / setNorm);
     }
     return { ...row, outlier };
+  });
+}
+
+// Reads text, images, audio and video, fetches a public https link itself, and
+// holds about 262,000 tokens a request.
+export const DEFAULT_LIBRARY_MODEL = "google/gemini-decision-1";
+// Decision models that take a video part, and those that fetch an https link
+// themselves (the rest need the bytes inline). From OpenRouter's Multimodal
+// Decisions guide; other models are sent images only, inline.
+const VIDEO_MODELS = new Set(["google/gemini-decision-1", "heygen/heygen-decision-1", "heygen/heygen-decision-1-turbo", "cloudflare/clef-omni"]);
+const REMOTE_MEDIA_MODELS = new Set(["google/gemini-decision-1", "heygen/heygen-decision-1", "heygen/heygen-decision-1-turbo"]);
+// The largest local file sent inline as a data URL. The stricter video models
+// take 16 MiB a file and 5 MiB an image; base64 adds a third to the request.
+export const MAX_INLINE_MEDIA_BYTES = Object.freeze({ video: 12 * 1024 * 1024, image: 4 * 1024 * 1024 });
+const MEDIA_TYPES = { ".mp4": "video/mp4", ".m4v": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
+
+/** → the state part for a post's media, or null when this model can't be sent it. */
+async function mediaPart(media, model) {
+  const remote = /^https:\/\//i.test(media);
+  if (!remote && /^[a-z][a-z0-9+.-]*:\/\//i.test(media)) return null;
+  const type = MEDIA_TYPES[path.extname(remote ? new URL(media).pathname : media).toLowerCase()];
+  // A link with no extension (most platform links) is taken as the video.
+  const kind = type ? type.split("/")[0] : remote ? "video" : null;
+  if (!kind || (kind === "video" && !VIDEO_MODELS.has(model))) return null;
+  let url = media;
+  if (remote) {
+    if (!REMOTE_MEDIA_MODELS.has(model)) return null;
+  } else {
+    // Only a file with a media extension is ever read, so a library row can't name some other local file to send.
+    const file = path.resolve(media);
+    if (!existsSync(file) || !statSync(file).isFile() || statSync(file).size > MAX_INLINE_MEDIA_BYTES[kind]) return null;
+    url = `data:${type};base64,${(await readFile(file)).toString("base64")}`;
+  }
+  return kind === "video" ? { type: "video_url", video_url: { url } } : { type: "image_url", image_url: { url } };
+}
+
+/**
+ * One request a post: the caption and text, and the media when the model takes
+ * it. rubric: from parseRubric. → tagged rows: the row plus tags, answers and
+ * outlier (worked out here when the rows have none). Every answer is recorded
+ * as a tag, a yes/no as its probability. media_skipped: true marks a post with
+ * media that was tagged from its words alone: the model does not take it, the
+ * local file is missing or over MAX_INLINE_MEDIA_BYTES, or the link could not
+ * be fetched. Pass media: false to tag from words only.
+ */
+export async function tagPosts(rows, rubric, { model, concurrency = 8, media = true, ...request } = {}) {
+  const route = model ?? rubric.model ?? DEFAULT_LIBRARY_MODEL;
+  const questions = questionsFor(rubric, "post");
+  const send = async (state) => (state.length ? ask({ ...request, model: route, state, questions }) : null);
+  return mapLimit(rows.every((row) => row.outlier !== undefined) ? rows : withOutliers(rows), concurrency, async (row) => {
+    const words = [row.caption && `Caption:\n${row.caption}`, row.text && `Words on screen or spoken:\n${row.text}`].filter(Boolean);
+    const part = media && row.media ? await mediaPart(row.media, route) : null;
+    let skipped = Boolean(row.media) && !part;
+    let reply;
+    try { reply = await send(part ? [...words, part] : words); } catch (error) {
+      // A link the model can't fetch (expired, blocked) is refused outright: tag from the words instead.
+      if (!part || !/answered 4(00|13|22)/.test(error.message)) throw error;
+      skipped = true;
+      reply = await send(words);
+    }
+    const tags = {};
+    const answers = {};
+    for (const key of reply ? Object.keys(questions) : []) {
+      const { status, value, p = null } = judge(rubric.questions[key], reply.answers[key], rubric.pass_at);
+      answers[key] = { status, value, p };
+      tags[key] = value;
+    }
+    return { ...row, tags, answers, ...(skipped ? { media_skipped: true } : {}) };
   });
 }
