@@ -104,14 +104,14 @@ niches/horse-racing/
   niche.json          keywords, platforms, settings
   creators.json       who was found, and why
   library.jsonl       one line a post: words, transcript, facts, results, answers
-  thumbs/             small copies of the covers (optional)
+  thumbs/             small copies of the covers
   rubric.draft.json   the questions, with their numbers
   report.md           the evidence: each question, its numbers, and example posts with links
 ```
 
-`--dir` or `LAUNCHCLIP_NICHES` sets where niches live. `launchclip score ... --niche horse-racing` then uses that niche's rubric.
+`--dir` or `LAUNCHCLIP_NICHES` sets where niches live. `launchclip score ... --rubric horse-racing` then uses that niche's rubric.
 
-**Small on a server.** The library keeps the fields it uses and drops the scrape's raw row, which is nine tenths of its size: about 1 KB a post, so a thousand posts is about a megabyte. Covers are scored from their link and not stored unless `--thumbs` is given, and then at a small size. Video, when on, lives in a temporary folder and is removed after its signals are read. Nothing needs a screen or a browser.
+**Small on a server.** The library keeps the fields it uses and drops the scrape's raw row, which is nine tenths of its size: about 1 KB a post, so a thousand posts is about a megabyte. Covers are kept as small copies (about 20 KB each, so a thousand is about 20 MB), because their links expire and a later redraft needs them; `--text-only` skips covers altogether. Video, when on, lives in a temporary folder and is removed after its signals are read. Nothing needs a screen or a browser.
 
 **Fetch evidence at discovery.** Subtitle and cover links expire, so the transcript is read and the cover scored in the same run that finds the post.
 
