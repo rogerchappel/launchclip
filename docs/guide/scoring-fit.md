@@ -23,14 +23,15 @@ A library of real posts, one JSON object on each line of `library.tagged.jsonl`:
 
 ## Fit and predict
 
-There is no `launchclip` command for this yet. From JavaScript:
-
-```js
-import { runFit } from "launchclip/src/scoring/fit.js";
-
-await runFit("fit", "library.tagged.jsonl", { out: "model.json", "own-weight": 3 });
-await runFit("predict", "report.json", { model: "model.json" });
+```bash
+launchclip score fit library.tagged.jsonl --out model.json --own-weight 3
 ```
+
+```bash
+launchclip score predict report.json --model model.json
+```
+
+To let a usable model order the hook shortlist, pass it to the funnel with `launchclip score hooks "<topic>" --fit model.json`. It is used only when it is usable and the funnel's rubric asks the questions it was trained on.
 
 `fit` prints how the model did and saves it. For example:
 

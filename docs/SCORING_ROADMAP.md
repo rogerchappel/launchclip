@@ -1,6 +1,6 @@
 # Scoring roadmap
 
-Status: the scorer and the rubric gate (stages 1 and 2) are built for a hosted model, as [`launchclip score`](guide/scoring.md). The local model, and every other stage, is not. Background and sources: [research report](../reports/JEV%20scoring%20model%20for%20content.md).
+Status: every stage has a first version for a hosted model, under [`launchclip score`](guide/scoring.md). Not built: the local model, scoring a draft from a preview render, and a per-post bandit (stage 6 moves shortlist slots between hook types). Not yet tried on real data: the post library with a real Apify account, and the fitted layer on real posts. Background and sources: [research report](../reports/JEV%20scoring%20model%20for%20content.md).
 
 ## The idea
 

@@ -4,6 +4,16 @@
 
 ### Added
 
+- **Scoring, end to end.** `launchclip score hooks` writes hundreds of hooks
+  with the rubric's rules in hand, scores them and keeps a varied shortlist.
+  `launchclip score library` imports real posts from your niche (a file, or
+  Apify with your own token), tags each with a decision model that can watch
+  video, measures each against its own channel's norm and prints a niche map.
+  `launchclip score fit` learns which tags go with above-normal results and
+  stays off until it beats chance on posts it has not seen. `launchclip score
+  batch` turns a topic into a day's carousel plans, each held to the rubric.
+  `npm run eval:scorer` measures a model against your own labels
+  ([guides](docs/guide/scoring.md#what-builds-on-it)).
 - **`launchclip score`: check hooks, scripts and slides against your own
   rules.** A fast decision model answers the closed questions in a rubric
   (yes/no, pick one, rate on a scale) about every item, and the command fails

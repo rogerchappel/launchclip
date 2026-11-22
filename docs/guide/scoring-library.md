@@ -2,7 +2,7 @@
 
 A post library is a set of real short videos and carousels from your niche, each tagged by a decision model (hook type, format, angle and so on) and joined to its public numbers. From it LaunchClip draws a **niche map**: which kinds of post are crowded, which are open, and which beat their channel's norm. It is stage 3 of the [scoring roadmap](../SCORING_ROADMAP.md) and builds on [`launchclip score`](scoring.md).
 
-There is no command for it yet. The steps below call `runLibrary` from `src/scoring/library.js`.
+The commands are `launchclip score library import`, `fetch`, `tag` and `map`.
 
 ## Read this first
 
@@ -15,15 +15,19 @@ There is no command for it yet. The steps below call `runLibrary` from `src/scor
 
 Bring a file, or fetch with your own Apify account.
 
-```js
-import { runLibrary } from "launchclip/src/scoring/library.js";
+A CSV, a JSON array or a JSONL file goes into `library.jsonl`:
 
-// A CSV, a JSON array or a JSONL file → library.jsonl
-await runLibrary("import", "posts.csv", { platform: "tiktok" });
-
-// Or run an Apify actor (APIFY_TOKEN in your environment; input.json is the actor's own input)
-await runLibrary("fetch", "clockworks/tiktok-scraper", { input: "input.json" });
+```bash
+launchclip score library import posts.csv --platform tiktok
 ```
+
+Or run an Apify actor, with `APIFY_TOKEN` in your environment and the actor's own input in `input.json`:
+
+```bash
+launchclip score library fetch clockworks/tiktok-scraper --input input.json
+```
+
+Add `--own` when the posts are your own. Your results can then count for more than a competitor's in the [fitted layer](scoring-fit.md), and they move shortlist slots toward the hook types that work for you (`launchclip score hooks "<topic>" --results own.tagged.jsonl`).
 
 Both add to `library.jsonl` if it is already there. A post with the same platform and id is replaced.
 
@@ -42,21 +46,21 @@ An Apify run through this call must finish within 300 seconds, so fetch in batch
 
 ## 2. Tag them
 
-```js
-await runLibrary("tag", "library.jsonl", { rubric: "docs/guide/scoring-library-rubric.json" });
+```bash
+launchclip score library tag library.jsonl --rubric docs/guide/scoring-library-rubric.json
 ```
 
 This writes `library.tagged.jsonl`: each row plus `tags`, `answers` and `outlier`. You need `OPENROUTER_API_KEY`.
 
 - The rubric is a list of closed questions in the [same form as a scoring rubric](scoring.md#write-a-rubric). Start from [`scoring-library-rubric.json`](scoring-library-rubric.json) and add your own. Every answer is recorded as a tag and nothing is failed. A yes/no question is recorded as the probability of yes.
-- The default model is `google/gemini-decision-1`, which watches video. Pass `model` to change it.
+- The default model is `google/gemini-decision-1`, which watches video. Pass `--model` to change it.
 - `media` is a public `https://` link or a local file. A local video up to 12 MB, or image up to 4 MB, is sent inline. Anything the model can't be sent (a larger file, a link that has expired or blocks the model, a model that takes no video) is tagged from the caption and text alone and marked `media_skipped: true`. Links from scrapers expire within hours, so tag soon after fetching or keep local files you are allowed to hold.
 - A 20-second video costs well under a tenth of a cent. Tagging starts again from the first row each time it is run.
 
 ## 3. Read the map
 
-```js
-await runLibrary("map", "library.tagged.jsonl", { out: "map.json" });
+```bash
+launchclip score library map library.tagged.jsonl --out map.json
 ```
 
 ```text

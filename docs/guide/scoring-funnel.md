@@ -14,18 +14,13 @@ It builds on [scoring](scoring.md): the same rubric file, the same decision mode
 
 ## Running it
 
-The funnel is a function for now, `runFunnel(target, flags)` in `src/scoring/funnel.js`; it has no command yet.
-
-```js
-import { runFunnel } from "launchclip/src/scoring/funnel.js";
-
-const summary = await runFunnel("marathon training for first-timers", {
-  count: 200,
-  recent: "recent-hooks.txt",
-  out: "funnel"
-});
-console.log(summary.counts, summary.seconds, summary.cost_usd);
+```bash
+launchclip score hooks "marathon training for first-timers" --count 200 --recent recent-hooks.txt --out funnel
 ```
+
+The writer is told the rules your rubric gates a hook on, so it writes toward them. A cheap writing model still breaks them often; a stronger one (`--model`) passes more. In one run of 200 hooks a small model passed 6, and a mid-sized one passed 27 of 75.
+
+Flags are written `--count 200`; the table lists them by name.
 
 `target` is a topic, or a brief file. With a brief file the first line is the topic and the whole file is given to the writer and the scorer.
 
@@ -39,6 +34,9 @@ console.log(summary.counts, summary.seconds, summary.cost_usd);
 | `wildcards` | How many wildcards to add. | 2 |
 | `model` | The writing model, as `provider:model`. | `LAUNCHCLIP_MAKE_MODEL` |
 | `scorer-model` | The decision model. | the rubric's, else the scorer's default |
+| `concurrency` | Scoring requests in flight at once. | 32 |
+| `results` | Your own tagged posts (`launchclip score library tag`, imported with `--own`). Hook types that beat their norm for you get one more slot, and the worst get one fewer. | none |
+| `fit` | A fitted model (`launchclip score fit`). When it is usable, it orders the shortlist. | none |
 | `seed` | Any text. The same seed gives the same assembled hooks and the same wildcards. | empty |
 | `out` | The folder the files go in. | `funnel` |
 
