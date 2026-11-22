@@ -130,6 +130,14 @@ test("tagPosts sends words and media as state parts and records every answer as 
   await assert.rejects(tagPosts(rows.slice(0, 1), TAGS, { apiKey: "k", fetch: async () => new Response("no credit", { status: 402 }) }), /answered 402/);
 });
 
+test("the starter rubric is valid and holds only tag questions", async () => {
+  const rubric = parseRubric(JSON.parse(await readFile(path.join(import.meta.dirname, "../docs/guide/scoring-library-rubric.json"), "utf8")));
+  const questions = Object.values(rubric.questions);
+  assert.ok(questions.length >= 12);
+  assert.ok(questions.every((question) => question.on === undefined && question.allow === undefined && question.min === undefined && question.want === undefined));
+  assert.ok(rubric.questions.hook_type, "nicheMap pairs every tag with hook_type");
+});
+
 const tagged = (hook, face, outlier, extra = {}) => ({ id: `${hook}-${outlier}`, tags: { hook_type: hook, face, pacing: null, ...extra }, outlier });
 
 test("nicheMap counts each tag value, its median outlier and its hits, alone and with hook_type", () => {
