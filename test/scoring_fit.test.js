@@ -2,7 +2,7 @@
 // source, no network, no real posts.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { featurise } from "../src/scoring/fit.js";
+import { featurise, fit, foldsFor, spearman } from "../src/scoring/fit.js";
 
 function seeded(seed) {
   let state = seed >>> 0;
@@ -64,4 +64,70 @@ test("featurise: a saved schema gives new items the same columns", () => {
   assert.equal(row(0).filler, schema.columns.find((column) => column.name === "filler").fill);
   assert.equal(row(1)["hook_type=number"], 1, "a tag is read when there is no answer");
   assert.throws(() => featurise(items, {}), /schema has no columns/);
+});
+
+test("fit: recovers a known driver and is usable at 400 rows", () => {
+  const model = fit(library(400), { seed: 3 });
+  const coefficient = (name) => model.coefficients[model.schema.columns.findIndex((column) => column.name === name)];
+  assert.ok(coefficient("strong_open") > 0.2, `strong_open should push results up; got ${coefficient("strong_open")}`);
+  assert.ok(coefficient("hook_type=number") > 0);
+  assert.ok(Math.abs(coefficient("filler")) < coefficient("strong_open") / 3);
+  assert.equal(model.usable, true, model.reasons.join("; "));
+  assert.deepEqual(model.reasons, []);
+  assert.equal(model.target, "log_outlier");
+  assert.equal(model.trained_on, 400);
+  const { spearman: rho, spearman_ci: [low, high], top_quartile_lift: lift, baseline_spearman: baseline, split } = model.held_out;
+  assert.ok(low > 0 && low <= rho && rho <= high && rho > baseline);
+  assert.ok(lift > 1.2, `the predicted top quarter should beat the median; got ${lift}`);
+  assert.equal(split, "account");
+  assert.deepEqual(JSON.parse(JSON.stringify(model)), model, "the model is plain JSON");
+  assert.deepEqual(fit(library(400), { seed: 3 }), model, "the same seed gives the same model");
+});
+
+test("fit: pure noise is not usable, and says why", () => {
+  for (const seed of [11, 12, 13]) {
+    const model = fit(library(400, { seed, signal: 0 }), { seed });
+    assert.equal(model.usable, false, `seed ${seed}: ${JSON.stringify(model.held_out)}`);
+    assert.match(model.reasons.join("; "), /chance|shuffled/);
+  }
+});
+
+test("fit: fewer than 200 rows is not usable whatever the signal", () => {
+  const rows = [...library(150), { id: "too-new", account: "account-1", answers: {}, outlier: null }, { id: "no-views", account: "account-1", answers: {}, outlier: 0 }];
+  const model = fit(rows);
+  assert.equal(model.trained_on, 150, "rows with no usable outlier are left out");
+  assert.equal(model.usable, false);
+  assert.match(model.reasons[0], /only 150 posts with results: at least 200 are needed/);
+  assert.throws(() => fit(library(6)), /at least 10 rows/);
+});
+
+test("fit: whole accounts share a fold when there are enough of them", () => {
+  const rows = library(200, { accounts: 9 });
+  const { fold, split } = foldsFor(rows, 5, 2);
+  assert.equal(split, "account");
+  const byAccount = new Map();
+  rows.forEach((row, index) => byAccount.set(row.account, (byAccount.get(row.account) ?? new Set()).add(fold[index])));
+  for (const [account, used] of byAccount) assert.equal(used.size, 1, `${account} is split across folds`);
+  assert.equal(new Set(fold).size, 5);
+
+  const few = foldsFor(library(200, { accounts: 3 }), 5, 2);
+  assert.equal(few.split, "row");
+  assert.deepEqual([0, 1, 2, 3, 4].map((id) => few.fold.filter((value) => value === id).length), [40, 40, 40, 40, 40]);
+  assert.equal(fit(library(240, { accounts: 3 })).held_out.split, "row");
+});
+
+test("fit: constant and duplicated columns, weights and ties do not break the maths", () => {
+  const rows = library(240).map((row) => ({ ...row, own: row.account === "account-0", answers: { ...row.answers, always: { value: 1 }, copy: { value: row.answers.strong_open.value } } }));
+  const model = fit(rows, { lambda: 0, weights: (row) => (row.own ? 5 : 1) });
+  const coefficient = (name) => model.coefficients[model.schema.columns.findIndex((column) => column.name === name)];
+  assert.ok(model.coefficients.every(Number.isFinite));
+  assert.equal(coefficient("always"), 0);
+  assert.ok(coefficient("strong_open") + coefficient("copy") > 0.2);
+  assert.equal(model.lambda, 0);
+  assert.throws(() => fit(rows, { weights: () => 0 }), /above 0/);
+
+  assert.equal(spearman([1, 2, 3, 4], [10, 20, 30, 40]), 1);
+  assert.equal(spearman([1, 2, 3, 4], [4, 3, 2, 1]), -1);
+  assert.equal(spearman([1, 1, 1], [1, 2, 3]), 0, "a constant side has no rank correlation");
+  assert.ok(Math.abs(spearman([1, 2, 2, 3], [1, 2, 3, 4]) - 0.9487) < 1e-4, "ties share their average rank");
 });
