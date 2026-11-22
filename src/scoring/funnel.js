@@ -3,12 +3,15 @@
 //   writeHooks({topic, brief?, count, model, batchSize?, concurrency?, client?, onBatchError?})
 //                                          → [{id, kind: "hook", text, source: "written"}]
 //   assembleHooks({parts, count, seed?})  → [{id, kind: "hook", text, source: "assembled"}]
+//   shortlist(scoredItems, {perType?, wildcards?, tag?, recent?, similarityLimit?, seed?})
+//                                          → {picked, dropped: {failed, near_recent, near_duplicate, over_quota}}
 //
 // Writing is the slow step, so it is many small requests side by side to a
 // fast model, each with its own slant so the batches do not repeat each other.
 import { createHash } from "node:crypto";
 import { mapLimit } from "../concurrency.js";
 import { createStructuredClient } from "../model_provider.js";
+import { DEFAULT_HOOK_SIMILARITY_LIMIT, hookSimilarity } from "../visual_history.js";
 
 // What a batch is told to lead with. Batch i takes slant i and, once the
 // slants have gone round, the next reader, so no two batches share a brief.
@@ -137,4 +140,52 @@ export function assembleHooks({ parts, count, seed = "" } = {}) {
     items.push({ id: `assembled-${items.length + 1}`, kind: "hook", text, source: "assembled" });
   }
   return items;
+}
+
+// The measure `launchclip history check` flags repeated hooks with: 0–1 overlap of content words.
+const alike = (a, b) => hookSimilarity({ hook: { text: a } }, { hook: { text: b } });
+
+function meanPass(item) {
+  const shares = Object.values(item.answers ?? {}).map((answer) => answer?.p).filter(Number.isFinite);
+  return shares.length ? shares.reduce((sum, p) => sum + p, 0) / shares.length : 0;
+}
+
+/**
+ * scoredItems: the `items` of a scoreItems report. recent: the brand's last
+ * hooks, as text. A filter and a spread, not a ranking by quality.
+ * → {picked: [item + {type, wildcard?}], dropped: {failed, near_recent, near_duplicate, over_quota}} (dropped holds ids)
+ */
+export function shortlist(scoredItems, { perType = 3, wildcards = 2, tag = "hook_type", recent = [], similarityLimit = DEFAULT_HOOK_SIMILARITY_LIMIT, seed = "" } = {}) {
+  const dropped = { failed: [], near_recent: [], near_duplicate: [], over_quota: [] };
+  const near = (item, texts) => texts.some((text) => alike(item.text, text) >= similarityLimit);
+  const open = [];
+  for (const item of scoredItems) {
+    if (item.status === "failed") dropped.failed.push(item.id);
+    else if (near(item, recent)) dropped.near_recent.push(item.id);
+    else open.push(item);
+  }
+  // Fewest unsure answers first, then the higher mean pass probability; ties keep the order given.
+  open.sort((a, b) => (a.unsure?.length ?? 0) - (b.unsure?.length ?? 0) || meanPass(b) - meanPass(a));
+  const picked = [];
+  const kept = {};
+  const spare = [];
+  for (const item of open) {
+    const type = String(item.tags?.[tag] ?? "untagged");
+    if (near(item, picked.map((entry) => entry.text))) dropped.near_duplicate.push(item.id);
+    // The quota is per type because picking the overall top of one scorer makes everything sound alike.
+    else if ((kept[type] ?? 0) >= perType) spare.push({ ...item, type });
+    else {
+      kept[type] = (kept[type] ?? 0) + 1;
+      picked.push({ ...item, type });
+    }
+  }
+  // Wildcards: drawn by seed, not by score, from what the quota left out, so the scorer's taste is not the only one on the list.
+  let wild = 0;
+  for (const item of spare.sort((a, b) => draw(seed, a.id) - draw(seed, b.id))) {
+    if (wild < wildcards && !near(item, picked.map((entry) => entry.text))) {
+      wild += 1;
+      picked.push({ ...item, wildcard: true });
+    } else dropped.over_quota.push(item.id);
+  }
+  return { picked, dropped };
 }

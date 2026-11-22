@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { assembleHooks, parseHookParts, writeHooks } from "../src/scoring/funnel.js";
+import { assembleHooks, parseHookParts, shortlist, writeHooks } from "../src/scoring/funnel.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const PARTS = {
@@ -66,4 +66,55 @@ test("parseHookParts names an unknown slot and an empty list", () => {
   assert.throws(() => parseHookParts({ openers: [] }), /at least one template/);
   assert.throws(() => parseHookParts({ openers: ["{who} and {number}"], numbers: [] }), (error) => error.message.includes("{who}") && error.message.includes("numbers is empty"));
   assert.throws(() => parseHookParts({ openers: "x" }), /openers must be a list/);
+});
+
+// A scored item as scoreItems reports it. Texts share no content words unless a test wants them to.
+const WORDS = ["apple", "bridge", "candle", "dolphin", "engine", "forest", "guitar", "harbor", "island", "jacket", "kettle", "ladder", "marble", "needle", "orchid", "pencil"];
+function scored(index, type, { p = 0.9, unsure = [], status = unsure.length ? "review" : "passed", text } = {}) {
+  return { id: `h${index}`, kind: "hook", text: text ?? `${WORDS[index]} ${WORDS[index]}s ${index}${index}`, status, failed: status === "failed" ? ["q"] : [], unsure, tags: { hook_type: type }, answers: { q: { status: "pass", value: p, p }, hook_type: { status: "tag", value: type } } };
+}
+
+test("shortlist keeps a quota per type, preferring sure answers and then the higher pass probability", () => {
+  const items = [
+    scored(0, "number", { p: 0.75 }),
+    scored(1, "number", { p: 0.99 }),
+    scored(2, "number", { p: 0.8 }),
+    scored(3, "number", { p: 0.97, unsure: ["q"] }),
+    scored(4, "question", { p: 0.71 }),
+    scored(5, "number", { status: "failed", p: 0.1 })
+  ];
+  const { picked, dropped } = shortlist(items, { perType: 2, wildcards: 0 });
+  assert.deepEqual(picked.map((item) => item.id), ["h1", "h2", "h4"]);
+  assert.deepEqual(picked.map((item) => item.type), ["number", "number", "question"]);
+  assert.ok(picked.every((item) => !("wildcard" in item)));
+  assert.deepEqual(dropped, { failed: ["h5"], near_recent: [], near_duplicate: [], over_quota: ["h0", "h3"] });
+  // The overall top three would all be "number"; the quota is what lets the question in.
+  assert.equal(shortlist(items, { perType: 1, wildcards: 0 }).picked.length, 2);
+});
+
+test("shortlist marks seeded wildcards, taken from what the quota left out", () => {
+  const items = Array.from({ length: 10 }, (_, index) => scored(index, "number", { p: 0.99 - index / 100 }));
+  const first = shortlist(items, { perType: 2, wildcards: 2, seed: "s1" });
+  assert.deepEqual(first.picked.slice(0, 2).map((item) => item.id), ["h0", "h1"]);
+  const wild = first.picked.filter((item) => item.wildcard === true);
+  assert.equal(wild.length, 2);
+  assert.ok(wild.every((item) => !["h0", "h1"].includes(item.id) && item.status !== "failed"));
+  assert.equal(first.dropped.over_quota.length, 6);
+  assert.deepEqual(shortlist(items, { perType: 2, wildcards: 2, seed: "s1" }), first);
+  const seeds = new Set(["s1", "s2", "s3", "s4", "s5"].map((seed) => shortlist(items, { perType: 2, wildcards: 2, seed }).picked.filter((item) => item.wildcard).map((item) => item.id).join()));
+  assert.ok(seeds.size > 1, "another seed draws other wildcards");
+});
+
+test("shortlist drops hooks close to recent posts and near-duplicates of a picked hook", () => {
+  const items = [
+    scored(0, "number", { text: "Five pacing mistakes new runners make every single week" }),
+    scored(1, "question", { text: "Five pacing mistakes new runners make every week", p: 0.8 }),
+    scored(2, "story", { text: "My sourdough starter died twice before this trick" }),
+    scored(3, "story", { text: "Cold water swimming changed my mornings" })
+  ];
+  const { picked, dropped } = shortlist(items, { recent: ["My sourdough starter died twice before I learned this trick"], wildcards: 2 });
+  assert.deepEqual(picked.map((item) => item.id), ["h0", "h3"]);
+  assert.deepEqual(dropped, { failed: [], near_recent: ["h2"], near_duplicate: ["h1"], over_quota: [] });
+  // A looser limit lets both through.
+  assert.equal(shortlist(items, { recent: ["My sourdough starter died twice before I learned this trick"], similarityLimit: 1.01 }).picked.length, 4);
 });
