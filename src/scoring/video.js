@@ -101,7 +101,7 @@ export async function contactSheet(file, out, { cuts, duration_s, frames = 9, wi
     "-hide_banner", "-loglevel", "error", "-y",
     ...times.flatMap((time) => ["-ss", String(time), "-i", source]),
     "-filter_complex", `${times.map((_, index) => `[${index}:v]scale=${width}:-2[v${index}]`).join(";")};${times.map((_, index) => `[v${index}]`).join("")}xstack=inputs=${times.length}:grid=${columns}x${times.length / columns}[sheet]`,
-    "-map", "[sheet]", "-frames:v", "1", "-q:v", "7", path.resolve(out)
+    "-map", "[sheet]", "-frames:v", "1", "-q:v", "9", path.resolve(out)
   ]);
   return out;
 }
@@ -126,8 +126,8 @@ async function whisper() {
  * resolution still at least 360 px), read the cuts, write sheets/<id>.jpg under
  * `dir`, set facts.cuts_per_s, facts.first_cut_s (null when there is no cut),
  * facts.duration_s (if missing) and sheet, then delete the video. A row with no
- * transcript gets one from local Whisper when it is installed (transcribe:
- * false turns that off). A failed row is counted and passed to onStep, never thrown.
+ * transcript gets one from local Whisper when it is installed, marked
+ * transcript_source: "whisper" (transcribe: false turns that off). A failed row is counted and passed to onStep, never thrown.
  *
  * download(row, folder) → file, probe (cutsOf), sheet (contactSheet) and
  * transcribe(file) → text can be replaced. tmp: where the working folder is
@@ -160,10 +160,11 @@ export async function videoSignals(rows, { dir, tmp = os.tmpdir(), best = 5, wor
         let transcript = row.transcript;
         if (!transcript && speech) {
           // A post with no speech, or one Whisper can't read, keeps its numbers.
-          transcript = (await Promise.resolve(speech(file)).catch(() => ""))?.trim() || undefined;
+          // Whisper writes "[Music]" for a post with no words; that is not a transcript.
+          transcript = (await Promise.resolve(speech(file)).catch(() => ""))?.replace(/[\[(][^\])]*[\])]/g, "").trim() || undefined;
           if (transcript) counts.transcribed += 1;
         }
-        out[index] = { ...row, ...(transcript ? { transcript } : {}), facts: { ...row.facts, cuts_per_s: round3(cuts.length / duration_s), first_cut_s: cuts[0] ?? null, duration_s: row.facts?.duration_s ?? duration_s }, sheet: name };
+        out[index] = { ...row, ...(transcript && !row.transcript ? { transcript, transcript_source: "whisper" } : {}), facts: { ...row.facts, cuts_per_s: round3(cuts.length / duration_s), first_cut_s: cuts[0] ?? null, duration_s: row.facts?.duration_s ?? duration_s }, sheet: name };
         counts.done += 1;
         onStep?.({ row: out[index], ok: true });
       } catch (error) {

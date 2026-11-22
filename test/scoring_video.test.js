@@ -63,7 +63,7 @@ test("videoSignals records the facts and deletes every video, on success and on 
   const rows = [...account("a"), post("b", 1, 1)];
   rows[9].facts = { duration_s: 12 };
   const { rows: out, counts } = await videoSignals(rows, {
-    dir, tmp: work, best: 2, worst: 2, transcribe: (file) => (file.includes("video") ? " hello there " : ""),
+    dir, tmp: work, best: 2, worst: 2, transcribe: (file) => (file.includes("video") ? " [Music] hello there " : ""),
     download: async (row, folder) => {
       const file = path.join(folder, "video.mp4");
       await writeFile(file, "not a video");
@@ -79,7 +79,7 @@ test("videoSignals records the facts and deletes every video, on success and on 
   assert.equal(saved.length, 4);
   assert.ok(saved.every((file) => !existsSync(file)), "a video was left behind");
   assert.deepEqual(await readdir(work), [], "the working folder was left behind");
-  assert.deepEqual(out[9], { ...rows[9], transcript: "hello there", facts: { duration_s: 12, cuts_per_s: 0.3, first_cut_s: 2 }, sheet: "sheets/a-10.jpg" });
+  assert.deepEqual(out[9], { ...rows[9], transcript: "hello there", transcript_source: "whisper", facts: { duration_s: 12, cuts_per_s: 0.3, first_cut_s: 2 }, sheet: "sheets/a-10.jpg" });
   assert.equal(out[8].facts.duration_s, 10);
   assert.equal(await readFile(path.join(dir, "sheets", "a-9.jpg"), "utf8"), "jpeg");
   // Failed and unsampled rows are untouched.
