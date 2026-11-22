@@ -4,6 +4,13 @@
 
 ### Added
 
+- **`launchclip score`: check hooks, scripts and slides against your own
+  rules.** A fast decision model answers the closed questions in a rubric
+  (yes/no, pick one, rate on a scale) about every item, and the command fails
+  the ones that break a rule, marks the unsure ones for review and writes the
+  passing ones as a shortlist. It reads a list of hooks, a script, or a
+  project's carousel slides and script. It needs `OPENROUTER_API_KEY`
+  ([guide](docs/guide/scoring.md)).
 - **Sharper short-video scripts.** The script prompt for videos of 90 s or
   less now asks for a specific in place of every broad summary, each line
   earning the next, a first payoff by about 8 s, a new question at about

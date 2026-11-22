@@ -1,6 +1,6 @@
 # Scoring roadmap
 
-Status: ideas, not scheduled. Nothing here is built. Background and sources: [research report](../reports/JEV%20scoring%20model%20for%20content.md).
+Status: the scorer and the rubric gate (stages 1 and 2) are built for a hosted model, as [`launchclip score`](guide/scoring.md). The local model, and every other stage, is not. Background and sources: [research report](../reports/JEV%20scoring%20model%20for%20content.md).
 
 ## The idea
 
