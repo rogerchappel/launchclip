@@ -1,6 +1,6 @@
 # Scoring roadmap
 
-Status: every stage has a first version for a hosted model, under [`launchclip score`](guide/scoring.md). Not built: reading the video itself (stage 8), the test for when a rubric is done (stage 9), formats across industries (stage 10), the local model, scoring a draft from a preview render, and a per-post bandit (stage 6 moves shortlist slots between hook types). A rubric can be drafted from a library found by keyword (`score library discover`, `score rubric draft`). Keyword discovery and the rubric drafter have had one small real run on TikTok (5 creators, 93 posts: too few to keep a gate). Not yet tried on real data: Instagram discovery, a library large enough to keep a gate, and the fitted layer on real posts. Background and sources: [research report](../reports/JEV%20scoring%20model%20for%20content.md).
+Status: every stage has a first version for a hosted model, under [`launchclip score`](guide/scoring.md). Not built: one command for a niche with its evidence folder (stage 8), the test for when a rubric is done (stage 9), formats across industries (stage 10), the local model, scoring a draft from a preview render, and a per-post bandit (stage 6 moves shortlist slots between hook types). A rubric can be drafted from a library found by keyword (`score library discover`, `score rubric draft`). Keyword discovery and the rubric drafter have had one small real run on TikTok (5 creators, 93 posts: too few to keep a gate). Not yet tried on real data: Instagram discovery, a library large enough to keep a gate, and the fitted layer on real posts. Background and sources: [research report](../reports/JEV%20scoring%20model%20for%20content.md).
 
 ## The idea
 
@@ -71,25 +71,49 @@ Import results for posted videos and carousels. When variants are posted, later 
 - **Several accounts means several angles**, not copies. Give each account its own audience or angle and it becomes a clean test of that angle. Posting the same carousel from several accounts on one platform teaches nothing new and is the kind of duplication platforms penalise.
 - Posting and scheduling are out of scope here. LaunchClip produces the batch and reads the results back.
 
-### 8. Read the video, cheaply
+### 8. One command for a niche, with its evidence
 
-Not built. The first real library (407 TikTok posts from one keyword) showed that caption wording alone separates nothing: none of 30 drafted questions passed. The hook, the script, the visuals and the pacing are in the video, so the library has to read it, and it has to stay cheap at hundreds to thousands of videos.
+Not built. The first real library (407 TikTok posts from one keyword) showed that caption wording alone separates nothing: none of 30 drafted questions passed. The hook and the script are in what is said, so the library has to read more than the caption, and stay cheap at hundreds to thousands of posts.
 
-`launchclip score library signals <library.jsonl>` adds, per post:
+```bash
+launchclip score niche "horse racing" --name horse-racing
+```
 
-| Signal | How | Model cost |
+One command runs discover, evidence, draft and report, in that order. It can be stopped and run again: each step skips what is already done. Each step is also its own command, for a scheduler.
+
+**Evidence, without downloading any video (the default).** The same scrape that returns the caption also returns, at no extra charge:
+
+| Evidence | From | Gives |
 |---|---|---|
-| Pacing | Local, with ffmpeg: length, number of cuts, cuts a second, seconds to the first cut | None |
-| Script and spoken hook | The platform's own subtitles when the scrape returns them, else local transcription. The first sentence is the hook. Words a second and seconds to the first word are computed | None |
-| Visuals | One contact sheet a video: frames at 0, 1 and 3 seconds and at each of the next few cuts, tiled into one image and scored by the image scorer | One small image a post |
+| Caption and hashtags | the post | the written hook |
+| Transcript, with timings | the platform's own subtitles | the spoken hook (first sentence), the script, words a second, seconds to the first word, and whether anyone speaks at all |
+| Thumbnail | the cover image link | the opening frame, on-screen text, whether a person is shown |
+| Facts | the post | length, slideshow or video, original or borrowed sound |
+| Results | the post | views, likes, comments, shares, saves, and the outlier figure |
 
-- **Download a sample, not the library.** For each creator, their best few and worst few posts by outlier (default 5 and 5). That is the contrast the drafter needs, at about a third of the downloads.
-- **Fetch soon after discovery.** Video links expire. The download step is its own stage with a cache keyed by post id, so a rerun never downloads or scores a post twice.
-- **Numbers are features, not questions.** Cuts a second and seconds to the first word go to the drafter and the fitted layer as numbers, banded into low, middle and high within the library. No model is asked to judge pacing.
-- **What a contact sheet cannot see:** motion, sound, music, and how an edit feels. It judges the opening frame, on-screen text, framing and whether a person is on camera.
-- The video-watching scorer (stage 1) stays as an option for a small audit sample, to check that the cheap signals agree with it.
+On the first real library, every post had a cover and 143 of 407 had subtitles; most of the rest have no speech. YouTube gives a thumbnail and captions the same way. Instagram gives a caption and a cover but no transcript.
 
-The drafter then proposes questions per part (hook, script, visuals) and tests each as it does now.
+**Video is a switch, off by default.** `--video` downloads a contrast sample (each creator's best five and worst five), reads cuts and pacing with ffmpeg, transcribes posts that had no subtitles, makes one contact sheet, and deletes the video. Nothing else in the process depends on it.
+
+**The folder.** One folder a niche, so one machine can hold many industries or many customers:
+
+```text
+niches/horse-racing/
+  niche.json          keywords, platforms, settings
+  creators.json       who was found, and why
+  library.jsonl       one line a post: words, transcript, facts, results, answers
+  thumbs/             small copies of the covers (optional)
+  rubric.draft.json   the questions, with their numbers
+  report.md           the evidence: each question, its numbers, and example posts with links
+```
+
+`--dir` or `LAUNCHCLIP_NICHES` sets where niches live. `launchclip score ... --niche horse-racing` then uses that niche's rubric.
+
+**Small on a server.** The library keeps the fields it uses and drops the scrape's raw row, which is nine tenths of its size: about 1 KB a post, so a thousand posts is about a megabyte. Covers are scored from their link and not stored unless `--thumbs` is given, and then at a small size. Video, when on, lives in a temporary folder and is removed after its signals are read. Nothing needs a screen or a browser.
+
+**Fetch evidence at discovery.** Subtitle and cover links expire, so the transcript is read and the cover scored in the same run that finds the post.
+
+The drafter then proposes questions per part (written hook, spoken hook, script, thumbnail) and tests each as it does now. Timings go in as numbers, banded low, middle and high within the niche; no model is asked to judge pacing.
 
 ### 9. When a rubric is done
 
@@ -106,7 +130,7 @@ A rubric is never finished, but a version is ready to use when all of these hold
 
 Not built. A post has a format (how it is built) and a topic (what it is about). The format is what can move between industries.
 
-- **One format rubric for every library.** A shared set of choice questions about structure, answered from the signals in stage 8: the kind of opening, the structure (list, before and after, story, reaction, demonstration), who is on screen, how text is used.
+- **One format rubric for every library.** A shared set of choice questions about structure, answered from the evidence in stage 8: the kind of opening, the structure (list, before and after, story, reaction, demonstration), who is on screen, how text is used.
 - **Several keywords, several industries.** `library discover` already takes a keyword list. Each library keeps its niche name, and the niche map is made per niche.
 - **`score library compare <a> <b>`** lists formats that go with above-normal results in niche A and are rare or absent in niche B. Those are candidates to import, not findings.
 - **A general trending feed is a source of creators and formats, never of proof.** Third-party actors exist for TikTok's trending and top-ads lists. They return hits only, so they are used as the keyword search is: to find creators, whose whole recent feeds are then collected, and to suggest format names for the shared rubric.
