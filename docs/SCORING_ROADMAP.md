@@ -1,6 +1,6 @@
 # Scoring roadmap
 
-Status: every stage has a first version for a hosted model, under [`launchclip score`](guide/scoring.md). Not built: the local model, scoring a draft from a preview render, and a per-post bandit (stage 6 moves shortlist slots between hook types). A rubric can be drafted from a library found by keyword (`score library discover`, `score rubric draft`). Keyword discovery and the rubric drafter have had one small real run on TikTok (5 creators, 93 posts: too few to keep a gate). Not yet tried on real data: Instagram discovery, a library large enough to keep a gate, and the fitted layer on real posts. Background and sources: [research report](../reports/JEV%20scoring%20model%20for%20content.md).
+Status: every stage has a first version for a hosted model, under [`launchclip score`](guide/scoring.md). Not built: one command for a niche with its evidence folder (stage 8), the test for when a rubric is done (stage 9), formats across industries (stage 10), the local model, scoring a draft from a preview render, and a per-post bandit (stage 6 moves shortlist slots between hook types). A rubric can be drafted from a library found by keyword (`score library discover`, `score rubric draft`). Keyword discovery and the rubric drafter have had one small real run on TikTok (5 creators, 93 posts: too few to keep a gate). Not yet tried on real data: Instagram discovery, a library large enough to keep a gate, and the fitted layer on real posts. Background and sources: [research report](../reports/JEV%20scoring%20model%20for%20content.md).
 
 ## The idea
 
@@ -70,6 +70,74 @@ Import results for posted videos and carousels. When variants are posted, later 
 - **One post on three platforms is one piece of content with three results**, not three pieces. Each platform's result is kept separately, which shows what works where, but the count of distinct posts is what the fitted layer learns from.
 - **Several accounts means several angles**, not copies. Give each account its own audience or angle and it becomes a clean test of that angle. Posting the same carousel from several accounts on one platform teaches nothing new and is the kind of duplication platforms penalise.
 - Posting and scheduling are out of scope here. LaunchClip produces the batch and reads the results back.
+
+### 8. One command for a niche, with its evidence
+
+Not built. The first real library (407 TikTok posts from one keyword) showed that caption wording alone separates nothing: none of 30 drafted questions passed. The hook and the script are in what is said, so the library has to read more than the caption, and stay cheap at hundreds to thousands of posts.
+
+```bash
+launchclip score niche "horse racing" --name horse-racing
+```
+
+One command runs discover, evidence, draft and report, in that order. It can be stopped and run again: each step skips what is already done. Each step is also its own command, for a scheduler.
+
+**Widening the keywords.** One keyword finds one corner of an industry. After the first search, the command lists more keywords from two free sources: the hashtags that several of the found creators share, and the sub-areas a writing model names for the niche (events, roles, audiences, neighbouring topics). On the first real library, "horse racing" led to thoroughbred, jockey, racehorse, two named race meetings, a famous horse, and the neighbouring sports. The list is saved in `niche.json` with a marker for each: in the niche, neighbouring, or off topic. You confirm it, or `--widen` takes the in-niche ones without asking. Each keyword's creators are capped, so one corner cannot fill the library, and the report shows results by keyword.
+
+**Evidence, without downloading any video (the default).** The same scrape that returns the caption also returns, at no extra charge:
+
+| Evidence | From | Gives |
+|---|---|---|
+| Caption and hashtags | the post | the written hook |
+| Transcript, with timings | the platform's own subtitles | the spoken hook (first sentence), the script, words a second, seconds to the first word, and whether anyone speaks at all |
+| Thumbnail | the cover image link | the opening frame, on-screen text, whether a person is shown |
+| Facts | the post | length, slideshow or video, original or borrowed sound |
+| Results | the post | views, likes, comments, shares, saves, and the outlier figure |
+
+On the first real library, every post had a cover and 143 of 407 had subtitles; most of the rest have no speech. YouTube gives a thumbnail and captions the same way. Instagram gives a caption and a cover but no transcript.
+
+**Video is a switch, off by default.** `--video` downloads a contrast sample (each creator's best five and worst five), reads cuts and pacing with ffmpeg, transcribes posts that had no subtitles, makes one contact sheet, and deletes the video. Nothing else in the process depends on it.
+
+**The folder.** One folder a niche, so one machine can hold many industries or many customers:
+
+```text
+niches/horse-racing/
+  niche.json          keywords, platforms, settings
+  creators.json       who was found, and why
+  library.jsonl       one line a post: words, transcript, facts, results, answers
+  thumbs/             small copies of the covers
+  rubric.draft.json   the questions, with their numbers
+  report.md           the evidence: each question, its numbers, and example posts with links
+```
+
+`--dir` or `LAUNCHCLIP_NICHES` sets where niches live. `launchclip score ... --rubric horse-racing` then uses that niche's rubric.
+
+**Small on a server.** The library keeps the fields it uses and drops the scrape's raw row, which is nine tenths of its size: about 1 KB a post, so a thousand posts is about a megabyte. Covers are kept as small copies (about 20 KB each, so a thousand is about 20 MB), because their links expire and a later redraft needs them; `--text-only` skips covers altogether. Video, when on, lives in a temporary folder and is removed after its signals are read. Nothing needs a screen or a browser.
+
+**Fetch evidence at discovery.** Subtitle and cover links expire, so the transcript is read and the cover scored in the same run that finds the post.
+
+The drafter then proposes questions per part (written hook, spoken hook, script, thumbnail) and tests each as it does now. Timings go in as numbers, banded low, middle and high within the niche; no model is asked to judge pacing.
+
+### 9. When a rubric is done
+
+A rubric is never finished, but a version is ready to use when all of these hold:
+
+1. **Enough posts to judge.** 100 or more held-out posts a question (already enforced).
+2. **It survives a second sample.** Draft on one discovery run, then test the kept questions on a fresh run with other creators. A question is kept only if its direction holds in both.
+3. **It stops changing.** Adding the next 100 posts changes no kept question.
+4. **It predicts held-out posts.** The kept questions together rank held-out posts better than a shuffled baseline (the fitted layer's own test).
+
+`score rubric draft` reports these as a short status: posts judging, questions kept, questions that held on the second sample, and whether the last batch changed anything. Expect a few hundred to a thousand posts for a niche. Formats drift, so a rubric is redrafted on fresh posts every month or two, and a brand's own results replace the library as soon as there are enough of them.
+
+### 10. Formats across industries
+
+Not built. A post has a format (how it is built) and a topic (what it is about). The format is what can move between industries.
+
+- **One format rubric for every library.** A shared set of choice questions about structure, answered from the evidence in stage 8: the kind of opening, the structure (list, before and after, story, reaction, demonstration), who is on screen, how text is used.
+- **Several keywords, several industries.** `library discover` already takes a keyword list. Each library keeps its niche name, and the niche map is made per niche.
+- **`score library compare <a> <b>`** lists formats that go with above-normal results in niche A and are rare or absent in niche B. Those are candidates to import, not findings.
+- **A general trending feed is a source of creators and formats, never of proof.** Third-party actors exist for TikTok's trending and top-ads lists. They return hits only, so they are used as the keyword search is: to find creators, whose whole recent feeds are then collected, and to suggest format names for the shared rubric.
+- **The niche report says what to try.** Each niche's `report.md` ends with "Worth testing here": formats from the other niches on the machine, and from a general trending library if one was collected, that do well there and are rare here, each with example posts. Neighbouring keywords from stage 8 are the nearest source, since their audiences overlap.
+- **Imports are tested, not trusted.** An imported format gets the shortlist's wildcard slots (stage 4), and the brand's own results decide whether it keeps them (stage 6). Nothing shows that a format which wins in one industry wins in another.
 
 ## Limits to design around
 
