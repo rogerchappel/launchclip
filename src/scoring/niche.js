@@ -101,9 +101,14 @@ export async function runNiche(target, flags = {}, io = {}) {
   if (!niche.widened && steps.widen) {
     say("Keywords: looking for the rest of the industry");
     try {
-      const more = await steps.widen({ niche: niche.niche, keywords: niche.keywords.map((entry) => entry.keyword), rows: await readJsonl(files.library), ...(io.client ? { client: io.client } : {}) });
+      // The writing model sorts keywords into the niche or out of it. Without one they come back unsorted, and none is collected.
+      const model = flags.model ?? process.env.LAUNCHCLIP_MAKE_MODEL;
+      const client = io.client ?? (model && !io.steps?.widen ? (await import("../model_provider.js")).createStructuredClient(model) : undefined);
+      const more = await steps.widen({ niche: niche.niche, keywords: niche.keywords.map((entry) => entry.keyword), rows: await readJsonl(files.library), ...(client ? { client } : {}) });
       for (const entry of more) if (!niche.keywords.some((seen) => seen.keyword.toLowerCase() === entry.keyword.toLowerCase())) niche.keywords.push(entry);
-      niche.widened = true;
+      // Unsorted keywords are not kept as the answer: the next run with a model sorts them.
+      niche.widened = more.every((entry) => entry.relation);
+      if (!niche.widened) { niche.keywords = niche.keywords.filter((entry) => entry.relation); warnings.push("keywords were found but not sorted: set a writing model (--model or LAUNCHCLIP_MAKE_MODEL) and run again"); }
       await writeJson(files.niche, niche);
     } catch (error) {
       warnings.push(`keywords were not widened: ${String(error.message).split("\n")[0]}`);
