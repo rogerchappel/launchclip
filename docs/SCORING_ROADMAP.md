@@ -1,6 +1,6 @@
 # Scoring roadmap
 
-Status: every stage has a first version for a hosted model, under [`launchclip score`](guide/scoring.md). Not built: the local model, scoring a draft from a preview render, and a per-post bandit (stage 6 moves shortlist slots between hook types). Not yet tried on real data: the post library with a real Apify account, and the fitted layer on real posts. Background and sources: [research report](../reports/JEV%20scoring%20model%20for%20content.md).
+Status: every stage has a first version for a hosted model, under [`launchclip score`](guide/scoring.md). Not built: the local model, scoring a draft from a preview render, and a per-post bandit (stage 6 moves shortlist slots between hook types). A rubric can be drafted from a library found by keyword (`score library discover`, `score rubric draft`). Not yet tried on real data: keyword discovery, the post library with a real Apify account, and the fitted layer on real posts. Background and sources: [research report](../reports/JEV%20scoring%20model%20for%20content.md).
 
 ## The idea
 
