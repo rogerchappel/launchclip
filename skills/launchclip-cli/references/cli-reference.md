@@ -1789,6 +1789,13 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 
   ```text
   launchclip score <project|hooks.txt|items.json|SCRIPT.json> --rubric <rubric.json> [--kind <kind>] [--brief <file>] [--model <id>] [--concurrency <n>] [--passed <file>] [--out <file>] [--json]
+  launchclip score hooks <topic|brief.md> [--count <n>] [--assemble <parts.json>] [--rubric <rubric.json>] [--recent <hooks.txt>] [--per-type <n>] [--wildcards <n>] [--model <provider:model>] [--scorer-model <id>] [--concurrency <n>] [--results <own.tagged.jsonl>] [--fit <model.json>] [--seed <text>] [--out <dir>] [--json] # write many hooks, keep a varied shortlist
+  launchclip score batch <topic|brief.md> [--carousels <n>] [--make-model <model>] [--dest <ids>] [--style <name>] [--slides <n>] [--render] [--out <dir>] [score hooks flags] # a day's carousel plans, each held to the rubric
+  launchclip score library import <posts.csv|.json|.jsonl> | fetch <apify actor> [--input <input.json>] [--platform <name>] [--own] [--out library.jsonl] # collect real posts and their numbers
+  launchclip score library tag <library.jsonl> --rubric <rubric.json> [--model <id>] [--concurrency <n>] [--out library.tagged.jsonl] # tag each post with a decision model
+  launchclip score library map <library.tagged.jsonl> [--out map.json] # which tags are crowded, open, or beat their channel
+  launchclip score fit <library.tagged.jsonl> [--out model.json] [--own-weight <n>] # learn which tags go with above-normal results
+  launchclip score predict <scored.json|tagged.jsonl> --model <model.json> [--force] # a fitted model's guess for new items
   ```
 
 - `history check`: Compare every pair of videos in a history dir (its launchclip-history.json, plus any project folder inside it with a storyboard.json) and flag pairs whose hooks or structure (module sequence) are too close, or that are too alike overall (hook, opening, modules, background, captions, cover, palette). Exits 1 when a pair is flagged; --json for agents.

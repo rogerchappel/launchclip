@@ -78,6 +78,16 @@ A script file on its own (`SCRIPT.json`, `NARRATION.json`, a video's `storyboard
 | `--model <id>` | Any decision model on OpenRouter. Default `typesafe/jev-1.13`, or `LAUNCHCLIP_SCORER_MODEL`, or the rubric's `"model"` |
 | `--concurrency <n>` | Requests in flight at once (default 16) |
 
+## What builds on it
+
+| Guide | What it does |
+|---|---|
+| [Measure a model](scoring-measure.md) | How often a model agrees with your own labels, before you trust it |
+| [Hook funnel](scoring-funnel.md) | `launchclip score hooks`: write hundreds of hooks, keep a varied shortlist |
+| [Post library](scoring-library.md) | `launchclip score library`: real posts from your niche, tagged and joined to their numbers |
+| [Fitted layer](scoring-fit.md) | `launchclip score fit`: a small model of what goes with above-normal results |
+| [Daily batch](scoring-batch.md) | `launchclip score batch`: a day's carousel plans from one topic |
+
 ## Limits
 
 - It needs a hosted model for now. A local model is on the roadmap, after its accuracy has been measured.

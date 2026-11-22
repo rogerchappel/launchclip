@@ -10,7 +10,7 @@
 | [Local generation with ComfyUI](comfyui.md) | Optional sound effects from a ComfyUI on your own machine; licences, setup and fallback |
 | [Generated footage](generated-footage.md) | Opt-in: shots the plan asks for made by an image and video model you choose; keys, quotes, budgets, the ledger and licences |
 | [Carousels and single-image posts](carousels.md) | Slides from a story: make, render, check and export for Instagram, LinkedIn, TikTok and more, with captions and alt text |
-| [Score hooks, scripts and slides](scoring.md) | Check every hook, script and carousel slide against your own closed questions with a fast decision model; rubrics, tags and the shortlist |
+| [Score hooks, scripts and slides](scoring.md) | Check every hook, script and carousel slide against your own closed questions with a fast decision model; rubrics, tags and the shortlist. Then: [measure a model](scoring-measure.md), [write hooks in bulk](scoring-funnel.md), [a library of your niche's posts](scoring-library.md), [learn from results](scoring-fit.md), [a day's carousels](scoring-batch.md) |
 | [Demo autopilot](demo-autopilot.md) | Point it at your SaaS codebase: it starts the app, records the key flows and edits them in |
 | [Effects around you on camera](effects.md) | Graphics behind and around you in a talking-head recording, and `launchclip fx` for one effect on a clip |
 | [Raw footage](raw-footage.md) | The base edit: silences, bad takes and filler words removed, audio cleaned up |
