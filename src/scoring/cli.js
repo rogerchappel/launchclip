@@ -53,6 +53,26 @@ export async function runScoreCommand(action, args, flags, io) {
     const summary = await runRubricDraft(args[1], flags);
     return flags.json ? json(summary) : write(formatRubricDraft(summary));
   }
+  if (action === "library" && args[0] === "evidence") {
+    const { runEvidence } = await import("./evidence.js");
+    const result = await runEvidence(args[1], flags, { stdout: io.stderr });
+    return flags.json ? json(result) : write(`${result.counts.posts} posts read: ${result.counts.transcripts} transcripts, ${result.counts.thumbs} covers kept (${result.counts.subtitle_failures + result.counts.thumb_failures} could not be fetched): ${result.out}\n`);
+  }
+  if (action === "library" && args[0] === "keywords") {
+    const { runKeywords, formatKeywords } = await import("./keywords.js");
+    const result = await runKeywords(args[1], flags);
+    return flags.json ? json(result) : write(formatKeywords(result));
+  }
+  if (action === "library" && args[0] === "compare") {
+    const { runCompare } = await import("./compare.js");
+    await runCompare(args.slice(1), flags, { stdout: io.stdout }); // prints itself
+    return undefined;
+  }
+  if (action === "library" && args[0] === "video") {
+    const { runVideo } = await import("./video.js");
+    const result = await runVideo(args[1], flags, { stdout: io.stderr });
+    return flags.json ? json(result) : write(`${result.counts.done} of ${result.counts.sampled} videos read, ${result.counts.failed} failed: ${result.out}\n`);
+  }
   if (action === "library") {
     const { runLibrary } = await import("./library.js");
     const result = await runLibrary(args[0], args[1], flags, { stdout: io.stdout });
