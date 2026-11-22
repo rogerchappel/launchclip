@@ -5,12 +5,19 @@
 //   assembleHooks({parts, count, seed?})  → [{id, kind: "hook", text, source: "assembled"}]
 //   shortlist(scoredItems, {perType?, wildcards?, tag?, recent?, similarityLimit?, seed?})
 //                                          → {picked, dropped: {failed, near_recent, near_duplicate, over_quota}}
+//   runFunnel(target, flags, io?)          → the summary; writes candidates.jsonl, scored.json,
+//                                            shortlist.txt and shortlist.json to --out
 //
 // Writing is the slow step, so it is many small requests side by side to a
 // fast model, each with its own slant so the batches do not repeat each other.
 import { createHash } from "node:crypto";
+import { existsSync, statSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { mapLimit } from "../concurrency.js";
 import { createStructuredClient } from "../model_provider.js";
+import { parseRubric, scoreItems } from "../scorer.js";
 import { DEFAULT_HOOK_SIMILARITY_LIMIT, hookSimilarity } from "../visual_history.js";
 
 // What a batch is told to lead with. Batch i takes slant i and, once the
@@ -188,4 +195,107 @@ export function shortlist(scoredItems, { perType = 3, wildcards = 2, tag = "hook
     } else dropped.over_quota.push(item.id);
   }
   return { picked, dropped };
+}
+
+const USAGE = "<topic|brief.md> [--count <n>] [--assemble <parts.json>] [--rubric <rubric.json>] [--recent <hooks.txt>] [--per-type <n>] [--wildcards <n>] [--model <provider:model>] [--scorer-model <id>] [--seed <text>] [--out <dir>]";
+const STARTER_RUBRIC = fileURLToPath(new URL("../../docs/guide/scoring-rubric.json", import.meta.url));
+
+function wholeNumber(flags, name, fallback, least) {
+  if (flags[name] == null) return fallback;
+  const value = Number(flags[name]);
+  if (!Number.isInteger(value) || value < least) throw new Error(`--${name} must be a whole number, ${least} or more; got ${flags[name]}`);
+  return value;
+}
+
+/**
+ * Write or assemble hooks on a topic, score them, and shortlist a spread.
+ * target: a topic, or a brief file (its first line is the topic). With
+ * --assemble the hooks are assembled; with --count as well, written too.
+ * io: {client (a writer with runStructured), fetch, apiKey}, for tests.
+ * Writes candidates.jsonl, scored.json, shortlist.txt and shortlist.json to
+ * --out (default ./funnel). → {topic, out, models, counts, seconds, cost_usd,
+ * warnings, shortlist}
+ */
+export async function runFunnel(target, flags = {}, io = {}) {
+  if (!String(target ?? "").trim()) throw new Error(`the hook funnel needs a topic or a brief file: ${USAGE}`);
+  const file = path.resolve(String(target));
+  const isBrief = existsSync(file) && statSync(file).isFile();
+  const brief = isBrief ? await readFile(file, "utf8") : "";
+  const topic = isBrief ? (brief.split("\n").map((line) => line.replace(/^#+\s*/, "").trim()).find(Boolean) ?? path.basename(file)) : String(target).trim();
+  const count = wholeNumber(flags, "count", 200, 1);
+  const perType = wholeNumber(flags, "per-type", 3, 1);
+  const wildcards = wholeNumber(flags, "wildcards", 2, 0);
+  const seed = String(flags.seed ?? "");
+  const rubricFile = flags.rubric ? path.resolve(String(flags.rubric)) : STARTER_RUBRIC;
+  const rubric = parseRubric(JSON.parse(await readFile(rubricFile, "utf8")));
+  const parts = flags.assemble ? parseHookParts(JSON.parse(await readFile(path.resolve(String(flags.assemble)), "utf8"))) : null;
+  const recent = flags.recent ? (await readFile(path.resolve(String(flags.recent)), "utf8")).split("\n").map((line) => line.trim()).filter(Boolean) : [];
+  const writes = !parts || flags.count != null;
+  const model = flags.model ?? process.env.LAUNCHCLIP_MAKE_MODEL;
+
+  const seconds = {};
+  const started = performance.now();
+  const since = (from) => Math.round(performance.now() - from) / 1000;
+  const timed = async (step, work) => {
+    const from = performance.now();
+    try { return await work(); } finally { seconds[step] = since(from); }
+  };
+  const warnings = [];
+
+  // The writing client reports tokens, not money; the router's own figure is read off each reply on its way through.
+  let writeCost = 0;
+  const fetchImpl = io.fetch ?? globalThis.fetch;
+  const costed = async (...request) => {
+    const response = await fetchImpl(...request);
+    writeCost += Number((await response.clone().json().catch(() => null))?.usage?.cost) || 0;
+    return response;
+  };
+  const written = writes ? await timed("write", () => writeHooks({
+    topic, brief, count, model,
+    client: io.client ?? (model ? createStructuredClient(model, { fetch: costed }) : undefined),
+    onBatchError: (error, index) => warnings.push(`writing batch ${index + 1} failed: ${error.message}`)
+  })) : [];
+  const assembled = parts ? await timed("assemble", () => assembleHooks({ parts, count, seed })) : [];
+  const candidates = dropExactDuplicates([...written, ...assembled]);
+
+  const out = path.resolve(String(flags.out ?? "funnel"));
+  await mkdir(out, { recursive: true });
+  await writeFile(path.join(out, "candidates.jsonl"), candidates.map((item) => `${JSON.stringify(item)}\n`).join(""));
+
+  const report = await timed("score", () => scoreItems(candidates, rubric, {
+    model: flags["scorer-model"],
+    context: isBrief ? { brief } : { topic },
+    ...(io.fetch ? { fetch: io.fetch } : {}),
+    ...(io.apiKey ? { apiKey: io.apiKey } : {})
+  }));
+  await writeFile(path.join(out, "scored.json"), `${JSON.stringify({ ...report, rubric: rubricFile }, null, 2)}\n`);
+
+  const options = { perType, wildcards, recent, seed, ...(flags.tag ? { tag: String(flags.tag) } : {}) };
+  const chosen = await timed("shortlist", () => shortlist(report.items, options));
+  await writeFile(path.join(out, "shortlist.json"), `${JSON.stringify({ topic, per_type: perType, wildcards, seed, recent: recent.length, ...chosen }, null, 2)}\n`);
+  await writeFile(path.join(out, "shortlist.txt"), chosen.picked.map((item) => `${item.text}\n`).join(""));
+  seconds.total = since(started);
+
+  const dollars = (value) => Math.round(value * 1e6) / 1e6;
+  return {
+    topic,
+    out,
+    models: { writer: writes ? (io.client ? io.client.model ?? null : model) : null, scorer: report.model },
+    counts: {
+      written: written.length,
+      assembled: assembled.length,
+      candidates: candidates.length,
+      ...report.counts,
+      near_recent: chosen.dropped.near_recent.length,
+      near_duplicate: chosen.dropped.near_duplicate.length,
+      over_quota: chosen.dropped.over_quota.length,
+      shortlisted: chosen.picked.length,
+      wildcards: chosen.picked.filter((item) => item.wildcard).length
+    },
+    seconds,
+    // write is what the router reported; a host that reports no cost counts as 0.
+    cost_usd: { write: dollars(writeCost), score: report.cost_usd, total: dollars(writeCost + report.cost_usd) },
+    warnings,
+    shortlist: chosen.picked.map((item) => ({ id: item.id, type: item.type, text: item.text, ...(item.wildcard ? { wildcard: true } : {}) }))
+  };
 }

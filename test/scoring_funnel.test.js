@@ -1,10 +1,11 @@
 // The hook funnel (src/scoring/funnel.js) against a stand-in writing client
 // and a stand-in for the hosted decision model: no network, no key.
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { assembleHooks, parseHookParts, shortlist, writeHooks } from "../src/scoring/funnel.js";
+import { assembleHooks, parseHookParts, runFunnel, shortlist, writeHooks } from "../src/scoring/funnel.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const PARTS = {
@@ -117,4 +118,95 @@ test("shortlist drops hooks close to recent posts and near-duplicates of a picke
   assert.deepEqual(dropped, { failed: [], near_recent: ["h2"], near_duplicate: ["h1"], over_quota: [] });
   // A looser limit lets both through.
   assert.equal(shortlist(items, { recent: ["My sourdough starter died twice before I learned this trick"], similarityLimit: 1.01 }).picked.length, 4);
+});
+
+const RUBRIC = {
+  questions: {
+    no_greeting: { type: "noul", want: false, instructions: "Does it open with a greeting?" },
+    hook_type: { type: "choice", on: "hook", instructions: "Which kind?", criteria: { number: "", question: "", other: "" } }
+  }
+};
+
+// The decision model's reply shape, answered from the text alone.
+function fakeScorer(calls = []) {
+  return async (url, init) => {
+    const body = JSON.parse(init.body);
+    calls.push(body);
+    const text = body.state.text;
+    const type = /^\d/.test(text) ? "number" : /\?$/.test(text) ? "question" : "other";
+    const answers = {
+      no_greeting: { type: "noul", noul: /^hey/i.test(text) ? 0.97 : 0.02 + (text.length % 10) / 100 },
+      hook_type: { type: "choice", choice: type, probabilities: { [type]: 1 } }
+    };
+    return new Response(JSON.stringify({ answers, model: body.model, usage: { cost: 0.00001 } }), { status: 200 });
+  };
+}
+
+// 12 hooks a batch over three types, one greeting the rubric fails, and words no other batch uses.
+function variedWriter(calls = []) {
+  return {
+    model: "stand-in-writer",
+    async runStructured(request) {
+      const batch = calls.push(request) - 1;
+      const word = (index) => `${WORDS[(batch * 5 + index) % WORDS.length]}${batch}${index}`;
+      return { value: { hooks: Array.from({ length: 12 }, (_, index) => index === 0 ? `Hey ${word(index)} friends ${word(index + 1)}` : index % 3 === 0 ? `${index} ${word(index)} lessons ${word(index + 2)}` : index % 3 === 1 ? `Is ${word(index)} worth ${word(index + 3)}?` : `${word(index)} beats ${word(index + 4)}`) } };
+    }
+  };
+}
+
+test("runFunnel writes, scores and shortlists, with the files, counts, time and cost of each step", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-funnel-"));
+  await writeFile(path.join(dir, "rubric.json"), JSON.stringify(RUBRIC));
+  await writeFile(path.join(dir, "recent.txt"), "Is bridge01 worth engine04?\n\n");
+  const scorerCalls = [];
+  // One batch of 12: 1 greeting, 3 number, 4 question (one of them a recent post), 4 other.
+  const run = (out, seed = "s") => runFunnel("morning routines", { count: 12, rubric: path.join(dir, "rubric.json"), recent: path.join(dir, "recent.txt"), "per-type": 2, wildcards: 2, "scorer-model": "scorer-x", seed, out: path.join(dir, out) }, { client: variedWriter(), fetch: fakeScorer(scorerCalls), apiKey: "k" });
+  const summary = await run("a");
+  assert.equal(summary.topic, "morning routines");
+  assert.deepEqual(summary.models, { writer: "stand-in-writer", scorer: "scorer-x" });
+  assert.equal(summary.counts.written, 12);
+  assert.equal(summary.counts.assembled, 0);
+  assert.equal(summary.counts.candidates, 12);
+  assert.equal(summary.counts.failed, 1, "the greeting");
+  assert.equal(summary.counts.near_recent, 1);
+  assert.equal(summary.counts.shortlisted, 8, "2 each of 3 types, plus 2 wildcards");
+  assert.equal(summary.counts.wildcards, 2);
+  assert.equal(summary.counts.over_quota, 2);
+  assert.equal(summary.counts.failed + summary.counts.near_recent + summary.counts.near_duplicate + summary.counts.over_quota + summary.counts.shortlisted, 12);
+  for (const step of ["write", "score", "shortlist", "total"]) assert.equal(typeof summary.seconds[step], "number", step);
+  assert.deepEqual(summary.cost_usd, { write: 0, score: 0.00012, total: 0.00012 });
+  assert.equal(scorerCalls[0].state.topic, "morning routines");
+
+  const lines = (await readFile(path.join(dir, "a/candidates.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+  assert.equal(lines.length, 12);
+  assert.equal(lines[0].source, "written");
+  assert.equal(JSON.parse(await readFile(path.join(dir, "a/scored.json"), "utf8")).items.length, 12);
+  const saved = JSON.parse(await readFile(path.join(dir, "a/shortlist.json"), "utf8"));
+  assert.deepEqual(saved.picked.map((item) => item.id), summary.shortlist.map((item) => item.id));
+  assert.deepEqual((await readFile(path.join(dir, "a/shortlist.txt"), "utf8")).trim().split("\n"), summary.shortlist.map((item) => item.text));
+  assert.ok(!summary.shortlist.some((item) => /^hey/i.test(item.text) || item.text === "Is bridge01 worth engine04?"));
+
+  // The same seed gives the same shortlist; the quota picks do not depend on the seed at all.
+  assert.deepEqual((await run("b")).shortlist, summary.shortlist);
+  assert.deepEqual((await run("c", "other")).shortlist.filter((item) => !item.wildcard), summary.shortlist.filter((item) => !item.wildcard));
+});
+
+test("runFunnel --assemble needs no writer, and with --count writes as well; a brief file gives the topic", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-funnel-"));
+  await writeFile(path.join(dir, "rubric.json"), JSON.stringify(RUBRIC));
+  await writeFile(path.join(dir, "brief.md"), "# Marathon training\n\nFor first-timers.\n");
+  const flags = { assemble: path.join(ROOT, "docs/guide/scoring-hook-parts.json"), rubric: path.join(dir, "rubric.json"), seed: 7, out: path.join(dir, "out") };
+  const noWriter = { runStructured: async () => { throw new Error("the writer was called"); } };
+  const scorerCalls = [];
+  const assembledOnly = await runFunnel(path.join(dir, "brief.md"), flags, { client: noWriter, fetch: fakeScorer(scorerCalls), apiKey: "k" });
+  assert.equal(assembledOnly.topic, "Marathon training");
+  assert.equal(assembledOnly.models.writer, null);
+  assert.deepEqual([assembledOnly.counts.written, assembledOnly.counts.assembled], [0, 200]);
+  assert.ok(scorerCalls[0].state.brief.includes("first-timers"));
+  assert.ok(assembledOnly.shortlist.length > 0 && assembledOnly.shortlist.length <= 3 * 3 + 2);
+  const both = await runFunnel("marathon training", { ...flags, count: 12 }, { client: variedWriter(), fetch: fakeScorer(), apiKey: "k" });
+  assert.deepEqual([both.counts.written, both.counts.assembled, both.counts.candidates], [12, 12, 24]);
+
+  await assert.rejects(runFunnel("", {}), /needs a topic/);
+  await assert.rejects(runFunnel("t", { count: "many" }), /--count must be a whole number/);
 });
