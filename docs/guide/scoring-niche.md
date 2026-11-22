@@ -15,6 +15,7 @@ It needs an [Apify](https://apify.com) token (`APIFY_TOKEN`) for the posts, an O
 | Discover | A search for each keyword finds creators; each creator's recent posts are collected, ordinary ones included | [`score library discover`](scoring-discover.md) |
 | Keywords | More keywords are found from the hashtags the creators share and from a writing model, each marked in the niche, neighbouring or off topic | `score library keywords` |
 | Evidence | For each post: the caption, the platform's own subtitles as a transcript, the first sentence spoken, a small copy of the cover, and timings. No video is downloaded | `score library evidence` |
+| Topic | Each post with words is asked "is this about the niche?". A creator with 5 or more answered posts and under 40% on topic is moved to `library.off-topic.jsonl` and named in the report | |
 | Formats | Each post is tagged with how it is built, using one rubric shared by every niche | [`score library compare`](scoring-compare.md) |
 | Draft | Questions are written per part (written hook, spoken hook, script, cover) and each is tested on posts the writer never saw | [`score rubric draft`](scoring-rubric-draft.md) |
 | Report | The evidence, as a page you read | |
@@ -45,6 +46,21 @@ launchclip score hooks "the first race of the season" --rubric horse-racing
 
 That reads `rubric.json` in the niche's folder if you have saved a reviewed one there, else the draft.
 
+## Borrow formats from other industries
+
+A new brand has no results of its own. Other industries' posts can stand in: collect a few niches whose audience behaves like yours, and the report lists formats that earn attention there and are rare in yours.
+
+```bash
+launchclip score niche "car auctions" --formats-only
+launchclip score niche "property auctions" --formats-only
+launchclip score niche --name horse-racing
+launchclip score hooks "the first sale of the season" --rubric horse-racing --formats horse-racing
+```
+
+`--formats-only` collects, checks and tags a niche without drafting a rubric for it, which is all a niche you borrow from needs. Running your own niche again then fills "Worth testing here" in its report and writes the same list to `worth-testing.json`. `score hooks --formats <niche>` gives the hook writer those formats, by name and description only, and asks it to spread the hooks across them.
+
+Formats are ranked by how far their posts beat their own channel's normal, then by shares a view. That measures attention, not sales, and attention in one industry is no proof for another: post them and let your own results decide.
+
 ## More of the industry
 
 The first run lists the keywords it found and collects only yours. To collect the in-niche ones too:
@@ -53,7 +69,7 @@ The first run lists the keywords it found and collects only yours. To collect th
 launchclip score niche --name horse-racing --widen
 ```
 
-`--keywords <n>` is how many to take (default 5), and each keyword gets its own `--creators` (default 8), so one corner of the industry cannot fill the library. To choose them yourself, edit `niche.json`: a keyword with `"relation": "in"` and no `"done"` is collected on the next `--widen` run.
+`--keywords <n>` is how many to take (default 5, search phrases before hashtags), and each keyword gets its own `--creators` (default 8), so one corner of the industry cannot fill the library. To choose them yourself, edit `niche.json`: a keyword with `"relation": "in"` and no `"done"` is collected on the next `--widen` run.
 
 ## Options
 
@@ -64,6 +80,7 @@ launchclip score niche --name horse-racing --widen
 | `--platform tiktok\|instagram` | Where to look (default tiktok). Instagram gives captions and covers, no transcripts |
 | `--creators`, `--per-creator`, `--days`, `--search-limit` | Passed to discovery, per keyword |
 | `--widen`, `--keywords <n>` | Collect the in-niche keywords that were found |
+| `--formats-only` | Collect, check and tag, with no rubric draft: for a niche you borrow formats from |
 | `--text-only` | No covers: nothing is kept and no cover question is asked |
 | `--with-video` | Also download a sample of each creator's best and worst videos for cuts and a contact sheet, then delete them ([guide](scoring-video.md)) |
 | `--second <library.jsonl>` | A second library with other creators, to test the kept questions on |

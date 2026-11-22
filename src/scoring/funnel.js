@@ -228,7 +228,7 @@ export function shortlist(scoredItems, { perType = 3, wildcards = 2, tag = "hook
   return { picked, dropped };
 }
 
-const USAGE = "<topic|brief.md> [--count <n>] [--assemble <parts.json>] [--rubric <rubric.json>] [--recent <hooks.txt>] [--per-type <n>] [--wildcards <n>] [--model <provider:model>] [--scorer-model <id>] [--concurrency <n>] [--results <own.tagged.jsonl>] [--fit <model.json>] [--seed <text>] [--out <dir>]";
+const USAGE = "<topic|brief.md> [--count <n>] [--assemble <parts.json>] [--rubric <rubric.json>] [--recent <hooks.txt>] [--per-type <n>] [--wildcards <n>] [--model <provider:model>] [--scorer-model <id>] [--concurrency <n>] [--results <own.tagged.jsonl>] [--fit <model.json>] [--formats <niche|worth-testing.json>] [--seed <text>] [--out <dir>]";
 const STARTER_RUBRIC = fileURLToPath(new URL("../../docs/guide/scoring-rubric.json", import.meta.url));
 
 function wholeNumber(flags, name, fallback, least) {
@@ -259,6 +259,17 @@ export async function runFunnel(target, flags = {}, io = {}) {
   const seed = String(flags.seed ?? "");
   const rubricFile = flags.rubric ? path.resolve(String(flags.rubric)) : STARTER_RUBRIC;
   const rubric = parseRubric(JSON.parse(await readFile(rubricFile, "utf8")));
+  // --formats <niche|worth-testing.json>: formats borrowed from other niches (launchclip score niche writes the file). Only their names and the shared rubric's own descriptions reach the writer, never scraped words.
+  let formats = "";
+  if (flags.formats) {
+    const { nichesDir } = await import("./niche.js");
+    const { loadFormatRubric } = await import("./compare.js");
+    const formatsFile = existsSync(String(flags.formats)) ? path.resolve(String(flags.formats)) : path.join(nichesDir(flags), String(flags.formats), "worth-testing.json");
+    if (!existsSync(formatsFile)) throw new Error(`--formats: ${formatsFile} not found; run launchclip score niche for this niche after collecting another one`);
+    const criteria = (await loadFormatRubric()).questions;
+    const lines = JSON.parse(await readFile(formatsFile, "utf8")).slice(0, 8).map((entry) => `- ${String(entry.value).replace(/_/g, " ")}${criteria[entry.question]?.criteria?.[entry.value] ? `: ${criteria[entry.question].criteria[entry.value]}` : ""}`);
+    if (lines.length) formats = `Formats to write in. They do well in other industries and are rare in this one. Spread the hooks evenly across them, keeping each format's shape and changing only the subject:\n${[...new Set(lines)].join("\n")}`;
+  }
   const parts = flags.assemble ? parseHookParts(JSON.parse(await readFile(path.resolve(String(flags.assemble)), "utf8"))) : null;
   const recent = flags.recent ? (await readFile(path.resolve(String(flags.recent)), "utf8")).split("\n").map((line) => line.trim()).filter(Boolean) : [];
   const writes = !parts || flags.count != null;
@@ -284,7 +295,7 @@ export async function runFunnel(target, flags = {}, io = {}) {
     return response;
   };
   const written = writes ? await timed("write", () => writeHooks({
-    topic, brief, count, model, requirements: rubricRequirements(rubric),
+    topic, brief: [brief, formats].filter(Boolean).join("\n\n"), count, model, requirements: rubricRequirements(rubric),
     client: io.client ?? (model ? createStructuredClient(model, { fetch: costed }) : undefined),
     onBatchError: (error, index) => warnings.push(`writing batch ${index + 1} failed: ${error.message}`)
   })) : [];

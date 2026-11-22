@@ -84,6 +84,10 @@ export function compareNiches(a, b, { minPosts = 8, minLift = 1.25, rareShare = 
   const keys = questions ?? [...tagKeys(rowsA)].filter((key) => inB.has(key));
   const norm = median(rowsA.map((row) => row.outlier));
   if (!(norm > 0)) return [];
+  // Shares are what carry a post to people who do not follow the account.
+  const shareRate = (row) => (row.metrics?.views > 0 && Number.isFinite(row.metrics?.shares) ? row.metrics.shares / row.metrics.views : null);
+  const rateOf = (rows) => median(rows.map(shareRate).filter((rate) => rate !== null));
+  const normRate = rateOf(rowsA);
   const found = [];
   for (const question of keys) {
     const has = (row) => typeof row.tags?.[question] === "string";
@@ -102,13 +106,13 @@ export function compareNiches(a, b, { minPosts = 8, minLift = 1.25, rareShare = 
       found.push({
         question,
         value,
-        a: { posts: group.length, share: round3(shareA), median_outlier: round3(groupMedian), lift: round3(lift) },
+        a: { posts: group.length, share: round3(shareA), median_outlier: round3(groupMedian), lift: round3(lift), ...(normRate > 0 && rateOf(group) >= 0 ? { share_lift: round3(rateOf(group) / normRate) } : {}) },
         b: { posts: postsB, share: round3(shareB) },
         examples: measured.slice(0, 3).map((row) => ({ url: row.url, account: row.account, outlier: row.outlier, words: cut(wordsOf(row)) }))
       });
     }
   }
-  return found.sort((x, y) => y.a.lift - x.a.lift);
+  return found.sort((x, y) => y.a.lift - x.a.lift || (y.a.share_lift ?? 0) - (x.a.share_lift ?? 0));
 }
 
 const percent = (share) => (share > 0 && share < 0.005 ? "under 1%" : `${Math.round(share * 100)}%`);

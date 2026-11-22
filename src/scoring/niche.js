@@ -42,11 +42,30 @@ function whole(flags, name, fallback) {
   return value;
 }
 
+/**
+ * Asks the text scorer of every post with words "is this about the niche?",
+ * once a post (the answer is kept on the row as on_topic). A creator with 5 or
+ * more answered posts and under `minShare` of them on topic is set aside.
+ * → {rows, aside, creators}
+ */
+export async function topicFilter(rows, { niche, minShare = 0.4, fetch, apiKey } = {}) {
+  const { parseRubric, scoreItems } = await import("../scorer.js");
+  const words = (row) => [row.caption, row.transcript].filter(Boolean).join("\n").trim();
+  const todo = rows.filter((row) => row.on_topic == null && words(row));
+  if (todo.length) {
+    const rubric = parseRubric({ questions: { on_topic: { type: "noul", gate: false, instructions: `Is this post about ${niche}?`, criteria: { true: `It is about ${niche}, or made for people interested in it.`, false: "It is about something else." } } } });
+    const report = await scoreItems(todo.map((row, index) => ({ id: String(index), kind: "hook", text: words(row).slice(0, 1500) })), rubric, { ...(fetch ? { fetch } : {}), ...(apiKey ? { apiKey } : {}) });
+    for (const item of report.items) { const p = item.answers?.on_topic?.value; if (Number.isFinite(p)) todo[Number(item.id)].on_topic = Math.round(p * 100) / 100; }
+  }
+  const off = [...Map.groupBy(rows.filter((row) => row.on_topic != null), (row) => row.account)].filter(([, posts]) => posts.length >= 5 && posts.filter((row) => row.on_topic >= 0.5).length / posts.length < minShare).map(([account]) => account);
+  return { rows: rows.filter((row) => !off.includes(row.account)), aside: rows.filter((row) => off.includes(row.account)), creators: off };
+}
+
 async function defaultSteps() {
   const [{ discover }, { widenKeywords }, { gatherEvidence }, { tagFormats, compareNiches, formatWorthTesting }, { runRubricDraft }] = await Promise.all([
     import("./discover.js"), import("./keywords.js"), import("./evidence.js"), import("./compare.js"), import("./rubric.js")
   ]);
-  return { discover, widen: widenKeywords, evidence: gatherEvidence, formats: tagFormats, compare: compareNiches, worthTesting: formatWorthTesting, draft: runRubricDraft, video: async (...args) => (await import("./video.js")).videoSignals(...args) };
+  return { topic: topicFilter, discover, widen: widenKeywords, evidence: gatherEvidence, formats: tagFormats, compare: compareNiches, worthTesting: formatWorthTesting, draft: runRubricDraft, video: async (...args) => (await import("./video.js")).videoSignals(...args) };
 }
 
 /**
@@ -54,7 +73,8 @@ async function defaultSteps() {
  * flags: name, dir, niche (the niche in a few words, for the writers),
  * platform, creators (a keyword, default 8), per-creator, days, widen (take the
  * in-niche keywords found, without asking), keywords (how many widened keywords
- * to take, default 5), text-only, with-video, questions, model, second.
+ * to take, default 5), text-only, with-video, formats-only (no rubric draft: a
+ * niche collected to borrow formats from), questions, model, second.
  * → {name, folder, keywords, posts, creators, evidence, draft, report, warnings}
  */
 export async function runNiche(target, flags = {}, io = {}) {
@@ -117,7 +137,9 @@ export async function runNiche(target, flags = {}, io = {}) {
   }
   if (flags.widen) {
     const take = whole(flags, "keywords", 5);
-    for (const entry of niche.keywords.filter((entry) => entry.relation === "in" && entry.source !== "you" && !entry.done).slice(0, take)) await discoverKeyword(entry);
+    // Search phrases before hashtags: on the first real niche the hashtags led to music edits, and the rubric needs posts where someone speaks.
+    const waiting = niche.keywords.filter((entry) => entry.relation === "in" && entry.source !== "you" && !entry.done);
+    for (const entry of [...waiting.filter((entry) => entry.source === "model"), ...waiting.filter((entry) => entry.source !== "model")].slice(0, take)) await discoverKeyword(entry);
   }
 
   let rows = await readJsonl(files.library);
@@ -130,6 +152,22 @@ export async function runNiche(target, flags = {}, io = {}) {
   await writeJsonl(files.library, rows);
   // gatherEvidence counts this run only; the report wants the library as it stands.
   const have = { posts: rows.length, transcripts: rows.filter((row) => row.transcript).length, thumbs: rows.filter((row) => row.thumb).length };
+
+  // A search returns broad accounts too. A creator whose posts are mostly about something else is set aside, not deleted.
+  if (steps.topic) {
+    say("Topic: checking each creator is in the niche");
+    try {
+      const checked = await steps.topic(rows, { niche: niche.niche, ...(io.fetch ? { fetch: io.fetch } : {}), ...(io.apiKey ? { apiKey: io.apiKey } : {}) });
+      if (checked.aside.length) {
+        await mergeLibrary(path.join(folder, "library.off-topic.jsonl"), checked.aside);
+        warnings.push(`set aside as mostly off the niche: ${checked.creators.join(", ")} (${checked.aside.length} posts, kept in library.off-topic.jsonl)`);
+      }
+      rows = checked.rows;
+      await writeJsonl(files.library, rows);
+    } catch (error) {
+      warnings.push(`the niche check did not run: ${String(error.message).split("\n")[0]}`);
+    }
+  }
 
   let video = null;
   if (flags["with-video"]) {
@@ -153,8 +191,9 @@ export async function runNiche(target, flags = {}, io = {}) {
     }
   }
 
-  say("Draft: writing and testing the questions");
-  const draft = await steps.draft(files.library, { niche: niche.niche, out: files.draft, ...(flags["text-only"] ? { "text-only": true } : {}), ...(flags.questions ? { questions: flags.questions } : {}), ...(flags.model ? { model: flags.model } : {}), ...(flags.second ? { second: flags.second } : {}) }, { ...(io.fetch ? { fetch: io.fetch } : {}), ...(io.apiKey ? { apiKey: io.apiKey } : {}), ...(io.client ? { client: io.client } : {}) });
+  // A niche collected only to borrow formats from needs no rubric of its own.
+  if (!flags["formats-only"]) say("Draft: writing and testing the questions");
+  const draft = flags["formats-only"] ? { cost_usd: 0, questions: [] } : await steps.draft(files.library, { niche: niche.niche, out: files.draft, ...(flags["text-only"] ? { "text-only": true } : {}), ...(flags.questions ? { questions: flags.questions } : {}), ...(flags.model ? { model: flags.model } : {}), ...(flags.second ? { second: flags.second } : {}) }, { ...(io.fetch ? { fetch: io.fetch } : {}), ...(io.apiKey ? { apiKey: io.apiKey } : {}), ...(io.client ? { client: io.client } : {}) });
 
   // Other niches on this machine are where formats to try come from.
   const others = [];
@@ -167,6 +206,8 @@ export async function runNiche(target, flags = {}, io = {}) {
 
   const summary = { name, folder, niche: niche.niche, platform: niche.platform, keywords: niche.keywords, posts: rows.length, creators: new Set(rows.map((row) => row.account)).size, evidence: have, ...(video ? { video: video.counts } : {}), draft, imports: imports.map((entry) => ({ from: entry.from, candidates: entry.candidates.length })), report: files.report, cost_usd: Math.round(((draft.cost_usd?.total ?? draft.cost_usd ?? 0) + formatsCost) * 1e6) / 1e6, warnings };
   await writeFile(files.report, nicheReport(summary, rows, imports, steps.worthTesting));
+  // The same list as data, for `launchclip score hooks --formats <niche>`.
+  await writeJson(path.join(folder, "worth-testing.json"), imports.flatMap((entry) => entry.candidates.map(({ examples, ...candidate }) => ({ from: entry.from, ...candidate }))));
   return summary;
 }
 

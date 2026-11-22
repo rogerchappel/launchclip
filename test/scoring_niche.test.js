@@ -4,7 +4,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { formatNiche, resolveRubric, runNiche } from "../src/scoring/niche.js";
+import { formatNiche, resolveRubric, runNiche, topicFilter } from "../src/scoring/niche.js";
 
 const post = (id, account, views) => ({ id: String(id), platform: "tiktok", account, url: `https://example.test/${id}`, caption: `post ${id}`, metrics: { views }, raw: { big: "x".repeat(50) } });
 
@@ -50,4 +50,40 @@ test("runNiche goes from a keyword to a folder with the library, the draft and t
 
   assert.equal(resolveRubric("horse-racing", { dir }), path.join(dir, "horse-racing", "rubric.draft.json"));
   assert.equal(resolveRubric("nope", { dir }), "nope");
+});
+
+test("topicFilter sets aside a creator whose posts are mostly off the niche, and asks once a post", async () => {
+  const calls = [];
+  const fetch = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    calls.push(body.state.text);
+    return new Response(JSON.stringify({ answers: { on_topic: { type: "noul", noul: /racing/.test(body.state.text) ? 0.9 : 0.1 } }, model: body.model, usage: { cost: 0 } }), { status: 200 });
+  };
+  const rows = [
+    ...[1, 2, 3, 4, 5].map((n) => ({ id: `a${n}`, account: "racing_tv", caption: `racing clip ${n}` })),
+    ...[1, 2, 3, 4, 5].map((n) => ({ id: `b${n}`, account: "news", caption: n === 1 ? "racing today" : `weather ${n}` })),
+    { id: "c1", account: "small", caption: "cooking" },
+    { id: "d1", account: "silent" }
+  ];
+  const first = await topicFilter(rows, { niche: "horse racing", fetch, apiKey: "k" });
+  assert.deepEqual(first.creators, ["news"]);
+  assert.equal(first.aside.length, 5);
+  // Under 5 answered posts is too few to judge a creator; a post with no words is never asked about.
+  assert.deepEqual([...new Set(first.rows.map((row) => row.account))], ["racing_tv", "small", "silent"]);
+  assert.equal(calls.length, 11);
+  await topicFilter(first.rows, { niche: "horse racing", fetch, apiKey: "k" });
+  assert.equal(calls.length, 11);
+});
+
+test("runNiche --formats-only collects and tags without drafting, and writes the formats to borrow as data", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-niche-"));
+  const calls = [];
+  const steps = { ...standIns(calls), compare: (from) => [{ question: "fmt_structure", value: "list", a: { posts: 9, lift: 2 }, b: { posts: 0, share: 0 }, examples: [{ words: "scraped" }], from_name: from.name }] };
+  const io = { steps, stderr: { write() {} } };
+  const lender = await runNiche("car auctions", { dir, "formats-only": true }, io);
+  assert.ok(!calls.some((call) => call.startsWith("draft")));
+  assert.equal(lender.draft.questions.length, 0);
+  await runNiche("horse racing", { dir }, io);
+  const borrowed = JSON.parse(await readFile(path.join(dir, "horse-racing", "worth-testing.json"), "utf8"));
+  assert.deepEqual(borrowed.map((entry) => [entry.from, entry.value, entry.examples]), [["car-auctions", "list", undefined]]);
 });
