@@ -1,0 +1,128 @@
+{
+  "questions": {
+    "hook_type": {
+      "type": "choice",
+      "instructions": "Which kind of opening does the post use in its first sentence, first slide or first two seconds?",
+      "criteria": {
+        "number_or_list": "Opens on a number or a count of items (\"3 fixes\", \"7 tools\").",
+        "question": "Opens by asking the viewer a question.",
+        "bold_claim": "Opens on a strong or surprising statement.",
+        "contrarian": "Opens by saying a common belief or habit is wrong.",
+        "problem": "Opens on a pain or a mistake the viewer has.",
+        "result_first": "Opens by showing or stating the end result.",
+        "story": "Opens on a personal moment or anecdote.",
+        "how_to": "Opens by promising to teach a specific thing.",
+        "other": "None of the above, or no clear opening."
+      }
+    },
+    "first_frame": {
+      "type": "choice",
+      "instructions": "What does the first frame or first slide mainly show?",
+      "criteria": {
+        "face": "A person's face, talking or reacting.",
+        "text_only": "Words on a plain or blurred background.",
+        "screen_or_product": "A screen recording, an app or a product.",
+        "action": "Something happening: a place, a process, hands at work.",
+        "graphic": "A chart, a diagram, an illustration or a meme image.",
+        "unknown": "The picture is not available, so it cannot be told."
+      }
+    },
+    "format": {
+      "type": "choice",
+      "instructions": "Which format is the post?",
+      "criteria": {
+        "talking_head": "One person speaking to the camera for most of it.",
+        "voiceover": "A voice over footage, stills or animation, with no speaker on camera.",
+        "screen_recording": "Mostly a recorded screen or app walkthrough.",
+        "carousel": "A set of still slides the viewer swipes through.",
+        "skit": "Acted scenes or characters.",
+        "demo": "A product or process shown working.",
+        "montage": "Clips cut to music with little or no speech.",
+        "other": "None of the above."
+      }
+    },
+    "angle": {
+      "type": "choice",
+      "instructions": "What is the post's main angle on its topic?",
+      "criteria": {
+        "teach": "Explains how to do something, step by step or as tips.",
+        "mistake": "Warns about an error and what to do instead.",
+        "personal_story": "Tells what happened to the creator or a customer.",
+        "comparison": "Sets two or more options against each other.",
+        "news_or_trend": "Reacts to something recent.",
+        "proof": "Shows a result, a number or a case as evidence.",
+        "opinion": "Argues a point of view.",
+        "entertainment": "Mainly there to amuse.",
+        "other": "None of the above."
+      }
+    },
+    "pacing": {
+      "type": "score",
+      "instructions": "How fast does the post move from one idea or shot to the next?",
+      "criteria": [
+        "Slow: one idea or shot held for a long time.",
+        "Steady: a new idea or shot every several seconds.",
+        "Fast: a new idea or shot every two or three seconds.",
+        "Very fast: cuts or new lines about every second."
+      ]
+    },
+    "call_to_action": {
+      "type": "choice",
+      "instructions": "What does the post ask the viewer to do, in its words, its last frame or its caption?",
+      "criteria": {
+        "none": "It asks for nothing.",
+        "follow": "Follow or subscribe.",
+        "comment": "Comment, reply or answer a question.",
+        "save_or_share": "Save the post or send it to someone.",
+        "link_or_buy": "Visit a link, sign up, download or buy.",
+        "other": "Some other request."
+      }
+    },
+    "face_on_camera": {
+      "type": "noul",
+      "instructions": "Is a person's face visible on camera for a meaningful part of the post?",
+      "criteria": { "true": "A face is on screen for much of it.", "false": "No face, or only a brief glimpse." }
+    },
+    "text_on_screen": {
+      "type": "score",
+      "instructions": "How much written text is shown on screen?",
+      "criteria": [
+        "None.",
+        "A title or a few words.",
+        "Captions or text for most of the post.",
+        "Text is the main content, as in a text slide."
+      ]
+    },
+    "length_band": {
+      "type": "choice",
+      "instructions": "How long is the post?",
+      "criteria": {
+        "under_15s": "A video shorter than 15 seconds.",
+        "15_to_30s": "A video of 15 to 30 seconds.",
+        "30_to_60s": "A video of 30 to 60 seconds.",
+        "over_60s": "A video longer than 60 seconds.",
+        "stills": "A carousel or a single image.",
+        "unknown": "The media is not available, so it cannot be told."
+      }
+    },
+    "names_audience": {
+      "type": "noul",
+      "instructions": "Does the post say who it is for, by naming a kind of person, role or situation?",
+      "criteria": { "true": "A viewer can tell who is being addressed (\"founders\", \"if you run payroll\").", "false": "It could be addressed to anyone." }
+    },
+    "concrete_detail": {
+      "type": "noul",
+      "instructions": "Does the opening contain a specific number, name, time span or result?",
+      "criteria": { "true": "It states a figure, a named thing or a measurable outcome.", "false": "It stays general (\"better results\", \"save time\")." }
+    },
+    "production": {
+      "type": "score",
+      "instructions": "How produced does the post look?",
+      "criteria": [
+        "Raw: one take on a phone, no edits.",
+        "Light edits: cuts and captions.",
+        "Designed: graphics, b-roll, sound design or motion."
+      ]
+    }
+  }
+}
