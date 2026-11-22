@@ -77,8 +77,8 @@ export async function runCli(argv, io = {}) {
   const moduleInvocation = command === "module" ? parseModuleInvocation(firstArg, rest) : null;
   const subjectInvocation = command === "subject" ? parseSubjectInvocation(firstArg, rest) : null;
   // launchclip score hooks|batch|fit|predict <target> [flags], score library <action> <target> [flags]; plain `score <target>` is the rubric gate.
-  const scoreAction = command === "score" && ["hooks", "batch", "library", "rubric", "fit", "predict"].includes(firstArg) ? firstArg : null;
-  const scoreArgs = scoreAction ? rest.slice(0, scoreAction === "library" || scoreAction === "rubric" ? 2 : 1).filter((arg, index, all) => !arg.startsWith("--") && all.slice(0, index).every((before) => !before.startsWith("--"))) : [];
+  const scoreAction = command === "score" && ["hooks", "batch", "library", "rubric", "fit", "predict", "niche"].includes(firstArg) ? firstArg : null;
+  const scoreArgs = scoreAction ? rest.slice(0, scoreAction === "library" ? 3 : scoreAction === "rubric" ? 2 : 1).filter((arg, index, all) => !arg.startsWith("--") && all.slice(0, index).every((before) => !before.startsWith("--"))) : [];
   const scoreInvocation = scoreAction ? { action: scoreAction, args: scoreArgs, flagArgs: rest.slice(scoreArgs.length) } : null;
   // launchclip script check <file> [flags]; plain `script <workspace>` is the teleprompter.
   const scriptCheckFile = command === "script" && firstArg === "check" && rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
@@ -515,6 +515,8 @@ export async function runCli(argv, io = {}) {
       return;
     } else if (scoreInvocation) {
       const { runScoreCommand } = await import("./scoring/cli.js");
+      // --rubric may name a niche (its folder under the niches directory) instead of a file.
+      if (flags.rubric) flags.rubric = (await import("./scoring/niche.js")).resolveRubric(flags.rubric, flags);
       await runScoreCommand(scoreInvocation.action, scoreInvocation.args, flags, { stdout, stderr });
       return;
     } else if (command === "score") {
@@ -776,7 +778,7 @@ export function parseFlags(args) {
       index += 1;
       continue;
     }
-    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "comfy-allow-remote" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "allow-needs-repair" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "base-edited" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "face-track" || name === "no-direction" || name === "prototype" || name === "overshoot" || name === "off" || name === "refresh-free-vision-models" || name === "capacity" || name === "still" || name === "models" || name === "no-sheet" || name === "no-pin" || name === "animatic" || name === "retake" || name === "comps" || name === "own" || name === "render") {
+    if (name === "keep-fillers" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "comfy-allow-remote" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "allow-needs-repair" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "base-edited" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "face-track" || name === "no-direction" || name === "prototype" || name === "overshoot" || name === "off" || name === "refresh-free-vision-models" || name === "capacity" || name === "still" || name === "models" || name === "no-sheet" || name === "no-pin" || name === "animatic" || name === "retake" || name === "comps" || name === "own" || name === "render" || name === "widen" || name === "text-only" || name === "with-video" || name === "no-transcribe" || name === "formats-only") {
       flags[name] = true;
       continue;
     }

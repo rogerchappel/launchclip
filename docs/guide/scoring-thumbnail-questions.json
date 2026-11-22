@@ -1,0 +1,64 @@
+{
+  "questions": {
+    "cover_shows_face": {
+      "type": "noul",
+      "instructions": "Is a person's face clearly visible in the image?",
+      "criteria": { "true": "At least one human face can be seen clearly.", "false": "No human face is shown, or it is hidden, turned away or too small to make out." }
+    },
+    "cover_has_text": {
+      "type": "noul",
+      "instructions": "Is there text overlaid on the image, such as a title or caption?",
+      "criteria": { "true": "Words have been added on top of the picture.", "false": "There is no added text. Words that are part of the scene, like a sign or a logo, do not count." }
+    },
+    "cover_text_readable": {
+      "type": "noul",
+      "instructions": "Is there overlaid text large enough to read at a glance on a phone screen?",
+      "criteria": { "true": "The added text is large, with clear contrast, and can be read in a second.", "false": "There is no added text, or it is small, crowded or hard to read." }
+    },
+    "cover_text_short": {
+      "type": "noul",
+      "instructions": "Is there overlaid text of seven words or fewer?",
+      "criteria": { "true": "The added text is seven words or fewer in all.", "false": "There is no added text, or it runs to more than seven words." }
+    },
+    "cover_one_subject": {
+      "type": "noul",
+      "instructions": "Does the image have one clear main subject?",
+      "criteria": { "true": "One person, animal or object clearly dominates the frame.", "false": "Several things compete for attention, or nothing stands out." }
+    },
+    "cover_close_up": {
+      "type": "noul",
+      "instructions": "Is the main subject shown in close-up?",
+      "criteria": { "true": "The main subject fills most of the frame.", "false": "The subject is small in the frame, or the shot is wide." }
+    },
+    "cover_in_action": {
+      "type": "noul",
+      "instructions": "Does the image show something happening, rather than a posed or still subject?",
+      "criteria": { "true": "The subject is caught in the middle of an action or movement.", "false": "The subject is posed, standing still or at rest." }
+    },
+    "cover_looks_at_camera": {
+      "type": "noul",
+      "instructions": "Is a person looking straight at the camera?",
+      "criteria": { "true": "A person's eyes meet the viewer.", "false": "No person is shown, or they look elsewhere." }
+    },
+    "cover_strong_emotion": {
+      "type": "noul",
+      "instructions": "Does a person in the image show a strong facial expression?",
+      "criteria": { "true": "A person shows clear surprise, joy, anger, fear or effort.", "false": "No person is shown, or their expression is neutral." }
+    },
+    "cover_bright": {
+      "type": "noul",
+      "instructions": "Is the image bright and well lit?",
+      "criteria": { "true": "The picture is bright, and its subject is easy to see.", "false": "The picture is dark, dim or murky." }
+    },
+    "cover_plain_background": {
+      "type": "noul",
+      "instructions": "Is the background plain or uncluttered?",
+      "criteria": { "true": "The background is simple, blurred or a single tone.", "false": "The background is busy or full of detail." }
+    },
+    "cover_is_graphic": {
+      "type": "noul",
+      "instructions": "Is the image a designed graphic, a screenshot or a collage, rather than a single photo or video frame?",
+      "criteria": { "true": "It was assembled or designed: a graphic, a screenshot, or several pictures combined.", "false": "It is one photo or one frame of video." }
+    }
+  }
+}

@@ -10,7 +10,7 @@
 //
 // Plain `launchclip score <project|file>` is the rubric gate (src/score_cli.js).
 
-export const SCORE_ACTIONS = Object.freeze(["hooks", "batch", "library", "rubric", "fit", "predict"]);
+export const SCORE_ACTIONS = Object.freeze(["hooks", "batch", "library", "rubric", "fit", "predict", "niche"]);
 
 /** The funnel's summary as lines a person reads. */
 export function formatFunnel(summary) {
@@ -42,11 +42,36 @@ export async function runScoreCommand(action, args, flags, io) {
     for (const warning of result.warnings) write(`warning: ${warning}\n`);
     return write(`${result.creators} creators found, ${result.added} posts collected, ${result.count} in the library: ${result.out}\nNext: launchclip score rubric draft ${result.out}\n`);
   }
+  if (action === "niche") {
+    const { runNiche, formatNiche } = await import("./niche.js");
+    const summary = await runNiche(args[0], flags, { stderr: io.stderr });
+    return flags.json ? json(summary) : write(formatNiche(summary));
+  }
   if (action === "rubric") {
     if (args[0] !== "draft") throw new Error("usage: launchclip score rubric draft <library.jsonl> [--niche \"<a few words>\"] [--questions <n>] [--out rubric.draft.json]");
     const { runRubricDraft, formatRubricDraft } = await import("./rubric.js");
     const summary = await runRubricDraft(args[1], flags);
     return flags.json ? json(summary) : write(formatRubricDraft(summary));
+  }
+  if (action === "library" && args[0] === "evidence") {
+    const { runEvidence } = await import("./evidence.js");
+    const result = await runEvidence(args[1], flags, { stdout: io.stderr });
+    return flags.json ? json(result) : write(`${result.counts.posts} posts read: ${result.counts.transcripts} transcripts, ${result.counts.thumbs} covers kept (${result.counts.subtitle_failures + result.counts.thumb_failures} could not be fetched): ${result.out}\n`);
+  }
+  if (action === "library" && args[0] === "keywords") {
+    const { runKeywords, formatKeywords } = await import("./keywords.js");
+    const result = await runKeywords(args[1], flags);
+    return flags.json ? json(result) : write(formatKeywords(result));
+  }
+  if (action === "library" && args[0] === "compare") {
+    const { runCompare } = await import("./compare.js");
+    await runCompare(args.slice(1), flags, { stdout: io.stdout }); // prints itself
+    return undefined;
+  }
+  if (action === "library" && args[0] === "video") {
+    const { runVideo } = await import("./video.js");
+    const result = await runVideo(args[1], flags, { stdout: io.stderr });
+    return flags.json ? json(result) : write(`${result.counts.done} of ${result.counts.sampled} videos read, ${result.counts.failed} failed: ${result.out}\n`);
   }
   if (action === "library") {
     const { runLibrary } = await import("./library.js");

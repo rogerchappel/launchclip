@@ -4,6 +4,17 @@
 
 ### Added
 
+- `launchclip score niche "<keyword>"` goes from a keyword to a drafted rubric
+  with its evidence, in one folder a niche: it finds creators, widens the
+  keywords, reads each post's transcript, spoken hook and cover without
+  downloading video, tags formats, drafts questions per part and writes a
+  report. `--rubric <niche name>` then uses that niche's rubric. New steps, also
+  on their own: `score library evidence`, `keywords`, `compare` and `video`.
+  The rubric drafter now tests questions per part, reports facts such as
+  length and pace, takes a `--second` library, and says when a draft is ready.
+  For a brand with no results yet: `--formats-only` collects a niche to borrow
+  formats from, the report lists formats that earn attention there and are
+  rare in yours, and `score hooks --formats <niche>` writes hooks in them.
 - **A rubric for your industry, from keywords.** `launchclip score library
   discover "<keywords>"` finds a niche's creators by search and collects
   their recent posts, ordinary ones included (Apify, your own token).
