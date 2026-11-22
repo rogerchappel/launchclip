@@ -4,6 +4,14 @@
 
 ### Added
 
+- **A rubric for your industry, from keywords.** `launchclip score library
+  discover "<keywords>"` finds a niche's creators by search and collects
+  their recent posts, ordinary ones included (Apify, your own token).
+  `launchclip score rubric draft <library>` has a writing model propose closed
+  questions from each creator's best and ordinary posts, asks them of every
+  other post, and keeps as gates only the ones that separate winners there;
+  the rest come back as tags to review. A question with `"gate": false` is
+  recorded and never fails anything ([guide](docs/guide/scoring.md#build-a-rubric-for-your-industry)).
 - **Scoring, end to end.** `launchclip score hooks` writes hundreds of hooks
   with the rubric's rules in hand, scores them and keeps a varied shortlist.
   `launchclip score library` imports real posts from your niche (a file, or

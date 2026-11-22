@@ -159,7 +159,7 @@ const alike = (a, b) => hookSimilarity({ hook: { text: a } }, { hook: { text: b 
  */
 export function rubricRequirements(rubric, kind = "hook") {
   return Object.values(rubric.questions)
-    .filter((question) => question.type === "noul" && (question.on == null || [question.on].flat().includes(kind)))
+    .filter((question) => question.type === "noul" && question.gate !== false && (question.on == null || [question.on].flat().includes(kind)))
     .map((question) => `${question.want === false ? "Never" : "Always"}: ${question.criteria?.true ?? question.instructions}`);
 }
 
@@ -278,7 +278,9 @@ export async function runFunnel(target, flags = {}, io = {}) {
   const fetchImpl = io.fetch ?? globalThis.fetch;
   const costed = async (...request) => {
     const response = await fetchImpl(...request);
-    writeCost += Number((await response.clone().json().catch(() => null))?.usage?.cost) || 0;
+    // Read first, add after: batches overlap, and `+=` across an await loses the others' figures.
+    const cost = Number((await response.clone().json().catch(() => null))?.usage?.cost) || 0;
+    writeCost += cost;
     return response;
   };
   const written = writes ? await timed("write", () => writeHooks({

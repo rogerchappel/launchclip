@@ -2,6 +2,27 @@
 
 `launchclip score` asks a fast decision model a list of closed questions about every hook, script or carousel slide you give it, and tells you which ones break your rules. It is a check, not a judge of quality: it can tell you a hook names no audience, and it cannot tell you a hook will perform. See the [scoring roadmap](../SCORING_ROADMAP.md) for what is planned on top of it.
 
+## Build a rubric for your industry
+
+You do not have to write the rubric from a blank page, or browse social media for examples. Start from keywords:
+
+1. **Find your niche's creators and collect their posts** ([guide](scoring-discover.md)). Needs an Apify account.
+
+   ```bash
+   launchclip score library discover "sourdough, home baking" --platform tiktok
+   ```
+
+2. **Draft a rubric from what separates their best posts from their ordinary ones** ([guide](scoring-rubric-draft.md)).
+
+   ```bash
+   launchclip score rubric draft library.jsonl --niche "home baking"
+   ```
+
+3. **Review the draft.** Delete questions that are noise, and add your own rules: claims you never make, your voice, your audience.
+4. **Measure it** against a sample you label yourself ([guide](scoring-measure.md)), then use it everywhere below.
+
+A draft needs a few hundred posts with numbers before it can prove anything. With fewer, every question comes back as a tag for you to judge. Until then, start from [`scoring-rubric.json`](scoring-rubric.json).
+
 ## What you need
 
 - An OpenRouter key in `OPENROUTER_API_KEY`. Scoring 1,000 short items costs a few cents.
@@ -84,6 +105,8 @@ A script file on its own (`SCRIPT.json`, `NARRATION.json`, a video's `storyboard
 |---|---|
 | [Measure a model](scoring-measure.md) | How often a model agrees with your own labels, before you trust it |
 | [Hook funnel](scoring-funnel.md) | `launchclip score hooks`: write hundreds of hooks, keep a varied shortlist |
+| [Discover by keyword](scoring-discover.md) | `launchclip score library discover`: keywords in, a niche's creators and their posts out |
+| [Draft a rubric](scoring-rubric-draft.md) | `launchclip score rubric draft`: closed questions that separate a library's winners, for you to review |
 | [Post library](scoring-library.md) | `launchclip score library`: real posts from your niche, tagged and joined to their numbers |
 | [Fitted layer](scoring-fit.md) | `launchclip score fit`: a small model of what goes with above-normal results |
 | [Daily batch](scoring-batch.md) | `launchclip score batch`: a day's carousel plans from one topic |

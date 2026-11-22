@@ -12,6 +12,7 @@ import { parseRubric } from "../src/scorer.js";
 import { formatBatch, runBatch } from "../src/scoring/batch.js";
 import { formatFunnel } from "../src/scoring/cli.js";
 import { quotaFromResults, rubricRequirements, runFunnel, shortlist } from "../src/scoring/funnel.js";
+import { draftRubric } from "../src/scoring/rubric.js";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const RUBRIC = {
@@ -45,6 +46,16 @@ async function workspace() {
 test("rubricRequirements turns a kind's gates into rules for the writer", () => {
   assert.deepEqual(rubricRequirements(parseRubric(RUBRIC)), ["Always: It states a figure.", "Never: It opens with a greeting."]);
   assert.deepEqual(rubricRequirements(parseRubric(RUBRIC), "slide"), ["Never: It opens with a greeting."]);
+  // A tag (gate: false) is not a rule: the writer is not told to follow it.
+  assert.deepEqual(rubricRequirements(parseRubric({ questions: { tagged: { ...RUBRIC.questions.has_number, gate: false } } })), []);
+});
+
+test("draftRubric gates only on what most winners do, and tags the rest", () => {
+  const question = (key) => ({ key, type: "noul", instructions: `${key}?`, criteria: { true: "yes", false: "no" } });
+  const verdict = (key, direction, hits) => ({ key, verdict: "keep", direction, yes_rate_hits: hits, yes_rate_rest: 0.4, rho: 0.3, n: 200 });
+  const rubric = draftRubric(["most", "some", "avoid", "sometimes_avoid"].map(question), [verdict("most", "more", 0.9), verdict("some", "more", 0.3), verdict("avoid", "less", 0.05), verdict("sometimes_avoid", "less", 0.5)]);
+  assert.deepEqual(Object.fromEntries(Object.entries(rubric.questions).map(([key, entry]) => [key, entry.gate === false ? "tag" : entry.want === false ? "never" : "always"])), { most: "always", some: "tag", avoid: "never", sometimes_avoid: "tag" });
+  parseRubric(rubric);
 });
 
 test("quotaFromResults gives the best third of measured types a slot and takes one from the worst", () => {

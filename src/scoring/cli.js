@@ -2,13 +2,15 @@
 //
 //   score hooks <topic|brief.md>                      write many hooks, keep a varied shortlist
 //   score batch <topic|brief.md>                      the day's carousel plans, each held to the rubric
+//   score library discover "<keywords>"               find a niche's creators by keyword, collect their posts
 //   score library import|fetch|tag|map <target>       a library of real posts, tagged, and its niche map
+//   score rubric draft <library.jsonl>                draft a rubric from what separates a library's winners
 //   score fit <library.tagged.jsonl>                  a small model of which answers go with above-normal results
 //   score predict <scored.json|tagged.jsonl>          that model's guess for new items
 //
 // Plain `launchclip score <project|file>` is the rubric gate (src/score_cli.js).
 
-export const SCORE_ACTIONS = Object.freeze(["hooks", "batch", "library", "fit", "predict"]);
+export const SCORE_ACTIONS = Object.freeze(["hooks", "batch", "library", "rubric", "fit", "predict"]);
 
 /** The funnel's summary as lines a person reads. */
 export function formatFunnel(summary) {
@@ -32,6 +34,19 @@ export async function runScoreCommand(action, args, flags, io) {
     const { runBatch, formatBatch } = await import("./batch.js");
     const summary = await runBatch(args[0], flags, { stderr: io.stderr });
     return flags.json ? json(summary) : write(formatBatch(summary));
+  }
+  if (action === "library" && args[0] === "discover") {
+    const { runDiscover } = await import("./discover.js");
+    const result = await runDiscover(args[1], flags, { stderr: io.stderr });
+    if (flags.json) return json(result);
+    for (const warning of result.warnings) write(`warning: ${warning}\n`);
+    return write(`${result.creators.length} creators found, ${result.added} posts collected, ${result.count} in the library: ${result.out}\nNext: launchclip score rubric draft ${result.out}\n`);
+  }
+  if (action === "rubric") {
+    if (args[0] !== "draft") throw new Error("usage: launchclip score rubric draft <library.jsonl> [--niche \"<a few words>\"] [--questions <n>] [--out rubric.draft.json]");
+    const { runRubricDraft, formatRubricDraft } = await import("./rubric.js");
+    const summary = await runRubricDraft(args[1], flags);
+    return flags.json ? json(summary) : write(formatRubricDraft(summary));
   }
   if (action === "library") {
     const { runLibrary } = await import("./library.js");
