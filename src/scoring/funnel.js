@@ -2,9 +2,11 @@
 //
 //   writeHooks({topic, brief?, count, model, batchSize?, concurrency?, client?, onBatchError?})
 //                                          → [{id, kind: "hook", text, source: "written"}]
+//   assembleHooks({parts, count, seed?})  → [{id, kind: "hook", text, source: "assembled"}]
 //
 // Writing is the slow step, so it is many small requests side by side to a
 // fast model, each with its own slant so the batches do not repeat each other.
+import { createHash } from "node:crypto";
 import { mapLimit } from "../concurrency.js";
 import { createStructuredClient } from "../model_provider.js";
 
@@ -83,4 +85,56 @@ export async function writeHooks({ topic, brief = "", count, model = process.env
   return dropExactDuplicates(written.flat().filter(Boolean).map((text) => ({ text })))
     .slice(0, count)
     .map((item, index) => ({ id: `written-${index + 1}`, kind: "hook", text: item.text, source: "written" }));
+}
+
+export const HOOK_SLOTS = Object.freeze({ audience: "audiences", number: "numbers", topic: "topics", payoff: "payoffs" });
+
+// A whole number from a seed and a key: the same pair always gives the same one.
+const draw = (seed, key) => createHash("sha1").update(`${seed}:${key}`).digest().readUInt32BE(0);
+
+/** value: the parsed parts file. → the parts, or throws naming every problem. */
+export function parseHookParts(value) {
+  const errors = [];
+  const lists = Object.fromEntries(["openers", ...Object.values(HOOK_SLOTS)].map((name) => [name, value?.[name] ?? []]));
+  for (const [name, list] of Object.entries(lists)) {
+    if (!Array.isArray(list) || list.some((entry) => typeof entry !== "string" && typeof entry !== "number")) errors.push(`${name} must be a list of text`);
+  }
+  if (!errors.length && !lists.openers.length) errors.push('openers needs at least one template, such as "{number} mistakes {audience} make with {topic}"');
+  if (!errors.length) {
+    for (const opener of lists.openers) {
+      for (const [, slot] of String(opener).matchAll(/\{(\w+)\}/g)) {
+        if (!HOOK_SLOTS[slot]) errors.push(`opener "${opener}" uses {${slot}}; the slots are ${Object.keys(HOOK_SLOTS).map((name) => `{${name}}`).join(" ")}`);
+        else if (!lists[HOOK_SLOTS[slot]].length) errors.push(`opener "${opener}" uses {${slot}}, but ${HOOK_SLOTS[slot]} is empty`);
+      }
+    }
+  }
+  if (errors.length) throw new Error(`hook parts: ${errors.join("; ")}`);
+  return lists;
+}
+
+/**
+ * `count` hooks built from parts, with no model: an opener template and a
+ * value for each of its slots, drawn by seed, no text twice. The same parts,
+ * count and seed give the same hooks. Fewer than `count` come back when the
+ * parts cannot make that many.
+ */
+export function assembleHooks({ parts, count, seed = "" } = {}) {
+  const lists = parseHookParts(parts);
+  if (!(count >= 1)) throw new Error(`assembleHooks needs a count of 1 or more; got ${count}`);
+  const items = [];
+  const seen = new Set();
+  // shortcut: draws and rejects repeats, which wastes tries only when count is close to every combination the
+  // parts can make; the cap on tries ends it then. Enumerate the combinations if parts files grow that tight.
+  for (let n = 0; items.length < count && n < count * 50 + 1000; n += 1) {
+    const opener = String(lists.openers[draw(seed, `${n}:opener`) % lists.openers.length]);
+    const raw = opener.replace(/\{(\w+)\}/g, (_, slot) => {
+      const list = lists[HOOK_SLOTS[slot]];
+      return String(list[draw(seed, `${n}:${slot}`) % list.length]);
+    }).replace(/\s+/g, " ").trim();
+    const text = raw.charAt(0).toUpperCase() + raw.slice(1);
+    if (!text || seen.has(sameText(text))) continue;
+    seen.add(sameText(text));
+    items.push({ id: `assembled-${items.length + 1}`, kind: "hook", text, source: "assembled" });
+  }
+  return items;
 }

@@ -1,8 +1,19 @@
 // The hook funnel (src/scoring/funnel.js) against a stand-in writing client
 // and a stand-in for the hosted decision model: no network, no key.
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
-import { writeHooks } from "../src/scoring/funnel.js";
+import { assembleHooks, parseHookParts, writeHooks } from "../src/scoring/funnel.js";
+
+const ROOT = path.resolve(import.meta.dirname, "..");
+const PARTS = {
+  openers: ["{number} mistakes {audience} make with {topic}", "{audience}: {topic} can {payoff}", "why {topic} matters"],
+  audiences: ["new runners", "founders"],
+  numbers: [3, 5, 7],
+  topics: ["pacing", "sleep"],
+  payoffs: ["save you an hour a day", "cut your costs"]
+};
 
 // Writes `per` hooks a batch, numbered by batch, plus one line every batch repeats.
 function fakeWriter(calls = [], { per = 5, failOn = () => false } = {}) {
@@ -36,4 +47,23 @@ test("writeHooks keeps going past a failed batch and throws when every batch fai
   await assert.rejects(writeHooks({ topic: "t", count: 10, batchSize: 5, client: fakeWriter([], { failOn: () => true }) }), /refused/);
   await assert.rejects(writeHooks({ topic: " ", count: 10, client: fakeWriter() }), /needs a topic/);
   await assert.rejects(writeHooks({ topic: "t", count: 10, model: "" }), /writing model/);
+});
+
+test("assembleHooks fills templates by seed, without repeats, the same way every time", async () => {
+  const hooks = assembleHooks({ parts: PARTS, count: 10, seed: "a" });
+  assert.equal(hooks.length, 10);
+  assert.equal(new Set(hooks.map((hook) => hook.text)).size, 10);
+  assert.ok(hooks.every((hook) => hook.kind === "hook" && hook.source === "assembled" && !/[{}]/.test(hook.text) && /^[A-Z0-9]/.test(hook.text)));
+  assert.deepEqual(assembleHooks({ parts: PARTS, count: 10, seed: "a" }), hooks);
+  assert.notDeepEqual(assembleHooks({ parts: PARTS, count: 10, seed: "b" }).map((hook) => hook.text), hooks.map((hook) => hook.text));
+  // 3*2*2 + 2*2*2 + 2 = 22 distinct texts are all these parts can make.
+  assert.equal(assembleHooks({ parts: PARTS, count: 500, seed: "a" }).length, 22);
+  const example = JSON.parse(await readFile(path.join(ROOT, "docs/guide/scoring-hook-parts.json"), "utf8"));
+  assert.equal(assembleHooks({ parts: example, count: 200, seed: 1 }).length, 200);
+});
+
+test("parseHookParts names an unknown slot and an empty list", () => {
+  assert.throws(() => parseHookParts({ openers: [] }), /at least one template/);
+  assert.throws(() => parseHookParts({ openers: ["{who} and {number}"], numbers: [] }), (error) => error.message.includes("{who}") && error.message.includes("numbers is empty"));
+  assert.throws(() => parseHookParts({ openers: "x" }), /openers must be a list/);
 });
