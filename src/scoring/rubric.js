@@ -205,7 +205,9 @@ export function draftRubric(questions, verdicts, { passAt = DEFAULT_PASS_AT } = 
     for (const question of questions) {
       const { key, ...evidence } = byKey.get(question.key) ?? {};
       if (evidence.verdict !== wanted) continue;
-      drafted[key] = { type: question.type, instructions: question.instructions, criteria: question.criteria, ...(wanted === "unproven" ? { gate: false } : evidence.direction === "less" ? { want: false } : {}), evidence };
+      // A gate fails what breaks it, so it must be something most winners do (or, for "less", few do). A kept question winners only sometimes meet stays a tag: gating on it would fail most of the winners too.
+      const safeGate = evidence.direction === "less" ? evidence.yes_rate_hits <= 0.25 : evidence.yes_rate_hits >= 0.75;
+      drafted[key] = { type: question.type, instructions: question.instructions, criteria: question.criteria, ...(wanted === "unproven" || !safeGate ? { gate: false } : evidence.direction === "less" ? { want: false } : {}), evidence };
     }
   }
   return { pass_at: passAt, questions: drafted };

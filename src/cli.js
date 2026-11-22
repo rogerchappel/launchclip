@@ -77,8 +77,8 @@ export async function runCli(argv, io = {}) {
   const moduleInvocation = command === "module" ? parseModuleInvocation(firstArg, rest) : null;
   const subjectInvocation = command === "subject" ? parseSubjectInvocation(firstArg, rest) : null;
   // launchclip score hooks|batch|fit|predict <target> [flags], score library <action> <target> [flags]; plain `score <target>` is the rubric gate.
-  const scoreAction = command === "score" && ["hooks", "batch", "library", "fit", "predict"].includes(firstArg) ? firstArg : null;
-  const scoreArgs = scoreAction ? rest.slice(0, scoreAction === "library" ? 2 : 1).filter((arg, index, all) => !arg.startsWith("--") && all.slice(0, index).every((before) => !before.startsWith("--"))) : [];
+  const scoreAction = command === "score" && ["hooks", "batch", "library", "rubric", "fit", "predict"].includes(firstArg) ? firstArg : null;
+  const scoreArgs = scoreAction ? rest.slice(0, scoreAction === "library" || scoreAction === "rubric" ? 2 : 1).filter((arg, index, all) => !arg.startsWith("--") && all.slice(0, index).every((before) => !before.startsWith("--"))) : [];
   const scoreInvocation = scoreAction ? { action: scoreAction, args: scoreArgs, flagArgs: rest.slice(scoreArgs.length) } : null;
   // launchclip script check <file> [flags]; plain `script <workspace>` is the teleprompter.
   const scriptCheckFile = command === "script" && firstArg === "check" && rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
