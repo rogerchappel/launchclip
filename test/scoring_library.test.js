@@ -1,12 +1,12 @@
 // The post library (src/scoring/library.js) against stand-ins for Apify and
 // the hosted decision model: no network, no key, no real posts.
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { parseRubric } from "../src/scorer.js";
-import { DEFAULT_LIBRARY_MODEL, MAX_INLINE_MEDIA_BYTES, fetchApify, importPosts, parseCsv, tagPosts, withOutliers } from "../src/scoring/library.js";
+import { DEFAULT_LIBRARY_MODEL, MAX_INLINE_MEDIA_BYTES, fetchApify, formatNicheMap, importPosts, nicheMap, parseCsv, runLibrary, tagPosts, withOutliers } from "../src/scoring/library.js";
 
 const tmp = () => mkdtemp(path.join(os.tmpdir(), "launchclip-library-"));
 
@@ -128,4 +128,73 @@ test("tagPosts sends words and media as state parts and records every answer as 
   const [off] = await tagPosts(rows.slice(1, 2), TAGS, { media: false, apiKey: "k", fetch: fakeModel() });
   assert.equal(off.media_skipped, true);
   await assert.rejects(tagPosts(rows.slice(0, 1), TAGS, { apiKey: "k", fetch: async () => new Response("no credit", { status: 402 }) }), /answered 402/);
+});
+
+const tagged = (hook, face, outlier, extra = {}) => ({ id: `${hook}-${outlier}`, tags: { hook_type: hook, face, pacing: null, ...extra }, outlier });
+
+test("nicheMap counts each tag value, its median outlier and its hits, alone and with hook_type", () => {
+  const rows = [tagged("number", 0.9, 3), tagged("number", 0.8, 2), tagged("number", 0.7, 0.5), tagged("number", 0.2, null), tagged("question", 0.1, 0.8), ...Array.from({ length: 5 }, (_, index) => tagged("other", 0.1, 0.4 + index / 10))];
+  const map = nicheMap(rows);
+  assert.deepEqual([map.rows, map.measured], [10, 9]);
+  assert.deepEqual(map.tags.hook_type.number, { count: 4, share: 0.4, median_outlier: 2, hit_share: 0.667 });
+  assert.deepEqual(map.tags.hook_type.question, { count: 1, share: 0.1, median_outlier: 0.8, hit_share: 0 });
+  assert.deepEqual(Object.keys(map.tags.face).sort(), ["0", "1"]);
+  assert.equal(map.tags.pacing, undefined, "a tag with no answer is left out");
+  assert.deepEqual(map.pairs.face["number + 1"], { count: 3, share: 0.3, median_outlier: 2, hit_share: 0.667 });
+  assert.equal(map.pairs.hook_type, undefined);
+  assert.match(map.caution, /only 9 post\(s\) have a settled result/);
+  assert.doesNotMatch(map.caution, /hits-only/);
+  const text = formatNicheMap(map);
+  assert.match(text, /Niche map: 10 post\(s\), 9 with a settled result\.\nCaution: only 9/);
+  assert.match(text, /\n {2}number +40% of posts \(4\), median 2x its channel, 67% at 2x or more\n/);
+  assert.match(text, /Crowded \(30% of posts or more\): hook_type=other, hook_type=number, face=0, face=1\n/);
+  assert.match(text, /Open \(10% or fewer; a value no post used is not listed\): hook_type=question\n/);
+  assert.match(text, /Beats its channel's norm[^\n]*: hook_type=number \(2x\), face=1 \(2x\)\n/);
+  assert.match(text, /Pairs with hook_type that beat their channel's norm\n {2}hook_type \+ face: number \+ 1 /);
+
+  const hits = nicheMap(Array.from({ length: 120 }, (_, index) => tagged("number", 0.9, index < 30 ? 0.5 : 3)));
+  assert.match(hits.caution, /^fewer than a third of the posts are below their channel's norm/);
+  assert.equal(nicheMap(Array.from({ length: 120 }, (_, index) => tagged("number", 0.9, index < 60 ? 0.5 : 3))).caution, undefined);
+  assert.equal(nicheMap([{ id: "x", tags: { format: "listicle" }, outlier: null }]).pairs, undefined);
+});
+
+test("runLibrary: import, fetch, tag and map write the library files", async () => {
+  const dir = await tmp();
+  const at = (name) => path.join(dir, name);
+  const lines = async (name) => (await readFile(at(name), "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+  await writeFile(at("posts.json"), JSON.stringify([TIKTOK, INSTAGRAM]));
+  assert.deepEqual(await runLibrary("import", at("posts.json"), { out: at("library.jsonl") }), { action: "import", out: at("library.jsonl"), count: 2, added: 2 });
+
+  // A second source adds to the library and replaces the post it already holds.
+  await writeFile(at("input.json"), JSON.stringify({ hashtags: ["dev"] }));
+  const before = process.env.APIFY_TOKEN;
+  process.env.APIFY_TOKEN = "test-token";
+  try {
+    const apify = async (url, init) => new Response(JSON.stringify(JSON.parse(init.body).hashtags ? [{ ...TIKTOK, playCount: 60000 }, { ...TIKTOK, id: "7302" }] : []), { status: 201 });
+    assert.equal((await runLibrary("fetch", "clockworks/tiktok-scraper", { input: at("input.json"), out: at("library.jsonl") }, { fetch: apify })).count, 3);
+  } finally {
+    if (before === undefined) delete process.env.APIFY_TOKEN; else process.env.APIFY_TOKEN = before;
+  }
+  assert.deepEqual((await lines("library.jsonl")).map((row) => [row.id, row.metrics.views]), [["7301", 60000], ["33", 8000], ["7302", 55000]]);
+
+  await writeFile(at("rubric.json"), JSON.stringify({ questions: TAGS.questions }));
+  const key = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = "test-key";
+  try {
+    assert.deepEqual(await runLibrary("tag", at("library.jsonl"), { rubric: at("rubric.json") }, { fetch: fakeModel() }), { action: "tag", out: at("library.tagged.jsonl"), count: 3, media_skipped: 0 });
+  } finally {
+    if (key === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = key;
+  }
+  const rows = await lines("library.tagged.jsonl");
+  assert.deepEqual(rows[0].tags, { hook_type: "number", pacing: 1.8, face: 0.92 });
+  assert.equal(rows[0].outlier, null, "a paid post has no outlier");
+
+  const out = [];
+  const map = await runLibrary("map", at("library.tagged.jsonl"), { out: at("map.json") }, { stdout: { write: (value) => out.push(value) } });
+  assert.equal(map.tags.hook_type.number.count, 2);
+  assert.match(out.join(""), /^Niche map: 3 post\(s\), 0 with a settled result\./);
+  assert.deepEqual(JSON.parse(await readFile(at("map.json"), "utf8")), map);
+  await assert.rejects(runLibrary("tag", at("library.jsonl"), {}), /needs a rubric/);
+  await assert.rejects(runLibrary("publish", "x"), /usage: library import/);
+  await assert.rejects(runLibrary("map", at("nothing.jsonl")), /not found/);
 });
