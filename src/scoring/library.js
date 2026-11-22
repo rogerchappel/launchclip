@@ -362,6 +362,13 @@ async function readJsonl(file) {
 }
 const writeJsonl = (file, rows) => writeFile(file, `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
 
+/** Adds posts to the library at `file` (made if missing): a post with the same platform and id is replaced. → every row now in it. */
+export async function mergeLibrary(file, posts) {
+  const merged = [...new Map([...(existsSync(file) ? await readJsonl(file) : []), ...posts].map((post) => [`${post.platform}:${post.id}`, post])).values()];
+  await writeJsonl(file, merged);
+  return merged;
+}
+
 /**
  * action: "import" | "fetch" | "tag" | "map". io: {stdout?, fetch?}.
  *   import <file>     → library.jsonl          fetch <actor> --input <json> → library.jsonl
@@ -378,9 +385,7 @@ export async function runLibrary(action, target, flags = {}, io = {}) {
     const file = out ?? path.resolve("library.jsonl");
     // --own marks the brand's own posts: the fitted layer can weigh them above a competitor's (src/scoring/fit.js).
     if (flags.own) for (const post of posts) post.own = true;
-    const merged = new Map([...(existsSync(file) ? await readJsonl(file) : []), ...posts].map((post) => [`${post.platform}:${post.id}`, post]));
-    await writeJsonl(file, [...merged.values()]);
-    return { action, out: file, count: merged.size, added: posts.length };
+    return { action, out: file, count: (await mergeLibrary(file, posts)).length, added: posts.length };
   }
   const source = path.resolve(String(target));
   if (action === "tag") {
