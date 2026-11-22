@@ -62,6 +62,15 @@ Run the brand's rubric on every hook, script and carousel slide before any rende
 
 Import results for posted videos and carousels. When variants are posted, later effort moves toward what performs, and the fitted layer is refit. A score is only ever a starting guess.
 
+### 7. A daily carousel batch
+
+- Carousels are the best first target. They are stills and text, so a scorer reads all of a post cheaply, with none of the video limits.
+- One command produces the day's batch (say five to ten carousels) from the brand's research: each is gated, tagged and checked against recent posts, so nobody has to review every one.
+- Posting daily is also what makes the fitted layer possible. A few hundred posts with results takes one to two months at this rate.
+- **One post on three platforms is one piece of content with three results**, not three pieces. Each platform's result is kept separately, which shows what works where, but the count of distinct posts is what the fitted layer learns from.
+- **Several accounts means several angles**, not copies. Give each account its own audience or angle and it becomes a clean test of that angle. Posting the same carousel from several accounts on one platform teaches nothing new and is the kind of duplication platforms penalise.
+- Posting and scheduling are out of scope here. LaunchClip produces the batch and reads the results back.
+
 ## Limits to design around
 
 Video through Gemini Decision 1, from its documentation:
