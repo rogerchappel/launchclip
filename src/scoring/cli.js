@@ -40,7 +40,7 @@ export async function runScoreCommand(action, args, flags, io) {
     const result = await runDiscover(args[1], flags, { stderr: io.stderr });
     if (flags.json) return json(result);
     for (const warning of result.warnings) write(`warning: ${warning}\n`);
-    return write(`${result.creators.length} creators found, ${result.added} posts collected, ${result.count} in the library: ${result.out}\nNext: launchclip score rubric draft ${result.out}\n`);
+    return write(`${result.creators} creators found, ${result.added} posts collected, ${result.count} in the library: ${result.out}\nNext: launchclip score rubric draft ${result.out}\n`);
   }
   if (action === "rubric") {
     if (args[0] !== "draft") throw new Error("usage: launchclip score rubric draft <library.jsonl> [--niche \"<a few words>\"] [--questions <n>] [--out rubric.draft.json]");

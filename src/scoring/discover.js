@@ -17,7 +17,8 @@ import { fetchApify, importPosts, mergeLibrary, withOutliers } from "./library.j
 
 // The Apify actors run by default, per platform: one for the keyword search,
 // one for a creator's posts. Input fields below were read from each actor's
-// input schema page on apify.com (November 2026); nothing was run against them.
+// input schema page on apify.com (November 2026). The TikTok actor has had one
+// small real run; the Instagram actors have not been run.
 export const DEFAULT_ACTORS = Object.freeze({
   tiktok: Object.freeze({ search: "clockworks/tiktok-scraper", posts: "clockworks/tiktok-scraper" }),
   instagram: Object.freeze({ search: "apify/instagram-hashtag-scraper", posts: "apify/instagram-post-scraper" })
