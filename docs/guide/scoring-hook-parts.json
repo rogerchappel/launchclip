@@ -1,0 +1,16 @@
+{
+  "openers": [
+    "{number} mistakes {audience} make with {topic}",
+    "{audience}: {topic} can {payoff}",
+    "I spent {number} weeks on {topic} so {audience} don't have to",
+    "Stop treating {topic} as optional if you want to {payoff}",
+    "What nobody tells {audience} about {topic}",
+    "The {number}-minute fix for {topic} that can {payoff}",
+    "If you are one of the {audience} still guessing at {topic}, read this",
+    "{topic}: {number} things I would do differently to {payoff}"
+  ],
+  "audiences": ["new runners", "weekend cyclists", "desk workers", "busy parents", "first-time marathoners"],
+  "numbers": [3, 5, 7, 10, 30],
+  "topics": ["sleep", "warm-ups", "recovery days", "hydration", "strength training", "pacing"],
+  "payoffs": ["cut your injury risk", "make training feel easier", "get you to the start line fresh", "save you an hour a week"]
+}
