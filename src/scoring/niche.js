@@ -164,7 +164,7 @@ export async function runNiche(target, flags = {}, io = {}) {
   }
   const imports = steps.compare ? others.map((other) => ({ from: other.name, candidates: steps.compare({ name: other.name, rows: withOutliers(other.rows) }, { name, rows: withOutliers(rows) }) })) : [];
 
-  const summary = { name, folder, niche: niche.niche, platform: niche.platform, keywords: niche.keywords, posts: rows.length, creators: new Set(rows.map((row) => row.account)).size, evidence: have, ...(video ? { video: video.counts } : {}), draft, imports: imports.map((entry) => ({ from: entry.from, candidates: entry.candidates.length })), report: files.report, cost_usd: Math.round(((draft.cost_usd ?? 0) + formatsCost) * 1e6) / 1e6, warnings };
+  const summary = { name, folder, niche: niche.niche, platform: niche.platform, keywords: niche.keywords, posts: rows.length, creators: new Set(rows.map((row) => row.account)).size, evidence: have, ...(video ? { video: video.counts } : {}), draft, imports: imports.map((entry) => ({ from: entry.from, candidates: entry.candidates.length })), report: files.report, cost_usd: Math.round(((draft.cost_usd?.total ?? draft.cost_usd ?? 0) + formatsCost) * 1e6) / 1e6, warnings };
   await writeFile(files.report, nicheReport(summary, rows, imports, steps.worthTesting));
   return summary;
 }
@@ -196,7 +196,7 @@ export function nicheReport(summary, rows, imports = [], worthTesting) {
 
   lines.push("", "## Posts to look at", "", "The furthest above and below their own channel's normal.", "");
   const sorted = [...outliers].sort((a, b) => b.outlier - a.outlier);
-  const example = (row) => `- ${row.outlier}× normal, ${row.metrics?.views ?? "?"} views, @${cell(row.account)}: "${cut(row.spoken_hook ?? row.caption)}"${row.url ? ` [open](${row.url})` : ""}`;
+  const example = (row) => `- ${row.outlier >= 10 ? Math.round(row.outlier) : Math.round(row.outlier * 100) / 100}× normal, ${row.metrics?.views ?? "?"} views, @${cell(row.account)}: "${cut(row.spoken_hook ?? row.caption)}"${row.url ? ` [open](${row.url})` : ""}`;
   lines.push("**Above**", "", ...sorted.slice(0, 8).map(example), "", "**Below**", "", ...sorted.slice(-5).map(example));
 
   lines.push("", "## Worth testing here", "");

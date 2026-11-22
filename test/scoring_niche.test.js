@@ -20,7 +20,7 @@ function standIns(calls) {
     evidence: async (rows) => { calls.push("evidence"); return { rows: rows.map(({ raw, ...row }) => ({ ...row, facts: { has_speech: false }, evidence_at: "now" })), counts: { posts: rows.length, transcripts: 0, thumbs: 0 } }; },
     formats: async (rows) => ({ rows: rows.map((row) => ({ ...row, tags: { structure: "list" } })), cost_usd: 0.001 }),
     compare: () => [],
-    draft: async (_library, flags) => { calls.push(`draft:${flags.niche}`); await writeFile(flags.out, JSON.stringify({ questions: {} })); return { cost_usd: 0.002, status: { judging_posts: 6, kept: 0, ready: false }, questions: [{ key: "q", part: "written_hook", instructions: "Does it name a horse?", verdict: "unproven", rho: 0.1, yes_rate_hits: 0.5, yes_rate_rest: 0.25 }] }; }
+    draft: async (_library, flags) => { calls.push(`draft:${flags.niche}`); await writeFile(flags.out, JSON.stringify({ questions: {} })); return { cost_usd: { write: 0.001, score: 0.001, total: 0.002 }, status: { judging_posts: 6, kept: 0, ready: false }, questions: [{ key: "q", part: "written_hook", instructions: "Does it name a horse?", verdict: "unproven", rho: 0.1, yes_rate_hits: 0.5, yes_rate_rest: 0.25 }] }; }
   };
 }
 
