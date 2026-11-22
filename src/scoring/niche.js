@@ -122,6 +122,8 @@ export async function runNiche(target, flags = {}, io = {}) {
   const evidence = await steps.evidence(rows, { ...(flags["text-only"] ? {} : { thumbsDir: path.join(folder, "thumbs") }), ...(io.fetch ? { fetch: io.fetch } : {}), onStep: (text) => say(`  ${text}`) });
   rows = evidence.rows;
   await writeJsonl(files.library, rows);
+  // gatherEvidence counts this run only; the report wants the library as it stands.
+  const have = { posts: rows.length, transcripts: rows.filter((row) => row.transcript).length, thumbs: rows.filter((row) => row.thumb).length };
 
   let video = null;
   if (flags["with-video"]) {
@@ -156,7 +158,7 @@ export async function runNiche(target, flags = {}, io = {}) {
   }
   const imports = steps.compare ? others.map((other) => ({ from: other.name, candidates: steps.compare({ name: other.name, rows: withOutliers(other.rows) }, { name, rows: withOutliers(rows) }) })) : [];
 
-  const summary = { name, folder, niche: niche.niche, platform: niche.platform, keywords: niche.keywords, posts: rows.length, creators: new Set(rows.map((row) => row.account)).size, evidence: evidence.counts, ...(video ? { video: video.counts } : {}), draft, imports: imports.map((entry) => ({ from: entry.from, candidates: entry.candidates.length })), report: files.report, cost_usd: Math.round(((draft.cost_usd ?? 0) + formatsCost) * 1e6) / 1e6, warnings };
+  const summary = { name, folder, niche: niche.niche, platform: niche.platform, keywords: niche.keywords, posts: rows.length, creators: new Set(rows.map((row) => row.account)).size, evidence: have, ...(video ? { video: video.counts } : {}), draft, imports: imports.map((entry) => ({ from: entry.from, candidates: entry.candidates.length })), report: files.report, cost_usd: Math.round(((draft.cost_usd ?? 0) + formatsCost) * 1e6) / 1e6, warnings };
   await writeFile(files.report, nicheReport(summary, rows, imports, steps.worthTesting));
   return summary;
 }

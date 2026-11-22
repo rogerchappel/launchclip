@@ -160,6 +160,8 @@ export async function gatherEvidence(rows, { fetch = globalThis.fetch, concurren
     if (counts.posts % 25 === 0) onStep(`Evidence: ${counts.posts} post(s), ${counts.transcripts} transcript(s), ${counts.thumbs} thumb(s)`);
     return evidenceOf(row, { vtt, thumb, now });
   });
+  // Slimming drops the links, so a run with the network down would lose them for good: stop before anything is written.
+  if (counts.subtitle_failures + counts.thumb_failures >= 5 && counts.transcripts + counts.thumbs === 0) throw new Error("no subtitle or cover could be fetched, so the library is left as it was; check the connection and run it again");
   return { rows: out, counts };
 }
 
