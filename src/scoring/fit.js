@@ -17,6 +17,7 @@
 // The model stays off (`usable: false`) until it ranks posts it has not seen
 // better than chance. Its coefficients are associations in one library, not
 // causes.
+import { readFile, writeFile } from "node:fs/promises";
 
 export const FIT_VERSION = 1;
 const RARE = 5; // a choice value seen fewer times than this folds into "other"
@@ -324,4 +325,62 @@ export function explain(model, { top = 10 } = {}) {
       return { feature: column.name, key: column.key, ...(column.kind === "is" ? { value: column.value } : {}), coefficient: round(coefficient), direction, text: `${what} goes with ${direction}-normal results` };
     });
   return { note: ASSOCIATION_NOTE, features };
+}
+
+const USAGE = "fit <library.tagged.jsonl> [--out model.json] [--own-weight n] | predict <scored.json|tagged.jsonl> --model model.json [--force]";
+
+/** A .jsonl of rows, a JSON list, or a `launchclip score` report. → the rows */
+async function readRows(file) {
+  const text = await readFile(String(file), "utf8");
+  if (!/\.jsonl$/i.test(String(file))) {
+    const value = JSON.parse(text);
+    const list = Array.isArray(value) ? value : value?.items;
+    if (!Array.isArray(list)) throw new Error(`${file} holds no items: it should be a list, or a score report with "items"`);
+    return list;
+  }
+  return text.split("\n").flatMap((line, index) => {
+    if (!line.trim()) return [];
+    try { return [JSON.parse(line)]; } catch (error) { throw new Error(`${file} line ${index + 1} is not valid JSON: ${error.message}`); }
+  });
+}
+
+function number(flags, name, fallback) {
+  if (flags[name] == null) return fallback;
+  const value = Number(flags[name]);
+  if (!Number.isFinite(value)) throw new Error(`--${name} must be a number; got ${flags[name]}`);
+  return value;
+}
+
+/**
+ * action "fit": target is the tagged library; prints the held-out numbers,
+ * whether the model is usable and its top features; writes --out. → the model
+ * action "predict": target is scored items; needs --model. → the predictions, best first
+ * io.write: where the lines go (default stdout).
+ */
+export async function runFit(action, target, flags = {}, { write = (text) => process.stdout.write(text) } = {}) {
+  if (!["fit", "predict"].includes(action) || !target) throw new Error(`usage: ${USAGE}`);
+  if (action === "predict") {
+    if (!flags.model) throw new Error(`predict needs --model <model.json>: ${USAGE}`);
+    const model = JSON.parse(await readFile(String(flags.model), "utf8"));
+    const rows = await readRows(target);
+    const text = new Map(rows.map((row, index) => [String(row?.id ?? index), String(row?.text ?? row?.caption ?? "").replace(/\s+/g, " ").slice(0, 60)]));
+    const predictions = predict(model, rows, { force: Boolean(flags.force) }).sort((a, b) => b.predicted_outlier - a.predicted_outlier);
+    if (!model.usable) write("This model has not beaten chance on posts it had not seen: these numbers are guesses.\n");
+    for (const row of predictions) write(`${row.predicted_outlier.toFixed(2)}x  top ${100 - row.percentile}%  ${row.id}  ${text.get(row.id)}\n`.replace(/\s+\n$/, "\n"));
+    return predictions;
+  }
+  const ownWeight = number(flags, "own-weight", 1);
+  const model = fit(await readRows(target), { lambda: number(flags, "lambda"), folds: number(flags, "folds", 5), seed: number(flags, "seed", 1), weights: (row) => (row.own === true ? ownWeight : 1) });
+  const held = model.held_out;
+  write(`Fitted on ${model.trained_on} posts with results (folds by ${held.split}, lambda ${model.lambda}).\n`);
+  write(`On posts it had not seen: rank correlation ${held.spearman} (95% range ${held.spearman_ci.join(" to ")}); shuffled results give ${held.baseline_spearman}.\n`);
+  write(`Its predicted top quarter had ${held.top_quartile_lift} times the median result.\n`);
+  write(model.usable ? "Usable: it beats chance on posts it had not seen.\n" : `Not usable:\n${model.reasons.map((reason) => `- ${reason}`).join("\n")}\n`);
+  const { note, features } = explain(model);
+  write(`Top features:\n${features.map((feature) => `  ${feature.coefficient > 0 ? "+" : ""}${feature.coefficient}  ${feature.text}`).join("\n")}\n${note}\n`);
+  if (flags.out) {
+    await writeFile(String(flags.out), `${JSON.stringify(model, null, 2)}\n`);
+    write(`Saved ${flags.out}.\n`);
+  } else write("Not saved: pass --out model.json to keep it.\n");
+  return model;
 }

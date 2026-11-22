@@ -1,8 +1,11 @@
 // The fitted layer (src/scoring/fit.js) on synthetic libraries: a seeded random
 // source, no network, no real posts.
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
-import { explain, featurise, fit, foldsFor, predict, spearman } from "../src/scoring/fit.js";
+import { explain, featurise, fit, foldsFor, predict, runFit, spearman } from "../src/scoring/fit.js";
 
 function seeded(seed) {
   let state = seed >>> 0;
@@ -156,4 +159,37 @@ test("explain: the driver comes first, with its direction, and the associations 
   assert.equal(features[0].text, "a higher strong_open goes with above-normal results");
   const number = explain(fit(library(400), { seed: 3 })).features.find((feature) => feature.feature === "hook_type=number");
   assert.equal(number.text, 'hook_type being "number" goes with above-normal results');
+});
+
+test("runFit: fit prints the held-out numbers and saves the model; predict sorts items by prediction", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-fit-"));
+  const file = (name) => path.join(dir, name);
+  const out = [];
+  const io = { write: (text) => out.push(text) };
+  await writeFile(file("library.tagged.jsonl"), `${library(400).map((row, index) => JSON.stringify({ ...row, own: index % 10 === 0 })).join("\n")}\n\n`);
+  const model = await runFit("fit", file("library.tagged.jsonl"), { out: file("model.json"), "own-weight": "3", seed: "3" }, io);
+  assert.equal(model.usable, true);
+  assert.deepEqual(JSON.parse(await readFile(file("model.json"), "utf8")), model);
+  assert.match(out.join(""), /Fitted on 400 posts.*rank correlation 0\.\d+ \(95% range .*Usable: it beats chance.*Top features:\n {2}\+0\.\d+ {2}a higher strong_open.*associations in this library, not causes.*Saved /s);
+
+  await writeFile(file("scored.json"), JSON.stringify({ stage: "score", items: [draft("weak", 0.05, "story"), draft("strong", 0.95, "number")] }));
+  out.length = 0;
+  const predictions = await runFit("predict", file("scored.json"), { model: file("model.json") }, io);
+  assert.deepEqual(predictions.map((row) => row.id), ["strong", "weak"]);
+  assert.match(out[0], /^\d\.\d\dx {2}top \d+% {2}strong {2}strong\n$/);
+
+  await writeFile(file("small.jsonl"), library(60).map((row) => JSON.stringify(row)).join("\n"));
+  out.length = 0;
+  await runFit("fit", file("small.jsonl"), { out: file("small.json") }, io);
+  assert.match(out.join(""), /Not usable:\n- only 60 posts with results/);
+  await assert.rejects(runFit("predict", file("scored.json"), { model: file("small.json") }, io), /not usable/);
+  out.length = 0;
+  assert.equal((await runFit("predict", file("scored.json"), { model: file("small.json"), force: true }, io)).length, 2);
+  assert.match(out[0], /guesses/);
+
+  await writeFile(file("broken.jsonl"), '{"id": 1}\n{oops\n');
+  await assert.rejects(runFit("fit", file("broken.jsonl"), {}, io), /line 2 is not valid JSON/);
+  await assert.rejects(runFit("fit", file("library.tagged.jsonl"), { "own-weight": "lots" }, io), /--own-weight must be a number/);
+  await assert.rejects(runFit("predict", file("scored.json"), {}, io), /needs --model/);
+  await assert.rejects(runFit("train", file("scored.json"), {}, io), /usage:/);
 });
