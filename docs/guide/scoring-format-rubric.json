@@ -1,0 +1,91 @@
+{
+  "questions": {
+    "fmt_opening": {
+      "type": "choice",
+      "gate": false,
+      "instructions": "How does the post open? Judge the first spoken sentence when there is a transcript, otherwise the first sentence of the caption.",
+      "criteria": {
+        "question": "Opens by asking the viewer a question.",
+        "bold_claim": "Opens on a strong, surprising or contrarian statement.",
+        "number": "Opens on a number, a count of items or a statistic.",
+        "story_start": "Opens in the middle of a moment or anecdote (\"So last week...\", \"I was about to...\").",
+        "direct_address": "Opens by naming or speaking to a kind of viewer (\"If you...\", \"Anyone who...\").",
+        "result_first": "Opens by stating the outcome or payoff before how it happened.",
+        "label_only": "Opens on a bare title, name, date or tags with no sentence aimed at the viewer.",
+        "other_unclear": "None of the above, or there are too few words to tell."
+      }
+    },
+    "fmt_structure": {
+      "type": "choice",
+      "gate": false,
+      "instructions": "Which structure does the post as a whole follow?",
+      "criteria": {
+        "list": "A counted or ordered set of separate points, tips or items.",
+        "before_after": "A starting state set against an end state: a change, a transformation or a comparison of two things.",
+        "story": "Events told in order, with a person or subject something happens to.",
+        "reaction_commentary": "The creator's opinion on, or reaction to, something made or done by someone else.",
+        "how_to": "Shows or explains how to do a specific thing, step by step or by demonstration.",
+        "news_update": "Reports something that just happened or is about to happen: a result, an announcement, a date.",
+        "question_answer": "Answers a question, often one from a viewer or a comment.",
+        "montage": "Clips or pictures with no narrative in the words: a mood, a highlight reel, an edit to music.",
+        "other_unclear": "None of the above, or there are too few words to tell."
+      }
+    },
+    "fmt_speaker": {
+      "type": "choice",
+      "gate": false,
+      "instructions": "Who speaks in the post, going by its transcript and how the words are phrased?",
+      "criteria": {
+        "creator_first_person": "The creator speaks as themselves to the viewer (\"I\", \"we\", \"you\").",
+        "narrator": "A voice describes people or events from outside, in the third person.",
+        "conversation": "Two or more people speak: an interview, a dialogue or a skit.",
+        "borrowed_audio": "The words are someone else's: a broadcast, a commentary track, a quoted clip or a song.",
+        "no_speech": "There is no transcript, or the transcript holds no spoken words.",
+        "other_unclear": "It cannot be told from the words."
+      }
+    },
+    "fmt_cta": {
+      "type": "choice",
+      "gate": false,
+      "instructions": "What, if anything, does the post ask the viewer to do? Choose the main ask.",
+      "criteria": {
+        "follow": "Asks the viewer to follow or subscribe.",
+        "comment": "Asks the viewer to comment, answer a question or vote.",
+        "share_or_save": "Asks the viewer to share, send, tag someone or save the post.",
+        "link_or_buy": "Sends the viewer off the platform: a link, a product, a booking, a sign-up.",
+        "watch_more": "Points to another post, a next part or a longer video.",
+        "none": "Asks for nothing. Hashtags alone are not an ask.",
+        "other_unclear": "Asks for something else, or it cannot be told."
+      }
+    },
+    "fmt_caption_role": {
+      "type": "choice",
+      "gate": false,
+      "instructions": "What job does the caption do next to the video or slides?",
+      "criteria": {
+        "repeats": "Says again, or sums up, what the video itself says.",
+        "adds_context": "Gives background, detail or credit the video does not: who, where, when, why.",
+        "tease": "Holds something back to make the viewer watch (\"wait for it\", \"you won't guess\").",
+        "carries_the_content": "The caption is the content: a long text that works without the video.",
+        "punchline_or_mood": "A joke, a reaction or a few words of feeling.",
+        "tags_only": "Only hashtags, mentions or emoji.",
+        "no_caption": "There is no caption.",
+        "other_unclear": "None of the above, or it cannot be told."
+      }
+    },
+    "fmt_tone": {
+      "type": "choice",
+      "gate": false,
+      "instructions": "Which tone do the words mostly take?",
+      "criteria": {
+        "informative": "Plain and factual: explains or reports.",
+        "excited": "High energy: hype, celebration, exclamations.",
+        "humorous": "Joking, ironic or playful.",
+        "emotional": "Moved or moving: gratitude, loss, pride, nostalgia.",
+        "opinionated": "Argues a view, criticises or takes a side.",
+        "promotional": "Sells or advertises something.",
+        "other_unclear": "None of the above, or there are too few words to tell."
+      }
+    }
+  }
+}
