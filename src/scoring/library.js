@@ -165,3 +165,47 @@ export async function fetchApify({ actor, input = {}, token = process.env.APIFY_
   if (!Array.isArray(items)) throw new Error(`Apify (${actor}) returned no list of items`);
   return items;
 }
+
+export const OUTLIER_MIN_POSTS = 5;
+export const OUTLIER_MIN_AGE_DAYS = 3;
+
+function median(values) {
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const middle = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+const round3 = (value) => Math.round(value * 1000) / 1000;
+
+/**
+ * Adds `outlier` to every row: how far a post is above or below what is normal
+ * for its own account, so a small channel's hit counts as a hit. 1 is normal,
+ * 2 is twice normal.
+ *
+ * - An account with 5 or more posts in the set: views / the median views of
+ *   that account's posts.
+ * - A smaller account, when followers are known: (views / followers) / the
+ *   median of views / followers over the whole set. Otherwise null.
+ * - null for a post under 3 days old (its numbers have not settled), a paid
+ *   post (the views were bought) and a post with no view count. These are also
+ *   left out of every median. A post with no date is taken as settled.
+ */
+export function withOutliers(rows, { now = Date.now() } = {}) {
+  const views = (row) => row.metrics?.views;
+  const settled = (row) => row.paid !== true && Number.isFinite(views(row)) && !(row.posted_at && now - Date.parse(row.posted_at) < OUTLIER_MIN_AGE_DAYS * 86400000);
+  const perFollower = (row) => (row.followers > 0 ? views(row) / row.followers : null);
+  const channel = (row) => `${row.platform}:${row.account}`;
+  const usable = rows.filter(settled);
+  const byChannel = Map.groupBy(usable, channel);
+  const setNorm = median(usable.map(perFollower));
+  return rows.map((row) => {
+    let outlier = null;
+    if (settled(row)) {
+      const own = byChannel.get(channel(row));
+      const norm = own.length >= OUTLIER_MIN_POSTS ? median(own.map(views)) : null;
+      if (norm > 0) outlier = round3(views(row) / norm);
+      else if (norm === null && setNorm > 0 && perFollower(row) !== null) outlier = round3(perFollower(row) / setNorm);
+    }
+    return { ...row, outlier };
+  });
+}

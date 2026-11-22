@@ -5,7 +5,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { fetchApify, importPosts, parseCsv } from "../src/scoring/library.js";
+import { fetchApify, importPosts, parseCsv, withOutliers } from "../src/scoring/library.js";
 
 const tmp = () => mkdtemp(path.join(os.tmpdir(), "launchclip-library-"));
 
@@ -47,4 +47,24 @@ test("fetchApify runs the actor with a bearer token and fails clearly without on
   await assert.rejects(fetchApify({ actor: "a/b", token: "" }), /APIFY_TOKEN is not set/);
   await assert.rejects(fetchApify({ actor: "a/b", token: "t", fetch: async () => new Response("slow", { status: 408 }) }), /answered 408 \(the run took longer than 300 seconds/);
   await assert.rejects(fetchApify({ actor: "a/b", token: "t", fetch: async () => new Response("{}", { status: 200 }) }), /no list of items/);
+});
+
+const NOW = Date.parse("2026-01-10T00:00:00Z");
+const post = (account, views, extra = {}) => ({ id: `${account}-${views}`, platform: "tiktok", account, metrics: { views }, ...extra });
+
+test("withOutliers measures a post against its own account, or per follower for a small one", () => {
+  const big = [100, 200, 300, 400, 3000].map((views) => post("big", views, { followers: 1000 }));
+  const rows = [
+    ...big,
+    post("big", 9000, { paid: true }),
+    post("big", 9000, { posted_at: "2026-01-09T00:00:00Z" }),
+    post("big", 600, { posted_at: "2026-01-01T00:00:00Z" }),
+    post("small", 500, { followers: 1000 }),
+    post("nofollowers", 500),
+    { id: "noviews", platform: "tiktok", account: "big", metrics: {} }
+  ];
+  const outliers = withOutliers(rows, { now: NOW }).map((row) => row.outlier);
+  // big's settled views: 100 200 300 400 600 3000, median 350. Views per follower over the set: 0.1 0.2 0.3 0.4 0.5 3, median 0.35.
+  assert.deepEqual(outliers, [0.286, 0.571, 0.857, 1.143, 8.571, null, null, 1.714, 1.429, null, null]);
+  assert.deepEqual(withOutliers([post("a", 0), post("a", 0), post("a", 0), post("a", 0), post("a", 0)]).map((row) => row.outlier), [null, null, null, null, null]);
 });
