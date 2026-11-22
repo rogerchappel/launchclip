@@ -112,6 +112,8 @@ export function compareNiches(a, b, { minPosts = 8, minLift = 1.25, rareShare = 
 }
 
 const percent = (share) => (share > 0 && share < 0.005 ? "under 1%" : `${Math.round(share * 100)}%`);
+// One decimal reads as a figure a person would say; the result keeps three.
+const times = (value) => Math.round(value * 10) / 10;
 const posts = (count) => `${count} post${count === 1 ? "" : "s"}`;
 
 /**
@@ -124,8 +126,8 @@ export function formatWorthTesting(candidates, { from = "the other niche", to = 
   lines.push(`Formats that go with above-normal results in ${from} and are rare in ${to}.`, "");
   for (const { question, value, a, b, examples } of candidates) {
     const meaning = rubric?.questions?.[question]?.criteria?.[value];
-    const links = examples.map((post) => (post.url ? `[@${post.account} at ${post.outlier}x](${post.url})` : `@${post.account} at ${post.outlier}x`)).join(", ");
-    lines.push(`- **${question}: ${value}**${meaning ? `. ${meaning}` : "."} In ${from}: ${posts(a.posts)} (${percent(a.share)}), with a median of ${a.median_outlier}x their own account's normal, ${a.lift} times the median for that library. In ${to}: ${posts(b.posts)} (${percent(b.share)}).${links ? ` Examples: ${links}.` : ""}`);
+    const links = examples.map((post) => (post.url ? `[@${post.account} at ${times(post.outlier)}x](${post.url})` : `@${post.account} at ${times(post.outlier)}x`)).join(", ");
+    lines.push(`- **${question}: ${value}**${meaning ? `. ${meaning}` : "."} In ${from}: ${posts(a.posts)} (${percent(a.share)}), with a median of ${times(a.median_outlier)}x their own account's normal, ${times(a.lift)} times the median for that library. In ${to}: ${posts(b.posts)} (${percent(b.share)}).${links ? ` Examples: ${links}.` : ""}`);
   }
   lines.push("", `None of these has been tested in ${to}. Doing well in one industry is no evidence for another: try each one and let your own results decide.`);
   return `${lines.join("\n")}\n`;
