@@ -85,3 +85,12 @@ test("agreement counts a missing or malformed answer as unsure and wrong", () =>
   const result = agreement(rows, { items: [{ id: "a", answers: { has_number: { status: "unsure", value: null, p: null } } }] }, rubric);
   assert.deepEqual([result.overall.agreement, result.overall.unsure, result.overall.confident_accuracy], [0, 1, null]);
 });
+
+test("the seed set fits the starter rubric and labels every question", async () => {
+  const starter = parseRubric(JSON.parse(await readFile(path.join(ROOT, "docs/guide/scoring-rubric.json"), "utf8")));
+  const rows = parseLabelled(await readFile(path.join(ROOT, "eval/fixtures/scorer-seed.jsonl"), "utf8"), starter);
+  assert.ok(rows.length >= 40);
+  const labelled = new Set(rows.flatMap((item) => Object.keys(item.labels)));
+  assert.deepEqual([...labelled].sort(), Object.keys(starter.questions).sort());
+  for (const item of rows) assert.deepEqual(Object.keys(item.labels).sort(), Object.keys(questionsFor(starter, item.kind)).sort(), item.id);
+});
