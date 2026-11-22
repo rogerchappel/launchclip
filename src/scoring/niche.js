@@ -89,8 +89,9 @@ export async function runNiche(target, flags = {}, io = {}) {
       warnings.push(...found.warnings);
       Object.assign(entry, { done: true, posts: found.rows.length, creators: found.creators.length });
     } catch (error) {
-      // One keyword that finds nothing does not stop the niche.
-      Object.assign(entry, { done: true, posts: 0, creators: 0, error: String(error.message).split("\n")[0] });
+      // One keyword that fails does not stop the niche. A search that found nobody is settled; anything else (no credit, no network) is tried again next run.
+      const error1 = String(error.message).split("\n")[0];
+      Object.assign(entry, /found no accounts/.test(error1) ? { done: true, posts: 0, creators: 0, error: error1 } : { error: error1 });
       warnings.push(`${entry.keyword}: ${entry.error}`);
     }
     await writeJson(files.niche, niche);
