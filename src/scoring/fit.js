@@ -78,7 +78,7 @@ const RESAMPLES = 1000;
 const SHUFFLES = 5;
 const round = (value) => Math.round(value * 1000) / 1000;
 
-function seededRandom(seed) {
+export function seededRandom(seed) {
   let state = seed >>> 0;
   return () => {
     state = (state + 0x6d2b79f5) >>> 0;
@@ -330,7 +330,7 @@ export function explain(model, { top = 10 } = {}) {
 const USAGE = "fit <library.tagged.jsonl> [--out model.json] [--own-weight n] | predict <scored.json|tagged.jsonl> --model model.json [--force]";
 
 /** A .jsonl of rows, a JSON list, or a `launchclip score` report. → the rows */
-async function readRows(file) {
+export async function readRows(file) {
   const text = await readFile(String(file), "utf8");
   if (!/\.jsonl$/i.test(String(file))) {
     const value = JSON.parse(text);

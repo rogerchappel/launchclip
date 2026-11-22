@@ -16,9 +16,11 @@
 //   want    noul only: false when "yes" is the failure (a banned claim). Default true
 //   min     score only: the lowest level index that passes
 //   allow   choice only: the options that pass
+//   gate    false makes the question a tag whatever its type. Default true
 //
-// A choice with no `allow`, or a score with no `min`, is a tag: recorded,
-// never failed. A question passes when the probability of a passing answer is
+// A choice with no `allow`, a score with no `min`, or any question with
+// `"gate": false` is a tag: recorded, never failed. Fields the scorer does not
+// know (a drafted rubric's `evidence`) are kept in the rubric and never sent. A question passes when the probability of a passing answer is
 // at least `pass_at` (default 0.7), fails at or below 1 - pass_at, and is
 // "unsure" in between. An item fails when any question fails, and is "review"
 // when none fails but one is unsure.
@@ -63,6 +65,7 @@ export function parseRubric(value) {
       else if (question.min !== undefined && !(Number.isInteger(question.min) && question.min >= 1 && question.min < criteria.length)) err(`min must be a level index from 1 to ${criteria.length - 1}`);
     }
     if (question.type === "noul" && question.want !== undefined && typeof question.want !== "boolean") err("want must be true or false");
+    if (question.gate !== undefined && typeof question.gate !== "boolean") err("gate must be true or false");
   }
   if (errors.length) throw new Error(`the rubric has ${errors.length} problem(s):\n- ${errors.join("\n- ")}`);
   return { model: value.model ?? null, pass_at: passAt, questions: value.questions };
@@ -102,7 +105,9 @@ export async function ask({ state, questions, model = process.env.LAUNCHCLIP_SCO
 
 /** One answer against its rubric question. → {status: "pass"|"fail"|"unsure"|"tag", value, p?} */
 export function judge(question, answer, passAt = DEFAULT_PASS_AT) {
-  if (!isObject(answer) || answer.type !== question.type) return { status: "unsure", value: null, p: null };
+  const answered = isObject(answer) && answer.type === question.type;
+  if (question.gate === false) return { status: "tag", value: answered ? answer[question.type] : null };
+  if (!answered) return { status: "unsure", value: null, p: null };
   let p = null;
   let value;
   if (question.type === "noul") {

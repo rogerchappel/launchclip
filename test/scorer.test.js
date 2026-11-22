@@ -64,6 +64,23 @@ test("judge: pass, fail, unsure and tag", () => {
   assert.equal(judge(q.has_number, undefined).status, "unsure");
 });
 
+test("gate: false makes any question a tag that never fails an item", async () => {
+  const q = RUBRIC.questions;
+  assert.deepEqual(judge({ ...q.has_number, gate: false }, { type: "noul", noul: 0.02 }), { status: "tag", value: 0.02 });
+  assert.deepEqual(judge({ ...q.filler, gate: false }, { type: "noul", noul: 0.97 }), { status: "tag", value: 0.97 });
+  assert.deepEqual(judge({ ...q.clarity, gate: false }, { type: "score", score: 0.1, probabilities: { 0: 0.9, 1: 0.1 } }), { status: "tag", value: 0.1 });
+  assert.deepEqual(judge({ ...q.hook_type, allow: ["question"], gate: false }, { type: "choice", choice: "other", probabilities: { other: 1 } }), { status: "tag", value: "other" });
+  assert.deepEqual(judge({ ...q.has_number, gate: false }, { type: "refusal" }), { status: "tag", value: null }, "no answer is not a reason to review");
+  assert.throws(() => parseRubric({ questions: { a: { ...q.has_number, gate: "no" } } }), /questions\.a: gate must be true or false/);
+  // Every gate would fail this text; as tags they are recorded and it passes. Unknown fields are kept and never sent.
+  const tagsOnly = parseRubric({ questions: Object.fromEntries(Object.entries(q).map(([key, question]) => [key, { ...question, gate: false, evidence: { rho: 0.1 } }])) });
+  assert.deepEqual(tagsOnly.questions.filler.evidence, { rho: 0.1 });
+  assert.deepEqual(Object.keys(questionsFor(tagsOnly, "hook").filler), ["type", "instructions"]);
+  const report = await scoreItems([{ id: "h", kind: "hook", text: "Hey, welcome back" }], tagsOnly, { apiKey: "k", fetch: fakeFetch() });
+  assert.deepEqual([report.status, report.items[0].failed, report.items[0].unsure], ["passed", [], []]);
+  assert.deepEqual(report.items[0].tags, { has_number: 0.04, filler: 0.97, clarity: 1.1, hook_type: "other" });
+});
+
 test("ask sends the request shape, retries a busy answer and reports a refusal", async () => {
   const calls = [];
   const reply = await ask({ state: { text: "3 fixes" }, questions: { has_number: { type: "noul", instructions: "?" } }, apiKey: "k", fetch: fakeFetch(calls) });
