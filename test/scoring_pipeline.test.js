@@ -99,7 +99,7 @@ test("runBatch plans a carousel for each pick across types, scores its slides, a
   };
   const summary = await runBatch("slow builds", { count: 7, carousels: 3, rubric: path.join(dir, "rubric.json"), "make-model": "m", out: path.join(dir, "batch") }, { funnel: { client: writer(), fetch: scorer, apiKey: "k" }, make, fetch: scorer, apiKey: "k" });
   assert.deepEqual(summary.carousels.map((entry) => entry.type), ["number", "question", "number"]);
-  assert.match(briefs[0].brief, /^3 fixes for slow builds\n\nOpen the carousel on that line/);
+  assert.match(briefs[0].brief, /^3 fixes for slow builds\n\nLead the carousel with that line/);
   assert.deepEqual(briefs[0].staged, ["render", "check", "export"]);
   assert.equal(briefs[0].flags.model, "m");
   assert.deepEqual(summary.carousels.map((entry) => entry.status === "error"), [false, true, false]);
