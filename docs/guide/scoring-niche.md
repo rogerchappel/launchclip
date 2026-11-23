@@ -79,6 +79,8 @@ launchclip score niche --name horse-racing --widen
 | `--niche "<words>"` | The niche in a few words, for the models that write |
 | `--platform tiktok\|instagram` | Where to look (default tiktok). Instagram gives captions and covers, no transcripts |
 | `--creators`, `--per-creator`, `--days`, `--search-limit` | Passed to discovery, per keyword |
+| `--free` | List each creator's posts with yt-dlp on this machine, not Apify (TikTok only). The keyword search still runs on Apify, and is about a fifth of a keyword's cost |
+| `--accounts <name,name>` | Collect these accounts in place of this run's keyword searches. With `--free`, nothing is charged and no Apify token is needed |
 | `--widen`, `--keywords <n>` | Collect the in-niche keywords that were found |
 | `--formats-only` | Collect, check and tag, with no rubric draft: for a niche you borrow formats from |
 | `--text-only` | No covers: nothing is kept and no cover question is asked |
@@ -95,5 +97,6 @@ The report says "Ready to use" when a question was kept, the kept questions held
 - A kept question is a pattern in this library, not a cause.
 - Transcripts are the platform's automatic subtitles. They have errors, and a post with music and no speech has none.
 - A cover is one frame. It says nothing about motion, sound or pacing; `--with-video` adds cuts.
+- A free listing has no subtitles and no follower count, so those posts have no transcript or spoken hook: questions about captions, covers and formats still work, questions about the script do not.
 - The search decides who is in the library, and it returns broad accounts as well as specialists. Read `creators.json`, and delete a creator's lines from `library.jsonl` if they do not belong.
 - Scoring a finished cover's image with `launchclip score` is not built: cover questions in a rubric are answered from the cover's text.

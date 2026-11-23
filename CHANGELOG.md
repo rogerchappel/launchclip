@@ -4,6 +4,10 @@
 
 ### Added
 
+- `launchclip score niche` and `score library discover` take `--free`, which
+  lists each creator's TikTok posts with yt-dlp at no charge, and
+  `--accounts <name,name>`, which collects accounts you name without a search.
+  Together they need no Apify token.
 - `launchclip score niche "<keyword>"` goes from a keyword to a drafted rubric
   with its evidence, in one folder a niche: it finds creators, widens the
   keywords, reads each post's transcript, spoken hook and cover without
