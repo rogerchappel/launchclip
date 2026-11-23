@@ -147,3 +147,11 @@ test("launchclip score: readable output, --passed, --out, and exit 1 on a failur
     if (before === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = before;
   }
 });
+
+test("ask retries a call that never answers, then says so", async () => {
+  const { ask } = await import("../src/scorer.js");
+  let calls = 0;
+  const fetch = async () => { calls += 1; throw new Error("timed out"); };
+  await assert.rejects(ask({ state: { text: "x" }, questions: { q: { type: "noul", instructions: "?" } }, apiKey: "k", fetch, sleep: async () => {} }), /did not answer: timed out/);
+  assert.equal(calls, 3);
+});

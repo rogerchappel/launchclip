@@ -87,11 +87,16 @@ export function questionsFor(rubric, kind) {
  * list of related context. fetch defaults to the global one, which the CLI has
  * already wrapped with its cost limit.
  */
-export async function ask({ state, questions, model = process.env.LAUNCHCLIP_SCORER_MODEL || DEFAULT_SCORER_MODEL, apiKey = process.env.OPENROUTER_API_KEY, url = SCORER_URL, fetch = globalThis.fetch, maxRetries = 2, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
+export async function ask({ state, questions, model = process.env.LAUNCHCLIP_SCORER_MODEL || DEFAULT_SCORER_MODEL, apiKey = process.env.OPENROUTER_API_KEY, url = SCORER_URL, fetch = globalThis.fetch, maxRetries = 2, timeoutMs = 60000, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set: scoring uses a hosted decision model through OpenRouter");
   const body = JSON.stringify({ model, state, questions });
   for (let attempt = 0; ; attempt += 1) {
-    const response = await fetch(url, { method: "POST", headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" }, body });
+    // A call that never answers would hold a whole run: on a real library one draft sat for half an hour.
+    const response = await fetch(url, { method: "POST", headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" }, body, signal: AbortSignal.timeout(timeoutMs) }).catch((error) => {
+      if (attempt >= maxRetries) throw new Error(`the scorer (${model}) did not answer: ${error.message}`);
+      return null;
+    });
+    if (!response) { await sleep(500 * 2 ** attempt); continue; }
     if (response.ok) {
       const value = await response.json();
       if (!isObject(value?.answers)) throw new Error(`the scorer (${model}) returned no answers`);
