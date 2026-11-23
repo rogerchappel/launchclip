@@ -73,6 +73,10 @@ test("topicFilter sets aside a creator whose posts are mostly off the niche, and
   assert.equal(calls.length, 11);
   await topicFilter(first.rows, { niche: "horse racing", fetch, apiKey: "k" });
   assert.equal(calls.length, 11);
+  // An account you named is never set aside, nor asked about.
+  const kept = await topicFilter(rows.map(({ on_topic, ...row }) => row), { niche: "horse racing", keep: ["news"], fetch, apiKey: "k" });
+  assert.deepEqual(kept.creators, []);
+  assert.equal(calls.length, 17);
 });
 
 test("runNiche --formats-only collects and tags without drafting, and writes the formats to borrow as data", async () => {
