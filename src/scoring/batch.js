@@ -38,7 +38,7 @@ export async function runBatch(target, flags = {}, io = {}) {
     const project = path.join(out, `${String(index + 1).padStart(2, "0")}-${pick.type}`);
     const entry = { hook: pick.text, type: pick.type, project, ...(pick.wildcard ? { wildcard: true } : {}) };
     try {
-      const brief = `${pick.text}\n\nOpen the carousel on that line, word for word, as the cover.\n\nTopic: ${funnel.topic}`;
+      const brief = `${pick.text}\n\nLead the carousel with that line: the cover says it within the cover's own length, and the post caption opens with it word for word.\n\nTopic: ${funnel.topic}`;
       const makeFlags = { ...(flags.dest ? { dest: flags.dest } : {}), ...(flags.style ? { style: flags.style } : {}), ...(flags.slides ? { slides: flags.slides } : {}), ...(flags["make-model"] ? { model: flags["make-model"] } : {}), out: project, json: true };
       await make(brief, makeFlags, { stdout: { write() {} }, stderr: io.stderr, ...(io.client ? { client: io.client } : {}), ...(flags.render ? {} : { stages: { render: skipped, check: skipped, export: skipped } }) });
       const report = await scoreItems(await readItems(project), rubric, { model: flags["scorer-model"], context: { topic: funnel.topic }, ...(io.fetch ? { fetch: io.fetch } : {}), ...(io.apiKey ? { apiKey: io.apiKey } : {}) });
