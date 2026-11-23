@@ -53,8 +53,9 @@ export async function topicFilter(rows, { niche, minShare = 0.4, fetch, apiKey }
   const words = (row) => [row.caption, row.transcript].filter(Boolean).join("\n").trim();
   const todo = rows.filter((row) => row.on_topic == null && words(row));
   if (todo.length) {
+    // One short question a post: the opening words settle it, and the calls are slow one at a time (6 s each on the first real run).
     const rubric = parseRubric({ questions: { on_topic: { type: "noul", gate: false, instructions: `Is this post about ${niche}?`, criteria: { true: `It is about ${niche}, or made for people interested in it.`, false: "It is about something else." } } } });
-    const report = await scoreItems(todo.map((row, index) => ({ id: String(index), kind: "hook", text: words(row).slice(0, 1500) })), rubric, { ...(fetch ? { fetch } : {}), ...(apiKey ? { apiKey } : {}) });
+    const report = await scoreItems(todo.map((row, index) => ({ id: String(index), kind: "hook", text: words(row).slice(0, 600) })), rubric, { concurrency: 48, ...(fetch ? { fetch } : {}), ...(apiKey ? { apiKey } : {}) });
     for (const item of report.items) { const p = item.answers?.on_topic?.value; if (Number.isFinite(p)) todo[Number(item.id)].on_topic = Math.round(p * 100) / 100; }
   }
   const off = [...Map.groupBy(rows.filter((row) => row.on_topic != null), (row) => row.account)].filter(([, posts]) => posts.length >= 5 && posts.filter((row) => row.on_topic >= 0.5).length / posts.length < minShare).map(([account]) => account);
@@ -99,7 +100,7 @@ export async function runNiche(target, flags = {}, io = {}) {
   const discoverKeyword = async (entry) => {
     say(`Discover: ${entry.keyword}`);
     try {
-      const found = await steps.discover({ keywords: [entry.keyword], platform: niche.platform, creators: whole(flags, "creators", 8), perCreator: whole(flags, "per-creator", 30), days: whole(flags, "days", 0), searchLimit: whole(flags, "search-limit", 60), ...(io.fetch ? { fetch: io.fetch } : {}), ...(io.token ? { token: io.token } : {}), onStep: (text) => say(`  ${text}`) });
+      const found = await steps.discover({ keywords: [entry.keyword], platform: niche.platform, creators: whole(flags, "creators", 8), perCreator: whole(flags, "per-creator", 30), days: whole(flags, "days", 0), searchLimit: whole(flags, "search-limit", 60), ...(entry.accounts ? { accounts: entry.accounts } : {}), ...(flags.free ? { free: true } : {}), ...(io.fetch ? { fetch: io.fetch } : {}), ...(io.token ? { token: io.token } : {}), onStep: (text) => say(`  ${text}`) });
       // A creator already in the library keeps the keyword that found them first.
       const known = new Map((await readJsonl(files.library)).map((row) => [`${row.platform}:${row.account}`, row.keyword]));
       await mergeLibrary(files.library, found.rows.map((row) => ({ ...row, keyword: known.get(`${row.platform}:${row.account}`) ?? entry.keyword })));
@@ -107,7 +108,7 @@ export async function runNiche(target, flags = {}, io = {}) {
       for (const creator of found.creators) if (!creators.creators.some((seen) => seen.account === creator.account)) creators.creators.push({ ...creator, keyword: entry.keyword });
       await writeJson(files.creators, creators);
       warnings.push(...found.warnings);
-      Object.assign(entry, { done: true, posts: found.rows.length, creators: found.creators.length });
+      if (!entry.accounts) Object.assign(entry, { done: true, posts: found.rows.length, creators: found.creators.length });
     } catch (error) {
       // One keyword that fails does not stop the niche. A search that found nobody is settled; anything else (no credit, no network) is tried again next run.
       const error1 = String(error.message).split("\n")[0];
@@ -116,7 +117,10 @@ export async function runNiche(target, flags = {}, io = {}) {
     }
     await writeJson(files.niche, niche);
   };
-  for (const entry of niche.keywords.filter((entry) => entry.relation === "in" && entry.source === "you" && !entry.done)) await discoverKeyword(entry);
+  // Accounts you name are collected in place of this run's keyword searches; the keywords stay waiting for a run without --accounts.
+  const named = flags.accounts ? String(flags.accounts).split(",").map((account) => account.trim()).filter(Boolean) : null;
+  if (named) await discoverKeyword({ keyword: niche.keywords[0].keyword, accounts: named });
+  else for (const entry of niche.keywords.filter((entry) => entry.relation === "in" && entry.source === "you" && !entry.done)) await discoverKeyword(entry);
 
   // Widen once: the library itself (shared hashtags) and a writing model name the rest of the industry.
   if (!niche.widened && steps.widen) {

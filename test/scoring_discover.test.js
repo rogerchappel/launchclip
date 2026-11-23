@@ -117,3 +117,21 @@ test("runDiscover adds to the library that is there, writes creators.json and wa
   await assert.rejects(runDiscover(" , ", {}, io(fakeApify())), /usage: library discover/);
   await assert.rejects(runDiscover("x", { creators: "0" }, io(fakeApify())), /--creators must be a whole number, 1 or more; got 0/);
 });
+
+test("discover with accounts and free lists each account with yt-dlp: no search, no Apify", async () => {
+  const { discover, listPosts } = await import("../src/scoring/discover.js");
+  const calls = [];
+  const exec = async (args) => {
+    calls.push(args.at(-1));
+    return JSON.stringify({ entries: [1, 2].map((n) => ({ id: `7${n}`, url: `https://www.tiktok.com/@a/video/7${n}`, description: `clip ${n} #auction`, timestamp: 1795388943, duration: 18, view_count: n * 100, like_count: 5, repost_count: 2, comment_count: 1, save_count: 3, track: "original sound", thumbnails: [{ id: "cover", url: "https://img.test/c.jpg" }] })) });
+  };
+  const fetch = async () => { throw new Error("no network call is expected"); };
+  const found = await discover({ keywords: ["car auctions"], accounts: ["@dealer.one", "dealer_two"], free: true, exec, fetch });
+  assert.deepEqual(calls, ["https://www.tiktok.com/@dealer.one", "https://www.tiktok.com/@dealer_two"]);
+  assert.equal(found.rows.length, 4);
+  const [row] = found.rows;
+  assert.deepEqual([row.account, row.caption, row.metrics.views, row.metrics.shares, row.metrics.saves], ["dealer.one", "clip 1 #auction", 100, 2, 3]);
+  assert.equal(row.raw.videoMeta.coverUrl, "https://img.test/c.jpg");
+  assert.equal(row.raw.hashtags[0].name, "auction");
+  await assert.rejects(listPosts("https://evil.test/x", { exec }), /not an account name/);
+});

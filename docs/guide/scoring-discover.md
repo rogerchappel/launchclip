@@ -43,6 +43,8 @@ Then carry on with [`library tag` and `library map`](scoring-library.md).
 | `--per-creator` | 30 | posts a creator, newest first |
 | `--days` | 90 | how far back to go; 0 for no limit |
 | `--search-limit` | 100 | search results in all, shared between the keywords |
+| `--accounts` | none | account names you already know, comma separated: no search runs |
+| `--free` | off | list each account's posts with yt-dlp, not Apify (TikTok only; no transcripts or follower counts) |
 | `--search-actor`, `--posts-actor` | see above | another Apify actor that takes the same input |
 | `--out` | `library.jsonl` | the library to add to |
 
