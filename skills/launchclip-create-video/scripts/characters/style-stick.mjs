@@ -18,6 +18,7 @@ import {flatPen} from './style-flat.mjs';
 import {linePen} from './style-line.mjs';
 import {caneLength} from './toon.mjs';
 import {asShadow} from './bounds.mjs';
+import {cubicPoints, pressureStroke} from './pens.mjs';
 
 const r1 = value => Math.round(value * 10) / 10;
 const group = (children, attrs) => el('g', null, null, children, attrs);
@@ -56,16 +57,21 @@ const PAPER = '#fbf9f4';
 /**
  * Draw a stick figure. mono: the classic black-and-white figure: one ink
  * line for every limb and the spine, a white head, no hands or colour, and
- * the hair, face and headwear in line art.
+ * the hair, face and headwear in line art. options.ink 'pressure': the ink
+ * of every stick is a pressure stroke (pens.mjs) instead of an even line.
  */
-export function drawStick(params, colors, {id, joints: j, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', gaze = false, turns = false}, {mono = false} = {}) {
+export function drawStick(params, colors, {id, joints: j, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', gaze = false, turns = false, ink: inkMode = null}, {mono = false} = {}) {
   const g = stickGeometry(params);
   // Facial hair reads in the hair's colour on a small round head.
   const c = {...toonColors(colors), stubble: mixColor(colors.hair, colors.skinShade ?? colors.skin, 0.72)};
   const P = mono ? linePen(c, {id}) : flatPen(c);
   const ink = c.outline;
   // Classic: every stick is one ink line; coloured: an ink edge round the colour of what covers it.
-  const stick = mono ? (_color, _ink, width, from, to) => [line(`M0 ${r1(from)}L0 ${r1(to)}`, ink, Math.max(7, width * 0.72))] : inkedStick;
+  let n = 0;
+  const pressed = (width, from, to) => pressureStroke(cubicPoints([0, from], [0, from + (to - from) / 3], [0, from + (to - from) * 2 / 3], [0, to], 6), width, ink, {seed: `${id}:s${n++}`, taper: [0, 0], wobble: 0.16});
+  const stick = inkMode === 'pressure'
+    ? (mono ? (_color, _ink, width, from, to) => [pressed(Math.max(7, width * 0.72), from, to)] : (color, _ink, w, from, to) => [pressed(w + EDGE * 2, from, to), line(`M0 ${r1(from)}L0 ${r1(to)}`, color, w)])
+    : mono ? (_color, _ink, width, from, to) => [line(`M0 ${r1(from)}L0 ${r1(to)}`, ink, Math.max(7, width * 0.72))] : inkedStick;
   const toonG = rigGeometry(params);
   const ctx = {id, g: toonG, c, p: params, j, expression, static: isStatic, props, P, facing};
   const w = g.w;

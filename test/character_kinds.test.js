@@ -30,8 +30,8 @@ const ids = node => (node && typeof node === 'object' ? [...(node.id ? [node.id]
 test('people are untouched: every starter person keeps its look in every style, and people sets generate the casts they did', () => {
   const people = [...STARTER_CAST, ...RETIRED_CAST].filter(entry => !entry.params.kind);
   assert.equal(people.length, 72);
-  // Measured on main before kinds existed: params, style and colours of every person, in every style.
-  assert.equal(sha(people.map(entry => DRAWING_STYLES.map(style => characterLook(starterCharacter(entry.id).params, {style}).look))), '330a5276ad3bff9d');
+  // Measured on main before kinds existed: params, style and colours of every person, in every style (of the styles there were then).
+  assert.equal(sha(people.map(entry => DRAWING_STYLES.filter(style => style !== 'rubber-hose').map(style => characterLook(starterCharacter(entry.id).params, {style}).look))), '330a5276ad3bff9d');
   assert.equal(sha(PEOPLE_SET_NAMES.map(set => [1, 3, 6, 12].map(count => generateCast({seed: '7f3a91c2', set, count})))), '1b172f5c6da1b047');
   for (const entry of people) assert.ok(!('kind' in starterCharacter(entry.id).params), `${entry.id}: a person stores no kind`);
   const params = {skin: 'brown', hair: {style: 'curly'}};
@@ -375,7 +375,7 @@ test('every pose means something on four legs: no cue fails, the feet stay on th
 test('stick figures: in stick and stick-classic every kind is a few lines, with every part id, and the classic one is ink on paper', () => {
   const count = node => (node && typeof node === 'object' ? (['path', 'ellipse'].includes(node.tag) ? 1 : 0) + (node.children ?? []).reduce((sum, child) => sum + count(child), 0) : 0);
   const fills = (node, out = new Set()) => { if (node && typeof node === 'object') { for (const key of ['fill', 'stroke']) if (/^#/.test(node.attrs?.[key] ?? '')) out.add(node.attrs[key].toLowerCase()); (node.children ?? []).forEach(child => fills(child, out)); } return out; };
-  assert.deepEqual([...STICK_STYLES], ['stick', 'stick-classic']);
+  assert.deepEqual([...STICK_STYLES], ['stick', 'stick-classic', 'rubber-hose']);
   for (const kind of KIND_NAMES) {
     const params = normalizeRigParams({kind});
     const full = count(drawn('chibi', params, 'stand'));

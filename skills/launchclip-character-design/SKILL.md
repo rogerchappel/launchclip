@@ -119,7 +119,7 @@ launchclip cast edit whiskers --set size=large --set colors.detail=white
   (`walk` trots, `look` lifts the head, `slump` lowers it, `wave` and
   `point` lift a foreleg, `cheer` prances, `sit` lies down): look at those
   on the sheet.
-- For the simplest look set `--style stick` or `stick-classic`: every kind
+- For the simplest look set `--style stick`, `stick-classic` or `rubber-hose`: every kind
   becomes a stick figure, a few lines and a face.
 - A mascot's colours default to the brand's `primary` and `accent`, so it
   wears each story's brand. A dark body or screen gets light eyes.

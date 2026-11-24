@@ -4709,8 +4709,8 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   | `lean-in` | steps forward, leaning toward the facing side |
   | `sit`, and any pose in a seated set | lies down: the legs fold under it (`geometry.seatedArms`, `sitLegs`, `sitDrop`) |
 
-- Stick figures: in `stick` and `stick-classic` every kind is a few lines.
-  Limbs are lines (ink alone in `stick-classic`, the limb's colour with an
+- Stick figures: in `stick`, `stick-classic` and `rubber-hose` every kind is a few lines.
+  Limbs are lines (ink alone in `stick-classic` and `rubber-hose`, the limb's colour with an
   ink edge in `stick`); a headed kind's trunk is its spine and its tail a
   line; a horse is a line for the body, four for the legs and one each for
   the neck and the tail; a single body keeps its outline. The head (or the
@@ -4727,7 +4727,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   the body leans and squashes on `C-torso`, and from behind the face is
   gone). Part ids are the toon's. A dark face area takes light ink. The
   cast's drawing style chooses the pen: flat fills with the chibi outline
-  for most, line art for `line` and `stick-classic`, comic ink for
+  for most, line art for `line`, `stick-classic` and `rubber-hose`, comic ink for
   `outlined`, cut paper for `paper`, soft shading for `soft-shade`,
   `avatar`, `lifelike` and `cinematic`. A size resizes shapes, pivots and
   line weights and leaves joint values alone.
@@ -4768,7 +4768,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   out every shape from the rig and hands each to a pen (`shape`, `ellipse`,
   `line`, `limb`, `strand`, `ground`, `within`, `defs?`), which decides how it
   is drawn.
-- The nine drawing styles (`DRAWING_STYLES`, in this order):
+- The drawing styles (`DRAWING_STYLES`, in this order):
   | Style | File | Look |
   |---|---|---|
   | `flat` | `style-flat.mjs` | flat fills and a dark outline (the default) |
@@ -4783,6 +4783,14 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   | `avatar` | `style-avatar.mjs` | cute avatar proportions: the toon body with a head 1.7 times the rig's (hair, face and headwear with it), bigger eyes, a short chunky torso and limbs, soft shading, a pin at each shoulder, elbow and knee; raised arms (wave, cheer, stretch) restated wide of the head (`geometry.poses`) |
   | `chibi` | `style-chibi.mjs` | the cute family: the toon body with a round head 2.1 times the rig's on a body about two heads tall (short legs, chunky limbs, half the rig's height range), the toon's cute face (`drawToon` `face: 'cute'`: large glossy eyes set low and wide, no nose, a small mouth, cheeks that always blush, glasses enlarged to the eyes), flat fills and one even heavy outline (`headPen` restates the scaled head's line weights); raised and face-touching arms restated wide of the head; a headscarf wraps close under the chin |
   | `chibi-plain` | `style-chibi.mjs` | the chibi figure with no skin tone: skin drawn paper white, hair and clothes in their own colours, for a neutral cast |
+  | `rubber-hose` | `style-rubber-hose.mjs` | early theatrical cartoon: a paper-white round head (radius 112) with the toon face in line art, oval eyes at 1.2 and two curved hair tufts (short hair; longer hair and headwear keep their line art), no clothes; the spine and each limb segment a `pens.mjs pressureStroke` bowed outward so a limb reads as one hose (one stroke per segment, since the renderers animate joint rotations only), small white gloves, short black curved shoes; the face and ink are fixed colours, so no scene light or grade tints them |
+
+  `pens.mjs pressureStroke(points, width, colour, {seed, taper, tip, wobble})`
+  is a pressure ink stroke: one filled absolute M/L ribbon that thins to
+  `tip` over its tapered ends, with round ends and an uneven pressure taken
+  from `seed` alone, so re-renders and both renderers match (`cubicPoints`
+  samples a curve for it). `stick` and `stick-classic` ink with it when
+  drawn with `options.ink: 'pressure'`; without it they draw as before.
 
   The first five are pens over the toon body; `stick` and the realistic
   pair are their own bodies with the same joints and part ids, and they
@@ -5947,8 +5955,13 @@ scene fails to resolve on an unknown one.
   may override it (the server room is cool, the alley neon pink at night).
   The model carries it as `content.light`; character renderers use it for
   shading and cast shadows.
-- `detail.mjs`: the drawing style picks the detail: stick and line →
-  simple (flat fills, ink outlines, pale fills, fewer small objects); flat,
+- `detail.mjs`: the drawing style picks the detail: stick, line and
+  rubber-hose → simple (flat fills, ink outlines, pale fills, fewer small
+  objects; rubber-hose instead repaints every colour early-cartoon,
+  `palette.mjs earlyCartoonColor`: a muted ramp by lightness from warm dark
+  gray through gray-taupe, dusty sage-gray and pearl gray to pale ivory,
+  saturated reds kept as faded brick, no glows or pools: `detail.palette`
+  `'early-cartoon'`, `detail.glows` false); flat,
   outlined, paper and soft-shade → standard (gradients, shadows, glows, haze,
   light pools); lifelike and cinematic → rich (shading, depth of field on
   the back layer, volumetric rays, vignette; cinematic adds a colour grade).

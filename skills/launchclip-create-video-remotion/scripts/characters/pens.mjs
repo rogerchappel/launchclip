@@ -116,3 +116,51 @@ export const group = (children, attrs) => el('g', null, null, children, attrs);
 export const placedGroup = (nodes, {at = [0, 0], angle = 0}) => group(nodes, {transform: `translate(${r1(at[0])} ${r1(at[1])})${angle ? ` rotate(${r1(angle)})` : ''}`});
 export const pathNode = (d, attrs) => el('path', null, null, [], {d, ...attrs});
 export const strokeLine = (d, color, width, extra = {}) => pathNode(d, {fill: 'none', stroke: color, strokeWidth: width, strokeLinecap: 'round', strokeLinejoin: 'round', ...extra});
+
+/** n + 1 points along the cubic p0 → p3 (control points p1, p2), each [x, y]. */
+export function cubicPoints(p0, p1, p2, p3, n = 12) {
+  const out = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, u = 1 - t;
+    const a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
+    out.push([a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0], a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1]]);
+  }
+  return out;
+}
+
+const smooth = t => t * t * (3 - 2 * t);
+
+/**
+ * A pressure ink stroke along points [[x, y], …]: a filled ribbon (one
+ * absolute M/L path, so bounds.mjs reads it) `width` wide at full pressure,
+ * thinning to `tip` of it over the first and last `taper` shares of its
+ * length ([start, end]; 0 keeps that end full, for a joint), with round
+ * ends and an uneven pressure of ±`wobble` along it. The unevenness comes
+ * from `seed` alone, so every render and both renderers draw the same stroke.
+ */
+export function pressureStroke(points, width, color, {seed = '', taper = [0.3, 0.3], tip = 0.3, wobble = 0.14} = {}) {
+  const n = points.length - 1;
+  const knots = [0, 1, 2, 3, 4].map(i => (noise(`${seed}:p${i}`) - 0.5) * 2);
+  const halfAt = i => {
+    const t = i / n, k = t * 4, i0 = Math.min(3, Math.floor(k));
+    const pressure = 1 + wobble * (knots[i0] + (knots[i0 + 1] - knots[i0]) * smooth(k - i0));
+    const a = taper[0] > 0 ? smooth(Math.min(1, t / taper[0])) : 1, b = taper[1] > 0 ? smooth(Math.min(1, (1 - t) / taper[1])) : 1;
+    return width / 2 * pressure * (tip + (1 - tip) * a * b);
+  };
+  const left = [], right = [], normals = [];
+  for (let i = 0; i <= n; i++) {
+    const [x0, y0] = points[Math.max(0, i - 1)], [x1, y1] = points[Math.min(n, i + 1)];
+    const len = Math.hypot(x1 - x0, y1 - y0) || 1;
+    const nx = -(y1 - y0) / len, ny = (x1 - x0) / len, h = halfAt(i);
+    normals.push([nx, ny]);
+    left.push([points[i][0] + nx * h, points[i][1] + ny * h]);
+    right.push([points[i][0] - nx * h, points[i][1] - ny * h]);
+  }
+  // A round end: a half circle round the end point, from the side `from` (+1 left, -1 right) to the other.
+  const cap = (i, from) => {
+    const [cx, cy] = points[i], h = halfAt(i), a0 = Math.atan2(from * normals[i][1], from * normals[i][0]);
+    return [1, 2, 3].map(s => [cx + Math.cos(a0 - s * Math.PI / 4) * h, cy + Math.sin(a0 - s * Math.PI / 4) * h]);
+  };
+  const ring = [...left, ...cap(n, 1), ...right.reverse(), ...cap(0, -1)];
+  return pathNode(ring.map(([x, y], i) => `${i ? 'L' : 'M'}${r1(x)} ${r1(y)}`).join('') + 'Z', {fill: color, stroke: 'none'});
+}

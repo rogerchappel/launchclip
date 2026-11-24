@@ -61,7 +61,8 @@ const PAPER = '#fbf9f4';
 // A stick figure's ink edge, in flat's outline widths, and its lines' widths.
 const STICK_INK = 0.7;
 const ROD = 12;
-const STICK_STYLES = ['stick', 'stick-classic'];
+// rubber-hose draws a kind as the classic stick figure does: ink lines on paper.
+const STICK_STYLES = ['stick', 'stick-classic', 'rubber-hose'];
 const strokeNode = (d, color, width) => el('path', null, null, [], {d, fill: 'none', stroke: color, strokeWidth: width, strokeLinecap: 'round', strokeLinejoin: 'round'});
 
 /** A pen whose outlines and lines are k times as heavy (flat: its limbs and strands too). */
@@ -84,8 +85,8 @@ function weighted(pen, k, flat) {
   return out;
 }
 
-const STYLE_PENS = {line: linePen, 'stick-classic': linePen, outlined: outlinedPen, paper: paperPen, 'soft-shade': softShadePen, avatar: softShadePen, lifelike: softShadePen, cinematic: softShadePen};
-const LINE_ART = ['line', 'stick-classic'];
+const STYLE_PENS = {line: linePen, 'stick-classic': linePen, 'rubber-hose': linePen, outlined: outlinedPen, paper: paperPen, 'soft-shade': softShadePen, avatar: softShadePen, lifelike: softShadePen, cinematic: softShadePen};
+const LINE_ART = ['line', 'stick-classic', 'rubber-hose'];
 
 /** The pen a kind is drawn with in a drawing style, and the face's pen (lighter by the face's scale). */
 function pens(style, colors, faceColors, {id, light}, faceK) {
@@ -572,7 +573,7 @@ const ON_DETAIL = new Set(['fox', 'penguin', 'owl', 'hedgehog', 'phone', 'laptop
  */
 export function drawKind(style, params, colors, {id, joints: j, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', light = null, gaze = false, turns = false}) {
   const medium = {kind: params.kind};
-  const sticks = STICK_STYLES.includes(style), classic = style === 'stick-classic';
+  const sticks = STICK_STYLES.includes(style), classic = style === 'stick-classic' || style === 'rubber-hose';
   const d = kindDims(medium), g = kindGeometry(medium, {stick: sticks});
   const s = KIND_SIZE_SCALE[params.size ?? 'medium'];
   const k = d.faceK;
