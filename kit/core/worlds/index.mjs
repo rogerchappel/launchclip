@@ -28,16 +28,17 @@ import {INSIDE} from './inside.mjs';
 import {STREET} from './street.mjs';
 import {OUTSIDE} from './outside.mjs';
 import {RACING} from './racing.mjs';
+import {VOID} from './void-stage.mjs';
 import {PROPS, PROP_IDS, PROP_STATES, STORY_PROP_IDS, placeProps, propEntry} from './props.mjs';
 import {propMotion} from '../physics.mjs';
 
 export {WORLD_TIMES, DETAIL_LEVELS, STYLE_DETAIL, PROPS, PROP_IDS, PROP_STATES, STORY_PROP_IDS, worldPalette};
 export {TOPIC_FIT, suggestWorld} from './fit.mjs';
 
-/** World definitions keyed by kind, in group order (inside, street, outside, then the racing worlds, which are outside). */
-export const WORLDS = Object.freeze({...INSIDE, ...STREET, ...OUTSIDE, ...RACING});
+/** World definitions keyed by kind: the inside, street and outside worlds, the racing worlds (outside) and the void stage (outside). */
+export const WORLDS = Object.freeze({...INSIDE, ...STREET, ...OUTSIDE, ...RACING, ...VOID});
 export const WORLD_KINDS = Object.freeze(Object.keys(WORLDS));
-export const WORLD_GROUPS = Object.freeze({inside: Object.keys(INSIDE), street: Object.keys(STREET), outside: [...Object.keys(OUTSIDE), ...Object.keys(RACING)]});
+export const WORLD_GROUPS = Object.freeze(Object.fromEntries(['inside', 'street', 'outside'].map(group => [group, WORLD_KINDS.filter(kind => WORLDS[kind].group === group)])));
 /** The racing worlds (worlds/racing.mjs), drawn at the cast's scale. */
 export const RACING_WORLDS = Object.freeze(Object.keys(RACING));
 
@@ -59,6 +60,8 @@ export function worldLight(kind, time = 'day') {
 export function worldGrade(kind, time = 'day', strength = 1) {
   const def = WORLDS[kind];
   if (!def) throw new Error(`unknown world kind ${JSON.stringify(kind)} (kinds: ${WORLD_KINDS.join(', ')})`);
+  // A world with its own grade (the void stage keeps the cast's colours and flips its ink).
+  if (def.grade) return def.grade(time, strength);
   return timeGrade(time, def.group === 'inside' ? 'inside' : 'outside', strength);
 }
 
@@ -92,6 +95,8 @@ export function renderWorld({id = 'world', kind, time = 'day', colors = {}, canv
   p.at('back'); layers.back = def.back(k, geo).flat(Infinity).filter(Boolean);
   p.at('mid'); layers.mid = def.mid(k, geo).flat(Infinity).filter(Boolean);
   p.at('front'); layers.front = (def.front ? def.front(k, geo) : []).flat(Infinity).filter(Boolean);
+  // Front nodes at the frame edges that stay when a cast stands in the world (withoutForeground).
+  const edge = def.edgeFront ? [...layers.front] : [];
   // Props sit on the world's anchors, drawn into the layer they belong to.
   const placed = placeProps(k, geo.anchors, props);
   for (const item of placed) {
@@ -103,7 +108,7 @@ export function renderWorld({id = 'world', kind, time = 'day', colors = {}, canv
   const defs = Object.fromEntries(['back', 'mid', 'front', 'fx'].map(name => [name, p.defsOf(name)]));
   return {
     kind, group: def.group, label: def.label, time, detail: spec, canvas: {width: k.W, height: k.H}, overscan: k.ov,
-    layers, defs, anchors: geo.anchors, quiet: geo.quiet, light: worldLight(kind, time), palette: k.pal,
+    layers, defs, edge, anchors: geo.anchors, quiet: geo.quiet, light: worldLight(kind, time), palette: k.pal,
     props: placed.map(({id: pid, anchor, x, y, scale, layer, rect, state, groups}) => ({id: pid, anchor, x, y, scale, layer, rect, motion: propMotion(pid), ...(groups ? {state, groups} : {})}))
   };
 }
