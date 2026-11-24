@@ -177,7 +177,8 @@ function directActor(b, actor, path, scene) {
   const W = scene.canvas.width;
   const margin = W * 0.12;
   let target = actor.target, facing = actor.facing, standing = false, x = 0;
-  const pointOf = value => { try { return targetPoint(value, scene); } catch (error) { check.fail(`${path}.target`, error.message); } return null; };
+  // A scene whose props move (contact actions push them about) gives where they are at a time (scene.at).
+  const pointOf = (value, t = b.start) => { try { return targetPoint(value, scene.at ? scene.at(t) : scene); } catch (error) { check.fail(`${path}.target`, error.message); } return null; };
   if (target !== null && !actor.facingSet) facing = sideOf(pointOf(target), actor.x, scene.canvas);
   const out = [];
   let gazeOn = false, walks = false, turns = false;
@@ -188,7 +189,7 @@ function directActor(b, actor, path, scene) {
     if (state.target !== undefined) target = state.target;
     else if (action && ACTION_INFO[action].gaze && ACTION_INFO[action].target) target = ACTION_INFO[action].target;
     const here = {...actor, x: actor.x + x};
-    const point = target === null ? null : pointOf(target);
+    const point = target === null ? null : pointOf(target, state.time);
     if (state.facing) facing = state.facing;
     else if (point) facing = sideOf(point, here.x, scene.canvas);
     if ((state.pose === 'walk' || action === 'walk-to') && actor.seated && !standing) check.fail(`${path}.cues`, `${action ?? 'walk'} at ${r2(state.time - b.start)} s needs the character standing: add a stand-up cue before it`);
@@ -419,12 +420,17 @@ function sceneObjects(b, value, cast) {
   });
 }
 
+/** planContacts that hands back its failure ({contact} | {error}) instead of failing the scene. */
+function tryContacts(b, actors, objects, scene) {
+  try { return {contact: playContacts(b, actors, objects, scene, true)}; } catch (error) { if (!error.where) throw error; return {error}; }
+}
+
 /** Contact actions, carried props and squash cues for directed actors (characters/contact.mjs). */
-function playContacts(b, actors, objects, scene) {
+function playContacts(b, actors, objects, scene, raw = false) {
   try {
     return planContacts({actors, objects, canvas: b.canvas, start: b.start, end: rt(b.start + b.duration), prefix: b.id, paths: actors.map((_, i) => b.model.module === 'character-cameo' ? 'params' : `params.cast[${i}]`), targets: scene});
   } catch (error) {
-    if (!error.where) throw error;
+    if (!error.where || raw) throw error;
     b.check.fail(error.where, error.message);
   }
 }
@@ -651,9 +657,24 @@ function resolveCastScene(params, ctx) {
     const k = frame.set;
     const onFloor = objects.map(object => ({...object, x: r2(object.at * canvas.width * k.scale + k.x), y: r2(frame.floor - HAND_PROPS[object.prop].h / 2 * frame.scale)}));
     const focus = onFloor.length ? {...(worldFocusPoints ?? {}), props: [...onFloor.map(o => ({id: o.id, x: o.x, y: o.y, far: false})), ...(worldFocusPoints?.props ?? [])]} : worldFocusPoints;
-    const sceneOf = all => ({focus, actors: all, canvas, safe, anchorsOf: ctx.anchorsOf, objects: onFloor});
-    const directed = placed.map((one, i, all) => directActor(b, one, `params.cast[${i}]`, sceneOf(all)));
-    const contact = playContacts(b, directed, onFloor, sceneOf(directed));
+    // Where the floor props are at a time, once contact actions have moved them (moves: planContacts).
+    const movedAt = (base, moves) => t => {
+      const here = onFloor.map(o => { const m = (moves[o.id] ?? []).filter(one => one.time <= t + 1e-6).at(-1); return m ? {...o, x: m.x, y: m.y} : o; });
+      return {...base, focus: {...focus, props: [...here.map(o => ({id: o.id, x: o.x, y: o.y, far: false})), ...(worldFocusPoints?.props ?? [])]}, objects: here};
+    };
+    const sceneOf = (all, moves = null) => { const base = {focus, actors: all, canvas, safe, anchorsOf: ctx.anchorsOf, objects: onFloor}; return moves ? {...base, at: movedAt(base, moves)} : base; };
+    // Walks aim at a prop where earlier pushes, pulls and throws left it: direct, plan, and again with the moves the plan found.
+    let moves = null, contact = null, directed = null;
+    for (let round = 0; round < 4; round++) {
+      directed = placed.map((one, i, all) => directActor(b, one, `params.cast[${i}]`, sceneOf(all, moves)));
+      const tried = tryContacts(b, directed, onFloor, sceneOf(directed, moves));
+      const next = tried.contact?.moves ?? tried.error.moves ?? null;
+      contact = tried.contact ?? null;
+      if (tried.error && !next) b.check.fail(tried.error.where, tried.error.message);
+      if (JSON.stringify(next) === JSON.stringify(moves) || !onFloor.length) { if (tried.error) b.check.fail(tried.error.where, tried.error.message); break; }
+      moves = next;
+      if (round === 3 && tried.error) b.check.fail(tried.error.where, tried.error.message);
+    }
     return {frame, contact, actors: contact.actors.map(actor => ({...actor, reach: actorReach(actor)}))};
   };
   // A wide shot on a set with no furniture moves a character in from the safe zone's side (9:16: the right-hand place).

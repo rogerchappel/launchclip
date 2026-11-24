@@ -172,3 +172,25 @@ test("direction-map cues carry actions, targets and squashes", () => {
   const map = { sections: [{ lines: [{ words: [0, 1], scenes: ["c"], cast: [{ id: "maya", at: "word:smack", action: "hit", target: { character: "theo" } }] }] }] };
   assert.deepEqual(sceneCastCues(map, "c", { words }).cues.maya, [{ at: 1.5, action: "hit", target: { character: "theo" } }]);
 });
+
+test("a pushed prop stops short of whoever stands in its way, and later actions and walks find it where it was left", () => {
+  const model = resolve({ shot: "wide", objects: [{ id: "block", prop: "box", at: 0.45 }], cast: [{ id: "maya", cues: [walkTo({ prop: "block" }), { at: 2, action: "push", target: { prop: "block" } }, { at: 3.2, action: "push", target: { prop: "block" } }, { at: 4.4, action: "push", target: { prop: "block" } }] }, { id: "theo", cues: [{ at: 5.6, action: "walk-to", target: { prop: "block" } }, { at: 7.2, action: "pull", target: { prop: "block" } }] }] });
+  const ops = charactersTimeline(model);
+  const [, theo] = model.content.actors;
+  const block = (t) => at(ops, t, "c-obj-block").x;
+  assert.ok(block(5.5) + 85 * theo.scale < theo.x - 10, "the block stops before theo, never through him");
+  // Theo walks to where the block is now (beside it), not where it started, and pulls it toward himself.
+  const arrived = theo.states.find((s) => s.arrive);
+  assert.ok(Math.abs(theo.x + arrived.x - block(5.5)) < Math.abs(theo.x - block(0)), "the walk aims at the block where it was left");
+  assert.equal(theo.states.find((s) => s.contact && s.time < 7.2).facing, "left");
+  assert.ok(block(8.5) > block(7), "the pull hauls it toward theo");
+});
+
+test("a throw cue and the catch cue it answers are one throw; a catch says it drives the thrower's throw", () => {
+  const pair = resolve({ cast: [{ id: "maya", holds: "ball", cues: [{ at: 2, action: "throw", target: { character: "theo" } }] }, { id: "theo" }] });
+  const lands = contactEvents(pair).find((e) => e.kind === "grip").at;
+  const agreed = resolve({ cast: [{ id: "maya", holds: "ball", cues: [{ at: 2, action: "throw", target: { character: "theo" } }] }, { id: "theo", cues: [{ at: lands, action: "catch", target: { character: "maya" } }] }] });
+  assert.deepEqual(contactEvents(agreed), contactEvents(pair));
+  assert.throws(() => resolve({ cast: [{ id: "maya", holds: "ball", cues: [{ at: 2, action: "throw", target: { character: "theo" } }] }, { id: "theo", cues: [{ at: lands + 0.5, action: "catch", target: { character: "maya" } }] }] }), /lands in theo's hands at .*give only one of them/);
+  assert.throws(() => resolve({ cast: [{ id: "maya", holds: "ball", cues: [{ at: 2.3, action: "gaze-at", target: "left" }] }, { id: "theo", cues: [{ at: 2.6, action: "catch", target: { character: "maya" } }] }] }), /theo's catch makes maya throw, released at .*leave out maya's own throw cue/);
+});

@@ -135,7 +135,8 @@ function activeState(actor, t) {
 export function planContacts({actors: input, objects = [], canvas, start, end, prefix, paths = [], targets = null}) {
   const actors = input.map(actor => ({...actor, expressions: [...actor.expressions], states: actor.states.map(state => ({...state}))}));
   const ops = [], contacts = [], gag = new Set();
-  const fail = (index, message) => { throw Object.assign(new Error(message), {where: `${paths[index] ?? `params.cast[${index}]`}.cues`}); };
+  // A failure carries where the floor props had moved by then (moves), so the caller can re-aim walks at them and try again.
+  const fail = (index, message) => { throw Object.assign(new Error(message), {where: `${paths[index] ?? `params.cast[${index}]`}.cues`, moves: moves()}); };
   const indexOf = actor => actors.indexOf(actor);
   const gagOf = actor => { gag.add(indexOf(actor)); return `${prefix}-c${indexOf(actor)}-gag`; };
   const xAt = (actor, t) => actor.x + (activeState(actor, t).x ?? 0);
@@ -153,6 +154,16 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
   const lose = (prop, t) => { const span = prop.spans.at(-1); if (span) span.to = t; prop.owner = null; };
   const key = (prop, time, dur, ease, to, extra = {}) => prop.keys.push({time: rt(time), dur: rt(dur), ease, to, ...extra});
   const event = (t, actor, action, kind, target) => contacts.push({at: rt(t), actor: actor.id, action, kind, target: target ?? null});
+  // Where each floor prop is from when (its moves so far): [{time, x, y}] per id, for targeting a prop that has moved.
+  const moves = () => Object.fromEntries([...props.values()].filter(prop => !prop.spans.length || prop.spans[0].from > -Infinity).map(prop => {
+    const now = {x: prop.x0, y: prop.y0}, out = [{time: start, x: r2(now.x), y: r2(now.y)}];
+    for (const k of prop.keys.map((one, n) => ({...one, n})).sort((a, b) => a.time - b.time || a.n - b.n)) {
+      if (k.to.x === undefined && k.to.y === undefined) continue;
+      Object.assign(now, k.to);
+      out.push({time: k.time, x: r2(now.x), y: r2(now.y)});
+    }
+    return [prop.id, out];
+  }));
 
   /** Where a carried prop sits for an actor in a state (its walk offset and body). */
   const carryCenter = (actor, state, prop, dx = state.x ?? 0) => {
@@ -215,7 +226,8 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
     if (clash) fail(indexOf(actor), `${label} plays from ${at(ws)} to ${at(we)}; ${actor.id}'s ${clash.contact ? 'other action' : 'cue'} at ${at(clash.time)} falls inside it: move one`);
     const prev = others.filter(state => state.time < ws - 1e-6 && !faceOnly(state)).at(-1);
     if (prev && prev !== first) {
-      const settled = prev.time + (prev.walk ? prev.walk.duration : prev.tween ?? ACTING.poseTween);
+      // A walk's arrival only settles the legs: an action may wind up as the walker arrives.
+      const settled = prev.time + (prev.arrive ? 0 : prev.walk ? prev.walk.duration : prev.tween ?? ACTING.poseTween);
       if (settled > ws + 1e-6) fail(indexOf(actor), `${label} winds up from ${at(ws)}, before ${actor.id}'s move at ${at(prev.time)} has settled (${at(settled)}); move it later`);
     }
     // The recovery returns to the pose the cue names, else the one the action interrupted.
@@ -257,6 +269,13 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
     }
     fail(indexOf(actor), `${label} needs ${allow.map(kind => ({character: '{character: id}', prop: '{prop: id} (a prop in params.objects or held)', point: '{x, y} or a named target'})[kind]).join(' or ')}`);
   };
+  // An action faces what it is aimed at where that is by now (a prop may have been pushed past the actor).
+  const targetX = (target, t) => (target.kind === 'character' ? xAt(target.other, t) : target.kind === 'prop' ? target.prop.x : target.point.x);
+  const toward = (actor, cue, x) => {
+    const dx = x - xAt(actor, cue.time);
+    const sigma = Math.abs(dx) < 1 ? signOf(cue.facing ?? actor.facing) : Math.sign(dx);
+    return {sigma, cue: {...cue, facing: sigma < 0 ? 'left' : 'right'}};
+  };
   const handsFree = (actor, label) => { const prop = heldBy(actor); if (prop) fail(indexOf(actor), `${label}: ${actor.id} has its hands full (it holds ${prop.id}); drop, throw or give it first`); };
   const holding = (actor, label) => heldBy(actor) ?? fail(indexOf(actor), `${label}: ${actor.id} holds nothing (holds: a prop, or lift or catch one first)`);
   const person = (actor, label, t) => {
@@ -281,28 +300,28 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
   function strike(job) {
     const {actor, cue, action} = job, T = CONTACT[action], tc = cue.time, label = `${action} at ${scene(tc - start)} s`;
     person(actor, label, tc); handsFree(actor, label);
-    const sigma = signOf(cue.facing ?? actor.facing), side = armSide(sigma), s = actor.scale;
     const target = resolveTarget(actor, cue.cueTarget, tc, label, ['character', 'prop', 'point']);
+    const {sigma, cue: faced} = toward(actor, cue, targetX(target, tc)), side = armSide(sigma), s = actor.scale;
     let C, what;
     if (target.kind === 'character') { C = {x: xAt(target.other, tc) - sigma * bodyHalf(target.other.geometry) * target.other.scale, y: chestY(target.other)}; what = target.other.id; }
     else if (target.kind === 'prop') {
       if (target.prop.owner) fail(indexOf(actor), `${label}: ${target.prop.id} is in ${target.prop.owner.id}'s hands; aim at ${target.prop.owner.id}`);
       C = {x: target.prop.x - sigma * target.prop.def.w / 2 * s, y: target.prop.y}; what = target.prop.id;
     } else { C = target.point; what = 'the point'; }
-    const S = shoulderAt(actor, side, {}, cue.x ?? 0);
+    const S = shoulderAt(actor, side, {}, faced.x ?? 0);
     const hit = action === 'hit';
     const lean = {wind: -sigma * 4, strike: sigma * (hit ? 6 : 9), follow: sigma * (hit ? 8 : 11)};
     const wind = hit ? {x: S.x - sigma * 50 * s, y: S.y - 40 * s} : {x: S.x - sigma * 10 * s, y: S.y + 110 * s};
     const through = hit ? {x: C.x + sigma * 50 * s, y: C.y + 40 * s} : {x: C.x + sigma * 40 * s, y: C.y};
     // The contact: leaning in, bending down to it when it is low (a prop on the floor).
-    const reach = bend(actor, cue, {[side]: C}, sigma, Math.abs(lean.strike));
+    const reach = bend(actor, faced, {[side]: C}, sigma, Math.abs(lean.strike));
     must(actor, label, what, reach);
     const followBody = {...reach.body, lean: r2(reach.body.lean + sigma * 3)};
     place(actor, [
-      phase(cue, tc - T.strike - T.wind, T.wind, 'power2.out', {arms: solve(actor, cue, {[side]: wind}, {lean: lean.wind}).arms, body: {lean: lean.wind}}),
-      phase(cue, tc - T.strike, T.strike, hit ? 'power3.in' : 'power2.in', {arms: reach.arms, body: reach.body, ...(cue.shot ? {shot: cue.shot} : {})}),
-      phase(cue, tc + T.hold, T.follow, 'power2.out', {arms: solve(actor, cue, {[side]: through}, followBody).arms, body: followBody}),
-      phase(cue, tc + T.hold + T.follow + 0.06, T.recover, 'sine.inOut', {rest: true, contact: false})
+      phase(faced, tc - T.strike - T.wind, T.wind, 'power2.out', {arms: solve(actor, faced, {[side]: wind}, {lean: lean.wind}).arms, body: {lean: lean.wind}}),
+      phase(faced, tc - T.strike, T.strike, hit ? 'power3.in' : 'power2.in', {arms: reach.arms, body: reach.body, ...(cue.shot ? {shot: cue.shot} : {})}),
+      phase(faced, tc + T.hold, T.follow, 'power2.out', {arms: solve(actor, faced, {[side]: through}, followBody).arms, body: followBody}),
+      phase(faced, tc + T.hold + T.follow + 0.06, T.recover, 'sine.inOut', {rest: true, contact: false})
     ], cue, label);
     const targetRef = target.kind === 'character' ? {character: target.other.id} : target.kind === 'prop' ? {prop: target.prop.id} : {x: r2(C.x), y: r2(C.y)};
     event(tc, actor, action, 'impact', targetRef);
@@ -319,8 +338,16 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
         key(prop, tc, 0.12, 'power2.out', {y: prop.y - 30 * s});
         key(prop, tc + 0.12, 0.14, 'power2.in', {y: prop.y});
       } else {
+        // It slides until it would meet someone (it stops short of them) or the frame's edge.
         const half = prop.def.w / 2 * s;
-        const x = clamp(prop.x + sigma * T.shove * s, half, canvas.width - half);
+        let x = clamp(prop.x + sigma * T.shove * s, half, canvas.width - half);
+        for (const other of actors) {
+          const ox = xAt(other, tc);
+          if (other === actor || sigma * (ox - prop.x) <= 0) continue;
+          const stop = ox - sigma * (bodyHalf(other.geometry) * other.scale + 20 * s + half);
+          if (sigma * (x - stop) > 0) x = stop;
+        }
+        if (sigma * (x - prop.x) < 0) x = prop.x;
         key(prop, tc, T.hold + T.follow, 'power2.out', {x});
         prop.x = x;
       }
@@ -331,8 +358,8 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
   function pull(job) {
     const {actor, cue} = job, T = CONTACT.pull, tc = cue.time, label = `pull at ${scene(tc - start)} s`;
     person(actor, label, tc); handsFree(actor, label);
-    const sigma = signOf(cue.facing ?? actor.facing), side = armSide(sigma), s = actor.scale;
     const target = resolveTarget(actor, cue.cueTarget, tc, label, ['character', 'prop']);
+    const {sigma, cue: faced} = toward(actor, cue, targetX(target, tc)), side = armSide(sigma), s = actor.scale;
     let C, what, haul;
     if (target.kind === 'character') {
       const other = target.other;
@@ -346,14 +373,14 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
       haul = clamp(sigma * (C.x - xAt(actor, tc)) / s - bodyHalf(actor.geometry) - 50, 0, T.haul);
     }
     const back = {x: C.x - sigma * haul * s, y: C.y};
-    const reach = bend(actor, cue, {[side]: C}, sigma, 5);
+    const reach = bend(actor, faced, {[side]: C}, sigma, 5);
     must(actor, label, what, reach);
     // Hauling: the body leans back from its reach (sitting back into the crouch for a low prop).
     const haulBody = {...reach.body, lean: r2(reach.body.lean - sigma * 22)};
     place(actor, [
-      phase(cue, tc - T.reach, T.reach, 'power2.inOut', {arms: reach.arms, body: reach.body, ...(cue.shot ? {shot: cue.shot} : {})}),
-      phase(cue, tc + T.hold, T.pull, 'power2.inOut', {arms: solve(actor, cue, {[side]: back}, haulBody).arms, body: haulBody}),
-      phase(cue, tc + T.hold + T.pull + 0.05, T.recover, 'sine.inOut', {rest: true, contact: false})
+      phase(faced, tc - T.reach, T.reach, 'power2.inOut', {arms: reach.arms, body: reach.body, ...(cue.shot ? {shot: cue.shot} : {})}),
+      phase(faced, tc + T.hold, T.pull, 'power2.inOut', {arms: solve(actor, faced, {[side]: back}, haulBody).arms, body: haulBody}),
+      phase(faced, tc + T.hold + T.pull + 0.05, T.recover, 'sine.inOut', {rest: true, contact: false})
     ], cue, label);
     const ref = target.kind === 'character' ? {character: target.other.id} : {prop: target.prop.id};
     event(tc, actor, 'pull', 'grip', ref);
@@ -376,22 +403,22 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
     const target = resolveTarget(actor, cue.cueTarget, tc, label, ['prop']);
     const prop = target.prop;
     if (prop.owner) fail(indexOf(actor), `${label}: ${prop.id} is in ${prop.owner.id}'s hands`);
-    const sigma = signOf(cue.facing ?? actor.facing), s = actor.scale;
+    const {sigma, cue: faced} = toward(actor, cue, prop.x), s = actor.scale;
     const grips = gripPoints(prop.prop, {cx: prop.x, cy: prop.y, s, side: armSide(sigma)});
     // Bent over it: the least crouch and lean from which both hands reach its grips.
-    const bent = bend(actor, cue, grips, sigma, 20);
+    const bent = bend(actor, faced, grips, sigma, 20);
     const crouch = bent.short > 0 ? null : {body: bent.body, arms: bent.arms};
     if (!crouch) fail(indexOf(actor), `${label}: ${actor.id} cannot reach ${prop.id} on the floor even crouching; walk-to {prop: "${prop.id}"} first`);
     const strain = prop.def.heavy ? T.strain : 0.05;
-    const frames = [phase(cue, tc - T.reach, T.reach, 'power2.inOut', {...crouch, ...(cue.shot ? {shot: cue.shot} : {})})];
+    const frames = [phase(faced, tc - T.reach, T.reach, 'power2.inOut', {...crouch, ...(cue.shot ? {shot: cue.shot} : {})})];
     if (prop.def.heavy) {
       // A heavy box resists: the body strains and it barely leaves the floor before the lift.
       const body = {...crouch.body, bodyY: r2((crouch.body.bodyY ?? 0) - 8), lean: r2(crouch.body.lean * 0.85)};
       const up = gripPoints(prop.prop, {cx: prop.x, cy: prop.y - 8 * s, s, side: armSide(sigma)});
-      frames.push(phase(cue, tc + 0.04, strain - 0.04, 'sine.inOut', {arms: solve(actor, cue, up, body).arms, body}));
+      frames.push(phase(faced, tc + 0.04, strain - 0.04, 'sine.inOut', {arms: solve(actor, faced, up, body).arms, body}));
       key(prop, tc + 0.04, strain - 0.04, 'sine.inOut', {y: prop.y - 8 * s});
     }
-    frames.push(phase(cue, tc + strain, T.rise, 'power2.inOut', {rest: true, contact: false}));
+    frames.push(phase(faced, tc + strain, T.rise, 'power2.inOut', {rest: true, contact: false}));
     place(actor, frames, cue, label);
     gain(prop, actor, tc);
     event(tc, actor, 'lift', 'grip', {prop: prop.id});
@@ -447,7 +474,9 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
     const flight = r2(clamp(0.35 + Math.abs(D.x - R.x) / canvas.width * 0.9, 0.4, 0.9));
     const tc = job.cue ? job.cue.time : rt(job.lands - flight);
     const tl = rt(tc + flight);
-    const label = labelAt(job.cue ? tc : tl);
+    // A catch cue drives its thrower's throw; the thrower's own throw cue to the catcher is then the same throw.
+    const label = job.cue ? labelAt(tc) : `catch at ${scene(tl - start)} s (${catcher.id}'s catch makes ${actor.id} throw, released at ${scene(tc - start)} s; leave out ${actor.id}'s own throw cue)`;
+    if (job.cue && job.catchCue && Math.abs(tl - job.catchCue.time) > 0.1) fail(indexOf(catcher), `catch at ${scene(job.catchCue.time - start)} s: ${actor.id}'s throw at ${scene(tc - start)} s lands in ${catcher.id}'s hands at ${scene(tl - start)} s; give only one of them (a catch cue alone times the throw to land on it)`);
     person(actor, label, tc);
     const gripsAt = c => gripPoints(prop.prop, {cx: c.x, cy: c.y, s, side});
     const follow = Object.fromEntries(Object.keys(gripsAt(R)).map(arm => { const sh = shoulderAt(actor, arm, {}, base.x ?? 0); return [arm, {x: sh.x + sigma * 150 * s, y: sh.y + 90 * s}]; }));
@@ -528,6 +557,11 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
       jobs.push({actor: thrower, action: 'catch', catcher: actor, catchCue: cue, lands: cue.time, order: cue.time - 0.6});
     } else jobs.push({actor, action: cue.action, cue, order: cue.time});
   }));
+  // A throw cue at the catcher just before its catch cue is one throw: the catcher's frames replace its catch cue.
+  for (const job of jobs.filter(one => one.action === 'catch')) {
+    const pair = jobs.find(one => one.action === 'throw' && one.actor === job.actor && one.cue.cueTarget?.character === job.catcher.id && one.cue.time < job.lands && one.cue.time > job.lands - 1.2);
+    if (pair) { pair.catchCue = job.catchCue; jobs.splice(jobs.indexOf(job), 1); }
+  }
   jobs.sort((a, b) => a.order - b.order);
   for (const job of jobs) {
     if (job.action === 'push' || job.action === 'hit') strike(job);
@@ -600,7 +634,7 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
     }
   }
   for (const actor of actors) for (const state of actor.states) { delete state.cueTarget; delete state.squash; delete state.posed; }
-  return {actors, props: out, ops, contacts: contacts.sort((a, b) => a.at - b.at), gag: [...gag].sort((a, b) => a - b)};
+  return {actors, props: out, ops, contacts: contacts.sort((a, b) => a.at - b.at), gag: [...gag].sort((a, b) => a - b), moves: moves()};
 }
 
 /** Paper-stack sheets: each lags the stack by its height in the pile, then springs back past and settles. */
