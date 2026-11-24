@@ -12,8 +12,9 @@
 //                      inner lines grow out of drawn ones
 //   colour             the finished art is uncovered top to bottom under an inset
 //                      clip while the pen zigzags along the clip's edge
-// Budget: the ink gets a share of the scene; strokes past RATE a second are
-// left to arrive with the colour (the shortest first), never sped up.
+// Budget: the ink gets a share of the scene. The pen draws no faster than
+// SPEED and travels between lines at TRAVEL, and at most RATE lines a second;
+// lines past that are left to arrive with the colour (the shortest first).
 // The pen (kit/core/sketch-pens.mjs) is one div moved by per-frame set ops
 // computed from the same points as the dash, so its tip stays on the line.
 
@@ -28,8 +29,12 @@ import {PENS, PEN_INK, penNode, penTipLift} from './sketch-pens.mjs';
 
 export const HAND_PENS = Object.freeze([...PENS, 'none']);
 const PAPER = '#f7f3ea', INK = '#22252b';
-// Strokes a second a hand can believably draw.
-const RATE = 6;
+// A hand's pace at 1080p: lines a second, px a second drawing, px a second travelling between lines (clamped to a short lift).
+const RATE = 6, SPEED = 2200, TRAVEL = 1800, LIFT = [0.1, 0.35];
+// Colour sweeps a second: a steady side-to-side, whatever the pen's line width.
+const SWEEPS = 2.5;
+// The share of each object's time the ink gets; the colour gets the rest bar a 10% beat between objects.
+const INK_SHARE = 0.72;
 const EASE = 'power1.inOut';
 const SOFT = 0.5;
 // How far the stage pushes in over the scene.
@@ -111,23 +116,31 @@ export function orderStrokes(strokes) {
   return out;
 }
 
-/** Strokes timed over [t0, t0 + span]: kept to RATE a second (the longest kept), each timed by its length, with the pen's travel between. */
-export function timeStrokes(strokes, t0, span) {
+/** Strokes timed over [t0, t0 + span] at a hand's pace (px scaled by unit): the silhouette and the longest lines that fit, in drawing order, each drawn at an even speed, with travel by distance between. */
+export function timeStrokes(strokes, t0, span, unit = 1) {
   if (!strokes.length) return [];
-  const max = Math.max(1, Math.floor(span * RATE));
-  let kept = strokes;
-  if (strokes.length > max) {
-    const keep = new Set([strokes[0], ...[...strokes.slice(1)].sort((a, b) => b.length - a.length).slice(0, max - 1)]);
-    kept = strokes.filter(s => keep.has(s));
+  const speed = SPEED * unit, gap = (a, b) => Math.min(LIFT[1], Math.max(LIFT[0], Math.hypot(b[0] - a[0], b[1] - a[1]) / (TRAVEL * unit)));
+  // Keep lines while they fit at full speed (travel estimated at the middle of its range).
+  const keep = new Set([strokes[0]]);
+  let used = strokes[0].length / speed;
+  for (const s of [...strokes.slice(1)].sort((a, b) => b.length - a.length)) {
+    const cost = s.length / speed + (LIFT[0] + LIFT[1]) / 2;
+    if (keep.size >= Math.max(1, Math.floor(span * RATE)) || used + cost > span) continue;
+    keep.add(s);
+    used += cost;
   }
-  const travel = kept.length > 1 ? Math.min(0.12, (span * 0.25) / (kept.length - 1)) : 0;
-  const drawTime = span - travel * (kept.length - 1);
-  const weights = kept.map(s => s.length ** 0.6), total = weights.reduce((a, b) => a + b, 0);
+  const kept = strokes.filter(s => keep.has(s));
+  const travels = kept.slice(1).map((s, i) => gap(kept[i].points.at(-1), s.points[0]));
+  const draw = kept.reduce((sum, s) => sum + s.length / speed, 0);
+  // Any time left slows the drawing evenly; a silhouette longer than the span is the one case drawn faster.
+  const avail = Math.max(0.01, span - travels.reduce((a, b) => a + b, 0));
+  // A line too short to see gets 0.04 s; the rest share what is left, so the last line still ends inside the span.
+  const raw = kept.map(s => Math.max(0.04, (s.length / speed) * avail / draw)), fit = avail / raw.reduce((a, b) => a + b, 0);
   let t = t0;
   return kept.map((s, i) => {
-    const duration = Math.max(0.04, drawTime * weights[i] / total);
+    const duration = raw[i] * fit;
     const out = {...s, at: rt(t), duration: rt(duration)};
-    t += duration + travel;
+    t += duration + (travels[i] ?? 0);
     return out;
   });
 }
@@ -182,14 +195,14 @@ function resolve(params, ctx) {
   if (share < 1.2) check.fail('duration', `gives each object ${r2(share)} s to draw; a hand-drawn object needs at least 1.2 s: lengthen the scene or drop the second object`);
   const pieces = objects.map((spec, i) => {
     const t0 = rt(begin + share * i);
-    const ink = r2(share * 0.6), colour = r2(share * 0.3);
+    const ink = r2(share * INK_SHARE), colour = r2(share * (0.9 - INK_SHARE));
     const all = strokesOf(art[i], {min: r2(3 * b.unit)});
     if (!all.length) check.fail(`params.${i ? 'second' : 'subject'}`, `"${spec.object}" has no lines to draw`);
-    const strokes = timeStrokes(orderStrokes(all), t0, ink);
+    const strokes = timeStrokes(orderStrokes(all), t0, ink, b.unit);
     const area = bounds(all.map(s => s.points));
     return {strokes, total: all.length, colourAt: rt(t0 + ink + 0.12), colour, area};
   });
-  b.events.push({id: `${b.id}-draw`, name: 'draw', time: begin, endTime: rt(begin + share * 0.6), role: 'emphasis', cue: 'pen-scribble'});
+  b.events.push({id: `${b.id}-draw`, name: 'draw', time: begin, endTime: rt(begin + share * INK_SHARE), role: 'emphasis', cue: 'pen-scribble'});
   pieces.forEach((piece, i) => { const first = piece.strokes[0]; b.events.push({id: `${b.id}-outline-${i}`, name: `outline-${i}`, time: rt(first.at + first.duration), role: 'emphasis'}); });
   pieces.forEach((piece, i) => b.events.push({id: `${b.id}-colour-${i}`, name: `colour-${i}`, time: piece.colourAt, endTime: rt(piece.colourAt + piece.colour), role: 'emphasis', cue: 'pen-scribble'}));
   const doneAt = rt(pieces.at(-1).colourAt + pieces.at(-1).colour);
@@ -246,7 +259,7 @@ export function penPath(model) {
       legs.push({t0: s.at, t1: rt(s.at + s.duration), fn: t => { const [x, y] = pointAt(pts, progress(t, s.at, s.duration, EASE)); return {x, y, lifted: 0}; }});
       at = rt(s.at + s.duration); from = pts[pts.length - 1];
     }
-    const A = piece.area, zigs = Math.max(3, Math.round(A.height / (c.inkWidth * 9)));
+    const A = piece.area, zigs = Math.max(2, Math.round(piece.colour * SWEEPS));
     const zig = (t) => {
       const s = progress(t, piece.colourAt, piece.colour, 'none'), w = (s * zigs) % 2;
       return {x: A.x + A.width * (w < 1 ? w : 2 - w), y: A.y + A.height * s, lifted: 0};
@@ -298,6 +311,6 @@ export const handDrawn = {
   describe: `An illustration drawn on by hand, whiteboard-explainer style: a pen inks the object's outline stroke by stroke (silhouette first, inner lines growing out of drawn ones), then colours it in, on a paper plate. One object, or two side by side drawn one after the other (${EDITORIAL_OBJECTS.join(', ')} drawn in detail; else a world-kit prop, or an icon at hero scale). An optional line of free type across the top, and a brand or sponsor name on the pen's barrel. For an explainer's opening or a concept that is easier to watch being drawn than to read.`,
   params: {subject: `${OBJECT_PARAM} the object drawn first`, second: `${OBJECT_PARAM} optional: drawn beside it, after it`, pen: `${HAND_PENS.join(' | ')} (default marker): the pen that draws, none for lines with no pen`,
     barrel: 'string ≤ 24 (optional): a brand or sponsor name printed on the pen', text: 'string ≤ 32, one line of free type across the top (optional; the caption usually says it)'},
-  events: ['draw', 'outline-0', 'colour-0', 'outline-1', 'colour-1'], timing: timingRules({rules: ['the pen draws from 0.35 s after the entrance; each object gets an equal share: 60% ink, 30% colour', 'at most 6 strokes a second; the shortest strokes past that arrive with the colour', 'the drawing holds 0.6 s before the exit']}), variants: ['default'],
+  events: ['draw', 'outline-0', 'colour-0', 'outline-1', 'colour-1'], timing: timingRules({rules: ['the pen draws from 0.35 s after the entrance; each object gets an equal share: 72% ink, 18% colour', 'the pen draws at a hand\'s pace (about 2200 px a second at 1080p, at most 6 lines a second); the shortest lines past that arrive with the colour', 'the pen leaves through the last 0.2 s']}), variants: ['default'],
   resolve, view, timeline
 };
