@@ -273,6 +273,9 @@ test('rubber-hose: a white round face, ink-only strokes and white gloves, every 
     assert.match(JSON.stringify(drawCharacter('rubber-hose', params, dimmed, {id: 'k', joints: poseJoints('stand', {geometry}), static: true, light: {dir: 200, color: '#203060', intensity: 1}})), /"fill":"#fdfcf8","stroke":"#1c1a1f"/);
     const weight = limbWeight(drawn('stand', true), 'k');
     assert.ok(weight.ratio >= MIN_LIMB_WEIGHT && weight.ratio <= 0.09, `${id}: limb ${weight.limb} on a ${weight.head} head (${weight.ratio})`);
+    // The head is about a fifth of the figure's height, as the period cartoons draw it.
+    const share = weight.head / styleHeight('rubber-hose', params);
+    assert.ok(share > 0.17 && share < 0.24, `${id}: head ${share} of the height`);
   }
 });
 
@@ -306,4 +309,26 @@ test('stick: pressure ink is an option; without it the stick figure draws as bef
     assert.ok(ribbons(pressed) > ribbons(plain) + 8, `${style}: the sticks are pressure strokes`);
     assert.ok(limbWeight(pressed, 'k').ratio >= MIN_LIMB_WEIGHT);
   }
+});
+
+test('rubber-hose: pie eyes, four-fingered gloves, a line of action standing, and the shared rig untouched', () => {
+  const {params} = starterCharacter('maya');
+  const {colors} = characterLook(params, {style: 'rubber-hose'});
+  const geometry = styleGeometry('rubber-hose', params);
+  const json = JSON.stringify(drawCharacter('rubber-hose', params, colors, {id: 'k', joints: poseJoints('stand', {geometry}), expression: 'happy', static: true}));
+  const nodes = [];
+  const walk = node => { if (node && typeof node === 'object') { nodes.push(node); (node.children ?? []).forEach(walk); } };
+  walk(JSON.parse(json));
+  // Tall black ovals, each with a wedge of paper cut into it.
+  const pupils = nodes.filter(n => n.tag === 'ellipse' && n.attrs.fill === '#1c1a1f' && n.attrs.ry > n.attrs.rx * 1.5);
+  assert.equal(pupils.length, 2);
+  // Each glove: three fingers, a palm, a cover and a thumb (paper ellipses), and a cuff.
+  assert.ok(nodes.filter(n => n.tag === 'ellipse' && n.attrs.fill === '#fdfcf8').length >= 12);
+  // Standing: the weight on one leg and the arms not mirror images; other styles stand as the rig does.
+  const stand = poseJoints('stand', {geometry});
+  assert.notEqual(stand.legL, stand.legR);
+  assert.notEqual(stand.armL, stand.armR);
+  assert.deepEqual(poseJoints('stand', {geometry: styleGeometry('stick', params)}), poseJoints('stand', {geometry: styleGeometry('stick', params)}));
+  const stick = poseJoints('stand', {geometry: styleGeometry('stick', params)});
+  assert.equal(stick.legL, stick.legR);
 });
