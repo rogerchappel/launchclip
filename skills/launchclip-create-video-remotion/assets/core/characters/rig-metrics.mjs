@@ -1,19 +1,20 @@
 // Motion metrics for the per-frame rig (docs/ANIMATION_MEASUREMENT.md,
 // "Per-frame rig"; docs/rd/per-frame-rig.md §4). Pure: a rig-scene plan
 // (content.rigScene, launchclip.rig-scene.v1) is sampled at the story's fps
-// with rigFrame, and every measure reads those samples in canvas px.
+// with rigSceneState (the joints and prop places the renderers draw), and
+// every measure reads those samples in canvas px.
 //
-//   sampleRigScene(plan, {fps, duration}) → {fps, actors: {id: [frame]}, props: {id: [sample]}}
+//   sampleRigScene(plan, {fps, duration, prepared?}) → {fps, actors: {id: [frame]}, props: {id: [sample]}}
 //   measureRigScene(sampled)              → {actors: {id: measures}, props: {id: measures}}
 //   rigFindings(measures, thresholds)     → [{rule, severity, actor|prop, at?, detail}]
 //
 // Imports only sibling kit/core files.
 
-import {rigFrame} from './rig-frame.mjs';
+import {rigScenePrepare, rigSceneState} from './rig-scene.mjs';
 
 const RAD = Math.PI / 180;
-// Where a hand holds a prop: along the glove from the wrist (rig units), as the prototype's ball sits.
-export const PALM = 50;
+// A pick-up: the prop was still this recently (s) before a hand took it.
+const TAKE_FROM_REST = 0.25;
 
 export const SEGMENTS = Object.freeze([['hipL', 'kneeL'], ['kneeL', 'ankleL'], ['hipR', 'kneeR'], ['kneeR', 'ankleR'], ['shoulderL', 'elbowL'], ['elbowL', 'wristL'], ['shoulderR', 'elbowR'], ['elbowR', 'wristR']]);
 const LEG_SEGMENTS = 4;
@@ -24,7 +25,6 @@ const unwrap = list => list.reduce((out, a) => { const prev = out.at(-1); out.pu
 const rms = xs => Math.sqrt(xs.reduce((s, x) => s + x * x, 0) / Math.max(1, xs.length));
 const finite = p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]);
 const round = (v, k = 10) => Math.round(v * k) / k;
-const xy = at => (Array.isArray(at) ? at : [at?.x, at?.y]).map(Number);
 
 // ---------------------------------------------------------------------------
 // Sampling
@@ -32,7 +32,7 @@ const xy = at => (Array.isArray(at) ? at : [at?.x, at?.y]).map(Number);
 /**
  * One actor's frame in canvas px: joints, each foot's ground contact and
  * whether it is planted, each hand's palm (where it holds a prop).
- * frame: rigFrame's result; at: {x, floor, scale}.
+ * frame: rigFrame's result (rigSceneState's actors[].frame); at: {x, floor, scale}.
  */
 export function canvasFrame(frame, at) {
   const {x = 0, floor = 0, scale = 1} = at ?? {};
@@ -44,42 +44,26 @@ export function canvasFrame(frame, at) {
     const miss = leg?.ankle && leg?.target ? [leg.ankle[0] - leg.target[0], leg.ankle[1] - leg.target[1]] : [0, 0];
     return [s, {planted: Boolean(leg?.planted), contact: px([(leg?.place ?? 0) + miss[0], miss[1]])}];
   }));
-  const hands = Object.fromEntries(['l', 'r'].map(s => {
-    const arm = frame.arms?.[s];
-    const g = (arm?.glove ?? 0) * RAD;
-    return [s, arm ? px([arm.wrist[0] + Math.sin(g) * PALM, arm.wrist[1] + Math.cos(g) * PALM]) : joints[`wrist${s.toUpperCase()}`]];
-  }));
+  const hands = Object.fromEntries(['l', 'r'].map(s => [s, frame.arms?.[s]?.palm ? px(frame.arms[s].palm) : joints[`wrist${s.toUpperCase()}`]]));
   return {joints, feet, hands};
 }
 
-/** Where a prop is at t (canvas px) and who holds it: its path's last key at or before t; between two `at` keys it moves in a line. */
-export function propAt(prop, t, handOf) {
-  const path = [...(prop.path ?? [])].sort((a, b) => a.t - b.t);
-  if (!path.length) return {at: [NaN, NaN], holder: null};
-  const i = Math.max(0, path.findLastIndex(k => k.t <= t + 1e-9));
-  const k = path[i], next = path[i + 1];
-  if (k.holder) return {at: handOf(k.holder), holder: k.holder};
-  const a = xy(k.at);
-  if (next?.at && next.t > k.t && t > k.t) {
-    const b = xy(next.at), u = (t - k.t) / (next.t - k.t);
-    return {at: [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u], holder: null, moving: true};
-  }
-  return {at: a, holder: null};
-}
-
 /**
- * A plan sampled at fps over [0, duration] (scene time).
- * options.frameOf(actor, t): the rig frame (default rigFrame(character, track, t)).
+ * A plan sampled at fps over [0, duration] (scene time), from rigSceneState.
+ * options.prepared: rigScenePrepare(plan) (made here when absent);
+ * options.frameOf(actor, t): replaces an actor's rig frame (tests).
  */
-export function sampleRigScene(plan, {fps = 30, duration, frameOf} = {}) {
-  const actors = plan?.actors ?? [];
-  const end = Number.isFinite(duration) ? duration : Math.max(0, ...actors.flatMap(a => [...(a.track?.walks ?? []).map(w => w.end), ...(a.track?.keys ?? []).map(k => k.t)]), ...(plan?.props ?? []).flatMap(p => (p.path ?? []).map(k => k.t)));
+export function sampleRigScene(plan, {fps = 30, duration, prepared, frameOf} = {}) {
+  prepared ??= rigScenePrepare(plan);
+  const end = Number.isFinite(duration) ? duration : Math.max(0, prepared.end - 1);
   const n = Math.floor(end * fps + 1e-6);
-  const of = frameOf ?? ((actor, t) => rigFrame(actor.character, actor.track, t));
   const out = {fps, actors: {}, props: {}};
-  for (const actor of actors) out.actors[actor.id] = Array.from({length: n + 1}, (_, i) => canvasFrame(of(actor, i / fps), actor.at));
-  for (const prop of plan?.props ?? []) {
-    out.props[prop.id] = Array.from({length: n + 1}, (_, i) => propAt(prop, i / fps, h => out.actors[h.actor]?.[i]?.hands[h.hand] ?? [NaN, NaN]));
+  for (const actor of plan.actors) out.actors[actor.id] = [];
+  for (const prop of plan.props) out.props[prop.id] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / fps, state = rigSceneState(plan, t, prepared);
+    state.actors.forEach((a, k) => out.actors[a.id].push(canvasFrame(frameOf ? frameOf(plan.actors[k], t) : a.frame, a.at)));
+    for (const p of state.props) out.props[p.id].push({at: p.at, holder: p.holder ?? null});
   }
   return out;
 }
@@ -177,19 +161,24 @@ export function crossings(frames) {
 }
 
 /**
- * A prop's path: grip loss (how far the prop jumps when a hand takes it or
- * lets it go: the hand was not where the prop was) and teleports (a jump of
- * more than teleportPx in one frame while nobody holds it, except a move
- * between two `at` keys slower than that). → {grip: [{frame, px}], teleports: [{frame, px}]}
+ * A prop's path. By rig-scene.mjs's semantics a release starts a smooth
+ * curve from the hand and a take ends one in the hand, so a throw, a catch
+ * and a handover are continuous; what can still slip is a pick-up from rest
+ * when the hand never reached the prop: it flies the last stretch to the
+ * hand. Grip loss: how far a prop at rest moves between its last still frame
+ * and the take (within TAKE_FROM_REST s). Teleports: a jump of more than
+ * teleportPx in one frame while nobody holds it.
+ * → {grip: [{frame, px}], teleports: [{frame, px}]}
  */
-export function propMeasures(samples, {teleportPx = 120} = {}) {
+export function propMeasures(samples, {teleportPx = 120, fps = 30} = {}) {
   const grip = [], teleports = [];
-  const same = (a, b) => (a?.actor ?? null) === (b?.actor ?? null) && (a?.hand ?? null) === (b?.hand ?? null);
+  let still = null;
   for (let i = 1; i < samples.length; i++) {
     const a = samples[i - 1], b = samples[i];
     const jump = dist(a.at, b.at);
-    if (!same(a.holder, b.holder)) grip.push({frame: i, px: jump});
+    if (!a.holder && b.holder && still !== null && (i - still) / fps <= TAKE_FROM_REST + 1e-9) grip.push({frame: i, px: dist(samples[still].at, b.at)});
     else if (!b.holder && !(jump <= teleportPx)) teleports.push({frame: i, px: jump});
+    if (!a.holder && !b.holder && jump < 0.5) still = i;
   }
   return {grip, teleports};
 }
@@ -202,7 +191,7 @@ export function measureRigScene(sampled, thresholds = {}) {
     const steps = plantedSteps(frames);
     actors[id] = {frames: frames.length, nonFinite: nonFinite(frames), boneDrift: boneDrift(frames), steps, footSlide: Math.max(0, ...steps.map(s => s.px)), jerk: jerk(frames, fps), corners: handCorners(frames), crossings: crossings(frames)};
   }
-  for (const [id, samples] of Object.entries(sampled.props)) props[id] = {nonFinite: samples.filter(s => !finite(s.at)).length, ...propMeasures(samples, {teleportPx: thresholds.errors?.prop_teleport_px})};
+  for (const [id, samples] of Object.entries(sampled.props)) props[id] = {nonFinite: samples.filter(s => !finite(s.at)).length, ...propMeasures(samples, {teleportPx: thresholds.errors?.prop_teleport_px, fps})};
   return {fps, actors, props};
 }
 

@@ -27,6 +27,7 @@
 //       track,                                      rig units (rig-frame.mjs rigFrame), see below
 //       expressions: [{t, expression}],             the last one at or before t shows
 //       mouth?: [{t, viseme}],                      acting.mjs VISEMES names; 'closed' or none: the expression's mouth
+//       visible?: [{t, visible}],                   the last one at or before t; hidden: not drawn, nor what it holds (default shown)
 //       z?                                          draw order (default: list order); props in hand draw with their holder
 //     }],
 //     props: [{
@@ -238,7 +239,7 @@ export function rigSceneTree(plan, t, {width, height}, prepared = rigScenePrepar
     return group(sq ? [group(nodes, {transform: sq})] : nodes, {transform: `translate(${r1(at[0])} ${r1(at[1])})${scale === 1 ? '' : ` scale(${r3(scale)})`}`});
   };
   const order = plan.actors.map((a, i) => ({a, z: a.z ?? i, i})).sort((x, y) => x.z - y.z || x.i - y.i);
-  const kids = order.map(({a}) => {
+  const kids = order.filter(({a}) => lastAt(a.visible, t, 'visible') !== false).map(({a}) => {
     const frame = ev.frame(a.id, t);
     // A prop goes with the hand that holds it; a two-hand prop is drawn on the near side, under the near arm.
     const held = {l: [], r: []}, near = frame.facing === 'left' ? 'l' : 'r';
@@ -294,6 +295,7 @@ export function validateRigScenePlan(plan) {
     if (!(a.at && num(a.at.x) && num(a.at.floor) && num(a.at.scale) && a.at.scale > 0)) err(`${at}.at`, 'needs x, floor and a positive scale');
     if (a.z !== undefined && !num(a.z)) err(`${at}.z`, 'not a number');
     timed(`${at}.expressions`, a.expressions ?? [], (k, w) => { if (typeof k.expression !== 'string') err(w, 'needs an expression'); });
+    timed(`${at}.visible`, a.visible, (k, w) => { if (typeof k.visible !== 'boolean') err(w, 'visible must be true or false'); });
     timed(`${at}.mouth`, a.mouth, (k, w) => { if (!(k.viseme in VISEMES)) err(w, `viseme must be one of ${Object.keys(VISEMES).join(', ')}`); });
     const tr = a.track;
     if (!tr || typeof tr !== 'object') return err(`${at}.track`, 'missing');

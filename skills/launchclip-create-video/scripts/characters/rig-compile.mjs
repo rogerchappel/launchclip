@@ -27,10 +27,10 @@
 import {frameState} from '../catalog-b-view.mjs';
 import {ACTING, sceneJoints, stateJoints} from './acting.mjs';
 import {isKind} from './kinds.mjs';
-import {RIG_FRAME_STYLES} from './rig-scene.mjs';
+import {RIG_FRAME_STYLES, RIG_SCENE_SCHEMA as RIG_SCHEMA} from './rig-scene.mjs';
 
+export {RIG_SCHEMA};
 export const RIG_MODES = Object.freeze(['ops', 'frame']);
-export const RIG_SCHEMA = 'launchclip.rig-scene.v1';
 
 const RAD = Math.PI / 180;
 const r1 = v => Math.round(v * 10) / 10;
@@ -41,6 +41,9 @@ const signOf = facing => (facing === 'left' ? -1 : 1);
 const REST_TOLERANCE = 5;
 // Prop flight and slides are sampled this often (s); the rig's Catmull-Rom passes through every sample.
 const PROP_STEP = 1 / 15;
+// A flight's first and last stretch (s) is the rig's curve from the release hand and into the taking hand (rig-scene.mjs).
+const HAND_GAP = 0.1;
+const samePoint = (a, b) => a[0] === b[0] && a[1] === b[1];
 
 /**
  * Why a scene asking for the per-frame rig plays on the op list instead, or
@@ -177,7 +180,7 @@ function gripWindows(actors, contacts) {
 }
 
 /** One actor's track and faces. */
-function compileActor(actor, index, {start, end, ops, prefix, grips}) {
+function compileActor(actor, index, {start, end, ops, prefix, grips, single}) {
   const g = actor.geometry, s = actor.scale, rel = t => rt(t - start);
   const list = targets(actor, end);
   const rest = f => sceneJoints('stand', {facing: f < 0 ? 'left' : 'right', seated: false, geometry: g, params: actor.params});
@@ -229,21 +232,41 @@ function compileActor(actor, index, {start, end, ops, prefix, grips}) {
   const mouth = (actor.speech ?? []).map(change => ({t: rel(change.time), viseme: change.shape})).filter((m, i, all) => !all[i + 1] || all[i + 1].t - m.t >= 1e-4);
   const squash = squashes(ops, `${prefix}-c${index}-gag`).map(q => ({...q, t: rel(q.t)}));
   const track = {x: 0, facing, walks, keys, facings, hands, feet, squash};
-  return {id: actor.id, character: {params: actor.params, style: actor.style}, colors: actor.colors, at: {x: actor.x, floor: actor.floor, scale: s}, track, expressions, ...(mouth.length ? {mouth} : {}), z: index};
+  // One copy of a person (catalog-characters.mjs castPassage): hidden until the way in has passed, or from the way out.
+  const visible = [];
+  if (single.arrive?.ids.includes(actor.id) && single.arrive.at > start + 1e-6) visible.push({t: 0, visible: false}, {t: rel(single.arrive.at), visible: true});
+  if (single.leave?.ids.includes(actor.id)) visible.push({t: rel(single.leave.at), visible: false});
+  return {id: actor.id, character: {params: actor.params, style: actor.style}, colors: actor.colors, at: {x: actor.x, floor: actor.floor, scale: s}, track, expressions, ...(mouth.length ? {mouth} : {}), ...(visible.length ? {visible} : {}), z: index};
 }
 
 /**
- * A prop's path: held by a hand from each owning grip (a handover passes when
- * the giver lets go), else where the op list puts it, sampled through its
- * moves; and its squashes on landing and impact.
+ * The prop's own moves. A tween that starts while the prop is free but away
+ * from where the moves so far put it is dropped: a carry's leftover (a
+ * recovery the prop followed in the hand) that the op list lets jump it.
+ */
+function freeMoves(mine, id, isFree) {
+  const kept = [];
+  for (const op of [...mine].sort((x, y) => (x.start ?? x.time) - (y.start ?? y.time))) {
+    if (op.type === 'tween' && isFree(op.start)) {
+      const now = frameState(kept, op.start).get(id) ?? {};
+      if (['x', 'y'].some(k => op.from?.[k] !== undefined && now[k] !== undefined && Math.abs(op.from[k] - now[k]) > 2)) continue;
+    }
+    kept.push(op);
+  }
+  return kept;
+}
+
+/**
+ * A prop's path (rig-scene.mjs prop semantics): a holder key where each hand
+ * takes it and where it lets go (a handover passes from the giver's key at
+ * the receiver's grip to the receiver's at the release); free, where the op
+ * list puts it, sampled on a grid, leaving the first and last HAND_GAP s of a
+ * flight to the rig's curve from the release hand and into the catching
+ * hand; a resting key just before a pick-up; and its squashes.
  */
 function compileProp(prop, {start, end, ops, prefix, grips, actors}) {
   const id = `${prefix}-obj-${prop.id}`, rel = t => rt(t - start);
-  const mine = ops.filter(op => op.target === id);
   const owned = grips.filter(w => w.prop === prop.id && w.action !== 'pull').sort((a, b) => a.from - b.from);
-  // Handovers: the receiver takes the path when the giver lets go.
-  const spans = owned.map((w, i) => ({...w, from: Math.max(w.from, owned[i - 1]?.to ?? -Infinity)}));
-  const holderAt = t => spans.find(w => w.from <= t + 1e-6 && t < w.to - 1e-6) ?? null;
   const handOf = w => {
     const actor = actors.find(one => one.id === w.actor);
     const state = actor.states.filter(one => one.time <= Math.max(w.from, start) + 1e-6).at(-1) ?? actor.states[0];
@@ -251,23 +274,43 @@ function compileProp(prop, {start, end, ops, prefix, grips, actors}) {
     // A one-hand prop sits in the facing hand (contact.mjs carryCenter); a two-hand prop names the first.
     return held.length === 1 ? held[0].toLowerCase() : signOf(state.facing ?? actor.facing) < 0 ? 'l' : 'r';
   };
-  const times = new Set([start, ...spans.flatMap(w => [w.from, w.to]).filter(Number.isFinite)]);
-  for (const op of mine) if (op.type === 'tween' && (op.to.x !== undefined || op.to.y !== undefined)) {
-    for (let t = op.start; t < op.start + op.duration; t += PROP_STEP) times.add(rt(t));
-    times.add(rt(op.start + op.duration));
-  }
+  // Each owner's span: from its grip (or the giver's release) to its release (or the receiver's grip).
+  const spans = owned.map((w, i) => ({holder: {actor: w.actor, hand: handOf(w)},
+    from: Math.max(start, owned[i - 1] && owned[i - 1].to > w.from ? owned[i - 1].to : w.from),
+    to: Math.min(end, owned[i + 1] && owned[i + 1].from < w.to ? owned[i + 1].from : w.to),
+    handover: Boolean(owned[i + 1] && owned[i + 1].from < w.to)}));
+  const mine = freeMoves(ops.filter(op => op.target === id), id, t => !spans.some(w => w.from - 1e-6 <= t && t < w.to - 1e-6));
+  const freeAt = t => {
+    const p = frameState(mine, t).get(id) ?? {};
+    return [r1(p.x ?? prop.x), r1(p.y ?? prop.y)];
+  };
   const path = [];
-  for (const t of [...times].filter(t => t >= start - 1e-6 && t <= end + 1e-6).sort((a, b) => a - b)) {
-    const w = holderAt(t);
-    if (w) { if (path.at(-1)?.holder?.actor !== w.actor) path.push({t: rel(t), holder: {actor: w.actor, hand: handOf(w)}}); continue; }
-    const p = frameState(mine, t).get(id) ?? {x: prop.x, y: prop.y};
-    const at = [r1(p.x ?? prop.x), r1(p.y ?? prop.y)];
-    const prev = path.at(-1);
-    if (prev?.at && prev.at[0] === at[0] && prev.at[1] === at[1] && path.at(-2)?.at?.[0] === at[0] && path.at(-2)?.at?.[1] === at[1]) prev.t = rel(t);
+  const atKey = (t, at) => {
+    const prev = path.at(-1), before = path.at(-2);
+    // Three equal points in a row: the middle one goes (two equal neighbours already hold).
+    if (prev?.at && before?.at && samePoint(prev.at, at) && samePoint(before.at, at)) prev.t = rel(t);
     else path.push({t: rel(t), at});
+  };
+  // Where the op list puts it from a to b, on a grid; a flight leaves HAND_GAP s at a release and at a take to the rig.
+  const free = (a, b, released, taken) => {
+    if (b - a < 1e-4) return;
+    const times = new Set([a, b]);
+    for (let t = a + PROP_STEP; t < b - 1e-4; t += PROP_STEP) times.add(rt(t));
+    for (const op of mine) if (op.type === 'tween' && op.start + op.duration > a && op.start + op.duration < b) times.add(rt(op.start + op.duration));
+    const lo = released ? a + HAND_GAP : a, hi = taken ? b - HAND_GAP : b;
+    const kept = [...times].sort((x, y) => x - y).filter(t => t >= lo - 1e-6 && t <= hi + 1e-6);
+    kept.filter((t, i) => i === 0 || t - kept[i - 1] >= 0.03).forEach(t => atKey(t, freeAt(t)));
+  };
+  let cursor = start, prev = null;
+  for (const span of spans) {
+    if (!prev?.handover) free(cursor, span.from, Boolean(prev), true);
+    path.push({t: rel(span.from), holder: span.holder});
+    if (span.to < end && span.to > span.from + 1e-4) path.push({t: rel(span.to), holder: span.holder});
+    cursor = span.to; prev = span;
   }
+  if (!prev || prev.to < end) free(cursor, end, Boolean(prev), false);
   const squash = squashes(ops, `${id}-sq`).map(q => ({...q, t: rel(q.t)}));
-  return {id: prop.id, prop: prop.prop, path: path.filter((k, i) => !path[i + 1] || path[i + 1].t - k.t >= 1e-4), ...(squash.length ? {squash} : {})};
+  return {id: prop.id, prop: prop.prop, path, ...(squash.length ? {squash} : {})};
 }
 
 /**
@@ -276,11 +319,12 @@ function compileProp(prop, {start, end, ops, prefix, grips, actors}) {
  *   contact   planContacts' result ({props, ops, contacts}) or null
  *   start, duration   the scene's story seconds
  *   prefix    the scene's id (the op list's element ids)
+ *   single    castPassage's single ({arrive?, leave?}): people shared with a neighbouring scene
  * → a launchclip.rig-scene.v1 plan (JSON)
  */
-export function compileRigScene({actors, contact = null, start, duration, prefix}) {
+export function compileRigScene({actors, contact = null, start, duration, prefix, single = {}}) {
   const end = start + duration, ops = contact?.ops ?? [], grips = gripWindows(actors, contact?.contacts ?? []);
-  const ctx = {start, end, ops, prefix, grips, actors};
+  const ctx = {start, end, ops, prefix, grips, actors, single};
   return {
     schema: RIG_SCHEMA,
     actors: actors.map((actor, i) => compileActor(actor, i, ctx)),

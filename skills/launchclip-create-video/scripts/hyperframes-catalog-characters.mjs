@@ -11,7 +11,7 @@
 // by the story compiler), the same pure function Remotion calls.
 
 import {charactersTimeline, charactersView} from './catalog-characters.mjs';
-import {rigLayerId, rigScenePrepare, withRigLayer} from './characters/rig-scene-layer.mjs';
+import {rigLayerId, rigScenePrepare} from './characters/rig-scene-layer.mjs';
 import {emitParts} from './hyperframes-catalog-e.mjs';
 
 export {gsapOwnedTransforms, transformProps} from './hyperframes-catalog-b.mjs';
@@ -20,7 +20,7 @@ const num = value => Math.round(value * 1e4) / 1e4;
 const js = value => JSON.stringify(value).replace(/</g, '\\u003c');
 
 export function emitCharacters(model) {
-  const out = emitParts(model, withRigLayer(model, charactersView(model)), charactersTimeline(model));
+  const out = emitParts(model, charactersView(model), charactersTimeline(model));
   return model.content?.rigScene ? {...out, motion: [out.motion, rigSceneMotion(model)].filter(Boolean).join('\n')} : out;
 }
 
