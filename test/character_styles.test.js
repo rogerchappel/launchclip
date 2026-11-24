@@ -7,7 +7,7 @@ import {EXPRESSIONS, POSES, poseJoints, rigGeometry} from '@launchclip/core/char
 import {STARTER_CAST, characterLook, starterCharacter} from '@launchclip/core/characters/cast.mjs';
 import {drawFlat} from '@launchclip/core/characters/style-flat.mjs';
 import {DRAWING_STYLES, MIN_LIMB_WEIGHT, drawCharacter, limbWeight, styleGeometry, styleHeight} from '@launchclip/core/characters/styles.mjs';
-import {cubicPoints, pressureStroke} from '@launchclip/core/characters/pens.mjs';
+import {cubicPoints, pathBox, pressureStroke} from '@launchclip/core/characters/pens.mjs';
 import {asHead} from '@launchclip/core/characters/toon.mjs';
 import {DEFAULT_LIGHT, lightErrors, normalizeLight} from '@launchclip/core/characters/light.mjs';
 import {resolveModule} from '@launchclip/core/modules.mjs';
@@ -249,11 +249,21 @@ test('rubber-hose: a white round face, ink-only strokes and white gloves, every 
     const geometry = styleGeometry('rubber-hose', params);
     const drawn = (pose, isStatic) => drawCharacter('rubber-hose', params, colors, {id: 'k', joints: poseJoints(pose, {geometry}), expression: 'happy', expressions: ['happy', 'sad'], static: isStatic});
     const json = JSON.stringify(drawn('wave', true));
-    // Ink, paper and greys only: the figure is drawn, not coloured.
+    // Ink, paper and muted greys only: the figure is drawn, not coloured (hair keeps a trace of its colour).
     for (const hex of new Set(json.match(/#[0-9a-f]{6}/gi).map(hex => hex.toLowerCase()))) {
       const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
-      assert.ok(Math.max(r, g, b) - Math.min(r, g, b) <= 16, `${id}: ${hex} is a grey, not a colour`);
+      assert.ok(Math.max(r, g, b) - Math.min(r, g, b) <= 32, `${id}: ${hex} is a muted grey, not a colour`);
     }
+    // No big solid ink shape (dark hair or a headscarf is line art over a light tone): only the shoes and small marks are filled ink.
+    const inkBlobs = node => (node && typeof node === 'object' ? (node.tag === 'path' && node.attrs?.fill === '#221d27' && (box => box.x1 - box.x0)(pathBox(node.attrs.d)) > 60 ? 1 : 0) + (node.children ?? []).reduce((sum, child) => sum + inkBlobs(child), 0) : 0);
+    assert.equal(inkBlobs(drawn('stand', true)), 0, `${id}: no solid ink hair`);
+    // Arms are drawn before the head, so a raised hand never strokes across the face.
+    const order = [];
+    const walk = node => { if (!node || typeof node !== 'object') return; const nid = node.id ?? node.attrs?.id; if (/^k-(arm-[lr]|head)$/.test(nid ?? '')) order.push(nid); (node.children ?? []).forEach(walk); };
+    walk(drawn('cheer', true));
+    assert.deepEqual(order, ['k-arm-l', 'k-arm-r', 'k-head']);
+    // The resting arms hang clear of the body, for this style only.
+    assert.ok(poseJoints('stand', {geometry}).armL > poseJoints('stand').armL);
     // The same animated part ids as the stick figure.
     const ids = node => (node && typeof node === 'object' ? [...(node.id ? [node.id] : []), ...(node.children ?? []).flatMap(ids)] : []);
     const stick = drawCharacter('stick-classic', params, characterLook(params, {style: 'stick-classic'}).colors, {id: 'k', joints: poseJoints('wave', {geometry: styleGeometry('stick-classic', params)}), expression: 'happy', expressions: ['happy', 'sad']});
