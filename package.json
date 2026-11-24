@@ -68,6 +68,8 @@
     "remotion",
     "src",
     "docs",
+    "eval/limb-weight.mjs",
+    "eval/motion-review.mjs",
     "skills",
     "SKILL.md",
     "README.md",

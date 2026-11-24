@@ -142,3 +142,26 @@ test("earlier failures are carried into the repair log and each needs a resoluti
   await save(same.file, sameFilled);
   assert.match((await checkMotionReview(same.file)).errors.join("\n"), /same file as before/);
 });
+
+test("launchclip review-motion makes a pack and review-motion check exits 1 while it is pending, 2 when it needs repair", async (t) => {
+  const { runCli } = await import("../src/cli.js");
+  const { dir, video, reference } = await fixtures();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  let out = "";
+  const stdout = { write: (chunk) => { out += chunk; } };
+  const pack = path.join(dir, "pack");
+  await runCli(["review-motion", video, "--reference", reference, "--reference-range", "0-1", "--out", pack], { stdout });
+  assert.match(out, /2 shot\(s\), \d+ frame strips, 1 reference excerpt/);
+  await assert.rejects(runCli(["review-motion", "check", pack], { stdout }), (error) => error.exitCode === 1 && /problem/.test(error.message));
+  const file = path.join(pack, "motion-review.json");
+  const review = fill(await read(file));
+  review.shots[0].checks.gesture.status = "needs_repair";
+  review.decisions.motion.status = "needs_repair";
+  await save(file, review);
+  out = "";
+  await assert.rejects(runCli(["review-motion", "check", file, "--json"], { stdout }), (error) => error.exitCode === 2);
+  assert.equal(JSON.parse(out).verdict, "needs_repair");
+  out = "";
+  await runCli(["review-motion", "--help"], { stdout });
+  assert.match(out, /launchclip review-motion check <motion-review\.json\|pack dir>/);
+});

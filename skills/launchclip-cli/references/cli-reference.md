@@ -1448,6 +1448,18 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip handin check <project> [--look mixed] [--model provider:model] [--json] # check HANDIN.json art against the story and the bible; writes qa/hand-in.json
   ```
 
+- `review-motion`: Make a motion review pack (docs/ANIMATION_MEASUREMENT.md, Motion review): per shot a clip and three-frame strips at the cut in, each pose change (from the project's shot list; a bare video is cut where the picture changes) and the cut out; the --reference clip's excerpts (--reference-range, default the whole clip) beside them; an index.html contact sheet; and motion-review.json with every check pending, bound to the video and reference by sha256. A project reviews renders/final.mp4 (or draft.mp4) unless --video names one. Limb weight (stroke width over head width) is measured from the frames as a guide. --previous carries an earlier review's failures into the repair log. --model names a model that takes images to suggest observations; a suggestion never sets a verdict. Writes <project>/qa/motion-review/ unless --out; refuses to overwrite a review.
+
+  ```text
+  launchclip review-motion <project|video> [--video <file>] [--reference <clip>] [--reference-range 0-3,5-8] [--previous <motion-review.json>] [--out <dir>] [--model provider:model] [--json] # a motion review pack against a reference clip, every check pending
+  ```
+
+- `review-motion check`: Check a filled motion review: the video, reference and pack files are unchanged; every check is pass, needs_repair or not_applicable with a reason, and has an observation and evidence; limb_weight has its comparison_basis and is not n/a when there is a reference; decisions.motion names who reviewed, how and when, and is pass only when nothing is open; every failure of the previous review is in the repair log and resolved (an implementation change needs a different video). Exits 1 when the review is incomplete and 2 when it is complete but needs repair. The technical and user decisions are reported, not checked.
+
+  ```text
+  launchclip review-motion check <motion-review.json|pack dir> [--previous <motion-review.json>] [--json] # a filled review is complete, current and resolves earlier failures
+  ```
+
 - `carousel make`: Plan, render and check a carousel or a single-image post from a brief (docs/CAROUSELS_RFC.md): a story whose scenes are slides, each a still (the slide's settled frame) or a short motion loop, with a post caption and alt text per destination.
 
   ```text
