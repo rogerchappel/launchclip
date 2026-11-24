@@ -57,6 +57,17 @@ The five styles a host app offers today, side by side with its own previews (lef
 | `photo-essay` | Large photos across the top of a light page, restrained captions | Photography, recaps, trips |
 | `lit-window` | Each photo in a rounded window in a soft pool of brand-coloured light, the type set free around it | Product shots, screenshots, case studies |
 
+### Detailed item slides
+
+A slide reads in 25 words by default. A saved list often says more on each item: its name, then two or three short points. Set `"density": "detailed"` in the story's `carousel` block and body slides may run to 50 words. On a `split-screen` slide, `items` then take up to 72 characters over two lines, and `accent` colours the key phrases:
+
+```json
+{ "module": "split-screen", "slide": { "role": "body", "medium": "still", "alt": "…" }, "params": {
+  "media": "assets/photos/page.png", "kicker": "1/5", "title": "THE DAM NEVER RACED",
+  "items": ["Unraced tells you nothing about her ability", "You pay for the sire and hope"],
+  "accent": ["never raced", "nothing", "the sire"] } }
+```
+
 ### How a slide gets its layout
 
 Each slide takes one of eight layouts (grammars). The content decides first; after that comes the template's choice for the slide's role, and then type on the ground:

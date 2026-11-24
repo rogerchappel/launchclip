@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { carouselPlanFindings, cutOff, namesSomething, slideText } from "@launchclip/core/carousel-check.mjs";
+import { carouselProblems } from "@launchclip/core/carousel.mjs";
 import { CAROUSEL_DESTINATIONS } from "@launchclip/core/carousel.mjs";
 import { declaredTextBoxes, geometryFindings, measuredContrast, readPixels, run } from "../src/carousel/check.js";
 import { ffmpegMissing, mediaSkip } from "./helpers/media.js";
@@ -388,4 +389,15 @@ test("cover-thumbnail: a small cover headline fails at feed size", { timeout: 60
     process.exitCode = exitCode;
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("one-idea: carousel.density \"detailed\" gives a body slide 50 words, and only that value is accepted", () => {
+  const story = clean();
+  story.scenes[1].params.sub = Array.from({ length: 40 }, (_, i) => `word${i}`).join(" ");
+  assert.match(rules(carouselPlanFindings(story), "one-idea")[0].reason, /reads in 25 or fewer/);
+  story.carousel.density = "detailed";
+  assert.deepEqual(rules(carouselPlanFindings(story), "one-idea"), []);
+  assert.deepEqual(carouselProblems(story), []);
+  story.carousel.density = "dense";
+  assert.match(carouselProblems(story).join("\n"), /carousel\.density must be "detailed"/);
 });

@@ -105,6 +105,7 @@ niches/horse-racing/
   creators.json       who was found, and why
   library.jsonl       one line a post: words, transcript, facts, results, answers
   thumbs/             small copies of the covers
+  slides/             one sheet of the slides for each photo post
   rubric.draft.json   the questions, with their numbers
   report.md           the evidence: each question, its numbers, and example posts with links
 ```

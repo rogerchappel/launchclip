@@ -113,6 +113,7 @@ function layoutBase(moduleId, params, ctx, allowed, required = []) {
   const grammarId = ctx.grammar?.id ?? ctx.grammar?.base ?? 'editorial';
   b.entrance = MEDIA_LAYOUT_ENTRANCES[grammarId] ?? MEDIA_LAYOUT_ENTRANCES.editorial;
   b.shape = frameShape(b.canvas);
+  b.slide = Boolean(ctx.noCaptions);
   b.enterEase = grammarEase(ctx.grammar, 'power3.out', {props: ['y', 'scale']});
   b.fadeEase = grammarEase(ctx.grammar, 'power2.out', {props: ['opacity']});
   b.stagger = grammarStagger(ctx.grammar, T.stagger, {min: 0.15, max: 0.6});
@@ -214,13 +215,21 @@ function textFits(b, entry, width) {
 function addTexts(b, laid, {over = [], partId = 'text', color = paperOnBg(b), shadow = false} = {}) {
   for (const entry of laid) {
     b.texts.push({key: entry.key, text: entry.text, box: entry.box, size: entry.size, family: entry.family, lineHeight: entry.lineHeight, lines: entry.lines, align: entry.align, ...(entry.weight ? {weight: entry.weight} : {}),
-      color: entry.color ?? color, at: entry.at, bullet: entry.kind === 'item' ? {size: b.u(18), color: b.colors.primary} : null, count: entry.count ?? null, shadow});
+      color: entry.color ?? color, ...(entry.accents?.length ? {accents: {phrases: entry.accents, color: b.colors.primary}} : {}), at: entry.at, bullet: entry.kind === 'item' ? {size: b.u(18), color: b.colors.primary} : null, count: entry.count ?? null, shadow});
     if (entry.at > b.lastReveal) b.lastReveal = entry.at;
   }
   if (!laid.length) return;
   const rect = unionRect(laid.map(entry => entry.box));
   const first = Math.min(...laid.map(entry => entry.at));
   b.parts.push({id: partId, role: 'text', rect, minTextPx: Math.min(...laid.map(entry => entry.size)), start: first, motion: {enterEnd: rt(first + T.textFade), exitStart: rt(b.end - T.exit)}, ...(over.length ? {over} : {})});
+}
+
+/** `text` cut at its accent phrases (case-insensitive, longest first): [{text, accent?}], in order. */
+export function accentRuns(text, accents) {
+  const phrases = [...(accents?.phrases ?? [])].sort((a, b) => b.length - a.length);
+  if (!phrases.length) return [{text}];
+  const escaped = phrases.map(phrase => phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return text.split(new RegExp(`(${escaped.join('|')})`, 'i')).filter(Boolean).map(part => (phrases.some(phrase => phrase.toLowerCase() === part.toLowerCase()) ? {text: part, accent: true} : {text: part}));
 }
 
 /** A pill of text (a label or chip) at `x, y` (its top-left), width from the text. */
@@ -249,6 +258,8 @@ const inset = (rect, by) => ({x: rect.x + by, y: rect.y + by, width: rect.width 
 function contentEntries(b, p, {titleSize, path = 'params', requireSome = true, itemTimes = true}) {
   const entries = [];
   const portrait = b.shape === 'portrait';
+  // A carousel slide is read, not heard: an item may run to two lines there.
+  const slide = b.slide;
   if (p.kicker !== undefined) entries.push({key: 'kicker', text: b.check.str(p.kicker, `${path}.kicker`, 32).toUpperCase(), family: 'body', preferred: b.u(44), color: b.colors.primary, path: `${path}.kicker`});
   if (p.title !== undefined) entries.push({key: 'title', text: b.check.str(p.title, `${path}.title`, 60), family: 'display', preferred: b.u(titleSize ?? (portrait ? 92 : 72)), maxLines: 2, gap: 14, path: `${path}.title`});
   const kinds = ['body', 'stat', 'items'].filter(key => p[key] !== undefined);
@@ -267,9 +278,18 @@ function contentEntries(b, p, {titleSize, path = 'params', requireSome = true, i
       const item = typeof raw === 'string' ? {text: raw} : b.check.obj(raw, `${path}.items[${i}]`, ['text', 'at'], ['text']);
       const fallback = T.lead + 0.35 + i * spread;
       const at = itemTimes ? b.timeOf(`item-${i}`, item.at, `${path}.items[${i}].at`, fallback, {min: 0, max: b.duration - T.minHold}) : undefined;
-      entries.push({key: `item-${i}`, text: b.check.str(item.text, `${path}.items[${i}].text`, 32), family: 'body', preferred: b.u(portrait ? 58 : 50), gap: 22, kind: 'item', at, path: `${path}.items[${i}].text`});
+      entries.push({key: `item-${i}`, text: b.check.str(item.text, `${path}.items[${i}].text`, slide ? 72 : 32), family: 'body', preferred: b.u(portrait ? 58 : 50), ...(slide ? {maxLines: 2} : {}), gap: 22, kind: 'item', at, path: `${path}.items[${i}].text`});
       if (at !== undefined) b.events.push({id: `${b.id}-item-${i}`, name: `item-${i}`, time: at, endTime: rt(at + T.textFade), role: 'beat'});
     });
+  }
+  if (p.accent !== undefined) {
+    // Key phrases in the brand primary, each where it is written in the title, body or an item.
+    const phrases = b.check.arr(p.accent, `${path}.accent`, 1, 8).map((phrase, i) => b.check.str(phrase, `${path}.accent[${i}]`, 40));
+    for (const [i, phrase] of phrases.entries()) {
+      const holders = entries.filter(entry => entry.key !== 'kicker' && !entry.count && entry.text.toLowerCase().includes(phrase.toLowerCase()));
+      if (!holders.length) b.check.fail(`${path}.accent[${i}]`, `${JSON.stringify(phrase)} is not in the title, body or items`);
+      for (const entry of holders) (entry.accents ??= []).push(phrase);
+    }
   }
   if (requireSome && !entries.some(entry => entry.key !== 'kicker')) b.check.fail(path, 'needs a title, body, stat or items (the half that carries the line)');
   return entries;
@@ -320,7 +340,7 @@ function finishLayout(b, extra = {}) {
 // split-screen
 
 function resolveSplit(params, ctx) {
-  const b = layoutBase('split-screen', params, ctx, ['media', 'variant', 'share', 'divider', 'fade', 'kicker', 'title', 'body', 'stat', 'items', 'align'], ['media']);
+  const b = layoutBase('split-screen', params, ctx, ['media', 'variant', 'share', 'divider', 'fade', 'kicker', 'title', 'body', 'stat', 'items', 'accent', 'align'], ['media']);
   const {check, canvas, safe, u, colors} = b;
   const p = b.params;
   const media = layoutMedia(check, p.media, 'params.media');
@@ -770,7 +790,7 @@ export function mediaLayoutView(model) {
     const style = {margin: 0, boxSizing: 'border-box', fontFamily: fonts[t.family] ?? fonts.body, ...(t.weight ? {fontWeight: t.weight} : {}), fontSize: t.size, lineHeight: String(r2(t.lineHeight)), color: t.color, textAlign: t.align, opacity: 0, transformOrigin: '50% 50%',
       whiteSpace: t.lines > 1 ? 'normal' : 'nowrap', ...(t.shadow ? {textShadow: `0 ${4 * model.unit}px ${24 * model.unit}px #00000099`} : {})};
     if (t.pill) Object.assign(style, {background: t.pill.fill, borderRadius: t.pill.radius, padding: `${t.pill.padY}px ${t.pill.padX}px`});
-    const children = [t.count ? formatCount(t.count, 0) : t.text];
+    const children = t.count ? [formatCount(t.count, 0)] : accentRuns(t.text, t.accents).map((run, n) => (run.accent ? el('span', `${id}-${t.key}-a${n}`, {color: t.accents.color}, [run.text]) : run.text));
     const node = el('div', `${id}-${t.key}`, abs(t.box.x, t.box.y, t.box.width, t.box.height, style), children);
     if (t.bullet) {
       const dot = el('div', `${id}-${t.key}-dot`, abs(t.box.x - t.bullet.size - model.unit * 22, t.box.y + t.size * t.lineHeight / 2 - t.bullet.size / 2, t.bullet.size, t.bullet.size, {borderRadius: t.bullet.size / 2, background: t.bullet.color, opacity: 0}));
@@ -907,14 +927,14 @@ const CONTENT = {
   title: 'string ≤ 60, up to two lines (the line, in a few words)',
   body: 'string ≤ 90, one or two lines under the title (optional; one of body, stat, items)',
   stat: '{value: string ≤ 12 (a figure like "1,200 kg" counts up), label?: string ≤ 40} (optional; one of body, stat, items)',
-  items: '[string ≤ 32 | {text, at?}] 2–4, revealed one by one on their words (optional; one of body, stat, items)'
+  items: '[string ≤ 72 | {text, at?}] 2–4, revealed one by one on their words: ≤ 32 on one line in a video, up to two lines on a carousel slide (optional; one of body, stat, items)'
 };
 
 export const splitScreen = definition('split-screen',
   'Footage fills the top or bottom half of the frame (left or right on a wide frame) and the other half carries the line: a title, a stat or a short list, across an accent line or a soft blend. Keeps captions.',
   {media: MEDIA, variant: 'top|bottom|left|right: where the footage sits (default top; on a 16:9 frame top → left, bottom → right)', share: '0.3–0.65, the footage\'s share of the frame (default 0.4 top on 9:16, else 0.5)',
     divider: 'line|blend (default line): an accent line that wipes across the seam, or the footage fading into the panel',
-    fade: '{color?: ground|primary, tint? 0–0.6, stops?: [solid, clear], opacity? 0.3–1}: a brand-coloured reading gradient over the footage, solid at the seam and clear from stops[1] of the footage (implies the blend; kit/core/reading-gradient.mjs)', ...CONTENT, align: 'left|center (default left)'},
+    fade: '{color?: ground|primary, tint? 0–0.6, stops?: [solid, clear], opacity? 0.3–1}: a brand-coloured reading gradient over the footage, solid at the seam and clear from stops[1] of the footage (implies the blend; kit/core/reading-gradient.mjs)', ...CONTENT, accent: '[string ≤ 40] 1–8 key phrases drawn in the brand primary where they are written in the title, body or items (optional)', align: 'left|center (default left)'},
   ['item-<i>'], resolveSplit);
 export const landscapeCard = definition('landscape-card',
   'A landscape clip letterboxed in a rounded window mid-frame (16:9 by default), a title above and a caption or chip below: landscape library footage without a heavy crop. Keeps captions.',

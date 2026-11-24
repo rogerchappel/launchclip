@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import {MEDIA_LAYOUTS, MODULES, countUp, mediaLayoutTimeline, mediaLayoutView} from '@launchclip/core/catalog-d.mjs';
+import {MEDIA_LAYOUTS, MODULES, accentRuns, countUp, mediaLayoutTimeline, mediaLayoutView} from '@launchclip/core/catalog-d.mjs';
 import {knownModules, resolveModule} from '@launchclip/core/modules.mjs';
 import {checkLayout, layoutExtras} from '@launchclip/core/layout-check.mjs';
 import {validateModuleParams} from '@launchclip/core/module-schemas.mjs';
@@ -284,4 +284,22 @@ test('media layouts: title size does not depend on the module built before', asy
     return MODULES['split-screen'].resolve(params, {id: 's', format: FORMATS['1:1'], start: 0, duration: 4, brand: wide}).content.texts.find(t => t.key === 'title').size;
   };
   assert.equal(titleSize({}), titleSize(wide.fonts));
+});
+
+test('split-screen: accent phrases are drawn in the primary; a carousel slide takes two-line items', () => {
+  const scene = {id: 'acc', module: 'split-screen', start: 0, end: 4, params: {media: STILL, title: 'The dam never raced', items: ['Unraced tells you nothing', 'You pay for the sire'], accent: ['never raced', 'UNRACED']}};
+  const model = resolve(scene);
+  const texts = Object.fromEntries(model.content.texts.map(t => [t.key, t.accents?.phrases]));
+  assert.deepEqual(texts, {title: ['never raced'], 'item-0': ['UNRACED'], 'item-1': undefined});
+  assert.deepEqual(accentRuns('Unraced tells you nothing', {phrases: ['UNRACED']}), [{text: 'Unraced', accent: true}, {text: ' tells you nothing'}]);
+  assert.deepEqual(accentRuns('a (b) a', {phrases: ['a', '(b)']}), [{text: 'a', accent: true}, {text: ' '}, {text: '(b)', accent: true}, {text: ' '}, {text: 'a', accent: true}]);
+  const spans = JSON.stringify(mediaLayoutView(model).overlay).match(/"tag":"span"[^}]*"color":"#[0-9a-f]{6}"/g);
+  assert.equal(spans.length, 2);
+  assert.ok(spans.every(span => span.includes(brand.colors.primary)));
+  assert.throws(() => resolve({...scene, params: {...scene.params, accent: ['black type']}}), /"black type" is not in the title, body or items/);
+  // A video keeps one-line items of 32 characters; a slide reads up to 72 across two lines.
+  const long = {...scene, params: {media: STILL, title: 'The dam never raced', items: ['Unraced tells you nothing about her ability on a track', 'You pay for the sire and hope']}};
+  assert.throws(() => resolve(long), /items\[0\]\.text/);
+  const slide = resolveModule({...long, slide: {role: 'body', medium: 'still', alt: 'x'}}, story([long], {width: 1080, height: 1350, fps: 30, kind: 'carousel'}, {carousel: {arc: 'listicle'}}));
+  assert.equal(slide.content.texts.find(t => t.key === 'item-0').lines, 2);
 });

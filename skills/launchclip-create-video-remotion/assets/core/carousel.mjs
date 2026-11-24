@@ -68,11 +68,12 @@ export function carouselProblems(story) {
   const err = (message) => errors.push(message);
   if (story.format.kind !== "carousel") { err('format.kind must be "carousel" or left out (a video)'); return errors; }
   const carousel = story.carousel;
-  if (!isObject(carousel)) err("carousel must be {arc, goal?, caption?, destinations?, seams?, panorama?, template?, background?}");
+  if (!isObject(carousel)) err("carousel must be {arc, goal?, caption?, destinations?, seams?, panorama?, template?, background?, density?}");
   const arc = isObject(carousel) ? carousel.arc : undefined;
   if (isObject(carousel)) {
-    for (const key of Object.keys(carousel)) if (!["arc", "goal", "caption", "destinations", "seams", "panorama", "template", "background"].includes(key)) err(`carousel.${key} is not a carousel field (arc, goal, caption, destinations, seams, panorama, template, background)`);
+    for (const key of Object.keys(carousel)) if (!["arc", "goal", "caption", "destinations", "seams", "panorama", "template", "background", "density"].includes(key)) err(`carousel.${key} is not a carousel field (arc, goal, caption, destinations, seams, panorama, template, background, density)`);
     if (!CAROUSEL_ARC_IDS.includes(arc)) err(`carousel.arc must be one of ${CAROUSEL_ARC_IDS.join(", ")}`);
+    if (carousel.density !== undefined && carousel.density !== "detailed") err('carousel.density must be "detailed" or left out');
     if (carousel.goal !== undefined && !CAROUSEL_GOALS.includes(carousel.goal)) err(`carousel.goal must be one of ${CAROUSEL_GOALS.join(", ")}`);
     if (carousel.caption !== undefined) {
       if (!isObject(carousel.caption)) err("carousel.caption must be {hook, body?, cta?, tags?}");
