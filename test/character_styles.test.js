@@ -279,3 +279,18 @@ test('limb weight: limb width over head width in every style; a wire-thin figure
   assert.ok(limbWeight(wire, 'w').ratio < MIN_LIMB_WEIGHT);
   assert.equal(limbWeight({tag: 'g', children: []}, 'w'), null, 'nothing to measure');
 });
+
+test('stick: pressure ink is an option; without it the stick figure draws as before', () => {
+  const {params} = starterCharacter('maya');
+  for (const style of ['stick', 'stick-classic']) {
+    const {colors} = characterLook(params, {style});
+    const options = {id: 'k', joints: poseJoints('wave', {geometry: styleGeometry(style, params)}), static: true};
+    const plain = drawCharacter(style, params, colors, options);
+    assert.deepEqual(drawCharacter(style, params, colors, {...options, ink: null}), plain);
+    const pressed = drawCharacter(style, params, colors, {...options, ink: 'pressure'});
+    assert.deepEqual(drawCharacter(style, params, colors, {...options, ink: 'pressure'}), pressed, `${style}: deterministic`);
+    const ribbons = node => (node && typeof node === 'object' ? (node.tag === 'path' && node.attrs?.stroke === 'none' && /^M[^CQ]+Z$/.test(node.attrs.d) ? 1 : 0) + (node.children ?? []).reduce((sum, child) => sum + ribbons(child), 0) : 0);
+    assert.ok(ribbons(pressed) > ribbons(plain) + 8, `${style}: the sticks are pressure strokes`);
+    assert.ok(limbWeight(pressed, 'k').ratio >= MIN_LIMB_WEIGHT);
+  }
+});
