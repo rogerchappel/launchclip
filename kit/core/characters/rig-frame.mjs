@@ -362,7 +362,7 @@ function goals(ctx, t) {
     const carry = carryAt(track.carries, side, t);
     // Walking, the arms come in from the stance's spread toward the line of the body; a carrying arm barely swings.
     const upper0 = rest[side].upper * (1 - 0.6 * walk.intensity) + f * WALK.swing * off * (1 - 0.8 * carry.w) + sway;
-    const flex0 = rest[side].flex + 14 * walk.intensity + 22 * Math.max(0, off);
+    const flex0 = rest[side].flex + 16 * walk.intensity + 24 * Math.max(0, off);
     let upper = upper0, fore = upper0 + f * flex0, stiff = 0;
     const toward = (at, w, bend) => {
       const ik = twoBone([0, 0], [f * at[0], at[1]], L.upper, L.fore, f * bend);

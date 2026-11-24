@@ -240,7 +240,9 @@ export function rigSceneTree(plan, t, {width, height}, prepared = rigScenePrepar
   const order = plan.actors.map((a, i) => ({a, z: a.z ?? i, i})).sort((x, y) => x.z - y.z || x.i - y.i);
   const kids = order.map(({a}) => {
     const frame = ev.frame(a.id, t);
-    const held = propStates.filter(({s}) => s.holder?.actor === a.id).map(({p, s}) => propNode(p, s.rig, 1));
+    // A prop goes with the hand that holds it; a two-hand prop is drawn on the near side, under the near arm.
+    const held = {l: [], r: []}, near = frame.facing === 'left' ? 'l' : 'r';
+    for (const {p, s} of propStates) if (s.holder?.actor === a.id) held[HAND_PROPS[p.prop].hands === 2 ? near : s.holder.hand].push(propNode(p, s.rig, 1));
     const viseme = lastAt(a.mouth, t, 'viseme');
     const body = drawRigFrame(a.character, a.colors, frame, {id: a.id, expression: lastAt(a.expressions, t, 'expression') ?? 'neutral', viseme: viseme && viseme !== 'closed' ? viseme : null, held});
     return group([body], {transform: `translate(${r1(a.at.x)} ${r1(a.at.floor)}) scale(${r3(a.at.scale)})`});
@@ -346,7 +348,7 @@ export function validateRigScenePlan(plan) {
 // The R&D prototype scene (eval/per-frame-rig, the side-by-side's right half)
 
 /**
- * One rubber-hose oliver: walks left about 0.8 m with the ball in his right
+ * One rubber-hose oliver: walks left about 0.6 m with the ball in his right
  * hand, settles, turns to face right, anticipates, throws over the top
  * (released at 4.47 s), follows through, settles into an idle. Today's rig
  * acts the same beats (eval/per-frame-rig/today.storyboard.json).
@@ -359,7 +361,7 @@ export const PROTOTYPE = Object.freeze({
   release: {t: 4.47, velocity: [1100, -820], gravity: 2300},
   track: {
     x: 0, facing: 'left', stance: 22,
-    walks: [{start: 0.3, end: 1.75, to: -449, stance: 46}],
+    walks: [{start: 0.3, end: 1.75, to: -330, stance: 46}],
     facings: [{t: 2.3, facing: 'right'}],
     squash: [{t: 1.8, amount: 0.12, hold: 0.04, recover: 0.32}],
     keys: [
@@ -382,8 +384,9 @@ export const PROTOTYPE = Object.freeze({
       r: [
         // The hand swings back and up (the arm straight as it passes behind), cocks behind the head,
         // holds, then whips over the top to release ahead and follows through down and across.
-        {t: 3.5, at: [14, 296]},
-        {t: 3.9, at: [-150, 245]},
+        {t: 3.45, at: [125, 190]},
+        {t: 3.7, at: [20, 292]},
+        {t: 3.92, at: [-150, 245]},
         {t: 4.06, at: [-282, 100], bend: -1},
         {t: 4.2, at: [-150, -150], bend: -1},
         {t: 4.31, at: [-128, -178], bend: -1},

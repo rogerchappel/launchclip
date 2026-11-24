@@ -72,10 +72,11 @@ export function rigPropNodes(kind, colors = {}) {
 /**
  * Draw one frame of a character (rig units, the feet's ground at y = 0).
  * frame: rigFrame's result. options: {id, expression, viseme (acting.mjs
- * VISEMES name), held: nodes drawn between the body and the near arm (a
- * prop in hand, placed in rig units)}.
+ * VISEMES name), held: {l?, r?: nodes} what each hand holds, placed in rig
+ * units: drawn just over that hand's arm, so a prop in the far hand stays
+ * behind the body}.
  */
-export function drawRigFrame(character, colors, frame, {id = 'rig', expression = 'neutral', viseme = null, held = []} = {}) {
+export function drawRigFrame(character, colors, frame, {id = 'rig', expression = 'neutral', viseme = null, held = {}} = {}) {
   const {params, style} = character;
   if (!RIG_FRAME_STYLES.includes(style)) throw new Error(`the per-frame rig draws ${RIG_FRAME_STYLES.join(', ')}, not ${JSON.stringify(style)}`);
   const hose = style === 'rubber-hose', mono = style === 'stick-classic';
@@ -148,9 +149,9 @@ export function drawRigFrame(character, colors, frame, {id = 'rig', expression =
     return t ? [group(kids, {transform: t})] : kids;
   };
   const body = [
-    ...upperBody([...arm(far), headAt([backIdle])]),
+    ...upperBody([...arm(far), ...(held[far] ?? []), headAt([backIdle])]),
     ...leg(far), ...leg(near),
-    ...upperBody([...spine, ...held, ...arm(near), headAt([headIdle])])
+    ...upperBody([...spine, ...(held[near] ?? []), ...arm(near), headAt([headIdle])])
   ];
   const gag = squashTransform(frame.squash, [pelvis[0], 0]);
   return group([shadow, ...(gag ? [group(body, {transform: gag})] : body)]);
