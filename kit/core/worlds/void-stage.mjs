@@ -130,7 +130,7 @@ const voidStage = {
     // Backlight: a soft glow at the vanishing point (red at dusk).
     const glowC = k.time === 'dusk' ? VOID_RED : c.paper ? '#ffffff' : '#ffffff';
     const glowA = k.time === 'dusk' ? 0.5 : c.paper ? 0.9 : 0.1;
-    out.push(p.ellipse(vp.x, vp.y, W * 0.55, H * 0.5, p.rad([[0, glowC, glowA], [0.55, glowC, glowA * 0.3], [1, glowC, 0]], vp.x, vp.y, W * 0.55, {force: true, glow: true}), G));
+    out.push(p.rect(x0, -2, w, H + 4, p.rad([[0, glowC, glowA], [0.55, glowC, glowA * 0.3], [1, glowC, 0]], vp.x, vp.y, W * 0.55, {force: true, glow: true}), G));
     // A far doorway frame round the vanishing point: the void has a back.
     const fw = W * (k.portrait ? 0.34 : 0.2), fh = H * (k.portrait ? 0.2 : 0.3);
     const fx = vp.x - fw / 2, fy = g.floorY - fh;
