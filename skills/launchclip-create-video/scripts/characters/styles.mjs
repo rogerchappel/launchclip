@@ -23,6 +23,7 @@ import {STYLE as outlined} from './style-outlined.mjs';
 import {STYLE as paper} from './style-paper.mjs';
 import {STYLE as softShade} from './style-soft-shade.mjs';
 import {STYLE as stick, STYLE_CLASSIC as stickClassic} from './style-stick.mjs';
+import {STYLE as rubberHose} from './style-rubber-hose.mjs';
 import {STYLE as lifelike} from './style-lifelike.mjs';
 import {STYLE as cinematic} from './style-cinematic.mjs';
 import {STYLE as avatar} from './style-avatar.mjs';
@@ -32,6 +33,8 @@ import {drawingBounds} from './bounds.mjs';
 import {castRoles} from './palette.mjs';
 import {normalizeRigParams, poseJoints} from './rig.mjs';
 import {drawKind} from './kind-draw.mjs';
+import {HEAD} from './toon.mjs';
+import {pathBox, pathPairs} from './pens.mjs';
 
 // In order from the default to the newest; flat stays first.
 const STYLES = {
@@ -46,7 +49,8 @@ const STYLES = {
   cinematic,
   avatar,
   chibi,
-  'chibi-plain': chibiPlain
+  'chibi-plain': chibiPlain,
+  'rubber-hose': rubberHose
 };
 
 export const DRAWING_STYLES = Object.freeze(Object.keys(STYLES));
@@ -71,7 +75,7 @@ export const styleHeight = (style, params) => (isKind(params) ? kindHeight(param
 
 /** The rig geometry a style draws and poses with. */
 /** The styles that draw a kind as a stick figure. */
-export const STICK_STYLES = Object.freeze(['stick', 'stick-classic']);
+export const STICK_STYLES = Object.freeze(['stick', 'stick-classic', 'rubber-hose']);
 export const styleGeometry = (style, params) => (isKind(params) ? kindGeometry(params, {stick: STICK_STYLES.includes(style)}) : styleOf(style).geometry(params));
 
 const stageCache = new Map();
@@ -114,4 +118,61 @@ function kindReach(params) {
     stageCache.set(key, reach);
   }
   return stageCache.get(key);
+}
+
+// ---------------------------------------------------------------------------
+// Limb weight
+
+/** The width a path is drawn at: its stroke, or for a filled ribbon (a pressure stroke) twice its area over its perimeter. */
+function drawnWidth(node) {
+  const a = node.attrs ?? {};
+  if (a.stroke && a.stroke !== 'none' && (!a.fill || a.fill === 'none')) return Number(a.strokeWidth) || 0;
+  const pts = pathPairs(a.d ?? '');
+  let area = 0, perimeter = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const [x0, y0] = pts[i], [x1, y1] = pts[(i + 1) % pts.length];
+    area += x0 * y1 - x1 * y0;
+    perimeter += Math.hypot(x1 - x0, y1 - y0);
+  }
+  return perimeter ? Math.abs(area) / perimeter + (Number(a.strokeWidth) || 0) : 0;
+}
+
+/** The least limb weight (limbWeight ratio) a figure keeps before its limbs read as wire. */
+export const MIN_LIMB_WEIGHT = 0.045;
+
+/**
+ * How heavy a character's limbs are drawn: the left forearm's stroke width
+ * over the head's width, both in the drawing's own units, so a check can
+ * catch a figure thinning into wire whatever its scale. drawing: a static
+ * drawCharacter node; id: the id it was drawn with. The forearm is the
+ * longest path under its joint (gloves, fingers and props are not it).
+ * → {limb, head, ratio}, or null when the drawing has no forearm or head.
+ */
+export function limbWeight(drawing, id) {
+  let head = 0, fore = null;
+  const find = node => {
+    if (!node || typeof node !== 'object') return;
+    if (node[HEAD]) {
+      const a = node.attrs ?? {};
+      head = node.tag === 'path' ? (box => box.x1 - box.x0)(pathBox(a.d)) : node.tag === 'ellipse' || node.tag === 'circle' ? 2 * Number(a.rx ?? a.r) : (box => box.right - box.left)(drawingBounds(node));
+    }
+    // A static drawing carries joint ids as attributes; an animated one on the node.
+    if ((node.id ?? node.attrs?.id) === `${id}-fore-l`) fore = node;
+    (node.children ?? []).forEach(find);
+  };
+  find(drawing);
+  if (!fore || !head) return null;
+  const paths = [];
+  const collect = node => {
+    if (!node || typeof node !== 'object' || /-finger/.test(node.id ?? node.attrs?.id ?? '')) return;
+    if (node.tag === 'path' && node.attrs?.d) {
+      const box = pathBox(node.attrs.d);
+      paths.push({node, long: Math.max(box.x1 - box.x0, box.y1 - box.y0)});
+    }
+    (node.children ?? []).forEach(collect);
+  };
+  collect(fore);
+  const longest = Math.max(0, ...paths.map(p => p.long));
+  const limb = Math.max(0, ...paths.filter(p => p.long >= longest * 0.6).map(p => drawnWidth(p.node)));
+  return limb ? {limb: Math.round(limb * 10) / 10, head: Math.round(head * 10) / 10, ratio: Math.round(limb / head * 1000) / 1000} : null;
 }

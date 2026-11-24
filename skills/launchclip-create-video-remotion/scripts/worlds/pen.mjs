@@ -12,6 +12,7 @@
 import {el} from '../catalog-b-view.mjs';
 import {mixColor} from '../catalog-b-base.mjs';
 import {seededRandom, hashString} from '../ambient.mjs';
+import {earlyCartoonColor} from './palette.mjs';
 
 const r1 = v => Math.round(v * 10) / 10;
 export const f = r1;
@@ -30,7 +31,9 @@ export function makePen({id, detail, pal, u, seed}) {
   let count = 0;
   const rand = seededRandom(hashString(String(seed ?? id)));
   const paperTone = mixColor(pal.paper, '#ffffff', 0.5);
-  const tone = c => (detail.mono && typeof c === 'string' && c.startsWith('#') ? mixColor(c, paperTone, 0.42) : c);
+  // Early-cartoon detail repaints every colour the world draws, lights too: lamps are painted, never lit (palette.mjs earlyCartoonColor).
+  const painted = detail.palette === 'early-cartoon';
+  const tone = c => (typeof c !== 'string' || !c.startsWith('#') ? c : detail.mono ? mixColor(c, paperTone, 0.42) : painted ? earlyCartoonColor(c) : c);
 
   const stroke = (o = {}) => {
     if (o.stroke === false || o.glow) return {};
@@ -42,7 +45,7 @@ export function makePen({id, detail, pal, u, seed}) {
     ...(o.opacity !== undefined && o.opacity !== 1 ? {opacity: r1(o.opacity * 100) / 100} : {}),
     ...(o.transform ? {transform: o.transform} : {})
   });
-  const fill = (c, o = {}) => (o.glow ? c : tone(c));
+  const fill = (c, o = {}) => (o.glow && !painted ? c : tone(c));
   const style = o => (o.blend ? {mixBlendMode: o.blend} : null);
 
   const pen = {
@@ -71,11 +74,11 @@ export function makePen({id, detail, pal, u, seed}) {
     },
     /** A stroked line (always drawn, outlines or not). */
     line(x1, y1, x2, y2, c, w = 2, o = {}) {
-      return el('path', null, style(o), [], {d: `M${r1(x1)} ${r1(y1)}L${r1(x2)} ${r1(y2)}`, fill: 'none', stroke: o.glow ? c : tone(c), strokeWidth: r1(w * u), strokeLinecap: o.cap ?? 'round', ...common(o)});
+      return el('path', null, style(o), [], {d: `M${r1(x1)} ${r1(y1)}L${r1(x2)} ${r1(y2)}`, fill: 'none', stroke: o.glow && !painted ? c : tone(c), strokeWidth: r1(w * u), strokeLinecap: o.cap ?? 'round', ...common(o)});
     },
     /** A stroked open path (always drawn). */
     stroke(d, c, w = 2, o = {}) {
-      return el('path', null, style(o), [], {d, fill: 'none', stroke: o.glow ? c : tone(c), strokeWidth: r1(w * u), strokeLinecap: 'round', strokeLinejoin: 'round', ...common(o)});
+      return el('path', null, style(o), [], {d, fill: 'none', stroke: o.glow && !painted ? c : tone(c), strokeWidth: r1(w * u), strokeLinecap: 'round', strokeLinejoin: 'round', ...common(o)});
     },
     g(children, o = {}) {
       const kids = children.flat(Infinity).filter(Boolean);
@@ -90,7 +93,7 @@ export function makePen({id, detail, pal, u, seed}) {
     lin(stops, x1, y1, x2, y2, o = {}) {
       if (!detail.gradients && !o.force) return tone(stops[o.flat ?? Math.floor(stops.length / 2)][1]);
       const gid = `${id}-${layer}-g${count++}`;
-      (defs[layer] ??= []).push(el('linearGradient', gid, null, stops.map(([offset, c, a]) => el('stop', null, null, [], {offset: r1(offset * 100) / 100, stopColor: o.glow ? c : tone(c), ...(a === undefined || a === 1 ? {} : {stopOpacity: Math.round(a * 1000) / 1000})})),
+      (defs[layer] ??= []).push(el('linearGradient', gid, null, stops.map(([offset, c, a]) => el('stop', null, null, [], {offset: r1(offset * 100) / 100, stopColor: o.glow && !painted ? c : tone(c), ...(a === undefined || a === 1 ? {} : {stopOpacity: Math.round(a * 1000) / 1000})})),
         {gradientUnits: 'userSpaceOnUse', x1: r1(x1), y1: r1(y1), x2: r1(x2), y2: r1(y2)}));
       return `url(#${gid})`;
     },
@@ -98,7 +101,7 @@ export function makePen({id, detail, pal, u, seed}) {
     rad(stops, cx, cy, r, o = {}) {
       if (!detail.gradients && !o.force) return tone(stops[o.flat ?? 0][1]);
       const gid = `${id}-${layer}-g${count++}`;
-      (defs[layer] ??= []).push(el('radialGradient', gid, null, stops.map(([offset, c, a]) => el('stop', null, null, [], {offset: r1(offset * 100) / 100, stopColor: o.glow ? c : tone(c), ...(a === undefined || a === 1 ? {} : {stopOpacity: Math.round(a * 1000) / 1000})})),
+      (defs[layer] ??= []).push(el('radialGradient', gid, null, stops.map(([offset, c, a]) => el('stop', null, null, [], {offset: r1(offset * 100) / 100, stopColor: o.glow && !painted ? c : tone(c), ...(a === undefined || a === 1 ? {} : {stopOpacity: Math.round(a * 1000) / 1000})})),
         {gradientUnits: 'userSpaceOnUse', cx: r1(cx), cy: r1(cy), r: r1(Math.max(1, r))}));
       return `url(#${gid})`;
     },
@@ -106,9 +109,10 @@ export function makePen({id, detail, pal, u, seed}) {
     /**
      * A soft light glow (lamp halo, neon bloom, window spill): a radial
      * fade from colour to clear. At simple detail it is a faint flat disc
-     * of a third the size.
+     * of a third the size; none where the detail has no glows.
      */
     glow(cx, cy, r, c, alpha = 0.5, o = {}) {
+      if (!detail.glows) return null;
       if (!detail.gradients) return alpha >= 0.3 && !o.soft ? pen.circle(cx, cy, r * 0.32, c, {opacity: alpha * 0.45, glow: true}) : null;
       const fillv = pen.rad([[0, c, alpha], [0.4, c, alpha * 0.45], [1, c, 0]], cx, cy, r, {force: true, glow: true});
       return o.ry ? pen.ellipse(cx, cy, r, o.ry, fillv, {glow: true, blend: o.blend}) : pen.circle(cx, cy, r, fillv, {glow: true, blend: o.blend});

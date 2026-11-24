@@ -130,7 +130,7 @@ launchclip style upgrade my-channel
 - **Layouts for your footage (`layouts`):** which layout each kind of line or section prefers (for example lists beside you on the right with `"list": "split-right"`), and how panels look: `solid`, `glass` or `paper`, with a corner radius.
 - **Vocabulary (`vocabulary`):** the tint of icons, whether illustrated objects are allowed, and which modules each kind of line reaches for.
 - **Pacing profile (`profile`):** the cadence your videos aim for, either a built-in profile such as `short-talking-head` or one measured from your own videos.
-- **Cast (`cast`):** the drawing style and colours of your characters, and which characters appear by default, so a series keeps the same people. Ten drawing styles share one rig, so any cast works in any of them:
+- **Cast (`cast`):** the drawing style and colours of your characters, and which characters appear by default, so a series keeps the same people. Thirteen drawing styles share one rig, so any cast works in any of them:
   - `flat`: flat fills and a dark outline (the default).
   - `stick`: a stick figure, coloured by the character's clothes.
   - `stick-classic`: the classic black-and-white stick figure.
@@ -143,6 +143,7 @@ launchclip style upgrade my-channel
   - `avatar`: cute avatar proportions: a big head on a short, chunky body, soft shading and pin joints.
   - `chibi`: the cute family: a very big round head with large glossy eyes on a small soft body, flat fills and a heavy outline.
   - `chibi-plain`: the chibi figure in paper white with no skin tone, for a neutral cast.
+  - `rubber-hose`: an early theatrical cartoon: a paper-white round face with two hair tufts, the body and limbs single bending strokes of ink that swell and thin like a brush pen, white gloves and black shoes. Its worlds are painted to match: pen outlines over flat muted colour (sage gray, pearl gray, gray-taupe and ivory with faded brick-red touches), lamps that never glow.
 
   A generated style also generates its cast from a character set (office team, founders, family, kids, seniors, students, chefs, medical, athletes, creators, city crowd), so every project gets different people.
 
@@ -150,7 +151,7 @@ launchclip style upgrade my-channel
   - Use a ready-made one by id: the horses `comet` and `copper` (stallions), `duchess` and `misty` (mares), `sprig` and `shadow` (foals); `mochi` and `soot` (cats), `biscuit` (dog), `bruno` (bear), `clover` (rabbit), `rusty` and `ember` (foxes), `puddle` (frog), `pebble` (penguin), `hoot` (owl), `chirp` (songbird), `dabble` (duck), `hazel` (fawn), `bramble` (stag), `nutmeg` (squirrel), `thistle` (hedgehog), `bloop` and `fizz` (blobs), `drip` (droplet), `twinkle` (star), `grumble` (monster), `ping` (phone), `byte` (laptop), `latte` (cup), `watt` (bulb), `rivet` and `cog` (robots), `penny` (coin), `paige` (book), `nimbus` (cloud).
   - Make your own: `launchclip cast create whiskers --describe "a small orange cat"`, or in a story cast `{ "id": "mug", "kind": "cup", "colors": { "accent": "red" } }`. Each takes a `size` (small, medium, large) and three colours (`body`, `detail`, `accent`); hair, clothes and the rest of a person's options do not apply and are refused.
   - A horse stands on four legs, so each pose means its four-legged version: `walk` trots, `look` lifts the head, `slump` lowers it, `wave` and `point` lift a foreleg with a nod, `cheer` is a little prance, and `sit` (or any seated set) lies down. Describe one by its coat: `launchclip cast create rosie --describe "a bay mare with a blaze"`.
-  - Want it simpler? Set the cast's style to `stick` or `stick-classic` and every one of them, horses included, is a stick figure: a few lines and a face.
+  - Want it simpler? Set the cast's style to `stick`, `stick-classic` or `rubber-hose` and every one of them, horses included, is a stick figure: a few lines and a face.
   - Generate a whole cast of them by asking for the character set `horse-family`, `forest-friends`, `birds`, `animal-friends`, `mascots`, `everyday-objects` or `mixed-company` (people and others, turn about). A generated style never picks these on its own.
 - **Brand frame (`brand_frame`):** your logo and a short kicker label with an underline, section labels and an optional progress line, drawn around every scene so the whole video hangs together. Name the kicker and sections per video with `"frame": { "kicker": { "label": "Inside Ship Mode" }, "labels": [{ "scene": "how", "label": "How it works" }] }`, or turn it off for one video with `"frame": false`.
 

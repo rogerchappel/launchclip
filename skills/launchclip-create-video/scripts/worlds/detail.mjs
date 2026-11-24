@@ -12,11 +12,13 @@
 // The drawing style also flavours its level: line and stick worlds are
 // drawn as pale fills under ink lines, outlined worlds keep standard detail
 // with outlines, paper worlds lift each layer on a cut-paper shadow, and
-// cinematic worlds add a vignette and a stronger grade.
+// cinematic worlds add a vignette and a stronger grade. Rubber-hose worlds
+// are early-cartoon scenery: confident pen contours over flat matte fills
+// in a muted palette (palette.mjs earlyCartoonColor), lamps never glowing.
 
 export const DETAIL_LEVELS = Object.freeze(['simple', 'standard', 'rich']);
 export const STYLE_DETAIL = Object.freeze({
-  stick: 'simple', line: 'simple',
+  stick: 'simple', line: 'simple', 'rubber-hose': 'simple',
   flat: 'standard', outlined: 'standard', paper: 'standard', 'soft-shade': 'standard',
   lifelike: 'rich', cinematic: 'rich'
 });
@@ -30,26 +32,28 @@ export function detailForStyle(style) {
 /**
  * Everything the pen and the worlds read about detail:
  * {level, n (0 | 1 | 2), style, outline, outlineWidth, mono, gradients,
- * shadows, glows, haze, dof (back-layer blur, px at 1080), pools, rays,
+ * shadows, glows, palette (null | 'early-cartoon'), haze, dof (back-layer blur, px at 1080), pools, rays,
  * vignette, paperLift, grade}.
  */
 export function detailSpec(level = 'standard', style = null) {
   const lvl = DETAIL_LEVELS.includes(level) ? level : 'standard';
   const n = DETAIL_LEVELS.indexOf(lvl);
   const s = style ?? {simple: 'line', standard: 'flat', rich: 'lifelike'}[lvl];
-  const outline = ['stick', 'line', 'outlined'].includes(s);
+  const cartoon = s === 'rubber-hose';
+  const outline = ['stick', 'line', 'outlined'].includes(s) || cartoon;
   return {
     level: lvl, n, style: s,
     outline,
-    outlineWidth: s === 'stick' ? 3.2 : s === 'line' ? 2.6 : 3,
+    outlineWidth: s === 'stick' || cartoon ? 3.2 : s === 'line' ? 2.6 : 3,
     mono: s === 'stick' || s === 'line',
     gradients: n >= 1,
     shadows: n >= 1,
-    glows: true,
+    glows: !cartoon,
+    palette: cartoon ? 'early-cartoon' : null,
     haze: n >= 1 ? (n === 2 ? 1 : 0.55) : 0,
     dof: n === 2 ? (s === 'cinematic' ? 3.2 : 2.2) : 0,
-    pools: n >= 1,
-    rays: n === 2 || s === 'soft-shade',
+    pools: n >= 1 && !cartoon,
+    rays: (n === 2 || s === 'soft-shade') && !cartoon,
     vignette: s === 'cinematic' ? 0.5 : n === 2 ? 0.28 : 0,
     paperLift: s === 'paper',
     grade: s === 'cinematic'
