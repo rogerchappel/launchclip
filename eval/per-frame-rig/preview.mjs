@@ -1,8 +1,8 @@
 // A quick look at the per-frame rig prototype without a render: frames drawn
 // to PNG with sharp and tiled into a strip (docs/rd/per-frame-rig.md).
-//   node eval/per-frame-rig/preview.mjs --from 0 --to 8 --fps 15 --out strip.png [--crop x,y,w,h] [--width 180] [--cols 15]
+//   node eval/per-frame-rig/preview.mjs --from 0 --to 8 --fps 15 --out strip.png [--crop x,y,w,h] [--width 180] [--cols 15] [--style stick]
 import sharp from 'sharp';
-import {prototypeTree} from '@launchclip/core/characters/rig-frame-draw.mjs';
+import {prototypePlan, rigScenePrepare, rigSceneTree} from '@launchclip/core/characters/rig-scene.mjs';
 
 const KEEP = new Set(['viewBox']);
 const attr = key => (KEEP.has(key) ? key : key.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`));
@@ -23,11 +23,12 @@ const arg = (name, fallback) => {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const from = Number(arg('from', 0)), to = Number(arg('to', 8)), fps = Number(arg('fps', 15));
-  const crop = arg('crop', '0,1000,1080,920').split(',').map(Number);
+  const crop = arg('crop', '0,350,1080,1150').split(',').map(Number);
   const width = Number(arg('width', 180)), cols = Number(arg('cols', 15));
+  const plan = prototypePlan(undefined, {style: arg('style', 'rubber-hose')}), prepared = rigScenePrepare(plan);
   const tiles = [];
   for (let t = from; t <= to + 1e-9; t += 1 / fps) {
-    const svg = svgMarkup(prototypeTree(t));
+    const svg = svgMarkup(rigSceneTree(plan, t, {width: 1080, height: 1920}, prepared));
     const png = await sharp(Buffer.from(svg)).flatten({background: '#e9e1cf'})
       .extract({left: crop[0], top: crop[1], width: crop[2], height: crop[3]}).resize({width}).png().toBuffer();
     tiles.push(png);

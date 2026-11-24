@@ -450,7 +450,8 @@ export function face(ctx, name) {
   const closed = group(sized(mouthShape(parts.mouth.closed, P)), {transform: mouthAt});
   const open = group(sized(mouthShape(parts.mouth.open === 'grin' ? 'grin_open' : parts.mouth.open, P)), {transform: mouthAt});
   const show = ctx.expression === name ? 1 : 0;
-  if (ctx.static) return show ? group([...kids, closed]) : null;
+  // A static face can speak: ctx.mouth [scaleX, scaleY] draws the open mouth at that size (a viseme, acting.mjs VISEMES).
+  if (ctx.static) return show ? group([...kids, ctx.mouth ? group([group(open.children, {transform: `scale(${ctx.mouth[0]} ${ctx.mouth[1]})`})], {transform: mouthAt}) : closed]) : null;
   return el('g', `${ctx.id}-face-${name}`, {opacity: show}, [
     ...kids,
     el('g', `${ctx.id}-mouth-${name}`, {opacity: show}, [closed]),
