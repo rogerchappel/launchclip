@@ -62,7 +62,7 @@ It copies the file under `assets/shots/generated/`, logs one ledger line (provid
 
 **Cost.** Pass `--cost` when the tool reported what the call cost. Without it the line is logged with `cost_unknown`, and `MAKE.json` costs show that generation as unknown (no USD estimate, with a warning), not as free: check the tool's own billing. On the skill path LaunchClip cannot stop the agent's own tool, so the gate holds only if the agent runs `generate allow` before each call, as the skill tells it to; spend it records with `--cost` counts against the budget, and calls without a cost count against `--max-generations`.
 
-Story shots and plates (a project with a frozen bible and an animatic) go the same way: `generate record` writes an accepted clip or plate into `HANDIN.json`, and `launchclip handin check` decides whether it is used.
+Story shots and plates (a project with a frozen bible and an animatic) go the same way: `generate record` writes an accepted clip or plate into `HANDIN.json`, and `launchclip handin check` decides whether it is used. Their briefs paste the drawing style's fixed paragraph word for word (with anatomy rules for stick and rubber-hose figures), time the action as setup, action, consequence and reaction, and ask the video model for no music or speech (`video.audio`). With `generate.continuity: true` in the storyboard (or `finish --generate-continuity`), a shot that carries straight on from the one before names it in `video.continue_from`, and its clip starts on that clip's last kept frame instead of its own keyframe.
 
 ## Keyframe candidates
 
