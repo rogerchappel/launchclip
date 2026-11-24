@@ -4,6 +4,15 @@
 
 ### Added
 
+- `launchclip review-motion <project|video> --reference <clip>` makes a
+  motion review pack (per-shot clips and frame strips at cuts and pose
+  changes beside the reference's, an `index.html` contact sheet and
+  `motion-review.json` with every check pending, bound to the files by
+  sha256), and `review-motion check` validates the filled review: every
+  check observed with evidence or a justified n/a, no pass with anything
+  open, and an earlier review's failures each resolved in a repair log.
+  Limb weight is measured from the frames as a guide; `--model` only
+  suggests. See docs/ANIMATION_MEASUREMENT.md.
 - `launchclip score niche` and `score library discover` take `--free`, which
   lists each creator's TikTok posts with yt-dlp at no charge, and
   `--accounts <name,name>`, which collects accounts you name without a search.
