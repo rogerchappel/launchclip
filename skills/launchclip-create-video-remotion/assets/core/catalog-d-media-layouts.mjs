@@ -171,8 +171,10 @@ function stackText(b, area, entries, {align = 'left', anchor = 'center', lead = 
       const width = area.width - indent;
       const preferred = Math.max(min, entry.preferred * scale);
       let fit;
+      const fitIn = maxLines => fitText({fail: () => { throw new Error('fit'); }}, entry.path ?? path, entry.text, {family: entry.family, width, preferred, min, maxLines});
       try {
-        fit = fitText({fail: () => { throw new Error('fit'); }}, entry.path ?? path, entry.text, {family: entry.family, width, preferred, min, maxLines: entry.maxLines ?? 1});
+        // A list row stays on one line when it can: a row that wraps only by the width estimate leaves a gap under it.
+        try { fit = fitIn(entry.kind === 'item' ? 1 : entry.maxLines ?? 1); } catch (error) { if (entry.kind !== 'item' || (entry.maxLines ?? 1) === 1) throw error; fit = fitIn(entry.maxLines); }
       } catch {
         ok = false;
         break;
