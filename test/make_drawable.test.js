@@ -94,6 +94,7 @@ test("the repair pass is told what failed and what the script showed, and the re
   // The default shape: three bigger tries, a snap, and an ending that loops to the opening.
   assert.match(calls[1].instructions, /Escalate in threes, then snap/);
   assert.match(calls[1].instructions, /plays again without a seam/);
+  assert.match(calls[1].schema.properties.title_options.description, /At least one reads "When \[the lead, by name\] \[does the thing\]"/);
 });
 
 test("shows and words: a model's answer is kept to the kit's lists, and one-word names need a determiner", () => {

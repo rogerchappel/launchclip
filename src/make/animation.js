@@ -181,7 +181,7 @@ export const SCREENPLAY_SCHEMA = Object.freeze({
       }
     },
     title: line("A short working title (60 characters at most)."),
-    title_options: { type: "array", description: `${TITLE_OPTIONS} publish-ready titles the video pays off, the best first (70 characters at most each).`, items: { type: "string" } },
+    title_options: { type: "array", description: `${TITLE_OPTIONS} publish-ready titles the video pays off, the best first (70 characters at most each). At least one reads "When [the lead, by name] [does the thing]" in six words or so: the cold open as a title.`, items: { type: "string" } },
     beats: {
       type: "array",
       description: `The story in order. Each beat is one of ${NARRATIVE_BEATS.join(", ")}.`,
