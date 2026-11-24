@@ -304,3 +304,9 @@ test("launchclip voice voices the derived lines in three voices, with a speaker 
     await rm(project, { recursive: true, force: true });
   }
 });
+
+test("a screenplay with no turn beat is warned: nothing breaks the pattern", async () => {
+  const flat = await changed((s) => { s.beats = s.beats.filter((beat) => beat.beat !== "turn"); });
+  assert.ok(ids(validateScreenplay(flat, OPTIONS).warnings).includes("turn-missing"));
+  assert.ok(!ids(validateScreenplay(await good(), OPTIONS).warnings).includes("turn-missing"));
+});

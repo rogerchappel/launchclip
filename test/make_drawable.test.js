@@ -91,6 +91,9 @@ test("the repair pass is told what failed and what the script showed, and the re
   await writeScreenplay({ client, provider: "openai", model: "stub", prompt: "x", duration: 30, premise: GATE.premise, characters: GATE.characters, logline: GATE.logline });
   assert.match(calls[1].input, /## What can be shown/);
   assert.match(calls[1].instructions, /The story may only turn on what is listed under "What can be shown"/);
+  // The default shape: three bigger tries, a snap, and an ending that loops to the opening.
+  assert.match(calls[1].instructions, /Escalate in threes, then snap/);
+  assert.match(calls[1].instructions, /plays again without a seam/);
 });
 
 test("shows and words: a model's answer is kept to the kit's lists, and one-word names need a determiner", () => {

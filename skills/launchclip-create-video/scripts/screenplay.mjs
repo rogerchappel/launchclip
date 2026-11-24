@@ -188,7 +188,7 @@ function actsIn(character, action) {
  * Error ids: script-shape, beat-name, line-id, line-shape, silent-length,
  * speaker-unknown, character-unused, narration-mismatch, fits-length,
  * problem-missing, problem-lands. Warnings: no-duration, under-length,
- * no-problem-limit, edge-silence.
+ * no-problem-limit, edge-silence, turn-missing.
  */
 export function validateScreenplay(value, options = {}) {
   const errors = [];
@@ -316,6 +316,9 @@ export function validateScreenplay(value, options = {}) {
       else if (problem.start > limit) add(errors, 'problem-lands', `The problem beat starts at about ${round1(problem.start)} s; it must land within ${limit} s.`, `Shorten the setup by about ${Math.ceil((problem.start - limit) * wpm / 60)} words, or open on the problem.`);
     }
   }
+
+  // --- The snap: a story Short breaks its pattern in a turn beat, or it has nothing to share.
+  if (!narrated && script.beats.length && !script.beats.some((beat) => beat?.beat === 'turn')) add(warnings, 'turn-missing', 'The script has no turn beat, so nothing breaks the pattern: the obvious ending is the one that plays.', 'Add a beat named "turn" after the attempts, where the expected ending flips.');
 
   const speakers = [...new Set(spoken.map((line) => line.speaker))];
   const stats = {

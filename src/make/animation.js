@@ -262,7 +262,8 @@ The shape:
 - A narrator carries the story and the characters speak the turns. Give every character at least one line. (Write pure dialogue only when the brief asks for it.)
 - A line is spoken or silent. A spoken line has a speaker (a character id, or "narrator"), the exact words in text, and may have a short playing note (how it is said; never spoken). A silent line has speaker "", an action that names who does what, and its seconds. Silent lines are where the acting happens: a look, a pause, a reaction.
 - Beats, in story order, each one of: ${NARRATIVE_BEATS.join(", ")}. Every script has a problem beat, and it comes early. Use cta only when the brief asks the viewer to do something.
-- Open on a spoken line and close on a spoken line.
+- Escalate in threes, then snap (unless a Structure section below sets the shape): in attempt the same try happens up to three times, each bigger than the last; turn breaks that pattern, so the obvious ending flips. Nobody explains the twist.
+- Open on a spoken line and close on a spoken line. The last moment hands back to the first (a reaction, or a line that runs into the opening one), so the video plays again without a seam.
 - shows: the place the story happens in (world) and every object it turns on (things), each matched to a listed thing that draws it. The story may only turn on what is listed under "What can be shown". When a thing changes on screen (a starting gate that opens), give the change a silent line of its own that says so plainly ("The gate opens.").
 
 The rules:
