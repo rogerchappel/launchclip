@@ -5,7 +5,8 @@ the gate before anything ships.
 Date: 2026-11-25
 Code: `kit/core/characters/rig-frame.mjs` (the rig),
 `kit/core/characters/rig-frame-draw.mjs` (the drawing and the prototype
-scene), `kit/remotion/experimental/PerFrameRig.tsx` (its own Remotion entry),
+scene), `kit/core/characters/rig-scene-layer.mjs` and
+`kit/hyperframes/rig-runtime.mjs` (the renderers' per-frame layer),
 `eval/per-frame-rig/` (today's storyboard, the side-by-side render, the
 metrics, a quick preview), `test/rig_frame.test.js`.
 Nothing here touches the storyboard schema or today's rig output.
@@ -187,6 +188,24 @@ Parity is exact by construction: the same pure function, the same floats,
 the same path strings (`r1` rounding). It is proven, not assumed, by the
 parity harness (`scripts/parity-scene.mjs`, `test/parity.test.js`) on a
 fixture scene before the rig is offered to any storyboard.
+
+**As built** (docs/KIT_CONTRACTS.md, "The per-frame rig in the renderers"),
+simpler than the plan above: no static parts and no per-attribute patching.
+The emitter writes one empty rig layer where the actors sit; the runtime
+(`RIG_RUNTIME`, an esbuild bundle of `kit/hyperframes/rig-scene-paint.mjs`
+and the kit/core rig code, inlined once per page) builds the frame's whole
+tree with `rigSceneTree` and sets the layer's `innerHTML` to the markup the
+HyperFrames serialiser writes for any tree. Element identity is not kept, but
+the markup is a pure function of t, so a seek in any order paints the same
+DOM, and a hold skips the DOM write. Remotion fills the same layer from the
+same function each frame. The experimental Remotion entry is gone:
+`eval/per-frame-rig/render.sh` renders both sides through the story
+composition (the per-frame side is the same storyboard with
+`cast.rig: "frame"`).
+
+Fixtures: `test/fixtures/parity/characters-rig-stick-classic-void.json` and
+`characters-rig-rubber-hose-world.json` (a walk, a contact action and a camera
+landing each).
 
 ## 6. Risks
 
