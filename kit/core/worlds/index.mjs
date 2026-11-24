@@ -30,6 +30,7 @@ import {OUTSIDE} from './outside.mjs';
 import {RACING} from './racing.mjs';
 import {VOID} from './void-stage.mjs';
 import {PERIOD} from './period.mjs';
+import {depthPass} from './depth.mjs';
 import {PROPS, PROP_IDS, PROP_STATES, STORY_PROP_IDS, placeProps, propEntry} from './props.mjs';
 import {propMotion} from '../physics.mjs';
 
@@ -84,7 +85,7 @@ function worldKit({id, kind, time, colors, canvas, detail, seed}) {
  * fx}: node arrays, defs: {layer: gradient nodes}, anchors, quiet, light,
  * overscan, props: placed props}.
  */
-export function renderWorld({id = 'world', kind, time = 'day', colors = {}, canvas = {width: 1920, height: 1080}, style = null, detail = null, props = [], seed = null} = {}) {
+export function renderWorld({id = 'world', kind, time = 'day', colors = {}, canvas = {width: 1920, height: 1080}, style = null, detail = null, props = [], seed = null, depth = false} = {}) {
   const def = WORLDS[kind];
   if (!def) throw new Error(`unknown world kind ${JSON.stringify(kind)} (kinds: ${WORLD_KINDS.join(', ')})`);
   if (!WORLD_TIMES.includes(time)) throw new Error(`unknown world time ${JSON.stringify(time)} (${WORLD_TIMES.join(', ')})`);
@@ -98,6 +99,16 @@ export function renderWorld({id = 'world', kind, time = 'day', colors = {}, canv
   p.at('front'); layers.front = (def.front ? def.front(k, geo) : []).flat(Infinity).filter(Boolean);
   // Front nodes at the frame edges that stay when a cast stands in the world (withoutForeground).
   const edge = def.edgeFront ? [...layers.front] : [];
+  // The opt-in depth pass (depth.mjs); the void stage draws its own depth.
+  const deep = depth && !def.edgeFront;
+  if (deep) {
+    const pass = depthPass(k, geo, def.group);
+    layers.back.push(...pass.back.flat(Infinity).filter(Boolean));
+    layers.mid.push(...pass.mid.flat(Infinity).filter(Boolean));
+    layers.front.push(...pass.edge);
+    edge.push(...pass.edge);
+    k.depthFx = pass.fx;
+  }
   // Props sit on the world's anchors, drawn into the layer they belong to.
   const placed = placeProps(k, geo.anchors, props);
   for (const item of placed) {
@@ -105,10 +116,10 @@ export function renderWorld({id = 'world', kind, time = 'day', colors = {}, canv
     layers[item.layer].push(...item.nodes);
   }
   p.at('fx');
-  layers.fx = [...(def.fx ? def.fx(k, geo) : []), ...(spec.grade ? grade(k) : []), ...vignette(k, spec.vignette)].flat(Infinity).filter(Boolean);
+  layers.fx = [...(def.fx ? def.fx(k, geo) : []), ...(k.depthFx ?? []), ...(spec.grade ? grade(k) : []), ...vignette(k, spec.vignette)].flat(Infinity).filter(Boolean);
   const defs = Object.fromEntries(['back', 'mid', 'front', 'fx'].map(name => [name, p.defsOf(name)]));
   return {
-    kind, group: def.group, label: def.label, time, detail: spec, canvas: {width: k.W, height: k.H}, overscan: k.ov,
+    kind, group: def.group, label: def.label, time, depth: deep, detail: spec, canvas: {width: k.W, height: k.H}, overscan: k.ov,
     layers, defs, edge, anchors: geo.anchors, quiet: geo.quiet, light: worldLight(kind, time), palette: k.pal,
     props: placed.map(({id: pid, anchor, x, y, scale, layer, rect, state, groups}) => ({id: pid, anchor, x, y, scale, layer, rect, motion: propMotion(pid), ...(groups ? {state, groups} : {})}))
   };
@@ -190,13 +201,14 @@ export function drawPropAt({id, kind = 'park', time = 'day', colors = {}, style 
 }
 
 /**
- * Errors in a video-wide world ({kind, time?, props?, detail?}: story.world,
+ * Errors in a video-wide world ({kind, time?, props?, detail?, depth?}: story.world,
  * or a style pack's world). → string[].
  */
 export function storyWorldErrors(world, path = 'world') {
   const errors = [];
-  if (!world || typeof world !== 'object' || Array.isArray(world)) return [`${path} must be {kind, time?, props?, detail?}`];
-  for (const key of Object.keys(world)) if (!['kind', 'time', 'props', 'detail'].includes(key)) errors.push(`${path}.${key} is not a world field (kind, time, props, detail)`);
+  if (!world || typeof world !== 'object' || Array.isArray(world)) return [`${path} must be {kind, time?, props?, detail?, depth?}`];
+  for (const key of Object.keys(world)) if (!['kind', 'time', 'props', 'detail', 'depth'].includes(key)) errors.push(`${path}.${key} is not a world field (kind, time, props, detail, depth)`);
+  if (world.depth !== undefined && typeof world.depth !== 'boolean') errors.push(`${path}.depth must be true or false`);
   if (world.kind !== undefined && !WORLD_KINDS.includes(world.kind)) errors.push(`${path}.kind must be one of ${WORLD_KINDS.join(', ')}`);
   if (world.time !== undefined && !WORLD_TIMES.includes(world.time)) errors.push(`${path}.time must be one of ${WORLD_TIMES.join(', ')}`);
   if (world.detail !== undefined && !DETAIL_LEVELS.includes(world.detail)) errors.push(`${path}.detail must be one of ${DETAIL_LEVELS.join(', ')}`);

@@ -459,7 +459,9 @@ function castStage(b, ctx, setName) {
   const stateful = p.props !== undefined || base.some(entry => PROP_STATES[typeof entry === 'string' ? entry : entry?.id]);
   const placed = beneath || !stateful ? {props: base, cues: []} : sceneProps(check, {base, own: p.props, start: b.start, duration: b.duration, states: ctx.propStates ?? {}});
   const detail = p.world === undefined && !beneath ? (ctx.world?.detail ?? null) : null;
-  return {backdrop, world, cues: placed.cues, draw: beneath ? null : {kind: world.kind, time: world.time, props: placed.props, detail, style: ctx.cast?.style ?? ctx.cast?.drawing_style ?? null}};
+  // story.world.depth: the depth pass (worlds/depth.mjs) on a world the scene draws itself.
+  const depth = p.world === undefined && !beneath && ctx.world?.depth === true;
+  return {backdrop, world, cues: placed.cues, draw: beneath ? null : {kind: world.kind, time: world.time, props: placed.props, detail, style: ctx.cast?.style ?? ctx.cast?.drawing_style ?? null, ...(depth ? {depth} : {})}};
 }
 
 /**
@@ -539,7 +541,7 @@ function resolveCastScene(params, ctx) {
   });
   const inWorldSet = stage.backdrop === 'world';
   const layout = layoutSet(setName, {canvas, colors: b.colors, count: p.cast.length, heights, screen: Boolean(screen), unit: b.unit, backdrop: stage.plate ? 'world' : stage.backdrop,
-    ...(inWorldSet ? {floor: worldFloor(stage, ctx, canvas), grade: worldGrade(stage.world.kind, stage.world.time), bare: RACING_WORLDS.includes(stage.world.kind)} : {}),
+    ...(inWorldSet ? {floor: worldFloor(stage, ctx, canvas), grade: worldGrade(stage.world.kind, stage.world.time), bare: RACING_WORLDS.includes(stage.world.kind) || stage.world.kind === 'void-stage'} : {}),
     ...(stage.plate?.floor ? {floor: stage.plate.floor} : {})});
   const slotOf = castSlots(b, p.cast, cast);
   const world = stage.world;

@@ -3,7 +3,7 @@
 // characters, cards or captions on higher tracks. Contract:
 // docs/KIT_CONTRACTS.md ("World module").
 //
-//   world  {kind?, time?, props?, camera?, detail?, scrim?}
+//   world  {kind?, time?, props?, camera?, detail?, scrim?, depth?}
 //
 // - kind, time and props default to story.world (a style's video-wide
 //   world, filled in by applyStyle); a scene's own params win.
@@ -14,6 +14,8 @@
 //   world camera's depths (kit/core/camera-world.mjs PARALLAX: the back at
 //   the background's 0.3, the front at the plate's 1, the mid between), so
 //   a pan reads as depth. The fx layer (glows, rays) and the scrim stay put.
+// - depth (or story.world.depth) fills the world with depth and light
+//   (kit/core/worlds/depth.mjs): opt-in, a world without it draws as before.
 // - scrim darkens the world's quiet area (or a named side) with the brand
 //   background, so text on a higher track reads at 4.5:1 or better.
 //
@@ -170,7 +172,8 @@ function settings(b, ctx) {
   // A world scene's own props replace story.world.props (as they always have); its stateful ones can be cued.
   const {props, cues} = sceneProps(check, p.props === undefined ? {base: rawProps, start: b.start, duration: b.duration, states: ctx.propStates ?? {}} : {own: rawProps, start: b.start, duration: b.duration, states: ctx.propStates ?? {}});
   const detail = p.detail === undefined ? (base.detail ?? null) : check.oneOf(p.detail, 'params.detail', DETAIL_LEVELS);
-  return {kind, time, props, detail, cues};
+  const depth = p.depth === undefined ? base.depth === true : check.bool(p.depth, 'params.depth');
+  return {kind, time, props, detail, depth, cues};
 }
 
 /**
@@ -200,7 +203,7 @@ export function worldBeneath(story, scene) {
   if (!WORLD_KINDS.includes(kind) || !WORLD_TIMES.includes(time)) return null;
   const bestEnd = Number(best.end);
   const next = story.scenes.find(other => other !== best && (other?.track ?? 0) === 0 && Math.abs(Number(other.start) - bestEnd) < 1e-3);
-  return {scene: best.id ?? null, kind, time, props: p.props ?? base.props ?? [], detail: p.detail ?? base.detail ?? null,
+  return {scene: best.id ?? null, kind, time, props: p.props ?? base.props ?? [], detail: p.detail ?? base.detail ?? null, depth: (p.depth ?? base.depth) === true,
     camera: worldCameraOf(p.camera),
     start: Number(best.start), end: bestEnd, in: isObject(best.in) ? best.in : null, nextIn: next ? (isObject(next.in) ? next.in : {type: 'cut'}) : null};
 }
@@ -269,9 +272,9 @@ export function worldCameraStates(camera, {overscan, grammar = null}) {
 }
 
 function resolveWorld(params, ctx) {
-  const b = createBase('world', params, ctx, {allowed: ['kind', 'time', 'props', 'camera', 'detail', 'scrim', 'foreground'], required: [], hidesCaptions: false});
+  const b = createBase('world', params, ctx, {allowed: ['kind', 'time', 'props', 'camera', 'detail', 'scrim', 'foreground', 'depth'], required: [], hidesCaptions: false});
   const {check, canvas, colors} = b;
-  const {kind, time, props, detail, cues} = settings(b, ctx);
+  const {kind, time, props, detail, depth, cues} = settings(b, ctx);
   const foreground = b.params.foreground === undefined ? !ctx.castAbove : check.bool(b.params.foreground, 'params.foreground');
   const camera = cameraOf(b);
   const scrimSide = b.params.scrim === undefined ? 'none' : (b.params.scrim === true ? 'auto' : b.params.scrim === false ? 'none' : check.oneOf(b.params.scrim, 'params.scrim', SCRIM_SIDES));
@@ -280,10 +283,10 @@ function resolveWorld(params, ctx) {
   // plateBleed) on a canvas that much larger, centred on the frame.
   const bleed = (ctx.layer ?? 0) === 0 && ctx.bleed ? {x: ctx.bleed.x ?? 0, y: ctx.bleed.y ?? 0} : {x: 0, y: 0};
   const drawn = {width: canvas.width + 2 * bleed.x, height: canvas.height + 2 * bleed.y};
-  const world = renderWorld({id: b.id, kind, time, colors, canvas: drawn, style, detail, props, seed: `${kind}|${time}|${drawn.width}x${drawn.height}`});
+  const world = renderWorld({id: b.id, kind, time, colors, canvas: drawn, style, detail, props, depth, seed: `${kind}|${time}|${drawn.width}x${drawn.height}`});
   const scrim = scrimFor(world, {text: colors.paper, bg: colors.bg, side: scrimSide === 'none' ? 'auto' : scrimSide});
   const content = {
-    kind, time, group: world.group, label: world.label, detail: world.detail.level, style: world.detail.style, foreground,
+    kind, time, group: world.group, label: world.label, detail: world.detail.level, style: world.detail.style, foreground, depth: world.depth,
     // A plate (track 0) arrives and leaves by its scene transition alone (its
     // `in`, or a cut); a world on a higher track fades in place like a card.
     plate: (ctx.layer ?? 0) === 0,
@@ -301,7 +304,7 @@ function resolveWorld(params, ctx) {
   model.minTextPx = null;
   // The drawing itself is rebuilt by the view from these inputs (pure), so
   // the model stays small and JSON-safe.
-  model.content.render = {kind, time, style, detail: world.detail.level, props: props.map(prop => ({...prop})), seed: `${kind}|${time}|${drawn.width}x${drawn.height}`, foreground, bleed};
+  model.content.render = {kind, time, style, detail: world.detail.level, props: props.map(prop => ({...prop})), seed: `${kind}|${time}|${drawn.width}x${drawn.height}`, foreground, bleed, ...(depth ? {depth} : {})};
   return model;
 }
 
@@ -310,13 +313,19 @@ export function worldOfModel(model) {
   const r = model.content.render;
   const bleed = r.bleed ?? {x: 0, y: 0};
   const world = renderWorld({id: model.id, kind: r.kind, time: r.time, colors: model.theme ? {bg: model.theme.bg, primary: model.theme.primary, accent: model.theme.accent, ink: model.theme.ink, paper: model.theme.paper} : {}, canvas: {width: model.canvas.width + 2 * bleed.x, height: model.canvas.height + 2 * bleed.y},
-    style: r.style, detail: r.detail, props: r.props, seed: r.seed});
+    style: r.style, detail: r.detail, props: r.props, seed: r.seed, depth: r.depth === true});
   return r.foreground === false ? withoutForeground(world) : world;
 }
 
-/** A world with an empty front layer (the layer stays, so the camera ops still find it). */
+/**
+ * A world without its foreground furniture: the front layer keeps only its
+ * edge pieces (world.edge: the depth pass's occluders, the void stage's
+ * slabs), which stand at the frame edges clear of a cast. The layer stays,
+ * so the camera ops still find it.
+ */
 export function withoutForeground(world) {
-  return {...world, layers: {...world.layers, front: []}, defs: {...world.defs, front: []}};
+  const edge = world.edge ?? [];
+  return {...world, layers: {...world.layers, front: edge}, defs: {...world.defs, front: edge.length ? world.defs.front : []}};
 }
 
 /** {front, media, overlay} element trees for a world model. */
@@ -369,7 +378,8 @@ export const MODULES = {
       camera: `${WORLD_CAMERA_MOVES.join(' | ')} or {move, amount 0..1} (default drift)`,
       detail: `${DETAIL_LEVELS.join(' | ')} (default: from story.cast.style)`,
       scrim: `${SCRIM_SIDES.join(' | ')} | true (darken the quiet area for text on top; default none)`,
-      foreground: 'boolean: draw the front layer (foreground furniture, parked cars); default true, false when a cast-scene stands in this world'
+      foreground: 'boolean: draw the front layer (foreground furniture, parked cars); default true, false when a cast-scene stands in this world',
+      depth: 'boolean: fill the world with depth and light (atmospheric perspective, window and lamp pools, moonlight, a contact band where the cast stands, a foreground occluder at the frame edge); default story.world.depth, else false'
     },
     events: [],
     timing,

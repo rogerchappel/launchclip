@@ -5828,11 +5828,12 @@ E's `emitParts` and `PartsModule`.
 
 | Module | Params | Events | Notes |
 | --- | --- | --- | --- |
-| `world` | `kind?` (a world kind; default `story.world.kind`), `time?` day/dusk/night (default `story.world.time`, else day), `props?` ≤ 12 (default `story.world.props`), `camera?` still/drift/pan-left/pan-right/push/pull or `{move, amount 0..1}` (default drift), `detail?` simple/standard/rich (default from `story.cast.style`), `scrim?` auto/top/bottom/left/right/centre/none or `true` (default none), `foreground?` boolean (default true; false when a cast-scene stands in this world, `castStandsIn`, so a parked car or a desk never sits under the cast's feet) | none | A plate (track 0) never fades itself: it arrives and leaves by its scene transition (`in`), or cuts, so a cut between two worlds is a cut, not a dip through the background. On a higher track it fades in place like a card. In world-camera mode a plate draws past its frame by half the gap to its neighbours (`plateBleed`: camera.spacing / 2 across and along), on a canvas that much larger, so the drift and the travel between plates never uncover the background; a cast standing in it takes the ground from the same canvas. Layout role `decor`. `params.kind` is allowed on world scenes only (story.mjs keeps it reserved elsewhere) |
+| `world` | `kind?` (a world kind; default `story.world.kind`), `time?` day/dusk/night (default `story.world.time`, else day), `props?` ≤ 12 (default `story.world.props`), `camera?` still/drift/pan-left/pan-right/push/pull or `{move, amount 0..1}` (default drift), `detail?` simple/standard/rich (default from `story.cast.style`), `scrim?` auto/top/bottom/left/right/centre/none or `true` (default none), `foreground?` boolean (default true; false when a cast-scene stands in this world, `castStandsIn`, so a parked car or a desk never sits under the cast's feet; the front layer's edge pieces stay, see "Depth and light"), `depth?` boolean (default `story.world.depth`, else false: the depth pass below) | none | A plate (track 0) never fades itself: it arrives and leaves by its scene transition (`in`), or cuts, so a cut between two worlds is a cut, not a dip through the background. On a higher track it fades in place like a card. In world-camera mode a plate draws past its frame by half the gap to its neighbours (`plateBleed`: camera.spacing / 2 across and along), on a canvas that much larger, so the drift and the travel between plates never uncover the background; a cast standing in it takes the ground from the same canvas. Layout role `decor`. `params.kind` is allowed on world scenes only (story.mjs keeps it reserved elsewhere) |
 
-**story.world** `{kind, time?, props?, detail?}` is the video-wide world:
-every world scene without its own `kind`, `time` or `props` takes them from
-it. A style pack's `world` reaches the story through `applyStyle`.
+**story.world** `{kind, time?, props?, detail?, depth?}` is the video-wide world:
+every world scene without its own `kind`, `time`, `props` or `depth` takes them from
+it, and a cast-scene that draws the world itself (no world scene beneath)
+draws it with `depth` too. A style pack's `world` reaches the story through `applyStyle`.
 `story.mjs` checks the shape (import-free); `storyWorldErrors(world)`
 (`kit/core/worlds/index.mjs`) checks kinds, times and props, and a world
 scene fails to resolve on an unknown one.
@@ -5840,16 +5841,17 @@ scene fails to resolve on an unknown one.
 ### The library (`kit/core/worlds/`)
 
 - `index.mjs`: `WORLDS`, `WORLD_KINDS`, `WORLD_GROUPS`, `WORLD_TIMES`;
-  `renderWorld({id, kind, time, colors, canvas, style?, detail?, props?})` →
-  `{layers: {back, mid, front, fx}, defs, anchors, quiet, light, palette,
+  `renderWorld({id, kind, time, colors, canvas, style?, detail?, props?, depth?})` →
+  `{layers: {back, mid, front, fx}, defs, edge, depth, anchors, quiet, light, palette,
   props, overscan, detail}`; `worldLight(kind, time)`; `drawProp(…)` for prop
   sheets; `storyWorldErrors`; `worldCatalogue()`; `worldAnchors(kind,
   {canvas})` (anchors without drawing); `worldGrade(kind, time, strength)`
-  (the time-of-day grade as hex → hex).
-- 25 worlds in three groups. Inside: office, home-desk, kitchen,
-  living-room, classroom, cafe, workshop, server-room, studio, gym. Street:
-  city-street, shopfronts, crossing, alley, rooftop, skyline. Outside: park,
-  beach, mountains, forest, space, abstract-stage, and the racing worlds
+  (the time-of-day grade as hex → hex; a world may bring its own, `def.grade`).
+- 28 worlds in three groups. Inside: office, home-desk, kitchen,
+  living-room, classroom, cafe, workshop, server-room, studio, gym, parlour.
+  Street: city-street, shopfronts, crossing, alley, rooftop, skyline,
+  cafe-terrace. Outside: park, beach, mountains, forest, space,
+  abstract-stage, void-stage, and the racing worlds
   (`RACING_WORLDS`, `racing.mjs`): racetrack (turf, the running rail, a dirt
   track and far rail, a grandstand in the distance, the winning post),
   stable-yard (a stable block with half-door stalls, a lantern, hay, a water
@@ -5944,6 +5946,89 @@ scene fails to resolve on an unknown one.
   chooses from a row; the seed varies among its worlds.
 - `view.mjs`: the layer divs (`<scene>-back|mid|front|fx`).
 
+### The void stage (`void-stage.mjs`)
+
+The classic black-and-white stick-figure look with 3D-feeling elements. A
+flat figure stands on an empty floor plane between extruded slabs in one
+bold red (`VOID_RED`), drawn as flat faces in one-point perspective toward a
+vanishing point above the cast: far pillars and a doorway frame in back
+(dimmed by distance), a tall pillar and a low step in mid, monoliths cropped
+by the frame edges in front, so a pan or push shows depth. Light: a
+spotlight cone and pool, rim light on the slab edges, a glossy floor that
+mirrors the red, a red ground line under the cast. Times: `night` a black
+void, `dusk` a red-backlit void, `day` white paper with long soft shadows.
+
+- The palette is fixed (black, white, red) whatever the brand.
+- Its grade (`worldGrade('void-stage', time)`) leaves the cast's colours
+  alone and, on a dark stage, maps the character outline (`OUTLINE`) to
+  white: the `stick-classic` figure draws white limbs and a white head with
+  its face in ink, as the classic white-on-black shorts do; other styles get
+  white outlines.
+- Its front slabs are edge pieces (`def.edgeFront`): they stay when a cast
+  stands on the stage. The `standing` and `phone` sets bring no pot plant
+  there.
+- `depth` leaves it unchanged: it draws its own.
+
+```json
+{"id": "intro", "module": "world", "start": 0, "end": 5, "params": {"kind": "void-stage", "time": "night", "camera": {"move": "push", "amount": 0.6}}}
+```
+
+With `story.cast.style: "stick-classic"` and a `cast-scene` over it (`set:
+"standing"`), or `story.world: {"kind": "void-stage", "time": "night"}` for
+the whole video.
+
+### Filled worlds (`period.mjs`)
+
+Two worlds that fill the frame edge to edge and light it from inside the
+picture, for character stories:
+
+- `parlour` (inside): damask wallpaper over panelling, a gilt picture rail, a
+  tall draped window, a fireplace with a gilt mirror, candles and a clock on
+  the mantel, a wingback armchair, a fringed table lamp and a Persian rug.
+  The fire glows at dusk and night (and lights the wall and floor). The
+  mantel is a `surface` anchor.
+- `cafe-terrace` (street): stone townhouses with shutters, flower boxes and
+  iron balconies under mansard roofs, a green café front with lit paned
+  windows and a striped awning, bistro tables with cups on cobbles, a lamp
+  post, and the far side of the square in haze with a clock tower; string
+  lights under the awning at dusk and night. The terrace is seen closer than
+  a street (0.74 of the inside scale).
+
+```json
+{"id": "cafe", "module": "world", "start": 0, "end": 6, "params": {"kind": "cafe-terrace", "time": "dusk", "depth": true, "camera": "pan-right"}}
+{"id": "home", "module": "world", "start": 6, "end": 12, "params": {"kind": "parlour", "time": "night", "depth": true}}
+```
+
+### Depth and light (`depth.mjs`)
+
+`depth: true` (a world scene's `params.depth`, or `story.world.depth`) runs
+`depthPass` over any world kind; a world without it draws exactly as before.
+
+- Atmospheric perspective: outside and on streets the back layer is veiled
+  toward the horizon in the time's haze, so far reads lighter and less
+  saturated than near.
+- Light: on streets at dusk and night, warm pools on the pavement with spill
+  shafts and an amber wash (amber noir); outside at night, a pool under the
+  near lamp post; inside, the window's light on the floor (moonlight at
+  night, low sun at dusk, daylight by day) and, at dusk and night, a lamp
+  pool where the cast stands; a ceiling falloff indoors and a light falloff
+  at the frame edges.
+- Grounding: a soft contact band along the ground line, and ambient
+  occlusion where an inside wall meets the floor. (Characters draw their own
+  contact shadows.)
+- A foreground occluder at the frame edges: a tall lamp post and a bush
+  outside, a plant and a table edge with a mug inside. It is returned as
+  `world.edge` and drawn in the front layer, so the camera's parallax slides
+  it past fastest, and `withoutForeground` keeps it when a cast stands in
+  the world. It is a plate layer: it passes behind the cast, never in front.
+- Lights pass `{glow: true}` and force their gradients, so they draw at
+  every detail level; occluders go through the pen like the rest of the
+  world.
+
+```json
+{"world": {"kind": "city-street", "time": "night", "depth": true}}
+```
+
 **Camera.** `params.camera` moves the back, mid and front layers at the
 world camera's depths (`camera-world.mjs` `PARALLAX`: back 0.3 = the
 background, front 1 = the plate, mid 0.65), with `sine.inOut` over the whole
@@ -5963,6 +6048,11 @@ are seen from further back (0.62 of the inside scale).
   [--detail …] [--props …] [--scrim]` renders every world at day, dusk and
   night (one PNG per still and `sheet*.png`); `--scrim` marks the quiet area
   with its scrim and sample text.
+- `node scripts/depth-sheet.mjs [--out qa/depth] [--kinds void-stage,cafe-terrace]
+  [--depth on|off|both] [--style stick-classic] [--portrait]` renders worlds
+  with two of the cast standing in them (a cast scene drawing
+  `story.world`), one row of times per world: for the void stage, the
+  filled worlds and the depth pass.
 - `node scripts/prop-sheet.mjs [out.png]` renders every prop at simple,
   standard and rich detail, by day and night.
 - `test/fixtures/parity/world-*.json`: landscape and portrait, the three
