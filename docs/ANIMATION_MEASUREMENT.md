@@ -317,3 +317,36 @@ for the reviewer and never decides the check.
 The review's shape (pending checks, three decisions, a repair log bound to
 fingerprints) follows the motion review of an MIT-licensed stickman director
 skill, rewritten for LaunchClip's shot list and cut down to six questions.
+
+**Rig measures.** A shot whose scene is drawn by the per-frame rig (below)
+also carries `rig_metrics`: the rig gate's numbers per actor and prop and its
+findings, shown under the shot in `index.html`. Like limb weight, they are
+evidence for the reviewer, not the verdict.
+
+## Per-frame rig
+
+Scenes drawn by the per-frame rig (a resolved scene with `content.rigScene`,
+docs/rd/per-frame-rig.md) are measured from the plan itself, not the pixels.
+`kit/core/characters/rig-metrics.mjs` samples every actor with `rigFrame` at
+the story's fps and reads the joints in canvas px:
+
+| measure | what it is | finish gate |
+|---|---|---|
+| non-finite joints | a joint or prop position that is not a number | error |
+| bone drift | the largest change of any limb segment's length | error over 1 px |
+| foot slide | per planted step, how far the foot's ground contact (its planted place plus whatever the leg's IK missed) moves from where it landed | error over 3 px |
+| grip loss | how far a prop jumps when a hand takes it or lets it go (the hand was not where the prop was); the grip point is the palm, 50 rig units along the glove from the wrist | error over 4 px |
+| prop teleport | an unheld prop moving more than 120 px in one frame | error |
+| jerk per unit of motion | RMS third derivative of every segment's angle over its RMS angular speed | warning over 900/s² |
+| hand corners | frames where a moving wrist (> 2 px a frame) turns more than 45° | warning over 1.5 a second |
+| limb crossings | share of frames where an arm crosses a limb, or the legs cross with the hips apart (legs passing side-on are a walk) | warning over 25% |
+
+The limits are data, in `src/rig_thresholds.json`. The warnings are
+calibrated on the approved prototype, which scores foot slide 0 px over six
+planted steps, bone drift 0, jerk per unit of motion 665/s² (the op-list rig:
+1088), 6 hand corners in 8 s and arms crossing in 22 of 241 frames, and passes
+with no findings. `launchclip finish` runs the `rig` gate only when a scene
+uses the per-frame rig, so every other story's gates are unchanged; its
+findings carry story times, and a failed gate has a `next` repair hint and a
+plain summary. `node eval/per-frame-rig/metrics.mjs` compares the prototype
+with today's op-list rig using the same measures.
