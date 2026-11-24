@@ -7,6 +7,9 @@
 //   cue: {at, action?, target?, pose?, expression?, facing?}
 //   action: look-far | turn-to-look | gaze-at | point-at | walk-to |
 //           stand-up | stretch
+//           | push | pull | hit | catch | lift | drop | throw | give
+//             (contact actions, characters/contact.mjs: the cue's `at` is
+//             the moment of contact; the wind-up plays before it)
 //   target: far | window | horizon | street | skyline (world focus points)
 //           | left | right | {prop: id} | {character: id} | {x, y} (canvas px)
 //           | {scene: id, anchor: name} (a point another scene on the plate
@@ -17,7 +20,9 @@
 
 import {anchorOf, isAnchorTarget} from '../anchors.mjs';
 
-export const ACTIONS = Object.freeze(['look-far', 'turn-to-look', 'gaze-at', 'point-at', 'walk-to', 'stand-up', 'stretch']);
+// Contact actions: a hand meets someone or something, with cause and effect (characters/contact.mjs).
+export const CONTACT_ACTIONS = Object.freeze(['push', 'pull', 'hit', 'catch', 'lift', 'drop', 'throw', 'give']);
+export const ACTIONS = Object.freeze(['look-far', 'turn-to-look', 'gaze-at', 'point-at', 'walk-to', 'stand-up', 'stretch', ...CONTACT_ACTIONS]);
 // Actions whose point is that the character looks at something.
 export const LOOK_ACTIONS = Object.freeze(['look-far', 'turn-to-look', 'gaze-at']);
 
@@ -29,11 +34,20 @@ export const ACTION_INFO = Object.freeze({
   'point-at': {pose: 'point', gaze: true, target: null, describe: 'faces the target and points at it'},
   'walk-to': {pose: 'walk', gaze: true, target: null, describe: 'turns and walks toward the target at a walking pace, then stands: all the way when the scene leaves time, else as far as it does'},
   'stand-up': {pose: 'stand', gaze: false, target: null, describe: 'gets up from a seat (seated sets) and stands'},
-  'stretch': {pose: 'stretch', gaze: false, target: null, describe: 'stretches both arms overhead'}
+  'stretch': {pose: 'stretch', gaze: false, target: null, describe: 'stretches both arms overhead'},
+  // Contact actions: `at` is the contact; the wind-up starts before it and the recovery follows.
+  'push': {pose: null, gaze: true, target: null, contact: true, describe: 'winds up and shoves the target ({character}, {prop} or {x, y}) with the facing hand; a character stumbles back, a prop slides away'},
+  'pull': {pose: null, gaze: true, target: null, contact: true, describe: 'reaches, grips the target ({character} or {prop}) and hauls it toward itself, leaning back'},
+  'hit': {pose: null, gaze: true, target: null, contact: true, describe: 'a big wind-up and a fast slap or punch that lands on `at`; the target recoils (squashes, staggers, looks surprised)'},
+  'catch': {pose: null, gaze: true, target: null, contact: true, describe: 'catches what the target {character} is holding, thrown so it lands in its hands on `at`'},
+  'lift': {pose: null, gaze: true, target: null, contact: true, describe: 'crouches, grips a prop on the floor ({prop}) on `at` and lifts it to carry (a heavy box strains first)'},
+  'drop': {pose: null, gaze: false, target: null, contact: true, describe: 'lets go of what it holds on `at`; it falls, lands and squashes (a ball bounces)'},
+  'throw': {pose: null, gaze: true, target: null, contact: true, describe: 'winds back and throws what it holds, released on `at`: to a {character} (who catches it), or to a point ({x, y}, left, right; default: ahead), where it lands'},
+  'give': {pose: null, gaze: true, target: null, contact: true, describe: 'hands what it holds to the target {character}: the giver alone, then both hands on it from `at`, then the receiver alone'}
 });
 
 // Actions that need a target named (the rest have a default or none).
-export const TARGET_REQUIRED = Object.freeze(['gaze-at', 'point-at', 'walk-to']);
+export const TARGET_REQUIRED = Object.freeze(['gaze-at', 'point-at', 'walk-to', 'push', 'pull', 'hit', 'catch', 'lift', 'give']);
 export const NAMED_TARGETS = Object.freeze(['far', 'window', 'horizon', 'street', 'skyline', 'left', 'right']);
 
 // How far the face turns toward a target, in rig units (a head is about 200
