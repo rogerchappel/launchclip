@@ -11,6 +11,7 @@
 //   diagrams   catalog-i-diagram.mjs (line-diagram, a labelled line sketch)
 //   graphs     catalog-i-graph.mjs (node-graph: nodes fanned round a hub, wires and pulses)
 //   pictures   illustration.mjs (illustration: a drawn object and one change, docs/EXPLAINER_CLAIMS_RFC.md §3.2)
+//              hand-drawn.mjs (hand-drawn: an object inked and coloured by a pen, docs/rd/hand-drawn-reveal.md)
 
 import {DATA_I} from './catalog-i-data.mjs';
 import {CALENDARS} from './catalog-i-calendar.mjs';
@@ -19,5 +20,6 @@ import {MATH} from './catalog-i-math.mjs';
 import {DIAGRAMS} from './catalog-i-diagram.mjs';
 import {GRAPHS} from './catalog-i-graph.mjs';
 import {illustration} from './illustration.mjs';
+import {handDrawn} from './hand-drawn.mjs';
 
-export const EXPLAIN_MODULES = [...DATA_I, ...CALENDARS, ...PEOPLE, ...MATH, ...DIAGRAMS, ...GRAPHS, illustration];
+export const EXPLAIN_MODULES = [...DATA_I, ...CALENDARS, ...PEOPLE, ...MATH, ...DIAGRAMS, ...GRAPHS, illustration, handDrawn];

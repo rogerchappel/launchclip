@@ -80,7 +80,7 @@ export function objectSpec(check, raw, path, {labels = false} = {}) {
 }
 
 /** Width over height of an object's box. */
-const aspectOf = spec => (spec.drawn ? OBJECT_ASPECT[spec.drawn] : spec.prop ? Math.min(1.6, Math.max(0.7, PROPS[spec.prop].w / PROPS[spec.prop].h)) : 1);
+export const aspectOf = spec => (spec.drawn ? OBJECT_ASPECT[spec.drawn] : spec.prop ? Math.min(1.6, Math.max(0.7, PROPS[spec.prop].w / PROPS[spec.prop].h)) : 1);
 
 /** The material's tone in the style: the hue mixed into bg, eased back toward bg until the foreground keeps 4.5:1 on it. */
 export function materialTone(material, colors, foreground) {
@@ -344,7 +344,7 @@ function fallbackNodes(model, spec, box, key, {worn = false} = {}) {
 }
 
 // One object as a rect-sized layer's children: drawn in detail, else its prop or icon (with a soft shadow).
-function subjectNodes(model, spec, objGeo, box, pid, {worn = false, days = 0, sweep = false} = {}) {
+export function subjectNodes(model, spec, objGeo, box, pid, {worn = false, days = 0, sweep = false} = {}) {
   const c = model.content;
   if (spec.drawn) {
     const drawn = drawnNodes(spec.drawn, objGeo, c.look, pid, model.rect, c.seed, {worn, days, sweep});
