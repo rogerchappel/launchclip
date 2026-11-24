@@ -244,3 +244,28 @@ test("a provider that spends only local seconds runs headless with no budget, ca
     assert.match(notes.join("\n"), amount ? /quote: .*\d+ seconds; local time only/ : /unknown seconds; local time only/);
   }
 });
+
+test("continuity: a brief with continue_from starts on the last kept frame of that shot's clip, and the ledger says so", async (t) => {
+  const dir = await project(t);
+  const fake = createFakeProvider({ price: 0.05 });
+  const starts = new Map();
+  const submit = fake.submit;
+  fake.submit = async (brief, step, tier, options) => { if (step === "video") starts.set(brief.id, options.startFrame); return submit(brief, step, tier, options); };
+  const grabbed = [];
+  const frame = async (video, seconds, out) => { grabbed.push({ video, seconds }); await writeFile(out, "png"); };
+  const brief = (id, extra = {}) => ({ id, kind: "story", steps: ["image", "video"], image: { prompt: id, negative: "", width: 64, height: 64, references: [] }, video: { prompt: id, audio: "none", seconds: 2, pad_seconds: 0.3, fps: 10, ...extra }, brief_hash: `sha256:${id}` });
+  const notes = [];
+  const generator = createGenerator({ project: dir, image: fake, video: fake, budget: { usd: 5 }, pollMs: NO_POLL, frame, notice: (line) => notes.push(line) });
+  const ask = (id, extra) => generator.findShot({ id, role: "story", storyBrief: brief(id, extra) });
+  // c continues from a shot that has no clip in this run: it falls back to its own keyframe.
+  const [a, b, c] = await Promise.all([ask("a"), ask("b", { continue_from: "a" }), ask("c", { continue_from: "zzz" })]);
+  assert.ok(a && b && c, notes.join("\n"));
+  assert.deepEqual(grabbed, [{ video: a.file, seconds: 2.2 }], "the last kept frame: pad + seconds − one frame");
+  assert.equal(starts.get("b"), path.join(dir, "assets/shots/generated/b/start-from-a.png"));
+  assert.match(starts.get("c"), /image-final-1/);
+  assert.match(notes.join("\n"), /c: starts from its own keyframe; zzz has no clip/);
+  const videos = (await readLedger(dir)).filter((entry) => entry.step === "video");
+  assert.deepEqual(videos.find((entry) => entry.shot === "b").start_frame, { shot: "a", at: 2.2 });
+  assert.ok(videos.every((entry) => entry.retained.in === 0.3 && entry.retained.out === 2.3));
+  assert.ok(!videos.find((entry) => entry.shot === "a").start_frame);
+});

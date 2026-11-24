@@ -24,7 +24,7 @@ import { copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { MAX_ASSET_PROVIDER_CONCURRENCY, createCommandAssetProvider } from "../asset_provider_cmd.js";
-import { footageBrief, lookParagraph, refusalReason } from "./brief.js";
+import { footageBrief, grabFrame, lookParagraph, refusalReason, retainedRange } from "./brief.js";
 import { FREE_UNITS, MAX_ATTEMPTS, appendLedger, checkBudget, nextAttempt, quoteBatch, readLedger, spendGate, spentTotal } from "./ledger.js";
 
 export const GENERATED_DIR = path.join("assets", "shots", "generated");
@@ -35,7 +35,7 @@ export const POLL_MS = Object.freeze({ image: 2000, video: 10_000 });
 // made and the best one is animated. One by default.
 export const MAX_KEYFRAME_CANDIDATES = 6;
 
-export function createGenerator({ project, image, video = null, budget = null, daily = null, tier = "final", maxCalls = null, library = null, check = null, approve = null, candidates = 1, concepts = null, look = lookParagraph(null), fps, pollMs = POLL_MS, notice = () => {} }) {
+export function createGenerator({ project, image, video = null, budget = null, daily = null, tier = "final", maxCalls = null, library = null, check = null, approve = null, candidates = 1, concepts = null, look = lookParagraph(null), fps, pollMs = POLL_MS, frame = grabFrame, notice = () => {} }) {
   if (!project) throw new Error("createGenerator needs a project");
   if (!image) throw new Error("createGenerator needs an image provider (the keyframe step)");
   const notes = [];
@@ -51,6 +51,8 @@ export function createGenerator({ project, image, video = null, budget = null, d
   let pending = [];
   let checkNoted = false;
   let audience = null;
+  // Each request's clip made or reused this run, for a brief that continues from it.
+  const clips = new Map();
 
   const providerFor = (step) => (step === "image" ? image : video);
   // keyframeOnly: a story draft stops at its approved keyframe; the clip is made once the draft is approved.
@@ -150,10 +152,33 @@ export function createGenerator({ project, image, video = null, budget = null, d
       if (!job.cached.image) return null;
     }
     if (wantsVideo(job) && !job.cached.video) {
-      job.cached.video = await step(job, "video", brief, { startFrame: path.resolve(project, job.cached.image.file), signal }, null);
+      const startFrame = (await chainedFrame(job)) ?? path.resolve(project, job.cached.image.file);
+      job.cached.video = await step(job, "video", brief, { startFrame, signal }, null);
       if (!job.cached.video) return null;
     }
     return finished(job);
+  }
+
+  // Continuity (RFC §4.1): a brief with continue_from starts on the last kept frame of that shot's clip, made
+  // earlier in this run (requests are generated in the order asked). Without that clip, its own keyframe.
+  // shortcut: the keyframe is still made (checked, and the fallback); skip it once chained clips prove reliable.
+  // shortcut: a cached chained clip is reused even if the shot before is remade; key the cache on that clip's hash if that bites.
+  async function chainedFrame(job) {
+    const from = job.brief.video?.continue_from;
+    if (!from) return null;
+    const prev = clips.get(from);
+    if (!prev) { say(`${job.request.id}: starts from its own keyframe; ${from} has no clip in this run to continue from`); return null; }
+    const { last } = retainedRange(prev.video);
+    const out = path.join(project, GENERATED_DIR, job.request.id, `start-from-${from}.png`);
+    try {
+      await mkdir(path.dirname(out), { recursive: true });
+      await frame(prev.file, last, out);
+    } catch (error) {
+      say(`${job.request.id}: starts from its own keyframe; the last frame of ${from} could not be read (${String(error?.message ?? error).split("\n")[0]})`);
+      return null;
+    }
+    job.chainedFrom = { shot: from, at: last };
+    return out;
   }
 
   // The keyframe, checked: a rejection retries with the check's one changed line.
@@ -193,7 +218,9 @@ export function createGenerator({ project, image, video = null, budget = null, d
         }
         const concept = name === "image" ? job.concepts?.[i - 1] ?? null : null;
         const asked = concept ? { ...brief, image: { ...brief.image, prompt: `${job.briefFor(concept).image.prompt}${changed ? ` ${changed}` : ""}` } } : brief;
-        const entry = { shot: job.request.id, step: name, tier, attempt, ...(want > 1 ? { candidate: i } : {}), ...(concept ? { concept } : {}), provider: provider.id, ...(askedModel ? { asked_model: askedModel } : {}), brief_hash: job.brief.brief_hash, ...(changed ? { changed } : {}) };
+        // A clip's line carries the range the edit keeps and, chained, the frame it started from (RFC §7).
+        const kept = name === "video" ? retainedRange(brief.video) : null;
+        const entry = { shot: job.request.id, step: name, tier, attempt, ...(want > 1 ? { candidate: i } : {}), ...(concept ? { concept } : {}), provider: provider.id, ...(askedModel ? { asked_model: askedModel } : {}), brief_hash: job.brief.brief_hash, ...(changed ? { changed } : {}), ...(kept ? { retained: { in: kept.in, out: kept.out } } : {}), ...(kept && job.chainedFrom ? { start_frame: job.chainedFrom } : {}) };
         const started = Date.now();
         let result;
         try {
@@ -256,6 +283,7 @@ export function createGenerator({ project, image, video = null, budget = null, d
     const last = clip ?? still;
     const made = [still, clip].filter(Boolean).map((entry) => `${entry.provider}:${entry.model ?? "?"}`);
     const licences = [...new Set([clip?.licence, still?.licence].filter(Boolean))];
+    if (clip) clips.set(job.request.id, { file: path.resolve(project, clip.file), video: job.brief.video });
     return {
       kind: clip ? "video" : "image",
       file: path.resolve(project, last.file),
