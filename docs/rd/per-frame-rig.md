@@ -1,14 +1,16 @@
 # R&D: a per-frame character rig
 
-Status: R&D prototype, open for review. Remotion only; HyperFrames parity is
-the gate before anything ships.
+Status: approved by the owner ("definitely better"); being productionised
+as an opt-in path. HyperFrames parity is the gate before it ships.
 Date: 2026-11-25
 Code: `kit/core/characters/rig-frame.mjs` (the rig),
-`kit/core/characters/rig-frame-draw.mjs` (the drawing and the prototype
-scene), `kit/remotion/experimental/PerFrameRig.tsx` (its own Remotion entry),
-`eval/per-frame-rig/` (today's storyboard, the side-by-side render, the
-metrics, a quick preview), `test/rig_frame.test.js`.
-Nothing here touches the storyboard schema or today's rig output.
+`kit/core/characters/rig-frame-draw.mjs` (the drawing per style),
+`kit/core/characters/rig-scene.mjs` (the scene contract both renderers draw,
+and the prototype scene), `kit/remotion/experimental/PerFrameRig.tsx` (its
+own Remotion entry), `eval/per-frame-rig/` (today's storyboard, the
+side-by-side render, the metrics, a quick preview, the cost),
+`test/rig_frame.test.js`.
+Today's rig output (op lists, goldens, parity) is unchanged.
 
 ## 1. The problem
 
@@ -42,7 +44,7 @@ the limbs can't be redrawn, so 1, 2 and 4 can only be patched.
 A character's frame becomes a **pure function of time**:
 
 ```
-rigFrame(character, track, t) → {joints, legs, arms, lean, bend, head, ball, walk}
+rigFrame(character, track, t, {plan, checkpoints, grip}?) → {joints, legs, arms, lean, bend, head, look, hbob, squash, stepSquash, carry, walk}
 ```
 
 `joints` are world positions (rig units, ground at y = 0) of the pelvis,
@@ -90,15 +92,91 @@ between calls.
   through the elbow (or knee) halfway, bowed a minimum when straight. The
   glove, shoe and head are the style's own parts (`hoseGlove`, `hoseShoe`,
   `hoseHead`, split out of `drawRubberHose` with byte-identical output).
-  `stick` draws two straight segments.
+  `stick` draws each limb as two straight segments with the style's ink edge
+  round the colour of what covers it (sleeves, trousers, skin), round hands
+  and line feet; `stick-classic` the same in one ink line with a paper head.
+  Both use the style's own head (`stickHead`, split out of `drawStick` with
+  byte-identical output). `RIG_FRAME_STYLES` is exactly these three; every
+  other style keeps today's rig (their limbs are shaded capsules, so a
+  per-frame curve buys them little), and `validateRigScenePlan` refuses them.
+
+### 2.1 Production additions
+
+- **The scene contract.** `rig-scene.mjs` draws a whole scene from one JSON
+  plan (`launchclip.rig-scene.v1`, documented at the top of the file):
+  `rigSceneTree(plan, t, {width, height}, prepared?)` → one `el()` SVG tree
+  in canvas px, transparent; `rigScenePrepare(plan)` → the JSON-serialisable
+  shared work; `rigSceneState` → the joints and prop places the tree is drawn
+  from (for gates); `validateRigScenePlan` → errors. Both renderers draw the
+  same tree, so parity is by construction.
+- **Checkpoints.** `springCheckpoints` stores the springs' state every 120
+  sub-steps (0.5 s); `rigFrame` resumes from the nearest one and runs the
+  same fixed sub-steps, so the floats are identical to a replay from 0 (the
+  test compares whole frames with `deepStrictEqual`, also after a JSON round
+  trip of the checkpoints). A frame now costs the same at any t.
+- **Turns.** `facings: [{t, facing}]` turn the figure over `TURN` (0.26 s):
+  the facing used for limbs flips halfway, the lean, shift and head turn
+  ease through 0 (the head passes through front), shoes and gloves flip with
+  it, and the elbow limit relaxes so the arms swing round on their springs.
+  A walk the other way turns first on its own (a facing key 0.6 × TURN
+  before it starts). Walks are planned in world x for either direction.
+- **Head and body agree.** The head turns three-quarter toward the facing
+  (the toon `gaze` and `turn` joints at `GAZE.quarter`, narrowed by
+  `quarterScale`) by a sprung `look` channel: 1 while walking, 0.8 while a
+  hand acts on a path, 0 standing still (front, a small look toward the
+  facing). Keys can set `look` directly. We chose a three-quarter head over a
+  three-quarter body: our faces read well turned, the profile body keeps the
+  walk legible, and the reference clips walk exactly so.
+- **Bouncier walk.** Steps of 230, lift 96 peaking early (a high, quick
+  knee), bob 30, arm swing 30° with the elbow flexing on the forward swing,
+  lean 7°. The upper body moves: the shoulders roll with the stride, the
+  head nods into each step on its (lagging) spring and trails the bob on its
+  own under-damped spring (`hbob`), and the upper body squashes on each
+  contact and stretches a little through passing (`stepSquash`, full on
+  rubber-hose, 0.4 of it on the sticks). Moving holds: breath, arm sway, a
+  slow weight shift and a head drift, all pure functions of t.
+- **Props in hand.** A one-hand prop sits in its hand at its grip and the
+  arm carries it forward (a sprung pose, the swing mostly gone). A two-hand
+  prop (box, paper-stack) is carried before the chest; both wrists lock on
+  its sides by IK after the springs, so the arms follow it through the walk.
+  `hands[side][k].grip` locks a hand on a prop's grip for a run of keys (a
+  pick-up, a catch, the receiving side of a handover); it blends in and out
+  over `handBlend`. A prop in the far hand is drawn behind the body.
+- **Props between hands.** Prop paths mix `{t, at}` (canvas px) and
+  `{t, holder}`: held between keys with the same holder, passed between two
+  holders, and along a smooth run of `at` keys that starts at the hand it
+  left (the release point) and ends in the hand that takes it (both found
+  in `prepare`). Two equal neighbours hold, so a box can rest until picked
+  up. A prop's own `squash` flattens it about its bottom.
+- **Feet paths.** `feet: {l|r: [{t, at, bend?}]}` (hip-relative) move a foot
+  by IK for a kick or a stomp; the pelvis stops lowering for that foot while
+  it is off the ground, and the foot's place is kept, so it lands where it
+  stood.
+- **Gag squash.** `squash: [{t, amount, hold, recover}]` scales the drawing
+  about the feet (area kept); the bones are untouched, so every rig
+  guarantee holds. It arrives over a 50 ms attack, so it never pops.
+- **Speech.** `mouth: [{t, viseme}]` opens the static face's mouth at the
+  viseme's size (`VISEMES`, as today's speech); `toon.mjs` draws it only
+  when asked, so today's faces are unchanged.
+- **Seated sets are out of scope.** `track.sit` is refused; the compiler
+  keeps today's rig for seated sets.
 
 ## 3. The prototype
 
 One rubber-hose `oliver`, 9:16, 8 s, on the `standing` set. Walk left about
-0.8 m in four steps (0.3–1.75 s), stop, a small settle, anticipation (crouch,
-lean back, weight to the back foot, the arm swings back and cocks behind the
-head), an over-the-top throw released at 4.47 s, follow-through, settle,
+0.6 m with the ball in his right hand (0.3–1.75 s), stop with a small gag
+squash, turn to face right (2.3 s), anticipation (crouch, lean back, weight
+to the back foot, the arm drops from the carry, swings back and cocks behind
+the head), an over-the-top throw released at 4.47 s, follow-through, settle,
 then an idle: breath, arm sway and a weight shift front to back.
+`prototypePlan()` (rig-scene.mjs) builds it as a rig-scene plan; the ball's
+flight is sampled from the release point every 0.1 s.
+
+The first prototype threw left from 260 px: the follow-through carried the
+hand and glove past the left edge of its own canvas, which the side-by-side
+showed as an arm drawn as a bare line for several frames (the "missing
+glove"). The rig drew the glove; the scene put it off the canvas. The scene
+now ends its walk at 363 px and throws toward the open side.
 
 Today's rig acts the same beats from a cast-scene storyboard
 (`eval/per-frame-rig/today.storyboard.json`: walk-to a point at 0.3 s, throw
@@ -154,9 +232,11 @@ How to read it:
 - **Bones.** Exactly rigid. Today drifts 1.3 px from scale tweens (breath,
   squash).
 
-Cost: `rigFrame` averages 3.3 ms a frame in Node (6.7 ms at 8 s; it grows
-with t because the springs replay from 0). The drawing adds little. The
-whole side-by-side, both renders and the ffmpeg steps, took 31 s.
+Cost (`node eval/per-frame-rig/perf.mjs`, the production rig): replaying
+the springs from 0 averages 2.7 ms a frame (5.0 ms in the last second);
+from the checkpoints 0.17 ms at any t. The whole scene tree, drawing
+included, is 0.3 ms a frame. `rigScenePrepare` takes 10 ms and its JSON is
+10 KB for the 8 s prototype (about 1.3 KB per actor-second).
 
 ## 5. HyperFrames parity
 
@@ -172,16 +252,13 @@ the frame for that time.
 
 The rig plugs in the same way:
 
-1. The emitter writes the static parts once: the head (with its expression
-   groups, toggled by opacity ops as today), the glove, the shoe and the
-   ball as `<g>` with ids, and one `<path>` per limb and the spine.
-2. A runtime, `RIG_RUNTIME`, is the source of `rig-frame.mjs` and the
-   limb-path part of `rig-frame-draw.mjs` (`limbCurve`, `pressureStroke`),
-   made self-contained like `PARTICLE_RUNTIME` (they import only each other
-   and pure helpers).
-3. A proxy tween's `onUpdate` calls `lcRigFrame(host, plan, clock.t)`, which
-   evaluates `rigFrame` and sets each limb path's `d` and each part's
-   `transform`. Remotion renders the same tree from the same function.
+1. The page inlines the plan and `rigScenePrepare(plan)` (JSON), so the
+   browser never replays the springs from 0.
+2. A runtime carries `rigSceneTree` and what it imports, made
+   self-contained like `PARTICLE_RUNTIME`.
+3. A proxy tween's `onUpdate` calls `rigSceneTree(plan, clock.t, canvas,
+   prepared)` and puts the tree in the host. Remotion renders the same tree
+   from the same function.
 
 Parity is exact by construction: the same pure function, the same floats,
 the same path strings (`r1` rounding). It is proven, not assumed, by the
@@ -190,10 +267,8 @@ fixture scene before the rig is offered to any storyboard.
 
 ## 6. Risks
 
-- **Cost grows with time.** Springs replay from 0. A 30 s scene would cost
-  about 25 ms a frame. Fix: checkpoints every 0.5 s cached by the plan
-  (derived from the plan alone, rebuilt on a backwards seek, as the particle
-  cache is). Fixed sub-steps from a checkpoint give the same numbers.
+- **Cost grows with time.** Fixed: checkpoints every 0.5 s in `prepared`;
+  a frame resumes from the nearest one with bit-identical floats.
 - **Floating-point drift between engines.** Node, Chromium (Remotion) and
   Chromium (HyperFrames) share V8, so the same code gives the same floats.
   The `r1` rounding of path data absorbs the rest. A parity test guards it.
@@ -201,14 +276,14 @@ fixture scene before the rig is offered to any storyboard.
   prototype. Planners can't write them. They must come from the cues we
   already have (`throw`, `point-at`, `catch`, `walk-to`), as generated
   breakdowns per action.
-- **Front view vs profile.** Today's figure is a front view; the walk and
-  the throw here read as a profile (both legs from one hip point, shoes
-  forward). That matches the reference, but turning to camera, sitting and
-  the seated sets are not designed yet.
-- **What today does that this doesn't.** `holds` carry poses, contact
-  reactions (squash, stagger), sets, gaze turns, lip sync, the
-  `stick-classic` and toon styles. The head, face and expressions are
-  reused, so lip sync and expressions port; the rest needs work.
+- **Front view vs profile.** The body walks and acts in profile with a
+  three-quarter head; standing still the head comes to front. A full turn to
+  camera (a front-view body) and sitting are not designed: seated sets keep
+  today's rig.
+- **What today does that this doesn't.** Contact reactions beyond squash
+  (stagger), gaze at a target, paper-stack sheets that lag, skirts on the
+  stick figures, and the toon styles. Expressions, visemes, carries,
+  handovers, throws, kicks and squash are in.
 
 ## 7. Migration path
 
@@ -233,7 +308,9 @@ never bend, a walk that glides, limbs that turn as rigid sticks, crouches
 that shorten legs, and arms that tween in straight angle lines. Side by side,
 the per-frame figure walks, crouches with bent knees and throws in an arc.
 
-Still missing against the reference: the walk has small steps and a quiet
-upper body (no shoulder roll, little head bob); there is no squash and
-stretch of the body or the limbs themselves; hand shapes don't change with
-the action; and every beat is hand-keyed, not generated from cues.
+The production pass (§2.1) closed the first gaps against the reference:
+bigger, bouncier steps, a shoulder roll, a lagging head bob and nod, body
+squash on contact, gag squash, carries and a head that agrees with the body.
+Still missing: the limbs themselves don't squash or stretch (bones are
+rigid on purpose), hand shapes don't change with the action, and the cue
+compiler (cues → tracks) is separate work.
