@@ -200,6 +200,10 @@ function compileActor(actor, index, {start, end, ops, prefix, grips}) {
   // Hands: a path from the first target off rest to the one back at rest (held to the scene's end if it never returns).
   const hands = {}, feet = {};
   for (const side of ['L', 'R']) {
+    // Kicks: a contact phase that sets the legs (not a step in), through to the recovery.
+    const kick = list.map(one => Boolean(one.state.contact && !one.state.walk && one.state.body?.[`leg${side}`] !== undefined));
+    const k0 = kick.indexOf(true), k1 = kick.lastIndexOf(true);
+    if (k0 >= 0) feet[side.toLowerCase()] = list.slice(Math.max(0, k0 - 1), k1 + 2).map(({t, j, f}) => ({t: rel(t), ...footTarget(j, side, g, f)}));
     const off = list.map(one => !atRest(one.j, side, one.f));
     const first = off.indexOf(true), last = off.lastIndexOf(true);
     if (first < 0) continue;
@@ -210,10 +214,6 @@ function compileActor(actor, index, {start, end, ops, prefix, grips}) {
       const prop = (j.held ?? []).includes(side) ? grip(t) : undefined;
       return {t: rel(t), ...handTarget(j, side, g, f), ...(prop ? {grip: prop} : {})};
     });
-    // Kicks: a contact phase that sets the legs (not a step in), through to the recovery.
-    const kick = list.map(one => Boolean(one.state.contact && !one.state.walk && one.state.body?.[`leg${side}`] !== undefined));
-    const k0 = kick.indexOf(true), k1 = kick.lastIndexOf(true);
-    if (k0 >= 0) feet[side.toLowerCase()] = list.slice(Math.max(0, k0 - 1), k1 + 2).map(({t, j, f}) => ({t: rel(t), ...footTarget(j, side, g, f)}));
   }
 
   const facing = actor.states[0].facing ?? actor.facing;
