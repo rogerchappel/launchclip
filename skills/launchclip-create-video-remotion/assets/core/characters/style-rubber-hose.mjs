@@ -19,7 +19,7 @@ import {asHead, backOfHead, backView, caneLength, face, faceParts, faceView, gaz
 import {aidSide, covers, headwear, heldAid, wheelchair} from './toon-wear.mjs';
 import {linePen} from './style-line.mjs';
 import {stickGeometry} from './style-stick.mjs';
-import {cubicPoints, pressureStroke} from './pens.mjs';
+import {cubicPoints, mix, pressureStroke} from './pens.mjs';
 import {asShadow} from './bounds.mjs';
 
 const r1 = value => Math.round(value * 10) / 10;
@@ -36,10 +36,44 @@ const BOW = 0.07;
 // Hair the two tufts stand in for; every other style keeps its line-art hair.
 const TUFTED = new Set(['buzz', 'short', 'sidepart', 'undercut', 'quiff', 'spiky', 'curly', 'pixie', 'mohawk', 'cornrows', 'twists']);
 
+// Arms at rest hang a little away from the body, the forearm easing back, so
+// the gloves clear the legs and the spine stays one clear line; raised arms
+// go wide of the big head. Only this style's poses (rig.mjs geometry.poses).
+const REST_ARM = {arm: 17, fore: -9};
+const POSES = Object.freeze({
+  stand: {armL: REST_ARM.arm, foreL: REST_ARM.fore, armR: REST_ARM.arm, foreR: REST_ARM.fore},
+  walk: {armL: REST_ARM.arm, foreL: REST_ARM.fore + 6, armR: REST_ARM.arm, foreR: REST_ARM.fore + 6},
+  slump: {armL: 12, foreL: -4, armR: 12, foreR: -4},
+  point: {armO: REST_ARM.arm, foreO: REST_ARM.fore},
+  look: {armO: REST_ARM.arm, foreO: REST_ARM.fore},
+  facepalm: {armO: REST_ARM.arm, foreO: REST_ARM.fore},
+  'point-self': {armO: REST_ARM.arm, foreO: REST_ARM.fore},
+  wave: {armA: 104, foreA: 52, armO: REST_ARM.arm, foreO: REST_ARM.fore},
+  cheer: {armL: 112, foreL: 44, armR: 112, foreR: 44}
+});
+
 /** Rubber-hose geometry: the stick figure's rig lengths with a larger round head. */
 export function hoseGeometry(params) {
   const g = stickGeometry(params);
-  return {...g, w: WEIGHT[params.build] ?? 15, headR: HEAD_R, headCy: -HEAD_R * 0.96};
+  return {...g, w: WEIGHT[params.build] ?? 15, headR: HEAD_R, headCy: -HEAD_R * 0.96, poses: POSES};
+}
+
+/**
+ * The line pen, with hair (and a headscarf, which is hair) laid in as a soft
+ * light gray-taupe holding a trace of its own colour under the ink line,
+ * never a solid ink shape: the white face and the thin limbs stay the focus.
+ */
+function hosePen(c, id) {
+  const tone = mix(c.hair, '#d6d1c2', 0.22);
+  // A light hair colour makes the line pen fill paper, which the tone replaces; stubble (an ink wash in line art) is left out.
+  const base = linePen({...c, hair: '#d6d1c2', stubble: '#d6d1c2'}, {id});
+  const tint = node => (node.attrs && node.attrs.fill && node.attrs.fill !== 'none' ? {...node, attrs: {...node.attrs, fill: tone}} : node);
+  return {
+    ...base,
+    shape: (d, fill, o = {}) => (fill === 'hair' && o.outline !== false ? tint(base.shape(d, fill, o)) : base.shape(d, fill, o)),
+    ellipse: (cx, cy, rx, ry, fill, o = {}) => (fill === 'hair' && o.outline !== false ? tint(base.ellipse(cx, cy, rx, ry, fill, o)) : base.ellipse(cx, cy, rx, ry, fill, o)),
+    strand: (d, fill, width) => base.strand(d, fill, width).map((node, i) => (fill === 'hair' && i === 1 ? {...node, attrs: {...node.attrs, stroke: tone}} : node))
+  };
 }
 
 /** One limb segment from (0, 0) to (0, length) as a bowed pressure stroke. */
@@ -52,7 +86,7 @@ function hose(length, width, seed, {taper = [0, 0], bow = -BOW} = {}) {
 export function drawRubberHose(params, colors, {id, joints: j, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', gaze = false, turns = false}) {
   const g = hoseGeometry(params);
   const c = toonColors(colors);
-  const P = linePen(c, {id});
+  const P = hosePen(c, id);
   // The toon face's geometry is the rig's; the head is scaled onto the circle below.
   const rig = stickGeometry(params);
   const ctx = {id, g: rig, c, p: params, j, expression, static: isStatic, props, P, facing, eyeScale: 1.2};
@@ -121,9 +155,10 @@ export function drawRubberHose(params, colors, {id, joints: j, expression = 'neu
     joint(ctx, 'hb', 0, g.neckY, tilt, [backIdle]),
     // The short neck and the spine: one stroke from under the head to the hips.
     group([hose(-g.neckY - 2, w, seed('spine'), {taper: [0, 0.1], bow: 0.03})], {transform: `translate(0 ${r1(g.neckY + 2)})`}),
-    joint(ctx, 'head', 0, g.neckY, tilt, [headIdle]),
+    // The arms go behind the head: a hand raised to the head reads as touching it, never as a stroke across the face.
     arm('l'),
-    arm('r')
+    arm('r'),
+    joint(ctx, 'head', 0, g.neckY, tilt, [headIdle])
   ];
   const breath = joint(ctx, 'breath', 0, 0, {}, torsoKids);
   const torso = joint(ctx, 'torso', 0, g.hipY, {rotation: j.lean, scaleY: j.squash}, [breath]);
