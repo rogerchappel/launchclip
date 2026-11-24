@@ -20,7 +20,7 @@ const OPENAPI = {
   'fal-ai/flux/dev': { components: { schemas: { FluxInput: { properties: { prompt: {}, image_size: {} } } } } },
   'fal-ai/nano-banana': { components: { schemas: { NanoInput: { properties: { prompt: {}, aspect_ratio: { enum: ['1:1', '16:9', '9:16'] } } } } } },
   'fal-ai/veo3.1/image-to-video': { components: { schemas: { VeoInput: { properties: {
-    prompt: {}, image_url: {}, negative_prompt: {}, duration: { enum: ['4s', '6s', '8s'] }, aspect_ratio: { enum: ['auto', '16:9', '9:16'] } } } } } }
+    prompt: {}, image_url: {}, negative_prompt: {}, generate_audio: {}, duration: { enum: ['4s', '6s', '8s'] }, aspect_ratio: { enum: ['auto', '16:9', '9:16'] } } } } } }
 };
 
 // A fal stand-in: records requests, answers queue, models, pricing and CDN calls.
@@ -108,6 +108,7 @@ test('video step: start frame inline, padded duration rounded to the model enum,
   assert.equal(body.duration, '6s'); // 4 s + 0.5 s each end = 5 s → 6s
   assert.equal(body.aspect_ratio, '16:9');
   assert.equal(body.negative_prompt, 'no text');
+  assert.equal(body.generate_audio, undefined, 'a footage brief says nothing about audio: the model default');
   const out = await fal.fetch(job, dir);
   assert.equal(path.basename(out.file), 'req-1.mp4');
   assert.equal(out.seed, undefined);
@@ -207,4 +208,13 @@ test('video step: a ratio the model does not offer asks for the nearest one, nev
   const mock = mockFal({ license: 'commercial' });
   await provider(mock).submit({ ...BRIEF, image: { ...BRIEF.image, width: 1080, height: 1350 } }, 'video', 'final', { startFrame: PNG });
   assert.equal(mock.requests.find((r) => r.method === 'POST').body.aspect_ratio, '9:16');
+});
+
+test('video step: a story brief turns the model\'s own audio off unless it asks for its sound effects', async () => {
+  for (const [audio, want] of [['none', false], ['effects', true]]) {
+    const mock = mockFal();
+    const fal = provider(mock);
+    await fal.submit({ ...BRIEF, video: { ...BRIEF.video, audio } }, 'video', 'final', { startFrame: PNG });
+    assert.equal(mock.requests.find((r) => r.method === 'POST').body.generate_audio, want, audio);
+  }
 });
