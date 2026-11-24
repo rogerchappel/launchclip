@@ -108,3 +108,13 @@ test('a cast scene drawing story.world itself carries depth into the world it dr
   const flat = {...s, world: {kind: 'cafe-terrace', time: 'dusk'}};
   assert.equal('depth' in resolveModule(flat.scenes[0], flat).content.drawWorld, false);
 });
+
+test('a cast scene with its own params.world can ask for depth', () => {
+  const own = (world) => ({...story([{id: 'c', module: 'cast-scene', start: 0, end: 6, params: {set: 'standing', world, cast: [{id: 'maya'}]}}]), cast: {style: 'stick', characters: [{id: 'maya'}]}});
+  const lit = own({kind: 'parlour', time: 'night', depth: true});
+  assert.equal(resolveModule(lit.scenes[0], lit).content.drawWorld.depth, true);
+  const flat = own({kind: 'parlour', time: 'night'});
+  assert.equal('depth' in resolveModule(flat.scenes[0], flat).content.drawWorld, false);
+  const bad = own({kind: 'parlour', depth: 'yes'});
+  assert.throws(() => resolveModule(bad.scenes[0], bad), /params\.world\.depth/);
+});

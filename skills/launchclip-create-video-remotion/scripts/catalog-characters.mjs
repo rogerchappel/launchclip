@@ -237,8 +237,9 @@ function standingWorld(b, ctx) {
   const {check} = b;
   const raw = b.params.world;
   if (raw === undefined) return ctx.beneath ? {kind: ctx.beneath.kind, time: ctx.beneath.time} : null;
-  check.obj(raw, 'params.world', ['kind', 'time'], ['kind']);
-  return {kind: check.oneOf(raw.kind, 'params.world.kind', WORLD_KINDS), time: raw.time === undefined ? 'day' : check.oneOf(raw.time, 'params.world.time', WORLD_TIMES)};
+  check.obj(raw, 'params.world', ['kind', 'time', 'depth'], ['kind']);
+  if (raw.depth !== undefined && typeof raw.depth !== 'boolean') check.fail('params.world.depth', 'must be true or false');
+  return {kind: check.oneOf(raw.kind, 'params.world.kind', WORLD_KINDS), time: raw.time === undefined ? 'day' : check.oneOf(raw.time, 'params.world.time', WORLD_TIMES), ...(raw.depth === true ? {depth: true} : {})};
 }
 
 // Characters standing in a world take half its time-of-day grade: a night
@@ -541,7 +542,8 @@ function castStage(b, ctx, setName) {
   const placed = beneath || !stateful ? {props: base, cues: []} : sceneProps(check, {base, own: p.props, start: b.start, duration: b.duration, states: ctx.propStates ?? {}});
   const detail = p.world === undefined && !beneath ? (ctx.world?.detail ?? null) : null;
   // story.world.depth: the depth pass (worlds/depth.mjs) on a world the scene draws itself.
-  const depth = p.world === undefined && !beneath && ctx.world?.depth === true;
+  // params.world.depth: the same pass on the scene's own world.
+  const depth = p.world === undefined ? !beneath && ctx.world?.depth === true : named.depth === true;
   return {backdrop, world, cues: placed.cues, draw: beneath ? null : {kind: world.kind, time: world.time, props: placed.props, detail, style: ctx.cast?.style ?? ctx.cast?.drawing_style ?? null, ...(depth ? {depth} : {})}};
 }
 
