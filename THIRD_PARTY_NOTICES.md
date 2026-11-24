@@ -320,6 +320,17 @@ source's bin width, the onset taken from the whole spectrum for one isolated
 sound, our effect families mapped to each type, and the typing run taking
 events. rea-video is not relicensed under LaunchClip's MIT License.
 
+## Stickman Video Director (stick-figure prompt lines)
+
+A few constraint lines in the stick-figure and rubber-hose paragraphs of
+`src/generate/style-paragraphs.js` (marked in comments there) are copied or
+lightly edited from Stickman Video Director, Copyright (c) 2026 Stickman Video
+Director contributors (<https://github.com/kaomei/stickman-video-director>),
+licensed under the MIT License. The ideas behind the contact acting, camera
+landings, motion review and the generation-clip notes in
+docs/GENERATED_FOOTAGE_RFC.md were studied from the same project and
+rewritten; no code was copied.
+
 ## AI model providers (optional, paid)
 
 Planning, scripts, the headless critic and some assets can call OpenAI,
