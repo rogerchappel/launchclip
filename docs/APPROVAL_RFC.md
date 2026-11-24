@@ -1,6 +1,6 @@
 # RFC: Approval packs and review in Slack
 
-Status: proposed. Nothing here is built yet.
+Status: built (phases 1 to 3). The user guide is [guide/approval.md](guide/approval.md).
 Date: 2026-11-24
 Builds on: [CAROUSELS_RFC.md](CAROUSELS_RFC.md) (the export folder per
 destination), [COLLECTIONS_RFC.md](COLLECTIONS_RFC.md) (batches),
@@ -84,8 +84,8 @@ approval/
       "day": "2026-11-25",
       "folder": "posts/01-ranked-01",
       "destinations": {
-        "instagram": { "files": ["01.png", "02.png"], "caption": "…" },
-        "linkedin": { "files": ["slides.pdf"], "caption": "…" }
+        "instagram": { "files": ["instagram/01.png", "instagram/02.png"], "caption": "…" },
+        "linkedin": { "files": ["linkedin/slides.pdf"], "caption": "…" }
       },
       "checks": { "ok": true, "warnings": [] },
       "decision": "pending",
@@ -98,6 +98,8 @@ approval/
 ```
 
 - `kind` is `carousel`, `image` (one slide) or `video`.
+- `files` are paths inside the post's folder. A video is one `video.mp4`
+  shared by every destination.
 - `decision` is `pending`, `approved`, `changes` or `dropped`.
 - A caption is the full text to paste for that platform. It comes from
   `captions.json` in the project when present (`{"instagram": "…"}`, written
@@ -122,8 +124,8 @@ launchclip approval pull  <dir> [--slack] [--from decisions.json] [--json]
 launchclip approval status <dir> [--json]
 ```
 
-- `build` exports any project whose export is missing or older than its
-  storyboard, copies the files in, and adds to an existing pack instead of
+- `build` runs the carousel export for each project (a video needs its
+  `renders/final.mp4`), copies the files in, and adds to an existing pack instead of
   replacing it. A post already in the pack keeps its decision unless its files
   changed, in which case it returns to `pending`.
 - `post` sends every post that has no `slack` entry. Running it twice sends
@@ -150,7 +152,9 @@ To answer:
 | Replies in the thread | `changes`, with the reply as the note |
 | Replies, then adds ✅ | `approved`, the note kept |
 
-The newest signal wins. The bot's own messages and reactions are ignored
+A tick wins over a cross, and a reaction wins over a reply; Slack gives
+reactions no time, so the newest cannot be told. Taking a reaction back
+returns the post to `pending`. The bot's own messages and reactions are ignored
 (`auth.test` gives its user id). With `--approvers U123,U456` only those
 people's answers count.
 

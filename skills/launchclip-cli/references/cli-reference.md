@@ -1472,6 +1472,30 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip carousel export <project> [--dest <id>[,<id>...]] [--link <url>] [--json] # package rendered slides per destination: PDF, card sheet, caption.md, alt.json, CAROUSEL.json
   ```
 
+- `approval build`: Gather finished posts into an approval pack (docs/APPROVAL_RFC.md): each project's exported slides or finished video, a caption per platform (captions.json in the project, else the export's caption), APPROVAL.json and index.html. Adds to an existing pack; a post keeps its decision unless its files or captions changed.
+
+  ```text
+  launchclip approval build <project>... --out <dir> [--title "..."] [--day YYYY-MM-DD] [--dest <id>[,<id>...]] [--json] # gather finished carousels, images and videos into one approval pack: every platform's files and captions, APPROVAL.json and a review page
+  ```
+
+- `approval post`: Post each undecided post of a pack to a Slack channel: the title, its slides in the thread and each platform's caption. Needs SLACK_BOT_TOKEN and a channel (--channel or SLACK_APPROVAL_CHANNEL). Sends nothing twice.
+
+  ```text
+  launchclip approval post <dir> --slack [--channel <id>] [--url <where the page is served>] [--json] # send each undecided post to a Slack channel for review
+  ```
+
+- `approval pull`: Read decisions into a pack: from Slack (a tick approves, a cross drops, a thread reply asks for changes and becomes the note) or from the JSON the review page copies. Exits 1 while any post is undecided.
+
+  ```text
+  launchclip approval pull <dir> [--slack] [--approvers U1,U2] [--from decisions.json] [--json] # read reactions and replies (or the page's copied decisions) back into the pack; exits 1 while a post is undecided
+  ```
+
+- `approval status`: Print how many posts in a pack are pending, approved, need changes or are dropped.
+
+  ```text
+  launchclip approval status <dir> [--json]          # the tally of decisions in a pack
+  ```
+
 - `generate brief`: Print the generation brief for every footage shot request ({kind: "shot"}) in a project's storyboard, without calling any provider, so it can be pasted into any image or video tool by hand. Each brief has the keyframe (image) prompt and negative, the motion (video) prompt with its length padded at each end, and a hash; a still or an image request stops at the keyframe. A request that names a real product, person, place or event is refused, with the reason. --shot <id> prints one (a request id or its scene id); --json prints {request, brief, reason} for each, plus accepted ({image, video} files) for steps already made for the current brief, which a re-run reuses instead of paying again.
 
   ```text

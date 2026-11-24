@@ -58,6 +58,10 @@ export const USAGE = Object.freeze([
   ["carousel render", "carousel render <project> [--dest <id>[,<id>...]] [--renderer remotion|hyperframes] [--json]", {comment: "each slide's still (and motion slides' loops) per destination, into carousel/<dest>/"}],
   ["carousel check", "carousel check <project> [--dest <id>] [--json]", {comment: "the slide rules (cover, type size, one idea, contrast, safe zones, alt text); exits 1 on a failure"}],
   ["carousel export", "carousel export <project> [--dest <id>[,<id>...]] [--link <url>] [--json]", {comment: "package rendered slides per destination: PDF, card sheet, caption.md, alt.json, CAROUSEL.json"}],
+  ["approval build", "approval build <project>... --out <dir> [--title \"...\"] [--day YYYY-MM-DD] [--dest <id>[,<id>...]] [--json]", {comment: "gather finished carousels, images and videos into one approval pack: every platform's files and captions, APPROVAL.json and a review page"}],
+  ["approval post", "approval post <dir> --slack [--channel <id>] [--url <where the page is served>] [--json]", {comment: "send each undecided post to a Slack channel for review"}],
+  ["approval pull", "approval pull <dir> [--slack] [--approvers U1,U2] [--from decisions.json] [--json]", {comment: "read reactions and replies (or the page's copied decisions) back into the pack; exits 1 while a post is undecided"}],
+  ["approval status", "approval status <dir> [--json]", {comment: "the tally of decisions in a pack"}],
   ["generate brief", "generate brief <project> [--shot <id>] [--json]", {comment: "the generation brief for each footage shot request; calls no provider"}],
   ["generate allow", "generate allow <project> --shot <id> --step image|video [--quote <n>usd|credits|unknown] [--budget <n>[usd|credits]] [--budget-daily <n>[usd|credits]] [--max-generations <n>] [--json]", {comment: "before each paid call on the skill path: make --generate's spend gate; exits 1 when refused"}],
   ["generate check", "generate check <project> --shot <id> --file <still>[,<still>...] --model <provider:model> [--audience <who>] [--concepts \"a|b|c\"] [--json]", {comment: "make --generate's keyframe check on a still the agent made; exits 1 when rejected"}],
@@ -237,6 +241,10 @@ export const SUMMARIES = Object.freeze({
   "carousel render": "Render each slide of a carousel project: the still at the slide's settled frame, and a loop for each motion slide, laid out again for each destination's canvas, into carousel/<dest>/.",
   "carousel check": "Check a carousel against the slide rules: a cover that makes one promise and reads at thumbnail size, type large enough for the feed, one idea per slide, contrast on the rendered pixels, the destination's safe zones, a payoff where the arc promises one, alt text. Exits 1 on a failure.",
   "carousel export": "Package a rendered carousel for each destination: numbered slides, a PDF for LinkedIn, a card sheet for Meta ads, caption.md, alt.json and CAROUSEL.json listing every file and the check results.",
+  "approval build": "Gather finished posts into an approval pack (docs/APPROVAL_RFC.md): each project's exported slides or finished video, a caption per platform (captions.json in the project, else the export's caption), APPROVAL.json and index.html. Adds to an existing pack; a post keeps its decision unless its files or captions changed.",
+  "approval post": "Post each undecided post of a pack to a Slack channel: the title, its slides in the thread and each platform's caption. Needs SLACK_BOT_TOKEN and a channel (--channel or SLACK_APPROVAL_CHANNEL). Sends nothing twice.",
+  "approval pull": "Read decisions into a pack: from Slack (a tick approves, a cross drops, a thread reply asks for changes and becomes the note) or from the JSON the review page copies. Exits 1 while any post is undecided.",
+  "approval status": "Print how many posts in a pack are pending, approved, need changes or are dropped.",
   "generate brief": "Print the generation brief for every footage shot request ({kind: \"shot\"}) in a project's storyboard, without calling any provider, so it can be pasted into any image or video tool by hand. Each brief has the keyframe (image) prompt and negative, the motion (video) prompt with its length padded at each end, and a hash; a still or an image request stops at the keyframe. A request that names a real product, person, place or event is refused, with the reason. --shot <id> prints one (a request id or its scene id); --json prints {request, brief, reason} for each, plus accepted ({image, video} files) for steps already made for the current brief, which a re-run reuses instead of paying again.",
   "bible show": "Print a project's show bible with its characters, sheets and must_keep, and check it: the hash matches the content, every sheet is on disk, every character the script lists has an entry and a voice, and the storyboard (when there is one) agrees with it. Exits 1 when the bible is not valid.",
   collection: "Create or show a collection: a product, channel, client or campaign whose videos share a style, voice, brand folder and rules.",
@@ -327,7 +335,7 @@ export const SUMMARIES = Object.freeze({
   direct: "Direct a talking-head or TTS video from a creative prompt."
 });
 
-export const USAGE_GROUPS = Object.freeze(["library", "skills", "style", "collection", "recipe", "profile", "skeletons", "cast", "bible", "handin", "generate", "carousel", "story", "sfx", "sound", "module", "subject", "demo", "evidence", "script", "history"]);
+export const USAGE_GROUPS = Object.freeze(["library", "skills", "style", "collection", "recipe", "profile", "skeletons", "cast", "bible", "handin", "generate", "carousel", "approval", "story", "sfx", "sound", "module", "subject", "demo", "evidence", "script", "history"]);
 const GROUPS = new Set(USAGE_GROUPS);
 const COMMENT_COLUMN = 52;
 
