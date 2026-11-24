@@ -1,0 +1,24 @@
+{
+  "schema": "launchclip.direction-map.v1",
+  "profile": "story-characters",
+  "sections": [
+    {"id": "setup", "title": "One job", "beat": "setup", "set": "standing",
+      "lines": [{"words": [0, 6], "intent": "hook", "treatment": "insert", "scenes": ["deliver"], "set": "standing",
+        "action": {"verb": "give", "who": "oliver"}, "why": "the job, and the box handed over"}]},
+    {"id": "problem", "title": "Too heavy", "beat": "problem",
+      "lines": [{"words": [7, 12], "intent": "problem", "treatment": "insert", "scenes": ["deliver"], "set": "standing",
+        "action": {"verb": "drop", "who": "maya"}, "why": "the weight squashes Maya and she drops it"}]},
+    {"id": "attempt", "title": "What is in it", "beat": "attempt",
+      "lines": [{"words": [13, 17], "intent": "personal", "treatment": "insert", "scenes": ["deliver"], "set": "standing",
+        "action": {"verb": "shrug", "who": "maya"}, "why": "Maya asks the viewer's question"}]},
+    {"id": "turn", "title": "The hard way", "beat": "turn",
+      "lines": [{"words": [18, 24], "intent": "turn", "treatment": "insert", "scenes": ["open"], "set": "standing",
+        "action": {"verb": "hit", "who": "oliver"}, "why": "Oliver hits the parcel open"}]},
+    {"id": "resolution", "title": "One coin", "beat": "resolution",
+      "lines": [{"words": [25, 28], "intent": "proof", "treatment": "insert", "scenes": ["open"], "set": "standing",
+        "action": {"verb": "lift", "who": "oliver"}, "why": "the reveal: a single coin"}]},
+    {"id": "cta", "title": "Worth it", "beat": "cta",
+      "lines": [{"words": [29, 30], "intent": "cta", "treatment": "insert", "scenes": ["open"], "set": "standing",
+        "action": {"verb": "throw", "who": "oliver"}, "why": "the coin thrown and caught, the payoff"}]}
+  ]
+}
