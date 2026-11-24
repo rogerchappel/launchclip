@@ -29,14 +29,15 @@ import {STREET} from './street.mjs';
 import {OUTSIDE} from './outside.mjs';
 import {RACING} from './racing.mjs';
 import {VOID} from './void-stage.mjs';
+import {PERIOD} from './period.mjs';
 import {PROPS, PROP_IDS, PROP_STATES, STORY_PROP_IDS, placeProps, propEntry} from './props.mjs';
 import {propMotion} from '../physics.mjs';
 
 export {WORLD_TIMES, DETAIL_LEVELS, STYLE_DETAIL, PROPS, PROP_IDS, PROP_STATES, STORY_PROP_IDS, worldPalette};
 export {TOPIC_FIT, suggestWorld} from './fit.mjs';
 
-/** World definitions keyed by kind: the inside, street and outside worlds, the racing worlds (outside) and the void stage (outside). */
-export const WORLDS = Object.freeze({...INSIDE, ...STREET, ...OUTSIDE, ...RACING, ...VOID});
+/** World definitions keyed by kind: the inside, street and outside worlds, the racing worlds (outside), the void stage (outside) and the filled period worlds (parlour inside, cafe-terrace street). */
+export const WORLDS = Object.freeze({...INSIDE, ...STREET, ...OUTSIDE, ...RACING, ...VOID, ...PERIOD});
 export const WORLD_KINDS = Object.freeze(Object.keys(WORLDS));
 export const WORLD_GROUPS = Object.freeze(Object.fromEntries(['inside', 'street', 'outside'].map(group => [group, WORLD_KINDS.filter(kind => WORLDS[kind].group === group)])));
 /** The racing worlds (worlds/racing.mjs), drawn at the cast's scale. */
