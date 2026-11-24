@@ -1,0 +1,38 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Per-frame rig R&D: today's rig (walk in, throw, idle)",
+  "notes": "The left half of the per-frame rig side by side (docs/rd/per-frame-rig.md): the same choreography acted by today's op-list rig.",
+  "lane": "motion",
+  "format": {"width": 1080, "height": 1920, "fps": 30, "duration": 8, "platform": "youtube-shorts"},
+  "brand": {
+    "colors": {"bg": "#e9e1cf", "primary": "#9a3b2e", "accent": "#c9a227", "ink": "#1c1a1f", "paper": "#fdfcf8"},
+    "fonts": {"display": "anton", "body": "inter", "meta": "jetbrains-mono"}
+  },
+  "ambient": {"level": "off"},
+  "cast": {"style": "rubber-hose", "characters": [{"id": "oliver", "position": "left"}]},
+  "scenes": [
+    {
+      "id": "stage",
+      "module": "cast-scene",
+      "start": 0,
+      "end": 8,
+      "params": {
+        "set": "standing",
+        "shot": "wide",
+        "cast": [
+          {
+            "id": "oliver",
+            "pose": "stand",
+            "expression": "happy",
+            "holds": "ball",
+            "cues": [
+              {"at": 0.3, "action": "walk-to", "target": {"x": 260, "y": 1500}},
+              {"at": 4.45, "action": "throw", "target": "left", "expression": "delighted"},
+              {"at": 5.6, "pose": "stand", "expression": "happy"}
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
