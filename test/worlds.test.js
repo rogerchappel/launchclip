@@ -243,3 +243,23 @@ test('in world mode a world plate draws a bleed past its frame, and a cast in it
   assert.equal(floor, worldAnchors('city-street', {canvas: {width: 1210, height: 2150}}).ground.y - 115);
   assert.equal(resolveModule(cast, cuts).content.actors[0].floor, worldAnchors('city-street', {canvas: {width: 1080, height: 1920}}).ground.y);
 });
+
+test('rubber-hose worlds: early-cartoon paint (muted ramp, faded brick accents), pen contours, flat fills, no glows', async () => {
+  const {earlyCartoonColor} = await import('@launchclip/core/worlds/palette.mjs');
+  assert.equal(STYLE_DETAIL['rubber-hose'], 'simple');
+  const sat = hex => { const n = parseInt(hex.slice(1), 16), c = [n >> 16, (n >> 8) & 255, n & 255]; return (Math.max(...c) - Math.min(...c)) / 255; };
+  // Saturated colours come out subdued; a saturated red stays a faded brick red.
+  for (const hex of ['#1f5eff', '#46d4ff', '#4f9150', '#fdb022']) assert.ok(sat(earlyCartoonColor(hex)) < 0.18, `${hex} → ${earlyCartoonColor(hex)}`);
+  const brick = earlyCartoonColor('#c0392b');
+  assert.ok(parseInt(brick.slice(1, 3), 16) > parseInt(brick.slice(3, 5), 16) + 30, `brick ${brick}`);
+  assert.ok(sat(earlyCartoonColor('#ffffff')) < 0.12 && earlyCartoonColor('#ffffff') !== '#ffffff', 'white is ivory');
+  for (const kind of ['kitchen', 'city-street']) {
+    const world = renderWorld({kind, time: 'night', colors: dark, style: 'rubber-hose'});
+    assert.ok(world.detail.outline && !world.detail.gradients && !world.detail.glows && !world.detail.pools && world.detail.palette === 'early-cartoon');
+    const hexes = new Set(JSON.stringify(world.layers).match(/#[0-9a-f]{6}/gi).map(hex => hex.toLowerCase()));
+    for (const hex of hexes) assert.ok(sat(hex) < 0.36, `${kind}: ${hex} is not muted`);
+    assert.ok(!/radialGradient/.test(JSON.stringify(world.defs)), `${kind}: flat fills, no lit pools`);
+  }
+  // Every other style's world is untouched.
+  assert.equal(renderWorld({kind: 'kitchen', time: 'day', colors: dark, style: 'stick'}).detail.palette, null);
+});

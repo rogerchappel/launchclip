@@ -258,6 +258,9 @@ test('rubber-hose: a white round face, ink-only strokes and white gloves, every 
     const ids = node => (node && typeof node === 'object' ? [...(node.id ? [node.id] : []), ...(node.children ?? []).flatMap(ids)] : []);
     const stick = drawCharacter('stick-classic', params, characterLook(params, {style: 'stick-classic'}).colors, {id: 'k', joints: poseJoints('wave', {geometry: styleGeometry('stick-classic', params)}), expression: 'happy', expressions: ['happy', 'sad']});
     assert.deepEqual(new Set(ids(drawn('wave', false))), new Set(ids(stick)), `${id}: same part ids`);
+    // The face stays paper-white whatever a scene's light or grade does to the character's colours.
+    const dimmed = Object.fromEntries(Object.entries(colors).map(([key, hex]) => [key, /^#[0-9a-f]{6}$/i.test(hex) ? '#202428' : hex]));
+    assert.match(JSON.stringify(drawCharacter('rubber-hose', params, dimmed, {id: 'k', joints: poseJoints('stand', {geometry}), static: true, light: {dir: 200, color: '#203060', intensity: 1}})), /"fill":"#fdfcf8","stroke":"#1c1a1f"/);
     const weight = limbWeight(drawn('stand', true), 'k');
     assert.ok(weight.ratio >= MIN_LIMB_WEIGHT && weight.ratio <= 0.09, `${id}: limb ${weight.limb} on a ${weight.head} head (${weight.ratio})`);
   }
