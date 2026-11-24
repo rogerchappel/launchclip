@@ -258,7 +258,8 @@ export function zoomRects(scene, model) {
   return scene.zooms.map((zoom, index) => {
     const path = `zooms[${index}]`;
     try {
-      if (typeof zoom?.land === 'string') return solveLanding(model, zoom);
+      // A landing holds (and follows its subject) until its own until, the next zoom or the shot's end.
+      if (typeof zoom?.land === 'string') return solveLanding(model, zoom, { until: zoom.until ?? scene.zooms[index + 1]?.at ?? scene.end, cues: scene.params?.cast?.find?.((entry) => entry?.id === zoom.land)?.cues });
       if (zoom?.box) return { rect: { ...zoom.box } };
       if (typeof zoom?.object === 'string') {
         const rect = model?.objects?.[zoom.object]?.rect;
