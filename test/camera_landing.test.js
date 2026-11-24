@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { blurAt, cameraOps, cameraPlan, cameraStateAt, opsStateAt, sceneObjectLookup, screenPoint, worldPoint } from "@launchclip/core/camera-world.mjs";
 import { frameGuides } from "@launchclip/core/characters/framing.mjs";
+import { landingSubject } from "@launchclip/core/characters/landing.mjs";
 import { getEase } from "@launchclip/core/motion.mjs";
 import { resolveModule } from "@launchclip/core/modules.mjs";
 import { STORY_LAND, resolveStory, validateStory } from "@launchclip/core/story.mjs";
@@ -191,4 +192,60 @@ test("guides: the landed faces sit inside the safe zone and above the caption ba
     const top = H / 2 + s * (rect.y - key.to.y), chin = H / 2 + s * (rect.y + rect.height - key.to.y);
     assert.ok(top >= safe.y - 0.5 && chin <= band.y + 0.5, `zooms[${z}]: crown ${top}, chin ${chin}`);
   }
+});
+
+// Oliver walks to the coin and crouches to lift it while the camera holds on his face (the
+// stickman-box finding: the head left the shot for about a second).
+const followStory = (zooms) => resolveStory(landingStory({ zooms, mutate: (s) => {
+  s.cast.characters = [{ id: "oliver", position: "left" }, { id: "maya", position: "right" }];
+  s.scenes[0].params = { set: "standing", shot: "wide", world: { kind: "parlour", time: "night" }, objects: [{ id: "coin", prop: "coin", at: 0.42 }],
+    cast: [{ id: "oliver", pose: "stand", cues: [{ at: 3, action: "walk-to", target: { prop: "coin" } }, { at: 5, action: "lift", target: { prop: "coin" } }] }, { id: "maya", pose: "stand" }] };
+  return s;
+} }));
+const FOLLOW = [{ at: 1, land: "oliver", move: "push", shot: "close", purpose: "land on Oliver before he spots the coin" }];
+
+test("follow: a landed character who walks and crouches keeps his face on its anchor, with no jump and no overshoot", () => {
+  const story = followStory(FOLLOW);
+  const { model, keys, warnings } = solved(story);
+  assert.deepEqual(warnings, []);
+  const follows = keys.filter((key) => key.move === "follow");
+  assert.ok(follows.length >= 2, `follows the walk and the crouch: ${JSON.stringify(keys.map((key) => [key.start, key.move]))}`);
+  assert.ok(follows.every((key) => /\(following the (walk-to|lift) cue at [\d.]+ s\)$/.test(key.purpose)), "each follow names its cue");
+  const target = landingScreen("center", SIZE);
+  // Once each move has settled (and the camera with it), the face is back on its anchor.
+  // (A key cut short by the next move hands over before it settles.)
+  const settled = follows.filter((key) => { const next = keys[keys.indexOf(key) + 1]; return !next || next.start > key.start + key.duration + 1e-6; });
+  assert.ok(settled.length >= 1);
+  for (const key of settled) {
+    const t = key.start + key.duration;
+    const face = landingSubject(model, "oliver", t), state = zoomStateAt(keys, t, getEase, SIZE);
+    const x = W / 2 + state.s * (face.point.x - state.x), y = H / 2 + state.s * (face.point.y - state.y);
+    assert.ok(Math.hypot(x - target.x, y - target.y) < LAND.follow.still * H + 1, `${key.purpose} at ${t}: face at ${x.toFixed(0)}, ${y.toFixed(0)}`);
+  }
+  // Frame by frame the camera never jumps (a follow peaks at π/2 of its capped average speed, a little more when the next move cuts it short), and every key stays between its ends.
+  const peak = (Math.PI / 2) * LAND.follow.speed * H / FPS;
+  let last = zoomStateAt(keys, 0, getEase, SIZE);
+  for (let f = 1; f < 10 * FPS; f += 1) {
+    const now = zoomStateAt(keys, f / FPS, getEase, SIZE);
+    if (f / FPS > 2) assert.ok(Math.hypot(now.x - last.x, now.y - last.y) * now.s < peak * 1.2, `no jump at frame ${f}`);
+    last = now;
+  }
+  for (const key of keys.filter((item) => !item.cut)) for (let i = 0; i <= 40; i += 1) {
+    const s = zoomStateAt(keys, key.start + (key.duration * i) / 40, getEase, SIZE);
+    for (const axis of ["x", "y"]) assert.ok(s[axis] >= Math.min(key.from[axis], key.to[axis]) - 1e-6 && s[axis] <= Math.max(key.from[axis], key.to[axis]) + 1e-6, `${key.move} ${axis} inside its ends`);
+  }
+});
+
+test("follow: a landing that cannot keep its subject in frame through a later cue fails, naming the cue", () => {
+  // Sam, landed close on the left third, walks off to the right edge: the view cannot pass the plate's edge to keep him there.
+  const zooms = [{ at: 1, land: "sam", move: "push", scale: 2.4, screen: "left-third", purpose: "land on Sam before he storms off" }];
+  const story = resolveStory(landingStory({ zooms, mutate: (s) => { s.scenes[0].params.cast[1].cues = [{ at: 4, action: "walk-to", target: "right" }]; return s; } }));
+  assert.throws(() => resolveModule(story.scenes[0], story), /cannot keep sam in frame through the walk-to cue at 4 s: following it puts the head/);
+});
+
+test("9:16: a character landed with no shot of its own lands at least at medium", () => {
+  const story = resolved({ zooms: [{ at: 1, land: "maya", move: "reveal", purpose: "find Maya before she speaks" }] });
+  const { model } = solved(story);
+  const subject = landingSubject(model, "maya", 2.4);
+  assert.ok(model.zoomRects[0].landing.s >= subject.shotScale("medium") - 1e-6);
 });

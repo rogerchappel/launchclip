@@ -3378,7 +3378,21 @@ anchors, as on any zoom.)
   single-character shot at that distance (`frameCast`; at most 3×), or
   `scale` 1–3. With neither, the least scale that keeps the view inside the
   plate (`landingMinScale`): at 1× only the centre can land on the centre, so
-  a reveal comes in just far enough to travel.
+  a reveal comes in just far enough to travel. In 9:16 a character landed
+  with neither lands at least at `medium`, so its face reads on a phone.
+- Follow: while a landing holds (from its start, so a move during the
+  travel retargets it, to `until`, the next zoom or the shot's end), the
+  camera keeps a landed character's face on its anchor through the
+  character's own moves, at the landing's scale (`followKeys`, keys
+  `{move: "follow"}` whose purpose names the cue they follow). A walk is
+  followed from `LAND.follow.lead` (28.5 %) of its time before it starts to
+  as long after it arrives; a pose change (a crouch to lift, a lunge to hit)
+  over its tween, at least 0.5 s and slow enough to average at most
+  `LAND.follow.speed` (1.5) frame heights a second. Every follow eases on
+  `sine.inOut` (zero speed at both ends, no overshoot); a move under
+  `LAND.follow.still` (4 %) of the frame's height is a gesture and the
+  camera holds; a key cut short by the next move ends where it had reached,
+  so the camera never jumps. The view stays inside the plate.
 - Feel: every travel is one key on `LAND.ease` (`power3.inOut`): zero speed
   at both ends, fastest in the middle, never past its landing, whatever the
   grammar's camera ease. Under the world camera it carries velocity blur at
@@ -3392,8 +3406,10 @@ anchors, as on any zoom.)
   a view that would leave the plate at the scale asked (it says the least
   scale that works), more than 3× needed, a landed face whose crown leaves
   the safe zone, whose chin drops into the caption band, or whose head
-  passes the safe zone's sides. A scene with cue shots (`cues[].shot`)
-  cannot also land: both reframe it.
+  passes the safe zone's sides, at the landing or once a move it follows
+  has settled (the message names the cue: "cannot keep sam in frame through
+  the walk-to cue at 4 s"). A scene with cue shots (`cues[].shot`) cannot
+  also land: both reframe it.
 - Timing (`validateZooms`): a landing holds at least `LAND.hold` (0.6 s)
   after its travel, before `until`, the next zoom or the shot's end. A
   scene's zooms replace its default character move.
@@ -3481,7 +3497,7 @@ export const LAND                          // {moves, dur, ease, blur, hold, scr
 export function landingScreen(screen, size) // → {x, y} canvas px
 export function landingMinScale(point, target, size) // least scale with the view inside the plate
 export function landingState(point, target, s, size) // → {x, y, s}
-// kit/core/characters/landing.mjs: landingSubject(model, name, t), solveLanding(model, zoom) → {landing, rect, point}
+// kit/core/characters/landing.mjs: landingSubject(model, name, t), solveLanding(model, zoom, {until, cues}) → {landing, follow, rect, point}
 // kit/core/modules.mjs: model.zoomRects = zoomRects(scene, model) → [{rect} | {landing, rect, point} | {error}]
 // kit/core/camera-world.mjs: sceneObjectLookup(...).zoomRects(sceneId)
 ```
