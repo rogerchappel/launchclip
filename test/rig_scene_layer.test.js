@@ -8,54 +8,54 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import {resolveModule} from '@launchclip/core/modules.mjs';
 import {charactersView} from '@launchclip/core/catalog-characters.mjs';
-import {fillRigLayer, rigLayerId, rigScenePrepare, rigSceneTree, withRigLayer} from '@launchclip/core/characters/rig-scene-layer.mjs';
-import {PROTOTYPE} from '@launchclip/core/characters/rig-frame-draw.mjs';
+import {RIG_FRAME_STYLES} from '@launchclip/core/characters/rig-scene.mjs';
+import {fillRigLayer, rigLayerId, rigScenePrepare, rigSceneTree} from '@launchclip/core/characters/rig-scene-layer.mjs';
 import {emitCharacters} from '../kit/hyperframes/catalog-characters.mjs';
 import {renderNode} from '../kit/hyperframes/catalog-b.mjs';
 import {RIG_RUNTIME} from '../kit/hyperframes/rig-runtime.mjs';
 import {rigRuntimeSource} from '../scripts/rig-runtime.mjs';
 
 const fixture = name => JSON.parse(readFileSync(new URL(`fixtures/parity/${name}.json`, import.meta.url), 'utf8'));
-const PLAN = JSON.parse(JSON.stringify(PROTOTYPE));
-const CANVAS = {width: 1080, height: 1920};
 
+/** A parity fixture's cast scene, on the per-frame rig (story.cast.rig: "frame") or today's. */
 function castModel(name, rig = true) {
   const {story, sceneId} = fixture(name);
-  const model = resolveModule(story.scenes.find(scene => scene.id === sceneId), story);
-  // shortcut: injects the plan the cue compiler will emit (content.rigScene); use a rig: "frame" story once it does.
-  if (rig) model.content = {...model.content, rigScene: PLAN};
+  const cast = {...story.cast, ...(rig ? {rig: 'frame', style: RIG_FRAME_STYLES.includes(story.cast.style) ? story.cast.style : 'stick'} : {rig: 'ops'})};
+  const model = resolveModule(story.scenes.find(scene => scene.id === sceneId), {...story, cast});
+  if (rig) assert.ok(model.content.rigScene, `${name}: ${model.content.rigFallback}`);
   return model;
 }
+const RIG = castModel('characters-rig-rubber-hose-world');
+const PLAN = RIG.content.rigScene;
+const CANVAS = RIG.canvas;
 
 const ids = node => (node && typeof node === 'object' ? (node.children ?? []).map(child => child.id ?? child.tag) : []);
 const byId = (node, id) => (typeof node !== 'object' ? null : node.id === id ? node : (node.children ?? []).map(child => byId(child, id)).find(Boolean) ?? null);
 
 test('the rig layer sits where the actors do: over the set, under its foreground, inside the camera wrappers', () => {
-  const model = castModel('characters-world-desk');
-  const view = withRigLayer(model, charactersView(model));
+  const model = RIG;
+  const view = charactersView(model);
   const layer = byId(view.front, rigLayerId(model));
   assert.ok(layer, 'rig layer in the scene tree');
   assert.deepEqual(layer.children, []);
   const parent = [view.front, ...view.front.children].find(node => node.children?.includes(layer));
   assert.equal(parent.children.at(-1).tag, 'svg', 'the foreground stays over the layer');
   assert.equal(parent.children.at(-2), layer);
-  assert.equal(withRigLayer(model, view), view, 'inserted once');
-  const plain = castModel('characters-world-desk', false);
-  const still = charactersView(plain);
-  assert.equal(withRigLayer(plain, still), still, 'no rigScene, no change');
+  const plain = castModel('characters-rig-rubber-hose-world', false);
+  assert.equal(byId(charactersView(plain).front, rigLayerId(plain)), null, 'no rigScene, no layer');
 });
 
 test('a video screen: the rig layer goes in the overlay, under its foreground', () => {
   const model = castModel('characters-screen');
-  const view = withRigLayer(model, charactersView(model));
+  const view = charactersView(model);
   assert.ok(view.overlay, 'the fixture plays a video screen');
   const cam = view.overlay.children.length === 1 ? view.overlay.children[0] : view.overlay;
   assert.equal(ids(cam).at(-2), rigLayerId(model));
 });
 
 test('fillRigLayer puts the frame in the layer and leaves the rest of the tree shared', () => {
-  const model = castModel('characters-world-desk');
-  const view = withRigLayer(model, charactersView(model));
+  const model = RIG;
+  const view = charactersView(model);
   const tree = rigSceneTree(PLAN, 1, CANVAS);
   const filled = fillRigLayer(view, model, tree);
   assert.deepEqual(byId(filled.front, rigLayerId(model)).children, [tree]);
@@ -64,12 +64,12 @@ test('fillRigLayer puts the frame in the layer and leaves the rest of the tree s
 });
 
 test('HyperFrames: the emitter writes the empty layer and a proxy tween that paints it', () => {
-  const model = castModel('characters-world-desk');
+  const model = RIG;
   const out = emitCharacters(model);
   assert.match(out.html, new RegExp(`<div id="${rigLayerId(model)}" style="[^"]*"></div>`));
   assert.match(out.motion, /window\.lcRigScene\(host, plan, prepared, clock\.t - 0, canvas\)/);
   assert.match(out.motion, /tl\.fromTo\(clock, \{t: 0\}, \{t: \d+(\.\d+)?, duration: [\d.]+, ease: 'none', immediateRender: false, onUpdate: paint\}, 0\);/);
-  const plain = castModel('characters-world-desk', false);
+  const plain = castModel('characters-rig-rubber-hose-world', false);
   assert.doesNotMatch(emitCharacters(plain).html, /-rig"/);
   assert.doesNotMatch(emitCharacters(plain).motion, /lcRigScene/);
 });

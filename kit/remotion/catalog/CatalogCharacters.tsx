@@ -9,10 +9,8 @@ import React, {useCallback, useMemo} from 'react';
 // @ts-ignore plain ESM core module
 import {charactersTimeline, charactersView} from '@launchclip/core/catalog-characters.mjs';
 // @ts-ignore plain ESM core module
-import {fillRigLayer, rigScenePrepare, rigSceneTree, withRigLayer} from '@launchclip/core/characters/rig-scene-layer.mjs';
+import {fillRigLayer, rigScenePrepare, rigSceneTree} from '@launchclip/core/characters/rig-scene-layer.mjs';
 import {PartsModule} from './CatalogE';
-
-const rigView = (model: any) => withRigLayer(model, charactersView(model));
 
 const RigScene: React.FC<{model: any}> = ({model}) => {
   const plan = model.content.rigScene;
@@ -20,7 +18,7 @@ const RigScene: React.FC<{model: any}> = ({model}) => {
   const canvas = model.canvas;
   // The rig's time is the scene's own, held at the scene end as the HyperFrames proxy tween is.
   const perFrame = useCallback((view: any, t: number) => fillRigLayer(view, model, rigSceneTree(plan, Math.min(t, model.end) - model.start, {width: canvas.width, height: canvas.height}, prepared)), [model, plan, prepared, canvas]);
-  return <PartsModule model={model} viewOf={rigView} timelineOf={charactersTimeline} perFrame={perFrame} />;
+  return <PartsModule model={model} viewOf={charactersView} timelineOf={charactersTimeline} perFrame={perFrame} />;
 };
 
 const typed = (id: string): React.FC<{model: any}> => {
