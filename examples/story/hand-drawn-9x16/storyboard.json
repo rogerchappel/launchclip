@@ -1,0 +1,71 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Drawn by hand (golden, 9:16 hand-drawn)",
+  "notes": "Golden story for the hand-drawn module (docs/rd/hand-drawn-reveal.md): three objects drawn on by a pen on paper, silhouette first and inner lines growing out of drawn ones, then coloured top to bottom. A clock under a marker with a sponsor name on its barrel; a laptop then a rocket under a fountain pen; a deck under a pencil. No narration and no paid calls.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 19,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#0e1116",
+      "primary": "#2f6fd6",
+      "accent": "#f2a93b",
+      "ink": "#0e1116",
+      "paper": "#f4efe6"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "space-grotesk",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "scenes": [
+    {
+      "id": "clock",
+      "module": "hand-drawn",
+      "start": 0,
+      "end": 5,
+      "params": {
+        "subject": {
+          "object": "clock"
+        },
+        "pen": "marker",
+        "barrel": "ACME MARKERS",
+        "text": "An hour back, every day"
+      }
+    },
+    {
+      "id": "launch",
+      "module": "hand-drawn",
+      "start": 5,
+      "end": 12,
+      "params": {
+        "subject": {
+          "object": "laptop"
+        },
+        "second": {
+          "object": "rocket"
+        },
+        "pen": "fountain"
+      }
+    },
+    {
+      "id": "deck",
+      "module": "hand-drawn",
+      "start": 12,
+      "end": 19,
+      "params": {
+        "subject": {
+          "object": "deck"
+        },
+        "pen": "pencil",
+        "text": "Oil it once a year"
+      }
+    }
+  ]
+}
