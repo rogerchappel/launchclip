@@ -1,7 +1,8 @@
 # R&D: a per-frame character rig
 
-Status: approved by the owner ("definitely better"); being productionised
-as an opt-in path. HyperFrames parity is the gate before it ships.
+Status: shipped as an opt-in path (`cast.rig: "frame"`, §9), approved by
+the owner ("definitely better"). HyperFrames parity passes on both rig
+fixtures and both rig example stories. Not yet the default (§7 step 4).
 Date: 2026-11-25
 Code: `kit/core/characters/rig-frame.mjs` (the rig),
 `kit/core/characters/rig-frame-draw.mjs` (the drawing per style),
@@ -342,3 +343,69 @@ squash on contact, gag squash, carries and a head that agrees with the body.
 Still missing: the limbs themselves don't squash or stretch (bones are
 rigid on purpose), hand shapes don't change with the action, and the cue
 compiler (cues → tracks) is separate work.
+
+## 9. What shipped (2026-11-25)
+
+Opt-in with `story.cast.rig: "frame"` or a cast-scene's `params.rig`
+(docs/KIT_CONTRACTS.md). One code path: the cue compiler
+(`rig-compile.mjs`) writes a `launchclip.rig-scene.v1` plan, the cast
+scene's view holds one empty `<scene>-rig` layer, Remotion fills it from
+`rigSceneTree` with a memoised `prepared`, HyperFrames from a proxy tween
+calling the inlined `RIG_RUNTIME` (about 90 KB, was 118 KB with the
+prototype's cast code) with `prepared` as JSON, and the rig gate measures
+`rigSceneState`, the same joints and prop places.
+
+Fixes made while wiring it up:
+
+- **Props follow the rig's semantics.** A holder key where a hand takes a
+  prop and another where it lets go (without the second, a prop slid from
+  the grip to the release); a handover passes from the giver's key at the
+  receiver's grip to the receiver's at the release (it had passed over the
+  whole carry); two equal keys rest a prop until just before a pick-up (it
+  had crept toward the hand from the scene start); a flight leaves its
+  first and last 0.1 s to the rig's curve, and a throw caught hand to hand
+  keeps only the flight's top. A carry's leftover tween in the op list that
+  jumped a dropped box back up is ignored.
+- **Pick-ups land in the hand.** Grip keys reach for where the prop rests
+  until the take; a grip lock puts the palm, not the wrist, on the point; a
+  two-hand prop sits between the palms and its carry comes in after the
+  take; a lift takes the prop when its hold at the bottom ends, once the
+  sprung body has crouched. Grip loss on the box story's coin went from
+  48 px to under 4.
+- **Shared people.** A character shared with the neighbouring scene is
+  hidden until the way in (`actors[].visible`), as the op list does.
+- **The gate** reads `rigSceneState`; grip loss is a pick-up from rest the
+  hand never reached (a throw, catch or handover is continuous by
+  construction). Warning guides recalibrated on the production prototype;
+  error limits unchanged.
+
+Measured:
+
+| check | stickman-box-rig (rubber-hose, 2 scenes) | stickman-void-rig (stick-classic) |
+|---|---|---|
+| rig gate | passed, 0 errors, 3 warnings (hand corners, jerk 1548/s²) | passed, 0 errors, 2 warnings (hand corners, jerk 1470/s²) |
+| foot slide / bone drift | 0 px / 0 px | 0 px / 0 px |
+| story parity (HyperFrames vs Remotion stills) | 0.9517 min SSIM, the low samples are the story camera's follow at 10–12 s; the op-list version of the same story scores 0.8366 there | 0.9973 min SSIM |
+| finished renders, whole-video SSIM | 0.971 | 0.989 |
+
+Scene parity: `characters-rig-stick-classic-void` 0.9920 and
+`characters-rig-rubber-hose-world` 0.9955 min SSIM (threshold 0.97); the
+op-list fixtures `characters-style-rubber-hose` 0.9981,
+`characters-style-stick-classic` 0.9994 and `characters-acting` 0.9950 are
+unchanged. The other finish gates that fail on the box story (density,
+motion, acting, pace) and the void story (motion) are the story's, not the
+rig's.
+
+Seen in the renders: feet planted, knees bent, the box carried before the
+chest and passed between both pairs of hands, the dropped box stays on the
+floor (the op-list render floats it back up), the coin goes from the floor
+to Oliver's hand to the top of its arc to Maya's hand. Still off: Oliver's
+reach for the coin folds him nearly flat (today's 75° lean on bent knees),
+the coin in Maya's far hand hides behind her body, and the close camera at
+"coin." loses Oliver as he bends (as it does on the op-list render).
+
+Still open: making it the default for the stick styles (§7 step 4);
+held or looped HyperFrames clones of a rig scene; the parity harness's
+internal builder (used only when the story compiler fails) does not inline
+the runtime; seated sets; scene parity cannot check camera landings (story
+parity does).
