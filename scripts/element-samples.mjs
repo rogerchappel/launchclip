@@ -117,6 +117,7 @@ export const SAMPLES = Object.freeze({
   'comparison-table': {title: 'How LaunchClip compares', columns: ['LaunchClip', 'Editor', 'Templates'], rows: [{label: 'One prompt to video', values: [true, false, false]}, {label: 'Your brand, every scene', values: [true, true, false]}, {label: 'Captions from the voice', values: [true, false, true]}, {label: 'Time to first cut', values: ['12 min', '2 days', '3 h']}, {label: 'Open source', values: [true, false, null]}], highlight: 0},
   // One change kind per fixture: wear here, the rest in EXTRA_SAMPLES.
   'illustration': {subject: {object: 'deck'}, change: 'wear', plate: 'stone', text: 'One summer, no oil'},
+  'hand-drawn': {subject: {object: 'clock'}, pen: 'marker', barrel: 'ACME MARKERS', text: 'An hour back'},
 });
 
 /** Scene length (s) for a module whose sample cannot fit the default 4 s scene. */
