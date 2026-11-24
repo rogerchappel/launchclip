@@ -141,7 +141,7 @@ Each sheet shows samples in time order, as pairs of tiles: left = the renderer's
 
 Judge:
 - narrative: does the story read from the pictures alone: who wants what, what goes wrong, what changes? Is the opening shot a hook? Is a beat missing, or shown in the wrong order?
-- works on mute: most viewers start with the sound off. Judge the opening seconds from the tiles and on-screen text only, as if the shot list's words were never heard: can a viewer tell where this is and what is about to go wrong by the end of the problem beat? If not, that is a major narrative finding on the shot that should show it.
+- works on mute: most viewers start with the sound off. Judge the opening seconds from the tiles and on-screen text only, as if the shot list's words were never heard: can a viewer tell where this is and what is about to go wrong by the end of the problem beat? If not, that is a major narrative finding on the shot that should show it. Then the attempts: when a try repeats, does each one look bigger than the last in the tiles alone (farther across the set, a bigger pose, a wider or closer frame)? Tries that look the same with the sound off are a major narrative finding on the shot of the try that should look bigger.
 - composition (staging): is the speaker on screen and easy to find, are the characters framed and facing each other, does the framing change when the story turns, is anyone cropped, hidden or standing on a caption?
 - timing: a shot that outstays its line, or one too short to read.
 - acting: a pose or expression that does not match its line, or a character holding still while the story moves.

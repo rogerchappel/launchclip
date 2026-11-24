@@ -148,6 +148,7 @@ test("the staging review judges story, staging and acting only, writes qa/animat
   assert.equal(existsSync(path.join(project, "qa/critic.json")), false, "the final's critique is not written by the staging review");
   assert.match(client.requests[0].instructions, /reviewing an animatic/);
   assert.match(client.requests[0].instructions, /works on mute: most viewers start with the sound off/);
+  assert.match(client.requests[0].instructions, /Tries that look the same with the sound off are a major narrative finding/);
   assert.deepEqual(client.requests[0].schema.properties.findings.items.properties.category.enum, STAGING_CATEGORIES);
   const critique = await read(path.join(project, "qa/animatic-critic.json"));
   assert.deepEqual(critique.findings.map((entry) => entry.category), ["composition"], "a polish finding is dropped");
