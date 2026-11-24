@@ -8,8 +8,7 @@ import {resolveModule} from '@launchclip/core/modules.mjs';
 import {charactersTimeline} from '@launchclip/core/catalog-characters.mjs';
 import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {hoseGeometry} from '@launchclip/core/characters/style-rubber-hose.mjs';
-import {PROTOTYPE, prototypeCast} from '@launchclip/core/characters/rig-frame-draw.mjs';
-import {rigFrame} from '@launchclip/core/characters/rig-frame.mjs';
+import {prototypePlan, rigScenePrepare, rigSceneState} from '@launchclip/core/characters/rig-scene.mjs';
 
 const FPS = 30, DURATION = 8;
 const THROW = [3.4, 5.4];
@@ -54,15 +53,13 @@ export function todayFrames(story) {
 }
 
 /** The per-frame rig: rigFrame's joints, placed as the prototype draws them. */
-export function perFrameFrames(scene = PROTOTYPE) {
-  const cast = prototypeCast(scene);
-  const {x, floor, scale} = scene.at;
-  const px = p => [x + p[0] * scale, floor + p[1] * scale];
+export function perFrameFrames(plan = prototypePlan()) {
+  const prepared = rigScenePrepare(plan);
   const frames = [];
   for (let i = 0; i <= DURATION * FPS; i++) {
-    const fr = rigFrame(cast.character, scene.track, i / FPS, cast.plan);
+    const {actors: [{frame, at: {x, floor, scale}}]} = rigSceneState(plan, i / FPS, prepared);
     const out = {};
-    for (const [k, p] of Object.entries(fr.joints)) out[k] = px(p);
+    for (const [k, p] of Object.entries(frame.joints)) out[k] = [x + p[0] * scale, floor + p[1] * scale];
     frames.push(out);
   }
   return frames;

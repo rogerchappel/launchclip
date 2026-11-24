@@ -5,16 +5,17 @@
 import React from 'react';
 import {AbsoluteFill, Composition, registerRoot, useCurrentFrame, useVideoConfig} from 'remotion';
 // @ts-ignore plain ESM core module
-import {prototypeCast, prototypeTree} from '@launchclip/core/characters/rig-frame-draw.mjs';
+import {prototypePlan, rigScenePrepare, rigSceneTree} from '@launchclip/core/characters/rig-scene.mjs';
 import {renderNode} from '../catalog/CatalogB';
 
-const cast = prototypeCast();
+const plan = prototypePlan();
+const prepared = rigScenePrepare(plan);
 const EMPTY = new Map();
 
 export const PerFrameRig: React.FC = () => {
   const frame = useCurrentFrame();
   const {fps, width, height} = useVideoConfig();
-  return <AbsoluteFill>{renderNode(prototypeTree(frame / fps, {width, height}, undefined, cast), EMPTY, 'rig')}</AbsoluteFill>;
+  return <AbsoluteFill>{renderNode(rigSceneTree(plan, frame / fps, {width, height}, prepared), EMPTY, 'rig')}</AbsoluteFill>;
 };
 
 const Root: React.FC = () => (
