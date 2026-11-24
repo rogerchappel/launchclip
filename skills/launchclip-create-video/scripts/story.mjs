@@ -719,9 +719,10 @@ export function validateStory(story, { modules, moduleParams } = {}) {
   // shape is checked here; kinds, times and props when a world scene resolves
   // (kit/core/catalog-world.mjs, kit/core/worlds/ storyWorldErrors).
   if (story.world !== undefined && story.world !== null) {
-    if (!isObject(story.world)) err("world must be {kind, time?, props?, detail?}");
+    if (!isObject(story.world)) err("world must be {kind, time?, props?, detail?, depth?}");
     else {
-      for (const key of Object.keys(story.world)) if (!["kind", "time", "props", "detail"].includes(key)) err(`world.${key} is not a world field (kind, time, props, detail)`);
+      for (const key of Object.keys(story.world)) if (!["kind", "time", "props", "detail", "depth"].includes(key)) err(`world.${key} is not a world field (kind, time, props, detail, depth)`);
+      if (story.world.depth !== undefined && typeof story.world.depth !== "boolean") err("world.depth must be true or false");
       for (const key of ["kind", "time", "detail"]) if (story.world[key] !== undefined && !nonEmpty(story.world[key])) err(`world.${key} must be a name`);
       if (story.world.props !== undefined && !Array.isArray(story.world.props)) err("world.props must be a list of props");
     }

@@ -366,10 +366,10 @@ export function validateBible(bible, {script = null, exists = null} = {}) {
 
   // World: a world the kit draws and the sets the story may use.
   if (bible.world !== undefined) {
-    if (!isObj(bible.world)) err('world must be {kind, time?, props?, detail?, sets?, shows?}');
+    if (!isObj(bible.world)) err('world must be {kind, time?, props?, detail?, depth?, sets?, shows?}');
     else {
       const {sets, shows, ...world} = bible.world;
-      errors.push(...storyWorldErrors(world).map(message => message.replace('(kind, time, props, detail)', '(kind, time, props, detail, sets, shows)')));
+      errors.push(...storyWorldErrors(world).map(message => message.replace('(kind, time, props, detail, depth)', '(kind, time, props, detail, depth, sets, shows)')));
       if (!nonEmpty(world.kind)) err('world.kind must name a world');
       if (sets !== undefined) {
         if (!Array.isArray(sets)) err('world.sets must be a list of sets');

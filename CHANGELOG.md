@@ -13,6 +13,15 @@
   open, and an earlier review's failures each resolved in a repair log.
   Limb weight is measured from the frames as a guide; `--model` only
   suggests. See docs/ANIMATION_MEASUREMENT.md.
+- Worlds: `void-stage`, the classic black-and-white stage for stick-figure
+  explainers (a black void, a red-backlit void or white paper, with extruded
+  red slabs in perspective, a spotlight and a glossy floor; the classic stick
+  figure draws white on the dark stage), and two filled storytelling worlds,
+  `parlour` and `cafe-terrace`. `depth: true` on a world scene or
+  `story.world` fills any world with light and depth: haze toward the
+  horizon, window and lamp pools, moonlight through a room's window, a
+  contact band where the cast stands and a foreground occluder at the frame
+  edge. `scripts/depth-sheet.mjs` renders them with a cast standing in them.
 - `launchclip score niche` and `score library discover` take `--free`, which
   lists each creator's TikTok posts with yt-dlp at no charge, and
   `--accounts <name,name>`, which collects accounts you name without a search.
