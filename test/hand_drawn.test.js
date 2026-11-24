@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {handDrawn, orderStrokes, penPath, timeStrokes} from '../kit/core/hand-drawn.mjs';
-import {pointAt} from '../kit/core/path-geometry.mjs';
+import {handDrawn, orderStrokes, penPath, timeStrokes} from '@launchclip/core/hand-drawn.mjs';
+import {pointAt} from '@launchclip/core/path-geometry.mjs';
 
 const ctx = (duration = 7) => ({id: 'hd', start: 0, duration, format: {width: 1080, height: 1920, fps: 30},
   brand: {colors: {bg: '#101820', primary: '#2f7de1', accent: '#f2a93b', ink: '#101820', paper: '#f4f1ea'}, fonts: {}}});

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {PENS, PEN_INK, penNode, penTipLift} from '../kit/core/sketch-pens.mjs';
+import {PENS, PEN_INK, penNode, penTipLift} from '@launchclip/core/sketch-pens.mjs';
 
 const walk = (node, out = []) => {
   if (node && typeof node === 'object') { out.push(node); for (const c of node.children ?? []) walk(c, out); }
