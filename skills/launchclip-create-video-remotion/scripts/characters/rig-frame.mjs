@@ -70,7 +70,7 @@ const REACH = 0.9995;
 // A gag squash ramps in over this long before its time (no pop).
 const SQUASH_ATTACK = 0.05;
 // Carries blend in and out over this long.
-const CARRY_BLEND = 0.25;
+export const CARRY_BLEND = 0.25;
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const smooth = x => { const t = clamp(x, 0, 1); return t * t * (3 - 2 * t); };
@@ -514,17 +514,17 @@ function assemble(ctx, s, now, t, opts) {
   let carry = null;
   for (const side of ['l', 'r']) {
     const A = arms[side];
-    const lockTo = (point, w) => {
+    // palm: the glove lines up with the forearm and the palm lands on the point (a grip); else the wrist sits a little above it (a carry's side).
+    const lockTo = (point, w, palm = false) => {
       if (!(w > 0) || !point) return;
-      // The wrist sits a little above the grip, so the hand's centre is on it.
-      const ik = twoBone(A.shoulder, [point[0], point[1] - L.palm * 0.6], L.upper, L.fore, f);
+      const ik = palm ? twoBone(A.shoulder, point, L.upper, L.fore + L.palm, f) : twoBone(A.shoulder, [point[0], point[1] - L.palm * 0.6], L.upper, L.fore, f);
       A.th1 = lerp(A.th1, A.th1 + wrap(ik.th1 - A.th1), w);
       A.th2 = lerp(A.th2, A.th2 + wrap(ik.th2 - A.th2), w);
       A.glove = lerp(A.glove, A.glove + wrap(A.th2 - A.glove), w);
     };
     for (const win of gripWindows(track.hands?.[side])) {
       const w = windowWeight(win.t0, win.t1, t, track.handBlend ?? 0.25);
-      if (w > 0 && opts.grip) lockTo(opts.grip(win.prop, side, clamp(t, win.t0, win.t1)), w);
+      if (w > 0 && opts.grip) lockTo(opts.grip(win.prop, side, clamp(t, win.t0, win.t1)), w, true);
     }
     const c = carryAt(track.carries, side, t);
     const p = HAND_PROPS[c.prop];

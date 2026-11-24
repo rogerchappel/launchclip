@@ -43,6 +43,8 @@ const REST_TOLERANCE = 5;
 const PROP_STEP = 1 / 15;
 // A flight's first and last stretch (s) is the rig's curve from the release hand and into the taking hand (rig-scene.mjs).
 const HAND_GAP = 0.1;
+// The longest hold at the bottom of a lift that the take waits for (s).
+const LIFT_SETTLE = 0.3;
 const samePoint = (a, b) => a[0] === b[0] && a[1] === b[1];
 
 /**
@@ -172,10 +174,20 @@ function gripWindows(actors, contacts) {
   const open = new Map(), out = [];
   for (const actor of actors) if (actor.holds && actor.holds !== 'phone') open.set(actor.id, {actor: actor.id, prop: actor.holds, from: -Infinity, action: 'holds'});
   for (const c of contacts) {
-    if (c.kind === 'grip' && c.target?.prop !== undefined) open.set(c.actor, {actor: c.actor, prop: c.target.prop, from: c.at, action: c.action});
+    if (c.kind === 'grip' && c.target?.prop !== undefined) {
+      // A lift takes the prop from rest when its hold at the bottom (reach, strain) ends and it rises: the rig's body has crouched to it by then.
+      const next = c.action === 'lift' ? actors.find(a => a.id === c.actor)?.states.find(st => st.time > c.at + 1e-6 && !st.contact) : null;
+      const from = next && next.time - c.at <= LIFT_SETTLE ? next.time : c.at;
+      open.set(c.actor, {actor: c.actor, prop: c.target.prop, reach: c.at, from, action: c.action});
+    }
     else if (c.kind === 'release' && open.has(c.actor)) { out.push({...open.get(c.actor), to: c.at}); open.delete(c.actor); }
   }
   for (const w of open.values()) out.push({...w, to: Infinity});
+  // The take: a handover's receiver takes it when the giver lets go.
+  for (const w of out) {
+    const giver = out.find(o => o !== w && o.prop === w.prop && o.action !== 'pull' && w.action !== 'pull' && o.from < w.from && o.to > w.from);
+    w.take = giver ? giver.to : w.from;
+  }
   return out;
 }
 
@@ -212,7 +224,8 @@ function compileActor(actor, index, {start, end, ops, prefix, grips, single}) {
     if (first < 0) continue;
     const span = list.slice(Math.max(0, first - 1), last + 2);
     if (last === list.length - 1) span.push({...list.at(-1), t: Math.max(end, list.at(-1).t + 0.1)});
-    const grip = t => grips.find(w => w.actor === actor.id && w.from <= t + 1e-6 && t < w.to - 1e-6)?.prop;
+    // A hand grips until it takes the prop (then the prop is in it); a pull's hand grips the prop throughout.
+    const grip = t => grips.find(w => w.actor === actor.id && (w.reach ?? w.from) <= t + 1e-6 && t < w.to - 1e-6 && (w.action === 'pull' || t <= w.take + 1e-6))?.prop;
     hands[side.toLowerCase()] = span.filter((one, i) => !span[i + 1] || span[i + 1].t - one.t >= 1e-4).map(({t, j, f}) => {
       const prop = (j.held ?? []).includes(side) ? grip(t) : undefined;
       return {t: rel(t), ...handTarget(j, side, g, f), ...(prop ? {grip: prop} : {})};
@@ -279,7 +292,9 @@ function compileProp(prop, {start, end, ops, prefix, grips, actors}) {
     from: Math.max(start, owned[i - 1] && owned[i - 1].to > w.from ? owned[i - 1].to : w.from),
     to: Math.min(end, owned[i + 1] && owned[i + 1].from < w.to ? owned[i + 1].from : w.to),
     handover: Boolean(owned[i + 1] && owned[i + 1].from < w.to)}));
-  const mine = freeMoves(ops.filter(op => op.target === id), id, t => !spans.some(w => w.from - 1e-6 <= t && t < w.to - 1e-6));
+  // Between a hand's reach and its take (a lift's strain) the prop rests where the hand reaches it.
+  const reaching = op => owned.some(w => op.start >= w.reach - 1e-6 && op.start < w.take - 1e-6);
+  const mine = freeMoves(ops.filter(op => op.target === id && !(op.type === 'tween' && reaching(op))), id, t => !spans.some(w => w.from - 1e-6 <= t && t < w.to - 1e-6));
   const freeAt = t => {
     const p = frameState(mine, t).get(id) ?? {};
     return [r1(p.x ?? prop.x), r1(p.y ?? prop.y)];
@@ -299,6 +314,12 @@ function compileProp(prop, {start, end, ops, prefix, grips, actors}) {
     for (const op of mine) if (op.type === 'tween' && op.start + op.duration > a && op.start + op.duration < b) times.add(rt(op.start + op.duration));
     const lo = released ? a + HAND_GAP : a, hi = taken ? b - HAND_GAP : b;
     const kept = [...times].sort((x, y) => x - y).filter(t => t >= lo - 1e-6 && t <= hi + 1e-6);
+    // Hand to hand (a throw caught): the rig's curve from the release hand through the flight's top into the catching hand.
+    if (released && taken) {
+      const top = kept.map(t => ({t, at: freeAt(t)})).sort((x, y) => x.at[1] - y.at[1])[0];
+      if (top) atKey(top.t, top.at);
+      return;
+    }
     kept.filter((t, i) => i === 0 || t - kept[i - 1] >= 0.03).forEach(t => atKey(t, freeAt(t)));
   };
   let cursor = start, prev = null;

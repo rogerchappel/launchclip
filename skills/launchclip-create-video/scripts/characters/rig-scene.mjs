@@ -52,7 +52,8 @@
 // in that hand; between two holders it passes from one hand to the other; a
 // run of `at` keys is a smooth curve through them (two equal neighbours
 // hold), starting from the hand it left and ending in the hand that takes
-// it. A one-hand prop sits in its hand at its grip; a held two-hand prop
+// it. A hand's grip keys before the key where it takes a prop from rest
+// reach for where the prop rests. A one-hand prop sits in its hand at its grip; a held two-hand prop
 // (box, paper-stack) is carried before the chest with both hands on its
 // sides. An actor holding a prop carries it: the arm comes forward and stops
 // swinging. Seated sets (sit) are not supported; keep today's rig for them.
@@ -63,7 +64,7 @@ import {el} from '../catalog-b-view.mjs';
 import {VISEMES} from './acting.mjs';
 import {characterLook, starterCharacter} from './cast.mjs';
 import {HAND_PROPS} from './props.mjs';
-import {pathAt, planWalks, rigFrame, springCheckpoints, squashAt} from './rig-frame.mjs';
+import {CARRY_BLEND, pathAt, planWalks, rigFrame, springCheckpoints, squashAt} from './rig-frame.mjs';
 import {RIG_FRAME_STYLES, drawRigFrame, rigPropNodes, squashTransform} from './rig-frame-draw.mjs';
 
 export {RIG_FRAME_STYLES};
@@ -76,6 +77,8 @@ const smooth = x => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 -
 const lerp2 = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
 const sameHolder = (a, b) => a.actor === b.actor && a.hand === b.hand;
 const samePoint = (a, b) => a[0] === b[0] && a[1] === b[1];
+// Hands on a two-hand prop's sides grip this share of its height above its centre (a lift's hold, easy to reach).
+const SIDE_GRIP = 0.15;
 
 /** Every time in the plan, for the checkpoints' reach. */
 function sceneEnd(plan) {
@@ -101,8 +104,9 @@ function carriesFor(plan, actorId) {
       if (!h || h.actor !== actorId) continue;
       let j = i;
       while (keys[j + 1]?.holder && sameHolder(keys[j + 1].holder, h)) j++;
-      // Held from the path's first key: held from the start.
-      out.push({prop: p.prop, side: h.hand, start: i === 0 ? Math.min(0, keys[0].t) : keys[i].t, ...(j < keys.length - 1 ? {end: keys[j].t} : {})});
+      // Held from the path's first key: held from the start. Taken from rest (two equal `at` keys before), the carry comes in after the take, from the hands.
+      const fromRest = i >= 2 && keys[i - 1].at && keys[i - 2].at && samePoint(keys[i - 1].at, keys[i - 2].at);
+      out.push({prop: p.prop, side: h.hand, start: i === 0 ? Math.min(0, keys[0].t) : keys[i].t + (fromRest ? CARRY_BLEND : 0), ...(j < keys.length - 1 ? {end: keys[j].t} : {})});
       i = j;
     }
   }
@@ -139,10 +143,12 @@ function evaluator(plan, prepared) {
     const inner = busy.has(id);
     busy.add(id);
     const grip = inner ? null : (propId, side, tg) => {
-      const p = props.get(propId), s = prop(propId, tg);
+      const p = props.get(propId);
+      // Taken by this hand from rest: it reaches for where the prop rests (the prop is in the hand from then on).
+      const s = p && (restBefore(p, id, tg) ?? prop(propId, tg));
       if (!p || !s || (s.holder?.actor === id)) return null;
       const def = HAND_PROPS[p.prop];
-      const off = def.hands === 2 ? [(side === 'l' ? -1 : 1) * def.w / 2, 0] : [def.grip.x, def.grip.y];
+      const off = def.hands === 2 ? [(side === 'l' ? -1 : 1) * def.w / 2, -SIDE_GRIP * def.h] : [def.grip.x, def.grip.y];
       return toRig(a, [s.at[0] + off[0] * s.scale, s.at[1] + off[1] * s.scale]);
     };
     const fr = rigFrame(a.character, pa.track, t, {plan: pa.walk, checkpoints: pa.checkpoints, grip});
@@ -150,11 +156,21 @@ function evaluator(plan, prepared) {
     return fr;
   }
 
+  /** A prop that `actorId` next takes from rest (its next key from t is that actor's holder key, after two equal `at` keys): {at, scale}, else null. */
+  function restBefore(p, actorId, t) {
+    const keys = p.path, i = keys.findIndex(k => k.t >= t - 1e-6);
+    if (keys[i]?.holder?.actor !== actorId) return null;
+    const a = keys[i - 1], b = keys[i - 2];
+    return i >= 2 && a.at && b.at && samePoint(a.at, b.at) ? {at: a.at, scale: scaleOf(p), holder: null} : null;
+  }
+
   /** A prop in a hand at t: {at (canvas), rig (the holder's units), scale, holder}. */
   function held(kind, holder, t) {
     const a = actors.get(holder.actor), fr = frame(holder.actor, t), def = HAND_PROPS[kind];
     const f = fr.facing === 'left' ? -1 : 1;
-    const rig = def.hands === 2 && fr.carry?.prop === kind ? fr.carry.at
+    // A two-hand prop sits between the palms, and before the chest as the carry comes in.
+    const between = def.hands === 2 ? lerp2(fr.arms.l.palm, fr.arms.r.palm, 0.5).map((v, k) => v + k * SIDE_GRIP * def.h) : null;
+    const rig = def.hands === 2 ? (fr.carry?.prop === kind ? lerp2(between, fr.carry.at, fr.carry.w) : between)
       : [fr.arms[holder.hand].palm[0] - f * (def.grip?.x ?? 0), fr.arms[holder.hand].palm[1] - (def.grip?.y ?? 0)];
     return {at: toCanvas(a, rig), rig, scale: a.at.scale, holder};
   }
