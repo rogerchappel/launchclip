@@ -1,7 +1,7 @@
 // Path geometry for the hand-drawn reveal: parsing, shapes, transforms, measuring.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { area, bounds, parsePath, pointAt, polylineLength, shapeSubpaths, toPathD, walkShapes } from "../kit/core/path-geometry.mjs";
+import { area, bounds, parsePath, pointAt, polylineLength, shapeSubpaths, toPathD, walkShapes } from "@launchclip/core/path-geometry.mjs";
 
 const near = (a, b, eps, msg) => assert.ok(Math.abs(a - b) <= eps, `${msg ?? ""} ${a} vs ${b}`);
 
