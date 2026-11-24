@@ -35,6 +35,7 @@ import { LIGHT_OVER_ID, LIGHT_Z, lightLayerActive, lightLayerCss, lightPlan, lig
 import { VFX_Z, vfxPlan } from '../core/vfx/plan.mjs';
 import { vfxWordBox } from '../core/vfx/paint.mjs';
 import { VFX_RUNTIME } from '../core/vfx/runtime.mjs';
+import { RIG_RUNTIME } from './rig-runtime.mjs';
 import { installGl } from '../core/gl-backgrounds.mjs';
 import { AUDIO_REACT_Z, audioReactCss, audioReactPlan } from '../core/audio-react.mjs';
 import { worldBackdrops } from '../core/world-backdrops.mjs';
@@ -733,7 +734,7 @@ ${fontCss.css.split('\n').map((line) => `    ${line}`).join('\n')}
     ${audio}
     ${feelLines.length ? '<div id="lc-feel" class="lc-feel">' : ''}${plan ? cameraMarkup(plan, story.brand, world, worldField.html, !worldBackdrop && !covered, stack?.html ?? '') : ''}
     ${hoisted.join('\n    ')}
-    ${markup.join('\n    ')}${feelLines.length ? '\n    </div>' : ''}${lightOver ? `\n    <div id="${LIGHT_OVER_ID}" data-launchclip-light="over" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:${LIGHT_Z.hyperframes}">${lightOver.html}</div>` : ''}${audioReactHtml ? `\n    ${audioReactHtml}` : ''}${vfx ? `\n    ${vfxCanvas('color')}${vfxCanvas('light')}${vfxWords}` : ''}${vfx || backdrop?.layers.some((layer) => layer.vfx) ? `\n    <script>\n${VFX_RUNTIME}\n    </script>` : ''}${glUsed ? `\n    <script>\n(${installGl.toString()})(window);\n    </script>` : ''}${wipeMarkup.length ? `\n    ${wipeMarkup.join('\n    ')}` : ''}
+    ${markup.join('\n    ')}${feelLines.length ? '\n    </div>' : ''}${lightOver ? `\n    <div id="${LIGHT_OVER_ID}" data-launchclip-light="over" aria-hidden="true" style="position:absolute;left:0;top:0;width:${W}px;height:${H}px;overflow:hidden;pointer-events:none;z-index:${LIGHT_Z.hyperframes}">${lightOver.html}</div>` : ''}${audioReactHtml ? `\n    ${audioReactHtml}` : ''}${vfx ? `\n    ${vfxCanvas('color')}${vfxCanvas('light')}${vfxWords}` : ''}${vfx || backdrop?.layers.some((layer) => layer.vfx) ? `\n    <script>\n${VFX_RUNTIME}\n    </script>` : ''}${glUsed ? `\n    <script>\n(${installGl.toString()})(window);\n    </script>` : ''}${models.some((model) => model.content?.rigScene) ? `\n    <script>\n${RIG_RUNTIME}\n    </script>` : ''}${wipeMarkup.length ? `\n    ${wipeMarkup.join('\n    ')}` : ''}
     ${look?.under ? `${lookGradeMarkup(look)}\n    ` : ''}${medium ? `${mediumDefs(medium)}<div id="${MEDIUM_LAYER_ID}" data-launchclip-medium="${medium.kind}" aria-hidden="true"></div>\n    ` : ''}${look && (look.furniture || (look.grade && !look.under)) ? `${look.under ? '' : lookGradeMarkup(look)}${lookFurnitureMarkup(look)}\n    ` : ''}${frame ? `<div id="lc-frame-root" aria-hidden="true"></div>\n    <script>\n${brandFrameRuntime(frame)}</script>\n    ` : ''}${captions ? '<div id="lc-captions" class="lc-captions"></div>' : ''}
     ${captions ? `<script>\n${captionPlanRuntime(captions.plan)}</script>` : ''}
     <script>
