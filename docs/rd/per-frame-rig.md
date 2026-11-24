@@ -203,16 +203,23 @@ drawing's own pivots); the prototype's from `rigFrame`.
 
 | measure | today | per-frame |
 |---|---|---|
-| foot slide while on the ground, walk (px) | 781.5 | 12.9 |
-| joint jerk, RMS (deg/s³) | 209271 | 60420 |
-| joint jerk per unit of motion (1/s²) | 1088 | 665 |
-| throw: hand travel (px) | 1737 | 1675 |
-| throw: hand path bow (sagitta / span) | 0.41 | 0.52 |
-| throw: worst turn between frames (deg) | 131.8 | 114.9 |
-| throw: corners (> 45° turn in a frame) | 7 | 3 |
-| frames with legs crossing | 0 | 13 |
-| frames with arms crossing (arm/arm, arm/leg) | 2, 0 | 18, 4 |
+| foot slide while on the ground, walk (px) | 575.5 | 7.9 |
+| joint jerk, RMS (deg/s³) | 208166 | 136472 |
+| joint jerk per unit of motion (1/s²) | 1111 | 1107 |
+| throw: hand travel (px) | 1600.5 | 1859.4 |
+| throw: hand path bow (sagitta / span) | 0.41 | 0.53 |
+| throw: worst turn between frames (deg) | 131.8 | 114.2 |
+| throw: corners (> 45° turn in a frame) | 5 | 3 |
+| frames with legs crossing | 0 | 12 |
+| frames with arms crossing (arm/arm, arm/leg) | 2, 0 | 74, 1 |
 | bone length drift (px) | 1.3 | 0 |
+
+(Re-measured on the production scene: 0.6 m walk carrying the ball, a turn,
+a throw to the right. The first prototype measured 12.9 px slide and jerk
+60420 / 665; the production walk is twice as bouncy and the turn and carry
+add motion, so jerk rises while jerk per unit of motion matches today's.
+The arms cross 74 frames because the ball arm carries across the body in
+profile: correct in a side view.)
 
 How to read it:
 
