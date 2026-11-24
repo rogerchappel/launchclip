@@ -81,12 +81,32 @@ export async function detectShots(video, duration, { exec = run } = {}) {
 async function projectShots(project) {
   const { storyShotsCommand } = await import("../src/story_shots.js");
   const report = await storyShotsCommand(project);
+  const rig = await rigShotMetrics(project);
   return report.shots.map((shot) => ({
+    ...(rig.has(shot.id) ? { rig: rig.get(shot.id) } : {}),
     id: String(shot.id ?? `shot-${shot.shot}`),
     start: Number(shot.start),
     end: Number(shot.end),
     changes: Object.entries(shot.poses ?? {}).flatMap(([who, poses]) => poses.slice(1).map((pose) => ({ at: pose.at, why: `${who}: ${[pose.pose, pose.expression, pose.action].filter(Boolean).join(", ") || "pose change"}` })))
   }));
+}
+
+/**
+ * The per-frame rig's measures for each scene that uses it (src/rig_gate.js,
+ * the rig gate's own numbers): id → {measured, findings, note}. Empty when no
+ * scene does.
+ */
+export async function rigShotMetrics(project) {
+  const { readProjectStory } = await import("../src/story_loader.js");
+  const { measureRigScenes, rigScenes, storyFps, RIG_THRESHOLDS } = await import("../src/rig_gate.js");
+  const { rigFindings, rigSummary } = await import("@launchclip/core/characters/rig-metrics.mjs");
+  const loaded = await readProjectStory(project);
+  const scenes = loaded ? rigScenes(loaded.resolved) : [];
+  return new Map(measureRigScenes(scenes, { fps: storyFps(loaded?.resolved) }).map((scene) => [scene.id, {
+    measured: rigSummary(scene.measures),
+    findings: rigFindings(scene.measures, RIG_THRESHOLDS).map((finding) => `${finding.severity}: ${finding.detail}`),
+    note: "joint and prop measures from the rig plan (kit/core/characters/rig-metrics.mjs, the finish rig gate's numbers); a guide for the reviewer, not a verdict"
+  }]));
 }
 
 /** "0-3,5.5-8" → [{start, end}] */
@@ -158,6 +178,7 @@ export async function buildMotionReviewPack(target, options = {}) {
       clip: await clip(video, span.start, span.end, `${tag}.mp4`),
       moments: shotMoments,
       limb_weight: limb,
+      ...(span.rig ? { rig_metrics: span.rig } : {}),
       checks: Object.fromEntries(Object.keys(SHOT_CHECKS).map((key) => [key, emptyCheck()]))
     });
   }
@@ -394,6 +415,7 @@ function contactSheet(review, dir) {
 <div class="row"><video controls preload="metadata" src="${esc(shot.clip)}"></video>
 <div class="strips">${shot.moments.map((moment) => `<figure><img src="${esc(moment.strip)}" loading="lazy"><figcaption>${moment.at}s · ${esc(moment.why)}</figcaption></figure>`).join("")}</div>
 <div class="strips ref">${refStrips}</div></div>
+${shot.rig_metrics ? rigMetricsHtml(shot.rig_metrics) : ""}
 <ul>${Object.entries(SHOT_CHECKS).map(([key, question]) => `<li><b>${key}</b> — pending${shot.checks[key].suggested ? ` <i>(model suggests ${esc(shot.checks[key].suggested.verdict)}: ${esc(shot.checks[key].suggested.observation)})</i>` : ""}<br><small>${esc(question)}</small></li>`).join("")}</ul></section>`).join("");
   return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Motion review</title>
 <style>body{font:15px/1.45 system-ui,sans-serif;margin:0 auto;padding:16px;max-width:1500px;background:#1d1b1f;color:#f3ece2}section{border-top:1px solid #554;padding:16px 0}.row{display:grid;grid-template-columns:minmax(0,320px) 1fr 1fr;gap:12px}@media (max-width:900px){.row{grid-template-columns:1fr}}video,img{width:100%;background:#000}figure{margin:0 0 8px}figcaption,small{color:#b9ad9d}.ref figcaption{color:#9cc3e6}code{word-break:break-all}</style>
@@ -404,6 +426,12 @@ function contactSheet(review, dir) {
 <h2>Limb weight</h2><p>${esc(LIMB_WEIGHT_QUESTION)}</p><p>Measured stroke/head: candidate ${measured.candidate_ratio ?? "n/a"}, reference ${measured.reference_ratio ?? "n/a"}${measured.relative ? ` (candidate is ${measured.relative}× the reference)` : ""}.</p>
 ${review.repair_log.length ? `<h2>Carried from the previous review</h2><ul>${review.repair_log.map((repair) => `<li><b>${esc(repair.issue)}</b> (${esc(repair.previous_status)}): ${esc(repair.previous_observation)}</li>`).join("")}</ul>` : ""}
 ${shots}`;
+}
+
+function rigMetricsHtml(rig) {
+  const actors = Object.entries(rig.measured.actors).map(([id, m]) => `<li><b>${esc(id)}</b>: foot slide ${m.foot_slide_px} px over ${m.planted_steps} planted steps, bone drift ${m.bone_drift_px} px, jerk per unit of motion ${m.jerk_per_motion}/s², hand corners ${m.hand_corners}, crossing frames (arms ${m.crossing_frames.arms}, arm/leg ${m.crossing_frames.arm_leg})</li>`);
+  const props = Object.entries(rig.measured.props).map(([id, m]) => `<li><b>${esc(id)}</b>: grip loss ${m.grip_loss_px} px, ${m.teleports} teleport(s)</li>`);
+  return `<h3>Rig measures</h3><p><small>${esc(rig.note)}</small></p><ul>${[...actors, ...props].join("")}</ul>${rig.findings.length ? `<ul>${rig.findings.map((line) => `<li>${esc(line)}</li>`).join("")}</ul>` : ""}`;
 }
 
 /** The pack or the check as lines a person reads. */
