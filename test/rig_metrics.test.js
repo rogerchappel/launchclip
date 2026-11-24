@@ -6,14 +6,15 @@ import { readFileSync } from "node:fs";
 import { resolveStory } from "@launchclip/core/story.mjs";
 import assert from "node:assert/strict";
 import { rigFrame } from "@launchclip/core/characters/rig-frame.mjs";
-import { PROTOTYPE, prototypeCast } from "@launchclip/core/characters/rig-frame-draw.mjs";
+import { prototypePlan } from "@launchclip/core/characters/rig-scene.mjs";
 import { measureRigScene, rigFindings, sampleRigScene } from "@launchclip/core/characters/rig-metrics.mjs";
 import { RIG_THRESHOLDS, rigGate } from "../src/rig_gate.js";
 import { explainGate } from "../src/gate_summary.js";
 
-const { character } = prototypeCast();
+const PROTO = prototypePlan();
+const { character, colors } = PROTO.actors[0];
 const AT = { x: 300, floor: 1500, scale: 0.5 };
-const actor = (walk = { start: 0.2, end: 1.6, to: 400 }) => ({ id: "ann", character, at: AT, track: { x: 0, facing: "right", walks: [walk], keys: [{ t: 0 }] } });
+const actor = (walk = { start: 0.2, end: 1.6, to: 400 }) => ({ id: "ann", character, colors, at: AT, track: { x: 0, facing: "right", walks: [walk], keys: [{ t: 0 }] } });
 const plan = (props = [], a = actor()) => ({ schema: "launchclip.rig-scene.v1", actors: [a], props });
 const findings = (p, options = {}) => rigFindings(measureRigScene(sampleRigScene(p, { fps: 30, duration: 2, ...options }), RIG_THRESHOLDS), RIG_THRESHOLDS);
 const errors = (list) => list.filter((finding) => finding.severity === "error");
@@ -26,9 +27,7 @@ test("a good walk, and a prop picked up where the hand is, pass", () => {
 });
 
 test("the approved prototype passes with no warnings (the thresholds are calibrated on it)", () => {
-  const cast = prototypeCast();
-  const scene = { actors: [{ id: "oliver", character: cast.character, at: PROTOTYPE.at, track: PROTOTYPE.track }], props: [] };
-  assert.deepEqual(findings(scene, { duration: 8 }), []);
+  assert.deepEqual(findings(PROTO, { duration: 8 }), []);
 });
 
 test("a stride the legs cannot reach slides the planted foot", () => {
@@ -49,11 +48,14 @@ test("a stretched forearm is bone drift", () => {
   assert.match(finding.detail, /^ann: the elbowR-wristR bone changes length by [\d.]+ px \(limit 1 px\)$/);
 });
 
-test("a hand that takes a prop from across the room is a grip loss", () => {
-  const [finding] = errors(findings(plan([{ id: "cup", prop: "cup", path: [{ t: 0, at: [900, 1200] }, { t: 1, holder: { actor: "ann", hand: "l" } }] }])));
+const across = [{ id: "cup", prop: "cup", path: [{ t: 0, at: [900, 1200] }, { t: 0.9, at: [900, 1200] }, { t: 1, holder: { actor: "ann", hand: "l" } }] }];
+test("a hand that takes a prop at rest from across the room is a grip loss; a catch on the prop's curve is not", () => {
+  const [finding] = errors(findings(plan(across)));
   assert.equal(finding.rule, "rig-grip-loss");
   assert.equal(finding.at, 1);
   assert.match(finding.detail, /^prop cup: the hand is \d+(\.\d)? px from it when it is taken or let go at 1 s \(limit 4 px\)$/);
+  // The prototype's ball leaves the hand on its throw: a release and a flight, no grip loss or teleport.
+  assert.deepEqual(errors(findings(PROTO, { duration: 5.5 })).filter((f) => f.prop), []);
 });
 
 test("an unheld prop that jumps in one frame is a teleport; a slow move between two places is not", () => {
@@ -76,7 +78,7 @@ test("the rig gate is skipped for today's stories and fails with times, a summar
   const good = rigGate(story, { scenes: [{ id: "s1", start: 4, end: 6, plan: plan() }] });
   assert.equal(good.status, "passed");
   assert.equal(good.measured.s1.actors.ann.foot_slide_px, 0);
-  const bad = rigGate(story, { scenes: [{ id: "s1", start: 4, end: 6, plan: plan([{ id: "cup", prop: "cup", path: [{ t: 0, at: [900, 1200] }, { t: 1, holder: { actor: "ann", hand: "l" } }] }]) }] });
+  const bad = rigGate(story, { scenes: [{ id: "s1", start: 4, end: 6, plan: plan(across) }] });
   assert.equal(bad.status, "failed");
   assert.equal(bad.findings[0].at, 5, "finding times are story seconds");
   assert.deepEqual(bad.findings[0].ids, ["s1"]);
