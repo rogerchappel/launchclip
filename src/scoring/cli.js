@@ -56,7 +56,7 @@ export async function runScoreCommand(action, args, flags, io) {
   if (action === "library" && args[0] === "evidence") {
     const { runEvidence } = await import("./evidence.js");
     const result = await runEvidence(args[1], flags, { stdout: io.stderr });
-    return flags.json ? json(result) : write(`${result.counts.posts} posts read: ${result.counts.transcripts} transcripts, ${result.counts.thumbs} covers kept (${result.counts.subtitle_failures + result.counts.thumb_failures} could not be fetched): ${result.out}\n`);
+    return flags.json ? json(result) : write(`${result.counts.posts} posts read: ${result.counts.transcripts} transcripts, ${result.counts.thumbs} covers and ${result.counts.slides} slide sheets kept (${result.counts.subtitle_failures + result.counts.thumb_failures + result.counts.slide_failures} could not be fetched): ${result.out}\n`);
   }
   if (action === "library" && args[0] === "keywords") {
     const { runKeywords, formatKeywords } = await import("./keywords.js");

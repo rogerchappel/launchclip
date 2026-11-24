@@ -4,7 +4,8 @@ import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { evidenceOf, gatherEvidence, parseVtt, runEvidence } from "../src/scoring/evidence.js";
+import { execFileSync, spawnSync } from "node:child_process";
+import { evidenceOf, gatherEvidence, parseVtt, runEvidence, slideLinks } from "../src/scoring/evidence.js";
 
 const VTT = "WEBVTT\n\n1\n00:00:01.200 --> 00:00:03.000\nNever back a horse\n\nNOTE a comment\n\n00:00:03.000 --> 00:00:05.200 align:start\n<c>on a wet track.</c> Here is\nwhy\n\n01:00:05.200 --> 01:00:06.000\n\n";
 const NOW = new Date("2026-11-23T00:00:00.000Z");
@@ -72,7 +73,7 @@ test("gatherEvidence prefers the asked language, counts a failed subtitle and sk
   ];
   const steps = [];
   const result = await gatherEvidence(rows, { fetch, concurrency: 2, now: NOW, onStep: (text) => steps.push(text) });
-  assert.deepEqual(result.counts, { posts: 6, transcripts: 2, thumbs: 0, subtitle_failures: 3, thumb_failures: 0 });
+  assert.deepEqual(result.counts, { posts: 6, transcripts: 2, thumbs: 0, slides: 0, subtitle_failures: 3, thumb_failures: 0, slide_failures: 0 });
   assert.deepEqual(asked.sort(), ["https://subs.example.com/a-eng", "https://subs.example.com/b-por", "https://subs.example.com/gone", "https://subs.example.com/html", "https://subs.example.com/throws"]);
   assert.deepEqual(result.rows.map((row) => [row.id, row.facts.has_speech, "raw" in row, "thumb" in row]), [["a", true, false, false], ["gone", false, false, false], ["html", false, false, false], ["throws", false, false, false], ["b", true, false, false], ["silent", false, false, false], ["done", false, false, false]]);
   assert.equal(result.rows[6], done);
@@ -85,7 +86,7 @@ test("runEvidence rewrites the library in place and a second run fetches nothing
   let calls = 0;
   const io = { fetch: async () => ((calls += 1), { ok: true, text: async () => VTT }), stdout: { write() {} } };
   const first = await runEvidence(file, { "text-only": true, concurrency: "2" }, io);
-  assert.deepEqual(first, { out: file, counts: { posts: 2, transcripts: 1, thumbs: 0, subtitle_failures: 0, thumb_failures: 0 } });
+  assert.deepEqual(first, { out: file, counts: { posts: 2, transcripts: 1, thumbs: 0, slides: 0, subtitle_failures: 0, thumb_failures: 0, slide_failures: 0 } });
   const written = (await readFile(file, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
   assert.deepEqual(written.map((row) => [row.id, row.spoken_hook, row.raw]), [["a", "Never back a horse on a wet track.", undefined], ["silent", undefined, undefined]]);
   assert.deepEqual(await readdir(dir), ["library.jsonl"]);
@@ -94,4 +95,25 @@ test("runEvidence rewrites the library in place and a second run fetches nothing
   await assert.rejects(runEvidence(file, { concurrency: 0 }, io), /--concurrency must be 1 or more/);
   await assert.rejects(runEvidence(path.join(dir, "missing.jsonl"), {}, io), /not found/);
   await assert.rejects(runEvidence(undefined, {}, io), /usage: library evidence/);
+});
+
+test("slideLinks reads a photo post's slides from TikTok and Instagram rows, and nothing from a video", () => {
+  const link = (n) => `https://cdn.example.com/s${n}.jpg`;
+  assert.deepEqual(slideLinks({ raw: { slideshowImageLinks: [{ downloadLink: link(1) }, { tiktokLink: link(2) }, {}] } }), [link(1), link(2)]);
+  assert.deepEqual(slideLinks({ raw: { images: [link(1), link(2), "javascript:alert(1)"] } }), [link(1), link(2)]);
+  assert.deepEqual(slideLinks({ raw: { images: [], childPosts: [{ displayUrl: link(1) }, { displayUrl: link(2) }] } }), [link(1), link(2)]);
+  assert.deepEqual(slideLinks({ raw: { images: [link(1)] } }), []);
+  assert.deepEqual(slideLinks(tiktok("7301")), []);
+  assert.deepEqual(slideLinks({}), []);
+});
+
+test("gatherEvidence stores one sheet of a photo post's slides and counts a failed one", { skip: spawnSync("ffmpeg", ["-version"]).status !== 0 }, async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "launchclip-slides-"));
+  const image = execFileSync("ffmpeg", ["-loglevel", "error", "-f", "lavfi", "-i", "color=red:s=90x160", "-frames:v", "1", "-f", "image2pipe", "-c:v", "png", "-"]);
+  const fetch = async (url) => (String(url).includes("gone") ? { ok: false, status: 404 } : { ok: true, arrayBuffer: async () => image });
+  const photo = (id, names) => ({ ...post, id, raw: { isSlideshow: true, slideshowImageLinks: names.map((name) => ({ downloadLink: `https://cdn.example.com/${name}.png` })) } });
+  const result = await gatherEvidence([photo("p1", ["a", "b", "c"]), photo("p2", ["a", "gone"])], { fetch, slidesDir: path.join(dir, "slides"), now: NOW });
+  assert.deepEqual([result.counts.slides, result.counts.slide_failures], [1, 1]);
+  assert.deepEqual(result.rows.map((row) => [row.slides, row.facts.slides]), [["slides/p1.jpg", 3], [undefined, 2]]);
+  assert.deepEqual(await readdir(path.join(dir, "slides")), ["p1.jpg"]);
 });

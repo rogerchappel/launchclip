@@ -32,6 +32,7 @@ niches/horse-racing/
   creators.json       who was found, and by which keyword
   library.jsonl       one line a post: words, transcript, facts, results, format tags
   thumbs/             small copies of the covers
+  slides/             one sheet of the slides for each photo post
   rubric.draft.json   the questions, with their numbers
   report.md           the evidence
 ```
