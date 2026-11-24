@@ -7,8 +7,8 @@ import { charactersTimeline, charactersView } from "@launchclip/core/catalog-cha
 import { POSES } from "@launchclip/core/characters/rig.mjs";
 import { CONTACT } from "@launchclip/core/characters/contact.mjs";
 import { storyCastErrors } from "@launchclip/core/characters/cues.mjs";
-import { RIG_SCHEMA } from "@launchclip/core/characters/rig-compile.mjs";
-import { validateRigScenePlan } from "@launchclip/core/characters/rig-scene.mjs";
+import { RIG_SCHEMA, compileRigScene } from "@launchclip/core/characters/rig-compile.mjs";
+import { rigScenePrepare, rigSceneState, rigSceneTree, validateRigScenePlan } from "@launchclip/core/characters/rig-scene.mjs";
 import { resolveModule } from "@launchclip/core/modules.mjs";
 import { castGate } from "../src/cast.js";
 
@@ -104,7 +104,8 @@ test("give: the giver alone, both hands in the shared window, then the receiver"
   const plan = planOf({ cast: [{ id: "maya", holds: "box", cues: [walkTo({ character: "theo" }, 0.5), { at: 3, action: "give", target: { character: "theo" } }] }, { id: "theo" }] });
   const shared = CONTACT.give.shared;
   const box = plan.props.find((p) => p.id === "box");
-  assert.deepEqual(box.path.map((k) => [k.t, k.holder?.actor]), [[0, "maya"], [3 + shared, "theo"]]);
+  // Held by maya until theo takes hold, passed hand to hand while both hold it, theo's from her release.
+  assert.deepEqual(box.path.map((k) => [k.t, k.holder?.actor]), [[0, "maya"], [3, "maya"], [3 + shared, "theo"]]);
   const spans = gripSpans(plan);
   const maya = spans.find((s) => s.actor === "maya"), theo = spans.find((s) => s.actor === "theo");
   assert.ok(maya.from === 0 && Math.abs(maya.to - 3) < 1e-6, "maya grips it until the shared window");
@@ -116,14 +117,24 @@ test("a throw flies an arc into the catcher's hands; lift, drop and pull move th
   const plan = planOf({ objects: [{ id: "parcel", prop: "box", at: 0.5 }], cast: [{ id: "maya", cues: [walkTo({ prop: "parcel" }), { at: 4, action: "lift", target: { prop: "parcel" } }, { at: 6, action: "throw", target: { character: "theo" } }] }, { id: "theo", cues: [{ at: 8, action: "drop" }] }] });
   const parcel = plan.props[0];
   const holders = parcel.path.filter((k) => k.holder).map((k) => [k.t, k.holder.actor]);
-  assert.deepEqual(holders.map(([, a]) => a), ["maya", "theo"]);
+  // A key where each hand takes it and where it lets go: same-holder keys keep it in hand (rig-scene.mjs).
+  assert.deepEqual(holders.map(([, a]) => a), ["maya", "maya", "theo", "theo"]);
   assert.equal(holders[0][0], 4, "lifted on the cue");
-  const flight = parcel.path.filter((k) => k.at && k.t >= 6 && k.t < holders[1][0]);
-  assert.ok(flight.length > 4, "the flight is sampled");
-  assert.ok(Math.min(...flight.map((k) => k.at[1])) < flight[0].at[1] - 50, "up and over: an arc");
+  const rest = parcel.path.filter((k) => k.at && k.t < 4);
+  assert.deepEqual(rest.at(-1).at, rest.at(-2).at, "it rests (two equal neighbours) until just before the pick-up");
+  assert.ok(4 - rest.at(-1).t <= 0.15, "the resting key is just before the pick-up");
+  const flight = parcel.path.filter((k) => k.at && k.t > holders[1][0] && k.t < holders[2][0]);
+  assert.ok(flight.length >= 2, "the flight is sampled between the hands");
+  assert.ok(flight[0].t - holders[1][0] >= 0.1 - 1e-6 && holders[2][0] - flight.at(-1).t >= 0.1 - 1e-6, "the rig's curve leaves the release hand and enters the catching hand");
+  const state = (t) => rigSceneState(plan, t, prepared).props[0].at;
+  const prepared = rigScenePrepare(plan);
+  const apex = Math.min(...flight.map((k) => k.at[1]));
+  assert.ok(apex < state(holders[1][0])[1] - 50 && apex < state(holders[2][0])[1] - 50, "up and over: an arc from hand to hand");
+  // The prop never jumps: at most a throw's speed between 30 fps frames, from the pick-up to the floor.
+  for (let t = 3.5; t < 9.5; t += FRAME) { const a = state(t), b = state(t + FRAME); assert.ok(Math.hypot(b[0] - a[0], b[1] - a[1]) < 120, `no jump at ${t.toFixed(2)} s`); }
   const landed = parcel.path.at(-1);
   assert.ok(landed.t > 8 && landed.at, "dropped, it falls to the floor");
-  assert.ok(parcel.squash.some((q) => Math.abs(q.t - holders[1][0]) < 1e-6), "the catch squashes it");
+  assert.ok(parcel.squash.some((q) => Math.abs(q.t - holders[2][0]) < 1e-6), "the catch squashes it");
   // Never in two hands outside a handover.
   const spans = gripSpans(plan);
   for (const a of spans) for (const b of spans) if (a !== b && a.prop === b.prop) assert.ok(a.to <= b.from + 1e-6 || b.to <= a.from + 1e-6, `${a.actor} and ${b.actor} never hold it at once`);
@@ -156,4 +167,16 @@ test("scenes the per-frame rig cannot play keep the op list, with a warning", ()
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /^c: the per-frame rig falls back to the op list: the flat drawing style has no per-frame rig/);
   assert.equal(castGate(story([scene(params)])).warnings, undefined, "no warnings without the opt-in");
+});
+
+test("a person shared with the scene before waits for the way in; one shared with the next leaves on the way out", () => {
+  const model = resolve({ cast: [{ id: "maya" }, { id: "theo" }] });
+  const plan = compileRigScene({ actors: model.content.actors, start: 0, duration: 10, prefix: "c", single: { arrive: { ids: ["maya"], at: 0.4 }, leave: { ids: ["theo"], at: 10 } } });
+  assert.deepEqual(validateRigScenePlan(plan), []);
+  assert.deepEqual(plan.actors[0].visible, [{ t: 0, visible: false }, { t: 0.4, visible: true }]);
+  assert.deepEqual(plan.actors[1].visible, [{ t: 10, visible: false }]);
+  const drawn = (t) => rigSceneTree(plan, t, { width: 1920, height: 1080 }).children.length;
+  assert.equal(drawn(0.2), 1, "maya is hidden until the way in has passed");
+  assert.equal(drawn(1), 2);
+  assert.equal(drawn(10), 1, "theo has gone with the way out");
 });

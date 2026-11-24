@@ -44,6 +44,7 @@ import {SPRITE_SCENE, SPRITE_TIMING} from './catalog-sprites.mjs';
 import {pointAim} from './characters/aim.mjs';
 import {lookCastOptions} from './looks/index.mjs';
 import {RIG_MODES, compileRigScene, rigFallback} from './characters/rig-compile.mjs';
+import {rigLayerId} from './characters/rig-scene-layer.mjs';
 import {PORTRAIT_MEDIUM_SETS, SHOTS, WIDE_SHIFT_SETS, defaultShot, fitShot, frameCast, frameGuides, framingMarks, punchIn} from './characters/framing.mjs';
 
 export const CHARACTER_TIMING = Object.freeze({
@@ -615,11 +616,11 @@ const isStoryWorld = world => Boolean(world) && typeof world === 'object' && WOR
  * scene can play per frame, else keeps the op list and says why.
  * → {} | {rigScene} | {rigFallback}
  */
-function castRig(b, ctx, {seated, actors, contact}) {
+function castRig(b, ctx, {seated, actors, contact, single}) {
   const mode = b.params.rig === undefined ? ctx.cast?.rig ?? 'ops' : b.check.oneOf(b.params.rig, 'params.rig', RIG_MODES);
   if (mode !== 'frame') return {};
   const fallback = rigFallback({seated, actors});
-  return fallback ? {rigFallback: fallback} : {rigScene: compileRigScene({actors, contact, start: b.start, duration: b.duration, prefix: b.id})};
+  return fallback ? {rigFallback: fallback} : {rigScene: compileRigScene({actors, contact, start: b.start, duration: b.duration, prefix: b.id, single})};
 }
 
 function resolveCastScene(params, ctx) {
@@ -695,7 +696,8 @@ function resolveCastScene(params, ctx) {
   // A wide shot on a set with no furniture moves a character in from the safe zone's side (9:16: the right-hand place).
   const {frame, actors, contact} = fitShot(shot, place, {canvas, count: resolved.length, wideShift: WIDE_SHIFT_SETS.includes(setName)});
   castEvents(b, actors, contact);
-  const rig = castRig(b, ctx, {seated: layout.seated, actors, contact});
+  const passage = castPassage(b, ctx, actors.map(actor => actor.id));
+  const rig = castRig(b, ctx, {seated: layout.seated, actors, contact, single: passage.single});
   // Cue shots: a cut in on one character, and back (characters/framing.mjs punchIn).
   const punches = actors.flatMap(actor => actor.states.filter(state => state.shot).map(state => ({time: state.time, ...punchIn(state.shot, shot, {canvas, actor, lean: stateJoints(state, actor).lean})}))).sort((a, c) => a.time - c.time);
   if (punches.length && screen?.kind === 'video') check.fail('params.cast', 'a cue shot cannot cut in on a set playing a video screen (the video is drawn apart from the set); frame the scene with params.shot instead');
@@ -706,7 +708,7 @@ function resolveCastScene(params, ctx) {
   const sr = layout.screenRect, k = frame.set;
   const screenRect = sr && shot !== 'wide' ? {x: r2(sr.x * k.scale + k.x), y: r2(sr.y * k.scale + k.y), width: r2(sr.width * k.scale), height: r2(sr.height * k.scale)} : sr;
   b.model.layer = 'front';
-  const content = {...castPassage(b, ctx, actors.map(actor => actor.id)), ...castDraw(ctx), follow: plateFollow(stage, ctx, canvas), set: setName, backdrop: stage.backdrop, world: stage.world, drawWorld: stage.draw, ...(stage.plate ? {plate: {src: stage.plate.src}} : {}), seated: layout.seated, back: layout.back, front: layout.front, screenRect, media: screen, actors, colors: layout.colors,
+  const content = {...passage, ...castDraw(ctx), follow: plateFollow(stage, ctx, canvas), set: setName, backdrop: stage.backdrop, world: stage.world, drawWorld: stage.draw, ...(stage.plate ? {plate: {src: stage.plate.src}} : {}), seated: layout.seated, back: layout.back, front: layout.front, screenRect, media: screen, actors, colors: layout.colors,
     shot: {name: shot, zoom: frame.zoom, set: frame.set, punches}, ...(stage.cues?.length ? {propCues: stage.cues} : {}), ...contactContent(contact, b, actors[0]?.scale), ...rig};
   const model = b.finish(content, {minTextPx: b.min.key});
   // A set fills the frame: fade in place rather than slide.
@@ -736,7 +738,7 @@ function castSceneView(model) {
   const worldNodes = framed && world.length ? [el('div', `${id}-shot-world`, abs(0, 0, W, H, {transform: `scale(${kw})`, transformOrigin: '50% 50%'}), world)] : world;
   const back = svgRoot(W, H, furniture(c.back));
   // The per-frame rig (content.rigScene) draws the cast and its props in its own layer, where the actors stand.
-  const actors = c.rigScene ? [el('div', `${id}-rig`, abs(0, 0, W, H), [])] : [...c.actors.map((actor, i) => actorNode(model, actor, i)), ...propNodes(model)];
+  const actors = c.rigScene ? [el('div', rigLayerId(model), abs(0, 0, W, H), [])] : [...c.actors.map((actor, i) => actorNode(model, actor, i)), ...propNodes(model)];
   const front = svgRoot(W, H, furniture(c.front));
   // Cue shots cut in on a character: one wrapper over the whole set.
   const punch = kids => (c.shot?.punches?.length ? [el('div', `${id}-punch`, abs(0, 0, W, H, {transformOrigin: '0px 0px'}), kids)] : kids);
