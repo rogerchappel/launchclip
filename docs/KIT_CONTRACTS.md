@@ -4988,10 +4988,18 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   `tween`/`ease`, `arms` (two-bone reach to a point, `aim.mjs reachArm`:
   bones keep their lengths, the elbow bends out from the body) and `body`
   (lean, and a crouch for something low: the legs shorten with the body
-  dropped onto them, feet on the floor). A contact out of arm's length,
-  even bent over, is an error naming the gap in px: walk-to the target
-  first (walk-to a character now stops at arm's length, walk-to a scene
-  prop right beside it) or change positions; an arm is never stretched.
+  dropped onto them, feet on the floor). Each phase names its action
+  (`acts`), which the acting gate reads. A strike leans at most
+  `STRIKE_LEAN` (35°); a hit or push on a prop on the floor is a kick with
+  the facing leg. Out of reach, a strike steps in one stride (`STEP`)
+  before its wind-up; further than that is an error: walk-to the target
+  first (walk-to a character stops at arm's length, walk-to a scene prop
+  right beside it, where earlier pushes, pulls and throws left it) or
+  change positions; a limb is never stretched. A push slides a prop until
+  it would meet someone or the frame's edge. Walks, and props carried on
+  them, ease in and out (`WALK_EASE`, sine.inOut). A `catch` cue drives
+  its thrower's throw; a throw cue at the catcher that lands on the catch
+  is the same throw.
   - **What it meets reacts.** A struck or pushed character staggers away
     (pulled: toward) and tips on its gag layer (`<cid>-gag`, about its
     feet), a hit also squashes it, and it changes face to `surprised` on
