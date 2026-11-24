@@ -28,6 +28,8 @@ const WEIGHT = {slim: 9, petite: 9, average: 11, athletic: 12, curvy: 12, broad:
 const HEAD_R = 74;
 const EDGE = 3.5;
 const LONG = new Set(['shirt', 'hoodie', 'blazer', 'sweater', 'turtleneck', 'cardigan', 'jacket', 'coat', 'lab-coat', 'chef-coat', 'kurta']);
+// Tops whose sleeves reach the wrist (the per-frame rig colours its arms the same way).
+export const STICK_LONG_SLEEVES = LONG;
 
 /** A stick: an ink edge round a coloured core, from (0, from) to (0, to). */
 function inkedStick(color, ink, w, from, to) {
@@ -62,9 +64,8 @@ const PAPER = '#fbf9f4';
  */
 export function drawStick(params, colors, {id, joints: j, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', gaze = false, turns = false, ink: inkMode = null}, {mono = false} = {}) {
   const g = stickGeometry(params);
-  // Facial hair reads in the hair's colour on a small round head.
-  const c = {...toonColors(colors), stubble: mixColor(colors.hair, colors.skinShade ?? colors.skin, 0.72)};
-  const P = mono ? linePen(c, {id}) : flatPen(c);
+  const ctx = stickContext(params, colors, {id, joints: j, expression, static: isStatic, props, facing, mono});
+  const {c, P} = ctx;
   const ink = c.outline;
   // Classic: every stick is one ink line; coloured: an ink edge round the colour of what covers it.
   let n = 0;
@@ -72,17 +73,11 @@ export function drawStick(params, colors, {id, joints: j, expression = 'neutral'
   const stick = inkMode === 'pressure'
     ? (mono ? (_color, _ink, width, from, to) => [pressed(Math.max(7, width * 0.72), from, to)] : (color, _ink, w, from, to) => [pressed(w + EDGE * 2, from, to), line(`M0 ${r1(from)}L0 ${r1(to)}`, color, w)])
     : mono ? (_color, _ink, width, from, to) => [line(`M0 ${r1(from)}L0 ${r1(to)}`, ink, Math.max(7, width * 0.72))] : inkedStick;
-  const toonG = rigGeometry(params);
-  const ctx = {id, g: toonG, c, p: params, j, expression, static: isStatic, props, P, facing};
+  const toonG = ctx.g;
   const w = g.w;
   const top = c.top, bottom = c.bottom, skin = c.skin;
   const long = LONG.has(params.outfit.top);
   const bare = ['shorts', 'skirt'].includes(params.outfit.bottom);
-
-  // Toon head parts scaled from the toon egg onto the circle.
-  const t = toonG.head;
-  const sx = r1((HEAD_R / t.rx) * 100) / 100, sy = r1((HEAD_R / t.ry) * 100) / 100;
-  const onHead = kids => group(kids, {transform: `translate(0 ${r1(g.headCy)}) scale(${sx} ${sy}) translate(0 ${r1(-t.cy)})`});
 
   // Arms: shoulder at the top of the spine.
   const arm = side => {
@@ -125,16 +120,8 @@ export function drawStick(params, colors, {id, joints: j, expression = 'neutral'
     flare.push(el('path', null, null, [], {d: `M-10 ${r1(y0)}L10 ${r1(y0)}L${x1} ${y1}L${-x1} ${y1}Z`, fill: mono ? PAPER : fill, stroke: ink, strokeWidth: mono ? 6 : EDGE, strokeLinejoin: 'round'}));
   }
 
-  const faceNodes = [...new Set([expression, ...expressions])].map(name => face(ctx, name)).filter(Boolean);
-  const {jaw, features} = faceParts(ctx, gaze, () => [...faceNodes, ...glasses(ctx)]);
-  // The circle turns as the toon head would: the gaze is measured on the toon egg.
-  const headKids = turnJoint(ctx, j, gaze, [
-    asHead(el('ellipse', null, null, [], {cx: 0, cy: r1(g.headCy), rx: HEAD_R, ry: HEAD_R, fill: mono ? PAPER : skin, stroke: ink, strokeWidth: 6})),
-    onHead([...faceView(ctx, turns, [...jaw, ...gazeJoint(ctx, j, gaze, features)]), ...(covers(params) ? [] : hairFront(ctx)), ...backView(ctx, turns, () => backOfHead(ctx)), ...hairPeek(ctx), ...headwear(ctx)])
-  ], sx);
   const tilt = {rotation: j.head, y: j.headY};
-  const headIdle = joint(ctx, 'headidle', 0, 0, {}, headKids);
-  const backIdle = joint(ctx, 'hbidle', 0, 0, {}, params.headwear === 'turban' ? [] : [onHead(stickHairBack(ctx))]);
+  const {headIdle, backIdle} = stickHead(ctx, expressions, {gaze, turns, mono});
   const spine = stick(top, ink, w + 6, -g.torso + 2, -6);
   const torsoKids = [
     joint(ctx, 'hb', 0, g.neckY, tilt, [backIdle]),
@@ -150,6 +137,38 @@ export function drawStick(params, colors, {id, joints: j, expression = 'neutral'
   const chair = params.mobility === 'wheelchair' ? wheelchair(ctx) : [];
   const ground = mono ? line('M-90 4L90 4', ink, 4, {opacity: 0.35}) : el('ellipse', null, null, [], {cx: 0, cy: 4, rx: 110, ry: 14, fill: mixColor('#000000', c.skin, 1), opacity: 0.12});
   return group([...asShadow([ground]), ...chair, body]);
+}
+
+/**
+ * The stick figure's drawing context: toon colours (with stubble in the
+ * hair's colour), the pen (line art for the classic figure) and the toon
+ * rig's geometry. Shared by drawStick and the per-frame rig's drawing.
+ */
+export function stickContext(params, colors, {id, joints: j, expression = 'neutral', static: isStatic = true, props = null, facing = 'right', mono = false}) {
+  // Facial hair reads in the hair's colour on a small round head.
+  const c = {...toonColors(colors), stubble: mixColor(colors.hair, colors.skinShade ?? colors.skin, 0.72)};
+  const P = mono ? linePen(c, {id}) : flatPen(c);
+  return {id, g: rigGeometry(params), c, p: params, j, expression, static: isStatic, props, P, facing};
+}
+
+/** The round head (headIdle) and the hair behind it (backIdle), with the toon face, hair and headwear scaled onto the circle. */
+export function stickHead(ctx, expressions, {gaze = false, turns = false, mono = false} = {}) {
+  const {p: params, j, c} = ctx;
+  const g = stickGeometry(params);
+  // Toon head parts scaled from the toon egg onto the circle.
+  const t = ctx.g.head;
+  const sx = r1((HEAD_R / t.rx) * 100) / 100, sy = r1((HEAD_R / t.ry) * 100) / 100;
+  const onHead = kids => group(kids, {transform: `translate(0 ${r1(g.headCy)}) scale(${sx} ${sy}) translate(0 ${r1(-t.cy)})`});
+  const faceNodes = [...new Set([ctx.expression, ...expressions])].map(name => face(ctx, name)).filter(Boolean);
+  const {jaw, features} = faceParts(ctx, gaze, () => [...faceNodes, ...glasses(ctx)]);
+  // The circle turns as the toon head would: the gaze is measured on the toon egg.
+  const headKids = turnJoint(ctx, j, gaze, [
+    asHead(el('ellipse', null, null, [], {cx: 0, cy: r1(g.headCy), rx: HEAD_R, ry: HEAD_R, fill: mono ? PAPER : c.skin, stroke: c.outline, strokeWidth: 6})),
+    onHead([...faceView(ctx, turns, [...jaw, ...gazeJoint(ctx, j, gaze, features)]), ...(covers(params) ? [] : hairFront(ctx)), ...backView(ctx, turns, () => backOfHead(ctx)), ...hairPeek(ctx), ...headwear(ctx)])
+  ], sx);
+  const headIdle = joint(ctx, 'headidle', 0, 0, {}, headKids);
+  const backIdle = joint(ctx, 'hbidle', 0, 0, {}, params.headwear === 'turban' ? [] : [onHead(stickHairBack(ctx))]);
+  return {headIdle, backIdle};
 }
 
 // Headwear that leaves the hair showing on its own (a band or a skullcap).
