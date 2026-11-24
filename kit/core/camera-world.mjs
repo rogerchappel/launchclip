@@ -478,7 +478,8 @@ export function cameraPlan(story, { windows, objects } = {}) {
       const rest = restState(placement, size);
       warnings.push(...dropped);
       const at = (state) => { const point = worldPoint(placement, state); return { x: round(point.x, 4), y: round(point.y, 4), zoom: round(rest.zoom * state.s, 6), rotation: rest.rotation }; };
-      for (const key of keys) moves.push({ sceneId: entry.id, type: 'zoom', zoom: true, start: key.start, duration: key.duration, ease: key.ease, blur: blurFor('zoom'), from: at(key.from), to: at(key.to) });
+      // A landing's keys carry their own blur (zooms.mjs LAND.blur; 0 on a cut) and purpose; camera.blur true / false still forces it.
+      for (const key of keys) moves.push({ sceneId: entry.id, type: 'zoom', zoom: true, start: key.start, duration: key.duration, ease: key.ease, blur: key.blur !== undefined && camera.blur === null ? key.blur : blurFor('zoom'), from: at(key.from), to: at(key.to), ...(key.purpose ? { purpose: key.purpose, move: key.move } : {}) });
     }
   }
   const overviews = [], travelling = [];
@@ -521,7 +522,9 @@ export function cameraPlan(story, { windows, objects } = {}) {
   const style = grammar.camera;
   // A character story's shots carry their own moves (character-camera.mjs), which keep the view inside each
   // plate; the drift would add a sway under them and shrink the view past a plate that draws its own world.
-  const drift = camera.mode === 'world' && style.drift > 0 && duration > 0 && !characterCameraOn(story) ? {
+  // A camera landing (zooms.mjs LAND) holds its subject exactly where it lands, so a story with one takes no drift either.
+  const lands = (story.scenes ?? []).some((scene) => Array.isArray(scene?.zooms) && scene.zooms.some((zoom) => zoom?.land !== undefined));
+  const drift = camera.mode === 'world' && style.drift > 0 && duration > 0 && !characterCameraOn(story) && !lands ? {
     x: wave(style.drift * unit, style.driftPeriod, duration),
     y: wave(-style.drift * 0.7 * unit, style.driftPeriod * 0.73, duration),
     scale: { ...wave(style.breathe, style.driftPeriod * 1.37, duration), centre: round(1 - style.breathe, 6) }
