@@ -108,40 +108,81 @@ function hose(length, width, seed, {taper = [0, 0], bow = -BOW} = {}) {
   return pressureStroke(cubicPoints([0, 0], [b, length / 3], [b, length * 2 / 3], [0, length], 10), width, HOSE_INK, {seed, taper, tip: 0.45, wobble: 0.12});
 }
 
-/** Draw a rubber-hose figure. */
-export function drawRubberHose(params, colors, {id, joints: j, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', gaze = false, turns = false}) {
-  const g = hoseGeometry(params);
-  const c = toonColors(colors);
-  const P = hosePen(c, id);
-  // The toon face's geometry is the rig's; the head is scaled onto the circle below.
-  const rig = stickGeometry(params);
-  const ctx = {id, g: rig, c, p: params, j, expression, static: isStatic, props, P, facing, eyeScale: 1.2};
-  const w = g.w;
-  const seed = part => `${id}:${part}`;
+/**
+ * A four-fingered cartoon glove hanging from the wrist at (0, handY): a
+ * flared cuff, a palm, three fingers showing and a thumb toward the front,
+ * three stitch lines on the back; about half the head's width.
+ */
+export function hoseGlove(handY) {
+  const ink = {fill: HOSE_PAPER, stroke: HOSE_INK, strokeWidth: 4.5};
+  const ell = (cx, cy, rx, ry, extra = {}) => el('ellipse', null, null, [], {cx: r1(cx), cy: r1(handY + cy), rx: r1(rx), ry: r1(ry), ...ink, ...extra});
+  const palmY = 40;
+  // Drawn at 1.18 about the wrist: the period glove is about half the head's width.
+  return [group([
+    ...[-17, 0, 17].map((x, i) => ell(x, palmY + 26 - Math.abs(x) * 0.25, 10, 17, {transform: `rotate(${(i - 1) * -10} ${r1(x)} ${r1(handY + palmY + 26)})`})),
+    ell(0, palmY, 30, 27),
+    // Covers the fingers' roots, so they read as one glove.
+    el('ellipse', null, null, [], {cx: 0, cy: r1(handY + palmY + 6), rx: 26, ry: 22, fill: HOSE_PAPER, stroke: 'none'}),
+    ell(31, palmY - 4, 10, 17, {transform: `rotate(-32 31 ${r1(handY + palmY - 4)})`}),
+    el('path', null, null, [], {d: [-9, 0, 9].map(x => `M${x} ${r1(handY + palmY - 12)}L${r1(x * 1.15)} ${r1(handY + palmY + 6)}`).join(''), fill: 'none', stroke: HOSE_INK, strokeWidth: 3, strokeLinecap: 'round'}),
+    // The flared cuff.
+    el('path', null, null, [], {d: `M-15 ${r1(handY - 2)}L15 ${r1(handY - 2)}L24 ${r1(handY + 16)}Q0 ${r1(handY + 23)} -24 ${r1(handY + 16)}Z`, ...ink, strokeLinejoin: 'round'})
+  ], {transform: `translate(0 ${r1(handY)}) scale(1.18) translate(0 ${r1(-handY)})`})];
+}
 
+/** A short black curved shoe at the end of a shin `sh` long, its toe toward +x. */
+export function hoseShoe(sh) {
+  return el('path', null, null, [], {d: `M-14 ${r1(sh - 14)}C14 ${r1(sh - 28)} 66 ${r1(sh - 26)} 78 ${r1(sh - 2)}C82 ${r1(sh + 8)} 72 ${r1(sh + 12)} 56 ${r1(sh + 12)}L-8 ${r1(sh + 12)}C-22 ${r1(sh + 12)} -26 ${r1(sh - 6)} -14 ${r1(sh - 14)}Z`, fill: HOSE_INK, stroke: 'none'});
+}
+
+/**
+ * The head (paper face, tufts or line-art hair, the face, headwear) and the
+ * hair behind it, each on its idle joint, in the head joint's frame (at the
+ * neck). ctx: the drawing context drawRubberHose builds.
+ */
+export function hoseHead(ctx, expressions, {gaze = false, turns = false} = {}) {
+  const {id, p: params, j, expression} = ctx;
+  const g = hoseGeometry(params);
+  const rig = ctx.g;
+  const seed = part => `${id}:${part}`;
   const t = rig.head;
   const sx = r1((HEAD_R / t.rx) * 100) / 100, sy = r1((HEAD_R / t.ry) * 100) / 100;
   const onHead = kids => group(kids, {transform: `translate(0 ${r1(g.headCy)}) scale(${sx} ${sy}) translate(0 ${r1(-t.cy)})`});
+  // Two fine curved tufts from the crown, in circle coordinates.
+  const top = g.headCy - HEAD_R;
+  const tufts = TUFTED.has(params.hair.style) && !params.headwear
+    ? [-1, 1].map(k => pressureStroke(cubicPoints([k * 8, top + 5], [k * 5, top - 20], [k * 18, top - 36], [k * 32, top - 34], 10), 7, HOSE_INK, {seed: seed(`tuft${k}`), taper: [0.1, 0.6], tip: 0.35, wobble: 0.1}))
+    : [];
+  const lineHair = TUFTED.has(params.hair.style) ? [] : covers(params) ? [] : hairFront(ctx);
 
-  // A four-fingered cartoon glove hanging from the wrist: a flared cuff, a
-  // palm, three fingers showing and a thumb toward the front, three stitch
-  // lines on the back; about half the head's width.
-  const glove = handY => {
-    const ink = {fill: HOSE_PAPER, stroke: HOSE_INK, strokeWidth: 4.5};
-    const ell = (cx, cy, rx, ry, extra = {}) => el('ellipse', null, null, [], {cx: r1(cx), cy: r1(handY + cy), rx: r1(rx), ry: r1(ry), ...ink, ...extra});
-    const palmY = 40;
-    // Drawn at 1.18 about the wrist: the period glove is about half the head's width.
-    return [group([
-      ...[-17, 0, 17].map((x, i) => ell(x, palmY + 26 - Math.abs(x) * 0.25, 10, 17, {transform: `rotate(${(i - 1) * -10} ${r1(x)} ${r1(handY + palmY + 26)})`})),
-      ell(0, palmY, 30, 27),
-      // Covers the fingers' roots, so they read as one glove.
-      el('ellipse', null, null, [], {cx: 0, cy: r1(handY + palmY + 6), rx: 26, ry: 22, fill: HOSE_PAPER, stroke: 'none'}),
-      ell(31, palmY - 4, 10, 17, {transform: `rotate(-32 31 ${r1(handY + palmY - 4)})`}),
-      el('path', null, null, [], {d: [-9, 0, 9].map(x => `M${x} ${r1(handY + palmY - 12)}L${r1(x * 1.15)} ${r1(handY + palmY + 6)}`).join(''), fill: 'none', stroke: HOSE_INK, strokeWidth: 3, strokeLinecap: 'round'}),
-      // The flared cuff.
-      el('path', null, null, [], {d: `M-15 ${r1(handY - 2)}L15 ${r1(handY - 2)}L24 ${r1(handY + 16)}Q0 ${r1(handY + 23)} -24 ${r1(handY + 16)}Z`, ...ink, strokeLinejoin: 'round'})
-    ], {transform: `translate(0 ${r1(handY)}) scale(1.18) translate(0 ${r1(-handY)})`})];
-  };
+  const faceNodes = [...new Set([expression, ...expressions])].map(name => face(ctx, name)).filter(Boolean);
+  const {jaw, features} = faceParts(ctx, gaze, () => [...faceNodes, ...glasses(ctx)]);
+  const headKids = turnJoint(ctx, j, gaze, [
+    asHead(el('ellipse', null, null, [], {cx: 0, cy: r1(g.headCy), rx: HEAD_R, ry: HEAD_R, fill: HOSE_PAPER, stroke: HOSE_INK, strokeWidth: OUTLINE})),
+    ...tufts,
+    onHead([...faceView(ctx, turns, [...jaw, ...gazeJoint(ctx, j, gaze, features)]), ...lineHair, ...backView(ctx, turns, () => backOfHead(ctx)), ...headwear(ctx)])
+  ], sx);
+  const headIdle = joint(ctx, 'headidle', 0, 0, {}, headKids);
+  const backHair = TUFTED.has(params.hair.style) || params.headwear === 'turban' ? [] : [onHead(hairBack(ctx))];
+  const backIdle = joint(ctx, 'hbidle', 0, 0, {}, backHair);
+  return {headIdle, backIdle};
+}
+
+/** The pen and drawing context drawRubberHose uses, for a part drawn on its own (hoseHead). */
+export function hoseContext(params, colors, {id, joints: j, expression = 'neutral', static: isStatic = true, props = null, facing = 'right'}) {
+  const c = toonColors(colors);
+  return {id, g: stickGeometry(params), c, p: params, j, expression, static: isStatic, props, P: hosePen(c, id), facing, eyeScale: 1.2};
+}
+
+/** Draw a rubber-hose figure. */
+export function drawRubberHose(params, colors, {id, joints: j, expression = 'neutral', expressions = [expression], static: isStatic = false, props = null, facing = 'right', gaze = false, turns = false}) {
+  const g = hoseGeometry(params);
+  // The toon face's geometry is the rig's; the head is scaled onto the circle (hoseHead).
+  const ctx = hoseContext(params, colors, {id, joints: j, expression, static: isStatic, props, facing});
+  const rig = ctx.g;
+  const w = g.w;
+  const seed = part => `${id}:${part}`;
+  const glove = hoseGlove;
 
   const arm = side => {
     const s = side === 'l' ? 'L' : 'R';
@@ -163,30 +204,13 @@ export function drawRubberHose(params, colors, {id, joints: j, expression = 'neu
   const leg = side => {
     const s = side === 'l' ? 'L' : 'R';
     // A short black curved shoe, toward the front (drawn mirrored, as the stick figure's foot).
-    const sh = g.shin;
-    const shoe = el('path', null, null, [], {d: `M-14 ${r1(sh - 14)}C14 ${r1(sh - 28)} 66 ${r1(sh - 26)} 78 ${r1(sh - 2)}C82 ${r1(sh + 8)} 72 ${r1(sh + 12)} 56 ${r1(sh + 12)}L-8 ${r1(sh + 12)}C-22 ${r1(sh + 12)} -26 ${r1(sh - 6)} -14 ${r1(sh - 14)}Z`, fill: HOSE_INK, stroke: 'none'});
+    const shoe = hoseShoe(g.shin);
     const shin = joint(ctx, `shin-${side}`, 0, g.thigh, {rotation: j[`shin${s}`]}, [hose(g.shin - 4, w, seed(`shin-${side}`), {bow: BOW * 0.6}), group([shoe], {transform: 'scale(-1 1)'})]);
     return joint(ctx, `leg-${side}`, side === 'l' ? -g.legX : g.legX, g.hipY, {rotation: j[`leg${s}`], scaleY: j.legScale}, [shin, hose(g.thigh, w, seed(`leg-${side}`), {bow: BOW * 0.6})], {mirror: side === 'r'});
   };
 
-  // Two fine curved tufts from the crown, in circle coordinates.
-  const top = g.headCy - HEAD_R;
-  const tufts = TUFTED.has(params.hair.style) && !params.headwear
-    ? [-1, 1].map(k => pressureStroke(cubicPoints([k * 8, top + 5], [k * 5, top - 20], [k * 18, top - 36], [k * 32, top - 34], 10), 7, HOSE_INK, {seed: seed(`tuft${k}`), taper: [0.1, 0.6], tip: 0.35, wobble: 0.1}))
-    : [];
-  const lineHair = TUFTED.has(params.hair.style) ? [] : covers(params) ? [] : hairFront(ctx);
-
-  const faceNodes = [...new Set([expression, ...expressions])].map(name => face(ctx, name)).filter(Boolean);
-  const {jaw, features} = faceParts(ctx, gaze, () => [...faceNodes, ...glasses(ctx)]);
-  const headKids = turnJoint(ctx, j, gaze, [
-    asHead(el('ellipse', null, null, [], {cx: 0, cy: r1(g.headCy), rx: HEAD_R, ry: HEAD_R, fill: HOSE_PAPER, stroke: HOSE_INK, strokeWidth: OUTLINE})),
-    ...tufts,
-    onHead([...faceView(ctx, turns, [...jaw, ...gazeJoint(ctx, j, gaze, features)]), ...lineHair, ...backView(ctx, turns, () => backOfHead(ctx)), ...headwear(ctx)])
-  ], sx);
+  const {headIdle, backIdle} = hoseHead(ctx, expressions, {gaze, turns});
   const tilt = {rotation: j.head, y: j.headY};
-  const headIdle = joint(ctx, 'headidle', 0, 0, {}, headKids);
-  const backHair = TUFTED.has(params.hair.style) || params.headwear === 'turban' ? [] : [onHead(hairBack(ctx))];
-  const backIdle = joint(ctx, 'hbidle', 0, 0, {}, backHair);
   const torsoKids = [
     joint(ctx, 'hb', 0, g.neckY, tilt, [backIdle]),
     // The short neck and the spine: one stroke from under the head to the hips.
