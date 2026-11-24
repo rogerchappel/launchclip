@@ -10,6 +10,7 @@ import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {hoseGeometry} from '@launchclip/core/characters/style-rubber-hose.mjs';
 import {PROTOTYPE, prototypeCast} from '@launchclip/core/characters/rig-frame-draw.mjs';
 import {rigFrame} from '@launchclip/core/characters/rig-frame.mjs';
+import {boneDrift, crossings, handCorners, jerk} from '@launchclip/core/characters/rig-metrics.mjs';
 
 const FPS = 30, DURATION = 8;
 const THROW = [3.4, 5.4];
@@ -69,12 +70,11 @@ export function perFrameFrames(scene = PROTOTYPE) {
 }
 
 // ---------------------------------------------------------------------------
-// Measures
+// Measures: the shipped ones (kit/core/characters/rig-metrics.mjs) over
+// {joints} frames, plus two only this comparison needs (today has no planted
+// flags, so its feet are judged by height; and the throw's bow).
 
-const SEGMENTS = [['hipL', 'kneeL'], ['kneeL', 'ankleL'], ['hipR', 'kneeR'], ['kneeR', 'ankleR'], ['shoulderL', 'elbowL'], ['elbowL', 'wristL'], ['shoulderR', 'elbowR'], ['elbowR', 'wristR']];
-const angle = (a, b) => Math.atan2(b[0] - a[0], b[1] - a[1]) / RAD;
-const unwrap = list => list.reduce((out, a) => { const prev = out.at(-1); out.push(prev === undefined ? a : prev + ((a - prev + 540) % 360) - 180); return out; }, []);
-const rms = xs => Math.sqrt(xs.reduce((s, x) => s + x * x, 0) / Math.max(1, xs.length));
+const wrap = frames => frames.map(joints => ({joints}));
 
 /**
  * Foot slide: horizontal travel of an ankle between frames while it is on the
@@ -92,36 +92,17 @@ export function footSlide(frames) {
   return total;
 }
 
-/** Joint jerk: RMS third derivative of every segment's angle (deg/s³), and per unit of motion (÷ RMS angular speed). */
-export function jerk(frames) {
-  const j3 = [], v1 = [];
-  for (const [a, b] of SEGMENTS) {
-    const th = unwrap(frames.map(f => angle(f[a], f[b])));
-    for (let i = 3; i < th.length; i++) j3.push((th[i] - 3 * th[i - 1] + 3 * th[i - 2] - th[i - 3]) * FPS ** 3);
-    for (let i = 1; i < th.length; i++) v1.push((th[i] - th[i - 1]) * FPS);
-  }
-  return {rms: rms(j3), perMotion: rms(j3) / Math.max(1e-9, rms(v1))};
-}
-
 /**
- * The throwing hand's path in the throw window: how far it bows off the
- * straight line from where it starts to its highest point… measured as the
- * sagitta of the whole path over its chord (0: a straight line), and the
- * worst turn between consecutive frames (a corner shows as a spike).
+ * The throwing hand's path in the throw window: its travel, how far it bows
+ * off the line between its two farthest points (sagitta / span; 0: a straight
+ * line), and its corners (rig-metrics handCorners) in that window.
  */
 export function handArc(frames, wrist) {
-  const pts = frames.slice(THROW[0] * FPS, THROW[1] * FPS + 1).map(f => f[wrist]);
-  let length = 0, maxTurn = 0, corners = 0;
+  const window = frames.slice(THROW[0] * FPS, THROW[1] * FPS + 1);
+  const pts = window.map(f => f[wrist]);
+  let length = 0;
   for (let i = 1; i < pts.length; i++) length += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
-  for (let i = 2; i < pts.length; i++) {
-    const a = angle(pts[i - 2], pts[i - 1]), b = angle(pts[i - 1], pts[i]);
-    const moving = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]) > 2 && Math.hypot(pts[i - 1][0] - pts[i - 2][0], pts[i - 1][1] - pts[i - 2][1]) > 2;
-    if (!moving) continue;
-    const turn = Math.abs(((b - a + 540) % 360) - 180);
-    maxTurn = Math.max(maxTurn, turn);
-    if (turn > 45) corners++;
-  }
-  // The span of the path: its farthest two points, and how far it bows off that line.
+  const {maxTurn, count: corners} = handCorners(wrap(window), [wrist]);
   let far = [pts[0], pts[0]], best = 0;
   for (const p of pts) for (const q of pts) { const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (d > best) { best = d; far = [p, q]; } }
   const [p, q] = far, n = [-(q[1] - p[1]) / (best || 1), (q[0] - p[0]) / (best || 1)];
@@ -129,39 +110,10 @@ export function handArc(frames, wrist) {
   return {travel: length, span: best, bow: best ? sag / best : 0, maxTurn, corners};
 }
 
-const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-const intersects = (p1, p2, q1, q2) => cross(p1, p2, q1) * cross(p1, p2, q2) < 0 && cross(q1, q2, p1) * cross(q1, q2, p2) < 0;
-
-/** Frames where two limb segments cross (segments sharing a joint never count). → {legs, arms, armLeg} */
-export function crossings(frames) {
-  const out = {legs: 0, arms: 0, armLeg: 0};
-  for (const f of frames) {
-    const hit = {legs: false, arms: false, armLeg: false};
-    for (let i = 0; i < SEGMENTS.length; i++) for (let j = i + 1; j < SEGMENTS.length; j++) {
-      const [a, b] = SEGMENTS[i], [c, d] = SEGMENTS[j];
-      if (new Set([a, b, c, d]).size < 4) continue;
-      if (Math.hypot(f[a][0] - f[c][0], f[a][1] - f[c][1]) < 1e-6) continue; // two legs from one hip point
-      if (!intersects(f[a], f[b], f[c], f[d])) continue;
-      const legI = i < 4, legJ = j < 4;
-      hit[legI && legJ ? 'legs' : !legI && !legJ ? 'arms' : 'armLeg'] = true;
-    }
-    for (const k of Object.keys(out)) if (hit[k]) out[k]++;
-  }
-  return out;
-}
-
-/** Bone lengths: the largest change of any segment's length over the clip (px; 0 = rigid bones). */
-export function boneDrift(frames) {
-  return Math.max(...SEGMENTS.map(([a, b]) => {
-    const ls = frames.map(f => Math.hypot(f[b][0] - f[a][0], f[b][1] - f[a][1]));
-    return Math.max(...ls) - Math.min(...ls);
-  }));
-}
-
 export function measure(frames) {
   const travel = k => frames.slice(THROW[0] * FPS, THROW[1] * FPS + 1).reduce((s, f, i, all) => (i ? s + Math.hypot(f[k][0] - all[i - 1][k][0], f[k][1] - all[i - 1][k][1]) : 0), 0);
   const wrist = travel('wristL') >= travel('wristR') ? 'wristL' : 'wristR';
-  return {footSlide: footSlide(frames), jerk: jerk(frames), hand: {wrist, ...handArc(frames, wrist)}, crossings: crossings(frames), boneDrift: boneDrift(frames)};
+  return {footSlide: footSlide(frames), jerk: jerk(wrap(frames), FPS), hand: {wrist, ...handArc(frames, wrist)}, crossings: crossings(wrap(frames)), boneDrift: boneDrift(wrap(frames)).px};
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -177,7 +129,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     ['throw: hand path bow (sagitta / span)', r(today.hand.bow * 100) / 100, r(perFrame.hand.bow * 100) / 100],
     ['throw: worst turn between frames (deg)', r(today.hand.maxTurn), r(perFrame.hand.maxTurn)],
     ['throw: corners (> 45° turn in a frame)', today.hand.corners, perFrame.hand.corners],
-    ['frames with legs crossing', today.crossings.legs, perFrame.crossings.legs],
+    ['frames with legs crossing (hips apart)', today.crossings.legs, perFrame.crossings.legs],
     ['frames with arms crossing (arm/arm, arm/leg)', `${today.crossings.arms}, ${today.crossings.armLeg}`, `${perFrame.crossings.arms}, ${perFrame.crossings.armLeg}`],
     ['bone length drift (px)', r(today.boneDrift), r(perFrame.boneDrift)]
   ];
