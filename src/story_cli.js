@@ -199,6 +199,7 @@ export async function runStoryCommand(action, storyPath, flags = {}, adapters = 
       const { castGate } = await import("./cast.js");
       const gate = castGate(resolvedStory); // the map's cast cues are checked with the direction above
       errors.push(...gate.findings.map((finding) => `cast: ${finding.detail}`).filter((entry) => !errors.includes(entry)));
+      validation.warnings.push(...(gate.warnings ?? []).map((warning) => `cast: ${warning}`));
     }
     if (resolvedStory) for (const warning of subjectDensityWarnings(resolvedStory, { profile: direction.profileDoc })) if (!validation.warnings.includes(warning)) validation.warnings.push(warning);
     // The app's constraints (src/constraints.js): CONSTRAINTS.json beside the

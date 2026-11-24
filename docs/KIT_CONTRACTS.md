@@ -5138,6 +5138,34 @@ is an illustrated character: it takes no rig params, acts only in
 provider's voice id (a Kokoro id under Kokoro, an ElevenLabs voice id under
 ElevenLabs), so each character in a dialogue speaks in its own voice.
 
+**The per-frame rig (experimental, opt-in).** `story.cast.rig` is `"ops"`
+(the op list; the default, unchanged) or `"frame"`; a cast-scene's
+`params.rig` (same values) overrides it for that scene. With `"frame"`, the
+cast-scene directs and plans its contacts as always, then
+`compileRigScene` (`characters/rig-compile.mjs`) compiles the actors into a
+`launchclip.rig-scene.v1` plan on `content.rigScene` (rig-scene.mjs draws
+it): each state's pose becomes body keys (lean toward the facing, crouch
+from the body drop, the weight following the lean, the head tilted toward
+what it looks at) reached `tween` seconds after the state's time, and hand
+targets by forward kinematics of the pose's arm angles (shoulder-relative,
+along the facing; an arm within 5° of the stand pose is left to the rig's
+own swing); gestures loop as hand or crouch keys while the pose holds;
+walks and contact step-ins become `walks`, facing changes `facings`; a
+contact action's phases become hand keys (the contact lands on the cue's
+time) and, for a kick, foot keys (hip-relative); a hand key on a prop
+carries `grip` from the contact events' grip to release; a prop's path is
+`holder` while someone owns it (a handover passes when the giver lets go,
+after both hands have held it) and the op list's positions, sampled at
+15 Hz, while it is free; squashes (gag cues, impacts, landings) become
+`squash`, and a stagger adds lean and weight-shift keys on the target.
+Expressions and mouth visemes keep today's timing. The view draws an empty
+`S-rig` layer where the actors stand and leaves out their parts and the
+contact props; the timeline leaves out their ops. A scene that cannot play
+per frame keeps the op list and says why on `content.rigFallback` (a
+drawing style outside `RIG_FRAME_STYLES`, a seated set, an animal or
+object, a mobility aid, a held phone, or a character-cameo); `castGate`
+returns those as `warnings` and `story validate` prints them.
+
 ### Saved characters (`launchclip.character.v1`)
 
 One designed character as a file, used by the CLI, by agents (the

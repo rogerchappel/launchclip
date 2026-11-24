@@ -265,5 +265,7 @@ export function castGate(story, { direction = null } = {}) {
     }
   }
   const characters = [...new Set(models.flatMap((model) => model.content.actors.map((actor) => actor.id)))];
-  return { status: findings.length ? "failed" : "passed", findings, characters };
+  // A scene that asked for the per-frame rig but plays on the op list (kit/core/characters/rig-compile.mjs rigFallback).
+  const warnings = models.filter((model) => model.content.rigFallback).map((model) => `${model.id}: the per-frame rig falls back to the op list: ${model.content.rigFallback}`);
+  return { status: findings.length ? "failed" : "passed", findings, characters, ...(warnings.length ? { warnings } : {}) };
 }

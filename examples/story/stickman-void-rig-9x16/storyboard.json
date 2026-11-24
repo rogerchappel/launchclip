@@ -1,0 +1,182 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "Push or pull (stickman test: classic black and white on the void stage)",
+  "notes": "No-AI end-to-end test of the classic stick figure on the void stage at night: a push that barely moves the block, a strain squash, a pull that hauls it in, and camera landings.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 8,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#000000",
+      "primary": "#d7372c",
+      "accent": "#d7372c",
+      "ink": "#111111",
+      "paper": "#f6f3ee"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "camera": {
+    "mode": "world"
+  },
+  "cast": {
+    "style": "stick-classic",
+    "rig": "frame",
+    "characters": [
+      {
+        "id": "sam",
+        "position": "left"
+      },
+      {
+        "id": "maya",
+        "position": "right"
+      }
+    ]
+  },
+  "audio": {
+    "words": "NARRATION.json",
+    "narration": {
+      "provider": "kokoro",
+      "voice": "am_michael",
+      "lines": [
+        {
+          "speaker": "narrator",
+          "text": "When something will not move, most people push harder."
+        },
+        {
+          "speaker": "narrator",
+          "text": "And harder."
+        },
+        {
+          "speaker": "narrator",
+          "text": "Try pulling instead."
+        }
+      ]
+    }
+  },
+  "scenes": [
+    {
+      "id": "stage",
+      "module": "cast-scene",
+      "start": 0,
+      "end": 8,
+      "params": {
+        "set": "standing",
+        "world": {
+          "kind": "void-stage",
+          "time": "night"
+        },
+        "objects": [
+          {
+            "id": "block",
+            "prop": "box",
+            "at": 0.5
+          }
+        ],
+        "cast": [
+          {
+            "id": "sam",
+            "pose": "stand",
+            "expression": "focused",
+            "cues": [
+              {
+                "at": "word:something",
+                "action": "walk-to",
+                "target": {
+                  "prop": "block"
+                }
+              },
+              {
+                "at": "word:push",
+                "action": "push",
+                "target": {
+                  "prop": "block"
+                },
+                "expression": "frustrated"
+              },
+              {
+                "at": "word:harder.#2",
+                "action": "push",
+                "target": {
+                  "prop": "block"
+                },
+                "expression": "angry",
+                "squash": {
+                  "amount": -0.25,
+                  "hold": 0.35,
+                  "recover": 0.4
+                }
+              },
+              {
+                "at": "word:Try",
+                "pose": "shrug",
+                "expression": "confused"
+              }
+            ]
+          },
+          {
+            "id": "maya",
+            "pose": "stand",
+            "expression": "neutral",
+            "cues": [
+              {
+                "at": "word:harder.#2",
+                "action": "walk-to",
+                "target": {
+                  "prop": "block"
+                }
+              },
+              {
+                "at": "word:instead.+0.4",
+                "action": "pull",
+                "target": {
+                  "prop": "block"
+                },
+                "expression": "happy"
+              }
+            ]
+          }
+        ]
+      },
+      "zooms": [
+        {
+          "at": 0.05,
+          "land": "sam",
+          "move": "reveal",
+          "purpose": "find Sam facing the block that will not move"
+        },
+        {
+          "at": "word:push",
+          "land": "sam",
+          "move": "push",
+          "shot": "close",
+          "purpose": "land on Sam straining as the pushing starts"
+        },
+        {
+          "at": "word:Try",
+          "land": "maya",
+          "move": "reveal",
+          "shot": "medium",
+          "purpose": "travel across to Maya for the answer"
+        }
+      ]
+    }
+  ],
+  "ending": {
+    "final": "hold"
+  },
+  "overlays": [
+    {
+      "type": "captions",
+      "style": "word-highlight"
+    }
+  ]
+}
