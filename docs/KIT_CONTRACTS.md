@@ -4559,7 +4559,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
 
 | Module | Params | Events | Notes |
 | --- | --- | --- | --- |
-| `cast-scene` | `set` desk-laptop/phone/meeting/screen/kitchen-counter/sofa/podium/stage/car/park-bench/video-call/standing-desk, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `shot?` wide/medium/close, `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?, action?, target?, shot?}], says?: [{from, to, words?: [[start, end, text?]]}], holds?: phone}`, `light?` `{dir?, color?, intensity?}` | `<character>-cue-<i>` | Fills the frame and fades in place. Framed by `shot` (see "Shot framing"). Seated sets (desk-laptop, meeting, sofa, car, park-bench, video-call) seat the cast and refuse `walk`; standing sets refuse `sit` (except for a wheelchair user). In `podium` the first character speaks at the lectern; in `car` the first drives; `video-call` gives each character a tile (a row in landscape, a column in portrait) and masks everything outside the tiles. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
+| `cast-scene` | `set` desk-laptop/phone/meeting/screen/kitchen-counter/sofa/podium/stage/car/park-bench/video-call/standing-desk, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `shot?` wide/medium/close, `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?, action?, target?, shot?, squash?}], says?: [{from, to, words?: [[start, end, text?]]}], holds?: phone or a hand prop}`, `objects?` `[{id, prop, at?}]`, `light?` `{dir?, color?, intensity?}` | `<character>-cue-<i>` | Fills the frame and fades in place. Framed by `shot` (see "Shot framing"). Seated sets (desk-laptop, meeting, sofa, car, park-bench, video-call) seat the cast and refuse `walk`; standing sets refuse `sit` (except for a wheelchair user). In `podium` the first character speaks at the lectern; in `car` the first drives; `video-call` gives each character a tile (a row in landscape, a column in portrait) and masks everything outside the tiles. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
 | `character-cameo` | `character`, `shot?` wide/medium/close, `pose?`, `expression?`, `facing?`, `cues?`, `says?`, `side` left/right, `card?` `{kicker? ≤ 32, title ≤ 64, body? ≤ 140}`, `panel?`, `light?` | `<character>-cue-<i>` | One character beside a card (landscape: a column; portrait: under the card), or alone on a panel. At medium or close its head sits at the top of its area and its body runs off the frame's bottom edge (no floor needed). `sit` is refused. Placed in the safe zone narrowed to the brand frame's safe area (`createBase(..., {frameSafe: true})`); `rect?` (guided and bespoke tiers) places it inside that |
 | `sprite-scene` | `plate` assets/ image, `move?` push-in/pull-out/pan-left/pan-right/none, `zoom?` 0.02–0.15, `cast` 1–3 `{id, art?, pose?, cues?: [{at, pose}], says?, talk?, blink?, position?, x?, height?, aspect?, facing?, depth?}`, `props?` 0–4 `{src, box, at?, from?}`, `card?` `{name ≤ 24, role? ≤ 32, at?, for?}`, `enter?`/`exit?` fade/cut | `cast`, `<character>-cue-<i>`, `prop-<i>`, `card` | Illustrated characters (`kit/core/catalog-sprites.mjs`): a painted plate on a slow move, each character a sprite folder (`<art>/<pose>.png`, `-talk.png` mouth open, `-blink.png` eyes closed; same size and framing). One sprite shows per character at a time: pose cues swap it, its spoken words show the talk sprite (a jaw bounce without one), blinks fall between words, a slow breath and parallax against the plate. `art` defaults to the story cast entry's. Opens on a cut when it is the video's first scene. Sprite casts are drawn by `launchclip cast sprites` (`src/sprite_cast.js`) |
 
@@ -4899,6 +4899,77 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
     nervous character lands early and holds), `anticipation`, `settle`,
     `lag`, the rates of `blinks`, `darts` and `shifts`, and `breath` and
     `breathRate`. Every value of `default` is 1.
+- **Contact acting** (`contact.mjs`, `props.mjs`; cast-scene). Physical
+  comedy with cause and effect. The contact actions are `push`, `pull`,
+  `hit`, `catch`, `lift`, `drop`, `throw` and `give`; a cue's `at` is the
+  **contact** (put it on the word the hit lands on), and the action plays
+  as a timed chain around it: anticipation (a wind-up leaning against the
+  direction, `power2.out`) → contact (a fast `power2.in`/`power3.in`
+  strike arriving on `at`, then a held frame) → follow-through → recovery
+  (`sine.inOut`, back to the cue's pose, else the pose it interrupted).
+  Phase lengths are `CONTACT` (e.g. hit: 0.28 s wind-up, 0.08 s strike,
+  0.06 s hold). No other cue of that character may fall inside the chain,
+  and it must fit inside the scene. Each phase is a state with its own
+  `tween`/`ease`, `arms` (two-bone reach to a point, `aim.mjs reachArm`:
+  bones keep their lengths, the elbow bends out from the body) and `body`
+  (lean, and a crouch for something low: the legs shorten with the body
+  dropped onto them, feet on the floor). A contact out of arm's length,
+  even bent over, is an error naming the gap in px: walk-to the target
+  first (walk-to a character now stops at arm's length, walk-to a scene
+  prop right beside it) or change positions; an arm is never stretched.
+  - **What it meets reacts.** A struck or pushed character staggers away
+    (pulled: toward) and tips on its gag layer (`<cid>-gag`, about its
+    feet), a hit also squashes it, and it changes face to `surprised` on
+    the contact. A prop squashes about its base on contact or landing and
+    rebounds past rest, a push slides it, a pull hauls it short of the
+    puller, a hit hops it; a `paper-stack`'s five sheets (`<id>-l0…4`) lag
+    and spring back; a `ball` bounces; a heavy `box` strains before a lift.
+  - **Props** (`HAND_PROPS`: `box`, `paper-stack` (both hands), `ball`,
+    `cup`, `sign`, `coin` (the facing hand)) are drawn on the scene, not in
+    a hand: `<scene>-obj-<id>` (x, y, rotation in px), its scale, and
+    `<scene>-obj-<id>-sq` (squash). Hands reach the prop's grips
+    (`gripPoints`), so hand and prop share one coordinate source. A prop
+    is held from the start (`holds: "box"`, id = the prop's name; `holds:
+    "phone"` keeps the in-hand phone) or stands on the floor
+    (`params.objects: [{id, prop, at?: 0–1 across the set}]` ≤ 4; targets
+    name it `{prop: id}`). One owner at a time: a holder's every state
+    keeps its hands on it (walks carry it along; gestures sit out on the
+    holding arm); `give` goes giver alone → both hands on it from `at`
+    (0.3 s) → receiver alone; a `throw` to a character is a pass it
+    catches (a `catch` cue on the receiver times the throw to land on it),
+    otherwise it arcs (one turn) to the point and lands.
+  - **Gag squash.** `squash: {amount, hold?, recover?}` on any cue
+    (cast-scene and cameo): a planned whole-body flatten (`amount` > 0,
+    up to 0.8) or stretch (< 0, down to −0.6) on the `<cid>-gag` wrapper:
+    in over 0.08 s (`power3.out`), held (default 0.25 s), then a rebound
+    past rest and a settle (`recover`, default 0.4 s). The rig's joints and
+    bone lengths are untouched; `MOVE.squash` (the small dip before an
+    ordinary move) is unchanged.
+  - **Contact events.** `contactEvents(model)` (`catalog-characters.mjs`)
+    → `[{at, actor, action, kind, target}]` in story seconds; `kind` is
+    `impact` (push, hit), `grip` (pull, lift, catch, a handover's
+    receiver), `release` (throw, drop, the giver, a pull's end) or `land`;
+    each is also a timeline event `<character>-<kind>-<n>`. Sound and VFX
+    (`hit-spark`, `impact-frame`) spot onto these.
+
+  Both renderers draw it from the one op list (x, y, rotation, scaleX,
+  scaleY on the wrappers above). A storyboard:
+
+  ```json
+  {"id": "office-gag", "module": "cast-scene", "start": 0, "end": 7,
+   "params": {"set": "standing",
+     "objects": [{"id": "reports", "prop": "paper-stack", "at": 0.5}],
+     "cast": [
+       {"id": "maya", "holds": "box", "cues": [
+         {"at": 0.3, "action": "walk-to", "target": {"character": "theo"}},
+         {"at": "word:here", "action": "give", "target": {"character": "theo"}},
+         {"at": 4.5, "action": "hit", "target": {"prop": "reports"}, "expression": "angry"}]},
+       {"id": "theo", "cues": [
+         {"at": 3.2, "expression": "surprised", "squash": {"amount": 0.45, "hold": 0.3, "recover": 0.5}},
+         {"at": 4.6, "action": "drop"}]}]}}
+  ```
+
+  Direction-map cast cues take `action`, `target` and `squash` too.
 - `cues.mjs`: story casts, direction-map cues and the consistency check.
   A character scene may name a character by place: `"@1"` is the first
   story-cast character, `"@2"` the second (`CAST_REF` in story.mjs;
