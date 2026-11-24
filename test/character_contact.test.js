@@ -7,7 +7,7 @@ import { frameState } from "@launchclip/core/catalog-b-view.mjs";
 import { charactersTimeline, charactersView, contactEvents } from "@launchclip/core/catalog-characters.mjs";
 import { armReach, handAt, reachArm, shoulderAt } from "@launchclip/core/characters/aim.mjs";
 import { CONTACT_ACTIONS } from "@launchclip/core/characters/actions.mjs";
-import { CONTACT, CONTACT_KINDS, squashError, squashScales } from "@launchclip/core/characters/contact.mjs";
+import { CONTACT, CONTACT_KINDS, STRIKE_LEAN, squashError, squashScales } from "@launchclip/core/characters/contact.mjs";
 import { HAND_PROP_NAMES, gripPoints } from "@launchclip/core/characters/props.mjs";
 import { sceneCastCues, validateCastCues } from "@launchclip/core/characters/cues.mjs";
 import { resolveModule } from "@launchclip/core/modules.mjs";
@@ -65,7 +65,7 @@ test("hit: a wind-up, a fast strike landing on at, a follow-through; the target 
 });
 
 test("a contact out of arm's length is an error that says to move, never a stretched arm", () => {
-  assert.throws(() => resolve({ cast: [{ id: "maya", cues: [{ at: 3, action: "push", target: { character: "theo" } }] }, { id: "theo" }] }), /push at 3 s: maya's hand cannot reach theo: it is \d+ px past arm's length .*walk-to/);
+  assert.throws(() => resolve({ cast: [{ id: "maya", cues: [{ at: 3, action: "push", target: { character: "theo" } }] }, { id: "theo" }] }), /push at 3 s: maya's hand cannot reach theo, even with a step in \(bones never stretch\); walk-to/);
   assert.throws(() => resolve({ cast: [{ id: "maya", cues: [walkTo({ character: "theo" }), { at: 2.6, action: "hit", target: { character: "theo" } }, { at: 2.9, action: "gaze-at", target: "left" }] }, { id: "theo" }] }), /hit at 2.6 s plays from .* cue at 2.9 s falls inside it/);
   // A cue that only changes the face lands inside the chain and keeps the phase's arms.
   const face = resolve({ cast: [{ id: "maya", cues: [walkTo({ character: "theo" }), { at: 2.6, action: "hit", target: { character: "theo" } }, { at: 2.63, expression: "angry" }] }, { id: "theo" }] });
@@ -133,6 +133,10 @@ test("throw to a character is a pass caught on time; a catch cue times the throw
   const events = contactEvents(caught);
   assert.equal(events.find((e) => e.kind === "grip").at, 2.5, "the ball reaches theo's hands on the catch cue");
   assert.ok(events.find((e) => e.kind === "release").at < 2.5);
+  // Each phase names the action it plays (the acting gate reads it): the catch makes maya throw.
+  const [mayaQ, theoQ] = caught.content.actors;
+  assert.ok(mayaQ.states.some((s) => s.acts === "throw") && theoQ.states.some((s) => s.acts === "catch"));
+  assert.equal(theoQ.states.find((s) => s.acts === "catch").facing, "left", "theo, on the right, faces the throw");
   assert.throws(() => resolve({ cast: [{ id: "maya", cues: [{ at: 2, action: "throw" }] }, { id: "theo" }] }), /throw at 2 s: maya holds nothing/);
 });
 
@@ -184,6 +188,27 @@ test("a pushed prop stops short of whoever stands in its way, and later actions 
   assert.ok(Math.abs(theo.x + arrived.x - block(5.5)) < Math.abs(theo.x - block(0)), "the walk aims at the block where it was left");
   assert.equal(theo.states.find((s) => s.contact && s.time < 7.2).facing, "left");
   assert.ok(block(8.5) > block(7), "the pull hauls it toward theo");
+});
+
+test("a strike never leans past STRIKE_LEAN: a prop on the floor is kicked, and one a stride away is stepped to", () => {
+  const model = resolve({ objects: [{ id: "crate", prop: "box", at: 0.5 }], cast: [{ id: "maya", cues: [walkTo({ prop: "crate" }), { at: 3, action: "hit", target: { prop: "crate" } }, { at: 4.5, action: "push", target: { prop: "crate" } }, { at: 6, action: "push", target: { prop: "crate" } }] }, { id: "theo", position: "left" }] });
+  const maya = model.content.actors.find((a) => a.id === "maya");
+  const phases = maya.states.filter((s) => s.contact);
+  assert.ok(phases.every((s) => Math.abs(s.body?.lean ?? 0) <= STRIKE_LEAN), "no dive");
+  const kick = phases.find((s) => Math.abs(s.time - (3 - CONTACT.hit.strike)) < 1e-6);
+  const leg = maya.states[0].facing === "left" || kick.facing === "left" ? "legL" : "legR";
+  assert.ok(kick.body[leg] > 10 && !kick.arms, "the strike is the facing leg's, not a hand's");
+  // The crate slid away after the first push: the second steps in one stride before winding up.
+  const step = maya.states.find((s) => s.walk && s.time > 5);
+  assert.ok(step && Math.abs(step.walk.to - step.walk.from) > 0, "a step in");
+  assert.equal(maya.states.at(-1).x, step.walk.to, "and stays where it stepped");
+  assert.throws(() => resolve({ cast: [{ id: "maya", cues: [{ at: 3, action: "hit", target: { character: "theo" } }] }, { id: "theo" }] }), /even with a step in/);
+});
+
+test("walks and what they carry ease in and out, never linear", () => {
+  const model = resolve({ cast: [{ id: "maya", holds: "box", cues: [walkTo({ character: "theo" })] }, { id: "theo" }] });
+  const moves = charactersTimeline(model).filter((op) => op.type === "tween" && /-(walk|obj-box)$/.test(op.target) && ("x" in (op.to ?? {})));
+  assert.ok(moves.length >= 2 && moves.every((op) => op.ease !== "none"));
 });
 
 test("a throw cue and the catch cue it answers are one throw; a catch says it drives the thrower's throw", () => {

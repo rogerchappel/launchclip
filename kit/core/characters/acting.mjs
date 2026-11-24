@@ -28,6 +28,8 @@
 import {set, tw} from '../catalog-b-view.mjs';
 import {HELD_AIDS, poseJoints} from './rig.mjs';
 
+// A walk eases in and out (slow, then at pace, then slow) rather than starting and stopping dead; what it carries goes with it on the same curve.
+export const WALK_EASE = 'sine.inOut';
 export const ACTING = Object.freeze({turn: 0.12, poseTween: 0.45, poseEase: 'power2.inOut', faceFade: 0.16, breath: 1.7, breathDepth: 0.012, sway: 2.6, swayDeg: 1.4, blinkEvery: 3.4, blinkDown: 0.06, blinkUp: 0.09,
   // Idle arms (styles whose geometry sets idleArms): a slow swing at the shoulder and a give at the elbow, and a slight sway of the body.
   armSway: 2.9, armDeg: 3, foreSway: 2.3, foreDeg: 7, bodySway: 3.7, bodyDeg: 0.9,
@@ -336,7 +338,7 @@ export function actingOps(ops, actor) {
   // Walks: the character crosses the floor on its own wrapper, at a steady pace.
   if (actor.walks) {
     set(ops, `${cid}-walk`, start, {x: states[0].x ?? 0});
-    for (const state of states) if (state.walk) tw(ops, `${cid}-walk`, rt(state.time), state.walk.duration, 'none', {x: state.walk.from}, {x: state.walk.to});
+    for (const state of states) if (state.walk) tw(ops, `${cid}-walk`, rt(state.time), state.walk.duration, WALK_EASE, {x: state.walk.from}, {x: state.walk.to});
   }
   // Faces: the first expression shows; each change crossfades.
   for (const name of actor.expressions) set(ops, `${cid}-face-${name}`, start, {opacity: name === states[0].expression ? 1 : 0});

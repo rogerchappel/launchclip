@@ -41,7 +41,7 @@
 // Imports only sibling kit/core files.
 
 import {set, tw} from '../catalog-b-view.mjs';
-import {ACTING} from './acting.mjs';
+import {ACTING, WALK_EASE} from './acting.mjs';
 import {CONTACT_ACTIONS, targetPoint} from './actions.mjs';
 import {armReach, reachArm, shoulderAt} from './aim.mjs';
 import {HAND_PROPS, gripPoints} from './props.mjs';
@@ -62,6 +62,12 @@ export const CONTACT = Object.freeze({
 
 // The gag squash cue: entry seconds, default hold and recovery, the amount's range.
 export const GAG = Object.freeze({entry: 0.08, hold: 0.25, recover: 0.4, min: -0.6, max: 0.8});
+
+// The most a strike leans in (degrees): further reads as a dive. Something lower is kicked; a pull may lean back further.
+export const STRIKE_LEAN = 35;
+// A step in to reach (rig units at most, seconds).
+export const STEP = Object.freeze({reach: 200, time: 0.3});
+const PULL_LEAN = 50;
 
 const rt = v => Math.round(v * 10000) / 10000;
 const r2 = v => Math.round(v * 100) / 100;
@@ -193,9 +199,9 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
    * leans in toward sigma, from `from` degrees, preferring a lean to a deep
    * crouch. → {body, arms, short: 0} | {short (px still out of reach)}
    */
-  const bend = (actor, state, hands, sigma, from = 0) => {
+  const bend = (actor, state, hands, sigma, from = 0, most = 85) => {
     let best = null;
-    for (let k = 1; k >= 0.44 - 1e-9; k -= 0.04) for (let lean = from; lean <= 85; lean += 5) {
+    for (let k = 1; k >= 0.44 - 1e-9; k -= 0.04) for (let lean = from; lean <= most; lean += 5) {
       const cost = (1 - k) * 120 + lean;
       if (best && cost >= best.cost) continue;
       const body = k > 0.999 ? {lean: r2(sigma * lean)} : {legScale: r2(k), bodyY: r2(-actor.geometry.hipY * (1 - k)), lean: r2(sigma * lean)};
@@ -211,7 +217,8 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
   };
 
   /** Put an action's phases into an actor's states: its window must be free of the actor's other moves. */
-  const place = (actor, frames, cue, label) => {
+  // Each phase names the action it plays (acts), so a gate can see who performed what.
+  const place = (actor, frames, cue, label, act = label.split(' ')[0]) => {
     const ws = frames[0].time, we = Math.max(...frames.map(f => f.time + (f.tween ?? 0)));
     const at = t => `${scene(t - start)} s`;
     if (ws < start - 1e-6) fail(indexOf(actor), `${label} winds up from ${at(ws)}, before the scene starts; move it at least ${scene(start - ws)} s later`);
@@ -241,6 +248,7 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
       for (const field of Object.keys(state)) delete state[field];
       Object.assign(state, under, {time, expression, ...(squash ? {squash} : {}), reaction: true});
     }
+    for (const f of frames) f.acts = act;
     actor.states = [...others, ...frames].sort((a, b) => a.time - b.time);
   };
 
@@ -296,6 +304,41 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
     }
   };
 
+  /**
+   * Where an action can play from: where the actor stands, else one stride in
+   * toward sigma (STEP), the step played before `from` (its wind-up).
+   * shape(state) → its phases from that state's x, or null when out of reach.
+   * → {frames (the step's, then the action's), dx (canvas px)} | null
+   */
+  const approach = (actor, f, sigma, shape, from) => {
+    const s = actor.scale, side = armSide(sigma), other = side === 'L' ? 'R' : 'L';
+    for (let d = 0; d <= STEP.reach + 1e-9; d += 20) {
+      const dx = r2(sigma * d * s), here = {...f, x: r2((f.x ?? 0) + dx)};
+      const frames = shape(here);
+      if (!frames) continue;
+      if (!d) return {frames, dx: 0};
+      const t0 = from - STEP.time;
+      // One stride: the lead leg swings forward and the back one back as the body travels, then they close.
+      return {dx, frames: [
+        phase(f, t0, STEP.time / 2, 'sine.inOut', {body: {[`leg${side}`]: 16, [`leg${other}`]: 10}, walk: {from: f.x ?? 0, to: here.x, duration: STEP.time}}),
+        phase(here, t0 + STEP.time / 2, STEP.time / 2, 'sine.inOut'),
+        ...frames
+      ]};
+    }
+    return null;
+  };
+  /** After a step in, the actor stands dx further on: its later states until its next walk, which starts from there. */
+  const shift = (actor, frames, dx) => {
+    if (!dx) return;
+    actor.walks = true;
+    const after = Math.max(...frames.map(f => f.time));
+    for (const state of actor.states) {
+      if (state.time <= after + 1e-9) continue;
+      state.x = r2((state.x ?? 0) + dx);
+      if (state.walk) { state.walk = {...state.walk, from: r2(state.walk.from + dx)}; break; }
+    }
+  };
+
   // --- push and hit: a strike with the facing hand.
   function strike(job) {
     const {actor, cue, action} = job, T = CONTACT[action], tc = cue.time, label = `${action} at ${scene(tc - start)} s`;
@@ -308,21 +351,43 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
       if (target.prop.owner) fail(indexOf(actor), `${label}: ${target.prop.id} is in ${target.prop.owner.id}'s hands; aim at ${target.prop.owner.id}`);
       C = {x: target.prop.x - sigma * target.prop.def.w / 2 * s, y: target.prop.y}; what = target.prop.id;
     } else { C = target.point; what = 'the point'; }
-    const S = shoulderAt(actor, side, {}, faced.x ?? 0);
     const hit = action === 'hit';
-    const lean = {wind: -sigma * 4, strike: sigma * (hit ? 6 : 9), follow: sigma * (hit ? 8 : 11)};
-    const wind = hit ? {x: S.x - sigma * 50 * s, y: S.y - 40 * s} : {x: S.x - sigma * 10 * s, y: S.y + 110 * s};
-    const through = hit ? {x: C.x + sigma * 50 * s, y: C.y + 40 * s} : {x: C.x + sigma * 40 * s, y: C.y};
-    // The contact: leaning in, bending down to it when it is low (a prop on the floor).
-    const reach = bend(actor, faced, {[side]: C}, sigma, Math.abs(lean.strike));
-    must(actor, label, what, reach);
-    const followBody = {...reach.body, lean: r2(reach.body.lean + sigma * 3)};
-    place(actor, [
-      phase(faced, tc - T.strike - T.wind, T.wind, 'power2.out', {arms: solve(actor, faced, {[side]: wind}, {lean: lean.wind}).arms, body: {lean: lean.wind}}),
-      phase(faced, tc - T.strike, T.strike, hit ? 'power3.in' : 'power2.in', {arms: reach.arms, body: reach.body, ...(cue.shot ? {shot: cue.shot} : {})}),
-      phase(faced, tc + T.hold, T.follow, 'power2.out', {arms: solve(actor, faced, {[side]: through}, followBody).arms, body: followBody}),
-      phase(faced, tc + T.hold + T.follow + 0.06, T.recover, 'sine.inOut', {rest: true, contact: false})
-    ], cue, label);
+    const low = C.y > actor.floor + actor.geometry.hipY * s * 0.55;
+    // The strike's phases from where the actor stands (f.x): null when it cannot reach from there.
+    const shape = f => {
+      const S = shoulderAt(actor, side, {}, f.x ?? 0);
+      if (low) {
+        // Something low (a prop on the floor) is kicked: the facing leg winds back and strikes, the body leaning away to balance.
+        const g = actor.geometry, leg = {upperArm: g.thigh, foreArm: g.shin, hand: 0};
+        const hip = {x: actor.x + (f.x ?? 0) + sigma * g.legX * s, y: actor.floor + g.hipY * s};
+        const kick = point => { const a = reachArm({shoulder: hip, side, target: point, geometry: leg, scale: s}); return {a, joints: {[`leg${side}`]: a.arm, [`shin${side}`]: a.fore}}; };
+        const foot = {x: C.x, y: Math.min(C.y + target.prop.def.h * 0.2 * s, actor.floor - 20 * s)};
+        const strikeLeg = kick(foot);
+        if (!strikeLeg.a.reached) return null;
+        return [
+          phase(f, tc - T.strike - T.wind, T.wind, 'power2.out', {body: {lean: r2(sigma * 4), ...kick({x: hip.x - sigma * 90 * s, y: hip.y + (g.thigh + g.shin) * 0.8 * s}).joints}}),
+          phase(f, tc - T.strike, T.strike, hit ? 'power3.in' : 'power2.in', {body: {lean: r2(-sigma * 8), ...strikeLeg.joints}, ...(cue.shot ? {shot: cue.shot} : {})}),
+          phase(f, tc + T.hold, T.follow, 'power2.out', {body: {lean: r2(-sigma * 10), ...kick({x: foot.x + sigma * 45 * s, y: foot.y - 30 * s}).joints}})
+        ];
+      }
+      // The hand: leaning in (never past STRIKE_LEAN degrees), crouching a little for something lower.
+      const lean = {wind: -sigma * 4, strike: sigma * (hit ? 6 : 9)};
+      const wind = hit ? {x: S.x - sigma * 50 * s, y: S.y - 40 * s} : {x: S.x - sigma * 10 * s, y: S.y + 110 * s};
+      const through = hit ? {x: C.x + sigma * 50 * s, y: C.y + 40 * s} : {x: C.x + sigma * 40 * s, y: C.y};
+      const reach = bend(actor, f, {[side]: C}, sigma, Math.abs(lean.strike), STRIKE_LEAN);
+      if (reach.short > 0) return null;
+      const followBody = {...reach.body, lean: r2(reach.body.lean + sigma * 3)};
+      return [
+        phase(f, tc - T.strike - T.wind, T.wind, 'power2.out', {arms: solve(actor, f, {[side]: wind}, {lean: lean.wind}).arms, body: {lean: lean.wind}}),
+        phase(f, tc - T.strike, T.strike, hit ? 'power3.in' : 'power2.in', {arms: reach.arms, body: reach.body, ...(cue.shot ? {shot: cue.shot} : {})}),
+        phase(f, tc + T.hold, T.follow, 'power2.out', {arms: solve(actor, f, {[side]: through}, followBody).arms, body: followBody})
+      ];
+    };
+    // Out of reach where it stands, it steps in (one stride at most) as it winds up.
+    const {frames, dx} = approach(actor, faced, sigma, shape, tc - T.strike - T.wind) ?? fail(indexOf(actor), `${label}: ${actor.id}'s ${low ? 'foot' : 'hand'} cannot reach ${what}, even with a step in (bones never stretch); walk-to it first, or change positions or the prop's place`);
+    const all = [...frames, phase({...faced, x: r2((faced.x ?? 0) + dx)}, tc + T.hold + T.follow + 0.06, T.recover, 'sine.inOut', {rest: true, contact: false})];
+    place(actor, all, cue, label);
+    shift(actor, all, dx);
     const targetRef = target.kind === 'character' ? {character: target.other.id} : target.kind === 'prop' ? {prop: target.prop.id} : {x: r2(C.x), y: r2(C.y)};
     event(tc, actor, action, 'impact', targetRef);
     if (target.kind === 'character') {
@@ -373,7 +438,7 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
       haul = clamp(sigma * (C.x - xAt(actor, tc)) / s - bodyHalf(actor.geometry) - 50, 0, T.haul);
     }
     const back = {x: C.x - sigma * haul * s, y: C.y};
-    const reach = bend(actor, faced, {[side]: C}, sigma, 5);
+    const reach = bend(actor, faced, {[side]: C}, sigma, 5, PULL_LEAN);
     must(actor, label, what, reach);
     // Hauling: the body leans back from its reach (sitting back into the crouch for a low prop).
     const haulBody = {...reach.body, lean: r2(reach.body.lean - sigma * 22)};
@@ -485,14 +550,14 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
       phase(base, tc - T.strike, T.strike, 'power2.in', {arms: solve(actor, base, gripsAt(R), {lean: sigma * 6}).arms, body: {lean: sigma * 6}, ...(base.shot && job.cue ? {shot: base.shot} : {})}),
       phase(base, tc, T.follow, 'power2.out', {arms: solve(actor, base, follow, {lean: sigma * 8}).arms, body: {lean: sigma * 8}}),
       phase(base, tc + T.follow + 0.05, T.recover, 'sine.inOut', {rest: true, contact: false})
-    ], job.cue ?? null, label);
+    ], job.cue ?? null, label, 'throw');
     key(prop, tc - T.strike - T.wind, T.wind, 'power2.out', W);
     key(prop, tc - T.strike, T.strike, 'power2.in', R);
     lose(prop, tc);
     event(tc, actor, 'throw', 'release', catcher ? {character: catcher.id} : {x: r2(D.x), y: r2(D.y)});
     // The flight: straight across, up and over in an arc, one turn.
     const apex = Math.min(R.y, D.y) - (0.18 * Math.abs(D.x - R.x) + 40 * s);
-    key(prop, tc, flight, 'none', {x: D.x});
+    key(prop, tc, flight, 'sine.inOut', {x: D.x});
     key(prop, tc, flight, 'none', {}, {spin: sigma * 360});
     key(prop, tc, flight / 2, 'power2.out', {y: apex});
     key(prop, tc + flight / 2, flight / 2, 'power2.in', {y: D.y});
@@ -502,14 +567,15 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
     const C = CONTACT.catch, qLabel = `catch at ${scene(tl - start)} s`;
     person(catcher, qLabel, tl); handsFree(catcher, qLabel);
     const qBase = job.catchCue ?? activeState(catcher, tl - C.reach);
-    const facing = sigmaQ < 0 ? 'right' : 'left';
-    catchHands = gripPoints(prop.prop, {cx: D.x, cy: D.y, s: catcher.scale, side: armSide(-sigmaQ)});
+    // The catcher faces the throw: the catch point is on its thrower's side (sigmaQ), and it gives backward as the catch lands.
+    const facing = sigmaQ < 0 ? 'left' : 'right';
+    catchHands = gripPoints(prop.prop, {cx: D.x, cy: D.y, s: catcher.scale, side: armSide(sigmaQ)});
     const qState = {...qBase, facing};
     place(catcher, [
       phase(qState, tl - C.reach, C.reach, 'power2.out', {arms: must(catcher, qLabel, prop.id, solve(catcher, qState, catchHands)), ...(job.catchCue?.shot ? {shot: job.catchCue.shot} : {})}),
-      phase(qState, tl, C.absorb, 'power2.out', {rest: true, contact: false, body: {bodyY: 18, lean: r2(sigmaQ * 4)}}),
+      phase(qState, tl, C.absorb, 'power2.out', {rest: true, contact: false, body: {bodyY: 18, lean: r2(-sigmaQ * 4)}}),
       phase(qState, tl + C.absorb, C.settle, 'sine.inOut', {rest: true, contact: false})
-    ], job.catchCue ?? null, qLabel);
+    ], job.catchCue ?? null, qLabel, 'catch');
     gain(prop, catcher, tl);
     event(tl, catcher, 'catch', 'grip', {prop: prop.id});
     wobble(ops, `${prefix}-obj-${prop.id}-sq`, tl, 1.08, 0.9, {out: 0.05, back: 0.24});
@@ -540,7 +606,7 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
     place(other, [
       phase(qBase, tc - 0.3, 0.3, 'power2.out', {arms: tooFar(solve(other, qBase, takerHands, {lean: -sigma * 4})), body: {lean: -sigma * 4}}),
       phase(qBase, tc + T.shared, T.back, 'power2.inOut', {rest: true, contact: false})
-    ], null, qLabel);
+    ], null, qLabel, 'receive');
     event(tc, other, 'give', 'grip', {prop: prop.id});
     lose(prop, tc + T.shared);
     gain(prop, other, tc + T.shared);
@@ -593,7 +659,7 @@ export function planContacts({actors: input, objects = [], canvas, start, end, p
     const there = state.walk ? carryCenter(actor, state, prop, state.walk.to) : here;
     if (i === 0 && prop.x0 === undefined) Object.assign(prop, {x0: here.x, y0: here.y});
     // A reaction (a face change) moves nothing: the carry it interrupts is already under way.
-    if (!state.reaction) key(prop, state.time, state.walk ? state.walk.duration : i === 0 ? 0 : state.tween ?? ACTING.poseTween, state.walk ? 'none' : state.ease ?? ACTING.poseEase, {x: there.x, y: there.y});
+    if (!state.reaction) key(prop, state.time, state.walk ? state.walk.duration : i === 0 ? 0 : state.tween ?? ACTING.poseTween, state.walk ? WALK_EASE : state.ease ?? ACTING.poseEase, {x: there.x, y: there.y});
   }));
 
   // Gag squash cues: the whole body on its own layer.
