@@ -4,6 +4,7 @@
 // front. Night lights the windows, shop glass, street lamps and neon; dusk
 // rakes warm light across the facades.
 
+import {painted, paintWall, cobbles} from './paint.mjs';
 import {mixColor} from '../catalog-b-base.mjs';
 import {f, pts} from './pen.mjs';
 import {span, sky, skyline, lampPost, tree, haze, rays, neonTube, skyBody} from './common.mjs';
@@ -39,6 +40,8 @@ function pavementRoad(k, g, {lanes = true, crossing = false} = {}) {
   if (k.d.n >= 1 || k.d.outline) for (let x = x0; x < x1; x += 150 * u) out.push(p.line(x, g.baseY, x - 30 * u, g.kerbY, pal.concreteShade, 1.6, {opacity: 0.6}));
   out.push(p.rect(x0, g.kerbY, w, 14 * u, mixColor('#ffffff', pal.concrete, 0.2), {stroke: k.d.outline ? true : false, sw: 0.6}));
   out.push(p.rect(x0, g.kerbY + 14 * u, w, H - g.kerbY, p.lin([[0, pal.asphaltShade], [1, pal.asphalt]], 0, g.kerbY, 0, H), {stroke: false}));
+  // Early-cartoon: an old street, cobbled kerb to kerb.
+  if (painted(k)) out.push(...cobbles(k, x0, g.baseY, w, g.kerbY, pal.concrete, {salt: 'pave'}), ...cobbles(k, x0, g.kerbY + 14 * u, w, H, pal.asphalt, {salt: 'road'}));
   const midY = g.kerbY + 14 * u + (H - g.kerbY) * 0.48;
   if (lanes && !crossing) for (let x = x0; x < x1; x += 220 * u) out.push(p.rect(x, midY, 120 * u, 10 * u, pal.line, {stroke: false, opacity: 0.9}));
   if (k.time !== 'day' && k.d.n >= 1) out.push(p.rect(x0, g.kerbY + 14 * u, w, H - g.kerbY, p.lin([[0, '#ffffff', 0.05], [1, '#ffffff', 0]], 0, g.kerbY, 0, H, {force: true}), {glow: true}));
@@ -54,6 +57,8 @@ function facade(k, x, w, baseY, h, {color, ground = 'shop', awning = null, floor
   const {p, pal, u, time, d} = k;
   const top = baseY - h;
   const out = [p.rect(x, top, w, h + 2, color, {})];
+  // Early-cartoon: weathered plaster under the windows and cornice.
+  if (painted(k)) out.push(...paintWall(k, x, top, w, h, color, {salt: 'facade'}));
   if (d.n >= 1) out.push(p.shade(x, top, w, h, time === 'dusk' ? 'right' : 'right', time === 'dusk' ? 0.32 : 0.18));
   if (time === 'dusk' && d.n >= 1) out.push(p.rect(x, top, w * 0.4, h, p.lin([[0, '#ffb070', 0.22], [1, '#ffb070', 0]], x, 0, x + w * 0.4, 0, {force: true, glow: true}), {glow: true, blend: 'screen'}));
   out.push(p.rect(x - 8 * u, top - 14 * u, w + 16 * u, 18 * u, mixColor('#000000', color, 0.2), {}));

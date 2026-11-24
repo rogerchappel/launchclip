@@ -263,3 +263,17 @@ test('rubber-hose worlds: early-cartoon paint (muted ramp, faded brick accents),
   // Every other style's world is untouched.
   assert.equal(renderWorld({kind: 'kitchen', time: 'day', colors: dark, style: 'stick'}).detail.palette, null);
 });
+
+test('early-cartoon paint: plaster stipple, stains, cracks and brick on walls, cobbled streets; deterministic; other styles untouched', () => {
+  const street = renderWorld({kind: 'city-street', time: 'day', colors: dark, style: 'rubber-hose'});
+  const again = renderWorld({kind: 'city-street', time: 'day', colors: dark, style: 'rubber-hose'});
+  assert.equal(JSON.stringify(street.layers), JSON.stringify(again.layers));
+  const json = JSON.stringify(street.layers);
+  // Stipple: one path of many tiny squares.
+  assert.ok((json.match(/h[\d.]+v[\d.]+h-[\d.]+Z/g) ?? []).length > 200, 'stipple');
+  const plain = JSON.stringify(renderWorld({kind: 'city-street', time: 'day', colors: dark, style: 'stick'}).layers);
+  assert.ok(json.length > plain.length * 1.3, 'the paint adds texture');
+  assert.ok(!/h[\d.]+v[\d.]+h-[\d.]+Z/.test(plain), 'no paint texture in other styles');
+  const kitchen = JSON.stringify(renderWorld({kind: 'kitchen', time: 'day', colors: dark, style: 'rubber-hose'}).layers);
+  assert.ok(/h[\d.]+v[\d.]+h-[\d.]+Z/.test(kitchen), 'interior walls and floors are painted too');
+});

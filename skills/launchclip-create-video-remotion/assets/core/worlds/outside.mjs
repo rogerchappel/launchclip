@@ -3,6 +3,7 @@
 // moon and stars); the land is layered far to near so a camera move shows
 // depth, with haze between the layers at standard and rich detail.
 
+import {painted, paintFloor} from './paint.mjs';
 import {mixColor} from '../catalog-b-base.mjs';
 import {f, pts} from './pen.mjs';
 import {span, sky, skyBody, hills, tree, lampPost, haze, rays, starField, cloud} from './common.mjs';
@@ -32,6 +33,7 @@ function grassField(k, y, {color = null, tufts = true} = {}) {
   const {x0, w} = span(k);
   const c = color ?? pal.grass;
   const out = [p.rect(x0, y, w, H - y + 4, p.lin([[0, mixColor('#000000', c, 0.06)], [1, mixColor('#000000', c, 0.22)]], 0, y, 0, H), {stroke: false})];
+  if (painted(k)) out.push(...paintFloor(k, x0, y, w, H - y, c, {salt: 'field'}));
   if (tufts && d.n >= 1) for (let i = 0; i < 46; i++) {
     const tx = x0 + p.rnd() * w, ty = y + Math.pow(p.rnd(), 0.8) * (H - y);
     const s = (0.5 + (ty - y) / (H - y)) * 10 * u;
