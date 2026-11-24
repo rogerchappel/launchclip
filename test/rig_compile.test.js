@@ -11,6 +11,8 @@ import { RIG_SCHEMA, compileRigScene } from "@launchclip/core/characters/rig-com
 import { rigScenePrepare, rigSceneState, rigSceneTree, validateRigScenePlan } from "@launchclip/core/characters/rig-scene.mjs";
 import { resolveModule } from "@launchclip/core/modules.mjs";
 import { castGate } from "../src/cast.js";
+import { measureRigScene, sampleRigScene } from "@launchclip/core/characters/rig-metrics.mjs";
+import { RIG_THRESHOLDS } from "../src/rig_gate.js";
 
 const brand = { colors: { bg: "#101820", primary: "#2a9d8f", accent: "#e9c46a", ink: "#101820", paper: "#f4f1ea" } };
 const story = (scenes, { style = "stick", rig, characters = [{ id: "maya" }, { id: "theo" }] } = {}) => ({ schema: "launchclip.story.v1", lane: "motion", brand, format: { width: 1920, height: 1080, fps: 30, duration: 10 }, cast: { style, ...(rig ? { rig } : {}), characters }, scenes });
@@ -106,11 +108,11 @@ test("give: the giver alone, both hands in the shared window, then the receiver"
   const box = plan.props.find((p) => p.id === "box");
   // Held by maya until theo takes hold, passed hand to hand while both hold it, theo's from her release.
   assert.deepEqual(box.path.map((k) => [k.t, k.holder?.actor]), [[0, "maya"], [3, "maya"], [3 + shared, "theo"]]);
+  // Grip keys reach for a prop until the hand takes it: maya carries it (no grip keys); theo's hand locks on it from the contact until he takes it.
   const spans = gripSpans(plan);
-  const maya = spans.find((s) => s.actor === "maya"), theo = spans.find((s) => s.actor === "theo");
-  assert.ok(maya.from === 0 && Math.abs(maya.to - 3) < 1e-6, "maya grips it until the shared window");
-  assert.ok(Math.abs(theo.from - 3) < 1e-6, "theo grips it from the contact");
-  assert.ok(Math.max(maya.from, theo.from) >= 3 - 1e-6 && Math.min(maya.to, theo.to) <= 3 + shared + 1e-6, "both hands only inside the shared window");
+  assert.equal(spans.find((s) => s.actor === "maya"), undefined);
+  const theo = spans.find((s) => s.actor === "theo");
+  assert.ok(Math.abs(theo.from - 3) < 1e-6 && Math.abs(theo.to - (3 + shared)) < 1e-6, "theo grips it through the shared window");
 });
 
 test("a throw flies an arc into the catcher's hands; lift, drop and pull move the prop", () => {
@@ -119,18 +121,21 @@ test("a throw flies an arc into the catcher's hands; lift, drop and pull move th
   const holders = parcel.path.filter((k) => k.holder).map((k) => [k.t, k.holder.actor]);
   // A key where each hand takes it and where it lets go: same-holder keys keep it in hand (rig-scene.mjs).
   assert.deepEqual(holders.map(([, a]) => a), ["maya", "maya", "theo", "theo"]);
-  assert.equal(holders[0][0], 4, "lifted on the cue");
-  const rest = parcel.path.filter((k) => k.at && k.t < 4);
+  assert.ok(holders[0][0] >= 4 && holders[0][0] <= 4.3, "lifted on the cue, as the hold at the bottom ends");
+  const rest = parcel.path.filter((k) => k.at && k.t < holders[0][0]);
   assert.deepEqual(rest.at(-1).at, rest.at(-2).at, "it rests (two equal neighbours) until just before the pick-up");
-  assert.ok(4 - rest.at(-1).t <= 0.15, "the resting key is just before the pick-up");
+  assert.ok(holders[0][0] - rest.at(-1).t <= 0.15, "the resting key is just before the pick-up");
   const flight = parcel.path.filter((k) => k.at && k.t > holders[1][0] && k.t < holders[2][0]);
-  assert.ok(flight.length >= 2, "the flight is sampled between the hands");
+  assert.equal(flight.length, 1, "hand to hand: the flight's top between the release and the catch");
   assert.ok(flight[0].t - holders[1][0] >= 0.1 - 1e-6 && holders[2][0] - flight.at(-1).t >= 0.1 - 1e-6, "the rig's curve leaves the release hand and enters the catching hand");
   const state = (t) => rigSceneState(plan, t, prepared).props[0].at;
   const prepared = rigScenePrepare(plan);
   const apex = Math.min(...flight.map((k) => k.at[1]));
   assert.ok(apex < state(holders[1][0])[1] - 50 && apex < state(holders[2][0])[1] - 50, "up and over: an arc from hand to hand");
   // The prop never jumps: at most a throw's speed between 30 fps frames, from the pick-up to the floor.
+  const measured = measureRigScene(sampleRigScene(plan, { fps: 30, duration: 10, prepared }), RIG_THRESHOLDS);
+  assert.deepEqual(measured.props.parcel.grip.filter((g) => g.px > RIG_THRESHOLDS.errors.grip_loss_px), [], "the hand is on the parcel when it lifts it");
+  assert.equal(measured.props.parcel.teleports.length, 0);
   for (let t = 3.5; t < 9.5; t += FRAME) { const a = state(t), b = state(t + FRAME); assert.ok(Math.hypot(b[0] - a[0], b[1] - a[1]) < 120, `no jump at ${t.toFixed(2)} s`); }
   const landed = parcel.path.at(-1);
   assert.ok(landed.t > 8 && landed.at, "dropped, it falls to the floor");
