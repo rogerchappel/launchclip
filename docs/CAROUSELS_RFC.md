@@ -197,7 +197,7 @@ and a reason, like the motion and direction checks.
 | `cover-promise` | The cover has a headline of 3 to 12 words that names a specific subject or number |
 | `cover-thumbnail` | The cover's headline is legible when scaled to a 160 px wide feed thumbnail (measured cap height and contrast) |
 | `type-size` | No text under a minimum font size: 46 px for body and 52 px for headlines at 1080 px wide, scaled by the canvas width |
-| `one-idea` | At most one headline and one supporting block per slide, and a word budget (proposed: 25 words for body slides, 12 for the cover) |
+| `one-idea` | At most one headline and one supporting block per slide, and a word budget (25 words for body slides, 12 for the cover; `carousel.density: "detailed"` gives body slides 50, for a list whose item slides explain) |
 | `contrast` | WCAG AA contrast for every text run against what is under it, measured on the rendered pixels, not the palette |
 | `safe-zone` | Text clears each destination's overlay zones (TikTok's caption and buttons, Instagram's dots and profile row): px margins per destination, 96 / 72 / 96 / 72 on 4:5, 72 on 1:1, 180 top and 240 bottom on 9:16 |
 | `continuity` | Every slide uses the same type scale and palette roles; a slide that switches looks is a warning |
@@ -211,7 +211,7 @@ and a reason, like the motion and direction checks.
 | `cut-off` | No headline ending in an ellipsis or on a function word ("the", "to", "can" …), no body copy stopped mid-sentence |
 | `restated-ending` | The last slide says something new: at least 85% of its words already on earlier slides is a warning (a deck ending on its payoff is exempt) |
 | `duplicates` | No headline or body text repeated across slides |
-| `word-budget` | The deck carries max(6, 3 × slides) to 28 × slides words: under is a warning, over fails |
+| `word-budget` | The deck carries max(6, 3 × slides) to 28 × slides words (50 × slides when detailed): under is a warning, over fails |
 | `scaffold-leak` | No planning labels in the copy ("Slide 3:", "Hook:", "CTA:", "[image]") |
 
 ### 6.1 Swipe continuity

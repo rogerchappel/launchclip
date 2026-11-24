@@ -50,7 +50,7 @@ export {EVIDENCE_CLIP_TIMING, evidenceClipParams, evidenceClipTimeline, evidence
 export {CLIP_ENTERS, CLIP_MOVES, CLIP_TIMING, clipTimeline, clipView} from './catalog-d-clip.mjs';
 export {SET_PROP_ENTERS, SET_PROP_EXITS, SET_PROP_PLACES, SET_PROP_TIMING, setPropTimeline, setPropView} from './catalog-d-set-prop.mjs';
 export {MEDIA_PASSAGES, mediaPassage, scenePassage} from './media-passage.mjs';
-export {MEDIA_LAYOUTS, MEDIA_LAYOUT_ENTRANCES, MEDIA_LAYOUT_TIMING, MEDIA_LAYOUT_VARIANTS, countUp, frameShape, layoutMedia, mediaLayoutTimeline, mediaLayoutView} from './catalog-d-media-layouts.mjs';
+export {MEDIA_LAYOUTS, MEDIA_LAYOUT_ENTRANCES, MEDIA_LAYOUT_TIMING, MEDIA_LAYOUT_VARIANTS, accentRuns, countUp, frameShape, layoutMedia, mediaLayoutTimeline, mediaLayoutView} from './catalog-d-media-layouts.mjs';
 
 export const PRODUCT_DEMO_TIMING = Object.freeze({
   minDuration: 2,

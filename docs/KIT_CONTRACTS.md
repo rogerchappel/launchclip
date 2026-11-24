@@ -6522,6 +6522,13 @@ small tilted `polaroid`. All keep captions.
   "kicker": "Corrugations", "title": "Why slide-ons ride smoother", "body": "Weight sits low, over the axle" } }
 ```
 
+- **`accent`** (split-screen): 1–8 key phrases drawn in the brand primary
+  where they are written in the title, body or items (matched without case;
+  a phrase that is not there fails). Each is a `<span>` inside the text's own
+  node, so both renderers draw it from the shared view.
+- **`items` on a carousel slide** (split-screen, picture-in-picture): up to 72
+  characters and two lines each, since a slide is read. A video keeps one line
+  of 32.
 - **`media`** (every footage slot): an `assets/` video or still, or `{src,
   kind?, sourceStart? (video), focus?: {x, y}}`. The window is drawn
   `object-fit: cover` about `focus`. A shot request (`{kind: "shot", shows,

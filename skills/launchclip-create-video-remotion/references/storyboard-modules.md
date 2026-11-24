@@ -995,7 +995,8 @@ params:
 - title: string ≤ 60, up to two lines (the line, in a few words)
 - body: string ≤ 90, one or two lines under the title (optional; one of body, stat, items)
 - stat: {value: string ≤ 12 (a figure like "1,200 kg" counts up), label?: string ≤ 40} (optional; one of body, stat, items)
-- items: [string ≤ 32 | {text, at?}] 2–4, revealed one by one on their words (optional; one of body, stat, items)
+- items: [string ≤ 72 | {text, at?}] 2–4, revealed one by one on their words: ≤ 32 on one line in a video, up to two lines on a carousel slide (optional; one of body, stat, items)
+- accent: [string ≤ 40] 1–8 key phrases drawn in the brand primary where they are written in the title, body or items (optional) [guided and bespoke tiers only]
 - align: left|center (default left)
 events: item-<i>
 
@@ -1019,7 +1020,7 @@ params:
 - title: string ≤ 60, up to two lines (the line, in a few words)
 - body: string ≤ 90, one or two lines under the title (optional; one of body, stat, items)
 - stat: {value: string ≤ 12 (a figure like "1,200 kg" counts up), label?: string ≤ 40} (optional; one of body, stat, items)
-- items: [string ≤ 32 | {text, at?}] 2–4, revealed one by one on their words (optional; one of body, stat, items)
+- items: [string ≤ 72 | {text, at?}] 2–4, revealed one by one on their words: ≤ 32 on one line in a video, up to two lines on a carousel slide (optional; one of body, stat, items)
 - align: left|center (default left)
 events: item-<i>
 

@@ -10,6 +10,8 @@ import { crossesSeam } from "./carousel-continuity.mjs";
 // Thresholds are the RFC's proposals (§6, §13): they need a pass against real feeds.
 export const COVER_WORDS = Object.freeze([3, 12]);
 export const BODY_WORD_BUDGET = 25;
+// carousel.density "detailed": an item slide that explains (a name, then a few two-line points), as saved list carousels do.
+export const DETAILED_WORD_BUDGET = 50;
 export const COVER_WORD_BUDGET = 12;
 export const ALT_MIN_WORDS = 3;
 
@@ -129,6 +131,7 @@ export function carouselPlanFindings(story) {
   const arc = carousel.arc;
   const texts = slides.map(slideText);
   const roleOf = (i) => slides[i]?.slide?.role;
+  const detailed = carousel.density === "detailed";
 
   // cover-promise
   const coverIndex = slides.findIndex((scene) => scene.slide?.role === "cover");
@@ -146,7 +149,7 @@ export function carouselPlanFindings(story) {
     const text = texts[i];
     if (text.headlines.length > 1) add("one-idea", i + 1, "fail", `${text.headlines.length} headlines (${text.headlines.map((block) => block.key).join(", ")}); one per slide`);
     if (text.supports.length > 1) add("one-idea", i + 1, "fail", `${text.supports.length} supporting blocks (${text.supports.map((block) => block.key).join(", ")}); one per slide`);
-    const budget = roleOf(i) === "cover" ? COVER_WORD_BUDGET : BODY_WORD_BUDGET;
+    const budget = roleOf(i) === "cover" ? COVER_WORD_BUDGET : detailed ? DETAILED_WORD_BUDGET : BODY_WORD_BUDGET;
     const count = words(text.own).length;
     if (count > budget) add("one-idea", i + 1, "fail", `${count} words; a ${roleOf(i) === "cover" ? "cover" : "slide"} reads in ${budget} or fewer`);
   });
@@ -218,12 +221,12 @@ export function carouselPlanFindings(story) {
     if (!sourced) add("claims", i + 1, "warn", `"${match[0].trim()}" states a result with no source: add params.source or frame.sources [{text, scene: "${scene.id}"}]`);
   });
 
-  findings.push(...copyFindings(slides, texts, carousel.caption));
+  findings.push(...copyFindings(slides, texts, carousel.caption, detailed));
   return findings;
 }
 
 // The copy rules, on slide text and the caption.
-function copyFindings(slides, texts, caption) {
+function copyFindings(slides, texts, caption, detailed = false) {
   const findings = [];
   const add = (rule, slide, level, reason) => findings.push({ rule, slide, level, reason });
   const captionParts = isObject(caption) ? ["hook", "body", "cta"].filter((key) => typeof caption[key] === "string" && caption[key].trim()).map((key) => ({ key, text: caption[key] })) : [];
@@ -282,7 +285,7 @@ function copyFindings(slides, texts, caption) {
 
   // word-budget: the deck as a whole
   const total = texts.reduce((sum, text) => sum + words(text.own).length, 0);
-  const low = Math.max(MIN_DECK_WORDS, WORDS_PER_SLIDE[0] * slides.length), high = WORDS_PER_SLIDE[1] * slides.length;
+  const low = Math.max(MIN_DECK_WORDS, WORDS_PER_SLIDE[0] * slides.length), high = (detailed ? DETAILED_WORD_BUDGET : WORDS_PER_SLIDE[1]) * slides.length;
   if (slides.length && total < low) add("word-budget", null, "warn", `${total} words across ${slides.length} slides; under ${low}, the slides say too little to be worth a swipe`);
   if (total > high) add("word-budget", null, "fail", `${total} words across ${slides.length} slides; over ${high}, it reads as a document, not a carousel`);
 
