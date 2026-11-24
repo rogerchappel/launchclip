@@ -87,7 +87,7 @@ test("--animation marks the motion lane as an animation and gives the reason; no
   assert.equal(result.kind, "animation");
   assert.ok(isAnimation(result));
   assert.ok(result.reasons.some((reason) => /--animation: a character story/.test(reason)));
-  assert.deepEqual([result.format.width, result.format.height, result.format.duration], [1080, 1920, 30], "format stays the frame size (a character story's default: 9:16)");
+  assert.deepEqual([result.format.width, result.format.height, result.format.duration], [1080, 1920, 24], "format stays the frame size (a character story's defaults: 9:16, 24 s)");
   // A brief that reads as a character story is not diverted yet: it still makes a whole video.
   const worded = route([], { prompt: "An animated story about two characters" });
   assert.ok(animationBrief("An animated story about two characters"));
@@ -95,6 +95,15 @@ test("--animation marks the motion lane as an animation and gives the reason; no
   assert.equal(worded.kind, undefined);
   assert.ok(!isAnimation(worded));
   assert.ok(!("kind" in route([])));
+});
+
+test("a character story is sized for 24 s unless --duration or the brief names a length; other videos keep 30 s", () => {
+  const story = route([], { prompt: "A foal learns why the starting gate opens", animation: true });
+  assert.equal(story.format.duration, 24);
+  assert.equal(story.duration_source, "default");
+  assert.equal(route([], { prompt: "A 40-second story about a foal", animation: true }).format.duration, 40);
+  assert.equal(route([], { prompt: "A foal learns to wait", animation: true, duration: 15 }).format.duration, 15);
+  assert.equal(route([], { prompt: "A launch video" }).format.duration, 30);
 });
 
 test("a character story is a Short (9:16) unless --aspect or the brief says otherwise; other videos keep 16:9", () => {

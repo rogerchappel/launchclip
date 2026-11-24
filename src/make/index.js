@@ -1055,7 +1055,7 @@ async function prepareAnimation(ctx) {
   }
   const characterVoices = Object.entries(voiced.voices).filter(([speaker]) => speaker !== NARRATOR).map(([, voice]) => voice);
   if (characterVoices.length && characterVoices.every((voice) => voice === (voiced.voices[NARRATOR] ?? narrationRequest(narrationVoice(ctx)).voice ?? null))) report.warnings.push(`every character speaks in the narrator's voice: the ${voiceProvider} voice has no voices to hand out. Give each character its own with launchclip cast edit <id> --voice <voice id> --project ${project}, then launchclip bible freeze ${project} --characters ${script.characters.map((character) => character.id).join(",")} --force`);
-  if (options.duration == null && routing.duration_source === "default") report.warnings.push("no --duration and none named in the prompt; sized for 30 s");
+  if (options.duration == null && routing.duration_source === "default") report.warnings.push(`no --duration and none named in the prompt; sized for ${target} s`);
   return unchanged ? { status: "cached", reason: "script and voice inputs unchanged" } : { status: "done" };
 }
 

@@ -5739,8 +5739,9 @@ A full example is `test/fixtures/screenplay/two-characters.json`.
 
   Warnings: `no-duration`, `under-length` (more than 15% short),
   `no-problem-limit`, `edge-silence` (the script opens or ends on a silent
-  line). A version 1 value is validated as all-narrator, without the
-  `beat-name`, `narration-mismatch` and problem rules.
+  line), `turn-missing` (no `turn` beat, so nothing breaks the pattern). A
+  version 1 value is validated as all-narrator, without the `beat-name`,
+  `narration-mismatch`, problem and turn rules.
 - `screenplayTiming(script, {wpm, gap})` → estimated times before any take
   exists: a spoken line runs its words at `wpm`, two spoken lines in a row
   are `gap` apart (0.3 s), a silent line runs its own `seconds`. Returns

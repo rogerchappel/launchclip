@@ -16,7 +16,8 @@
 // only) the shape the brief names, else 9:16 for a character story (a Short)
 // and 16:9 for everything else. Duration follows
 // --duration, else a "45-second" style phrase in the prompt, else the base or
-// voiceover length, else 30 s. A motion video longer than 180 s is long form
+// voiceover length, else 30 s (24 s for a character story: the story Shorts
+// that travel run 20–30 s). A motion video longer than 180 s is long form
 // (docs/LONG_FORM_MAKE_RFC.md): written and planned in chapters, up to 20 min.
 //
 // Animation (docs/ANIMATION_PIPELINE_RFC.md §6.1) is not a lane: it is the
@@ -32,6 +33,8 @@ export const DEFAULT_ASPECT = "16:9";
 // A character story (--animation) is a Short unless --aspect or the brief says otherwise.
 export const ANIMATION_DEFAULT_ASPECT = "9:16";
 export const DEFAULT_DURATION = 30;
+// A character story Short: the ones that travel run 20–30 s, so it is sized for 24 s (about 48 spoken words at 150 wpm).
+export const ANIMATION_DEFAULT_DURATION = 24;
 // Up to SHORT_MAX_SECONDS every lane plans the whole video at once; past it, a
 // motion video is long form, up to LONG_FORM_MAX_SECONDS.
 export const SHORT_MAX_SECONDS = 180;
@@ -139,7 +142,7 @@ export function routeLane(inventory, options = {}) {
   const animation = options.animation === true;
   const aspect = resolveAspect(options.aspect, base, { animation, prompt: options.prompt });
   const [width, height] = ASPECTS[aspect.value];
-  const duration = resolveDuration(options, { lane, base, voiceover });
+  const duration = resolveDuration(options, { lane, base, voiceover, animation });
   if (animation && lane !== "motion") throw new Error(`--animation writes the script and voices it, but ${(base ?? voiceover).path} already carries the voice (${lane}); remove it from --assets, or drop --animation`);
   if (animation && duration.value > SHORT_MAX_SECONDS) throw new Error(`--animation makes videos of ${SHORT_MAX_SECONDS} seconds or less; got ${duration.value}`);
   if (animation) reasons.push("--animation: a character story (the motion lane with a cast); the writers' room writes the script with speakers");
@@ -220,7 +223,7 @@ export function durationFromPrompt(prompt) {
   return null;
 }
 
-export function resolveDuration(options, { lane, base, voiceover }) {
+export function resolveDuration(options, { lane, base, voiceover, animation = false }) {
   if (options.duration !== undefined && options.duration !== null) {
     const value = Number(options.duration);
     if (!(value >= 3 && value <= LONG_FORM_MAX_SECONDS)) throw new Error(`--duration must be between 3 and ${LONG_FORM_MAX_SECONDS} seconds; got ${options.duration}`);
@@ -233,7 +236,7 @@ export function resolveDuration(options, { lane, base, voiceover }) {
   if (lane === "footage-led" && base?.media?.duration) return { value: round1(base.media.duration), reason: "the base recording's length (the base edit shortens it)" };
   if (lane === "voiceover-motion" && voiceover?.media?.duration) return { value: round1(voiceover.media.duration), reason: "the voiceover's length (the voice prep tightens it)" };
   if (fromPrompt && fromPrompt >= 3 && fromPrompt <= 180) return { value: fromPrompt, reason: "named in the prompt" };
-  return { value: DEFAULT_DURATION, reason: "default" };
+  return { value: animation ? ANIMATION_DEFAULT_DURATION : DEFAULT_DURATION, reason: "default" };
 }
 
 function round1(value) { return Math.round(value * 10) / 10; }

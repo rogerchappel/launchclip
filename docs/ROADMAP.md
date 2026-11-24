@@ -36,11 +36,7 @@ LaunchClip's goal: **a SaaS founder points it at their product and gets a launch
   - Made your own backgrounds, character art or finished shots somewhere else? Hand them in. They are checked against each character's reference sheet, and anything missing or off falls back to the code-drawn version.
   - It works through your AI agent's subscription or headless: the model writes, designs the cast, directs and reviews.
 - **Viral formats, results built in** ([RFC](VIRAL_FORMATS_RFC.md)): proven short-form structures ("$1 a second", "the last time", "X vs Y") as first-class formats, each with its hook, beats, key shot, share moment, voice tier and packaging. The planner picks a format and a fresh angle before the concepts, offers only formats the kit can actually render, and the finish gates check the first frame, the key shot and the share beat, all at no extra cost.
-  - Still to come, for character story Shorts:
-    - A length target of about 20–30 s and 40–70 spoken words. The short-video rules cover anything up to 90 s, but nothing pulls a story short down to that length.
-    - A "snap" beat after three escalations, where the pattern breaks and the obvious ending flips, before the loop back to the opener.
-    - A works-on-mute check: the setting and the problem read from the pictures and on-screen text alone, asked as a critic question on the storyboard.
-    - A "When [character] [does the thing]" template among the five title options when a video has a recurring character.
+  - **Shipped, for character story Shorts (`--animation`):** sized for 24 s when no length is given (about 48 spoken words); the writers' room escalates in threes, snaps in the turn beat and ends on a moment that loops to the opening, and the script check warns `turn-missing`; the animatic's staging review asks whether the opening works on mute; one title option reads "When [the lead] [does the thing]".
 - **Smarter asset understanding:** recognise what's in your screenshots and recordings (a pricing page, a dashboard, an onboarding flow) and place them where the story needs them.
 - **Built-in critic by default:** a vision model reviews the video the way a human editor would, as part of `launchclip make`.
 - **Faster first run:** smaller downloads and pre-warmed rendering, so the first video arrives sooner.
