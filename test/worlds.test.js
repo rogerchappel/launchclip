@@ -26,9 +26,9 @@ const count = nodes => nodes.reduce((n, node) => n + 1 + (node.children ? count(
 
 // The RFC library (docs/SEEDED_STYLES_RFC.md §3.5). Each world PR adds its group.
 const LIBRARY = {
-  inside: ['office', 'home-desk', 'kitchen', 'living-room', 'classroom', 'cafe', 'workshop', 'server-room', 'studio', 'gym'],
-  street: ['city-street', 'shopfronts', 'crossing', 'alley', 'rooftop', 'skyline'],
-  outside: ['park', 'beach', 'mountains', 'forest', 'space', 'abstract-stage', 'racetrack', 'stable-yard', 'paddock']
+  inside: ['office', 'home-desk', 'kitchen', 'living-room', 'classroom', 'cafe', 'workshop', 'server-room', 'studio', 'gym', 'parlour'],
+  street: ['city-street', 'shopfronts', 'crossing', 'alley', 'rooftop', 'skyline', 'cafe-terrace'],
+  outside: ['park', 'beach', 'mountains', 'forest', 'space', 'abstract-stage', 'racetrack', 'stable-yard', 'paddock', 'void-stage']
 };
 
 test('the library: the RFC worlds in their groups, three times each, 60+ props', () => {
@@ -242,4 +242,38 @@ test('in world mode a world plate draws a bleed past its frame, and a cast in it
   const floor = resolveModule(cast, world).content.actors[0].floor;
   assert.equal(floor, worldAnchors('city-street', {canvas: {width: 1210, height: 2150}}).ground.y - 115);
   assert.equal(resolveModule(cast, cuts).content.actors[0].floor, worldAnchors('city-street', {canvas: {width: 1080, height: 1920}}).ground.y);
+});
+
+test('rubber-hose worlds: early-cartoon paint (muted ramp, faded brick accents), pen contours, flat fills, no glows', async () => {
+  const {earlyCartoonColor} = await import('@launchclip/core/worlds/palette.mjs');
+  assert.equal(STYLE_DETAIL['rubber-hose'], 'simple');
+  const sat = hex => { const n = parseInt(hex.slice(1), 16), c = [n >> 16, (n >> 8) & 255, n & 255]; return (Math.max(...c) - Math.min(...c)) / 255; };
+  // Saturated colours come out subdued; a saturated red stays a faded brick red.
+  for (const hex of ['#1f5eff', '#46d4ff', '#4f9150', '#fdb022']) assert.ok(sat(earlyCartoonColor(hex)) < 0.18, `${hex} → ${earlyCartoonColor(hex)}`);
+  const brick = earlyCartoonColor('#c0392b');
+  assert.ok(parseInt(brick.slice(1, 3), 16) > parseInt(brick.slice(3, 5), 16) + 30, `brick ${brick}`);
+  assert.ok(sat(earlyCartoonColor('#ffffff')) < 0.12 && earlyCartoonColor('#ffffff') !== '#ffffff', 'white is ivory');
+  for (const kind of ['kitchen', 'city-street']) {
+    const world = renderWorld({kind, time: 'night', colors: dark, style: 'rubber-hose'});
+    assert.ok(world.detail.outline && !world.detail.gradients && !world.detail.glows && !world.detail.pools && world.detail.palette === 'early-cartoon');
+    const hexes = new Set(JSON.stringify(world.layers).match(/#[0-9a-f]{6}/gi).map(hex => hex.toLowerCase()));
+    for (const hex of hexes) assert.ok(sat(hex) < 0.36, `${kind}: ${hex} is not muted`);
+    assert.ok(!/radialGradient/.test(JSON.stringify(world.defs)), `${kind}: flat fills, no lit pools`);
+  }
+  // Every other style's world is untouched.
+  assert.equal(renderWorld({kind: 'kitchen', time: 'day', colors: dark, style: 'stick'}).detail.palette, null);
+});
+
+test('early-cartoon paint: plaster stipple, stains, cracks and brick on walls, cobbled streets; deterministic; other styles untouched', () => {
+  const street = renderWorld({kind: 'city-street', time: 'day', colors: dark, style: 'rubber-hose'});
+  const again = renderWorld({kind: 'city-street', time: 'day', colors: dark, style: 'rubber-hose'});
+  assert.equal(JSON.stringify(street.layers), JSON.stringify(again.layers));
+  const json = JSON.stringify(street.layers);
+  // Stipple: one path of many tiny squares.
+  assert.ok((json.match(/h[\d.]+v[\d.]+h-[\d.]+Z/g) ?? []).length > 200, 'stipple');
+  const plain = JSON.stringify(renderWorld({kind: 'city-street', time: 'day', colors: dark, style: 'stick'}).layers);
+  assert.ok(json.length > plain.length * 1.3, 'the paint adds texture');
+  assert.ok(!/h[\d.]+v[\d.]+h-[\d.]+Z/.test(plain), 'no paint texture in other styles');
+  const kitchen = JSON.stringify(renderWorld({kind: 'kitchen', time: 'day', colors: dark, style: 'rubber-hose'}).layers);
+  assert.ok(/h[\d.]+v[\d.]+h-[\d.]+Z/.test(kitchen), 'interior walls and floors are painted too');
 });

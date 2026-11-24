@@ -17,7 +17,7 @@ const resolve = (scenes) => { const s = story(scenes); return resolveModule(scen
 const ids = (node, out = []) => { if (node?.id) out.push(node.id); for (const child of node?.children ?? []) ids(child, out); return out; };
 
 test("the acting vocabulary: actions, look and stretch poses, target shapes", () => {
-  assert.deepEqual(ACTIONS, ["look-far", "turn-to-look", "gaze-at", "point-at", "walk-to", "stand-up", "stretch"]);
+  assert.deepEqual(ACTIONS, ["look-far", "turn-to-look", "gaze-at", "point-at", "walk-to", "stand-up", "stretch", "push", "pull", "hit", "catch", "lift", "drop", "throw", "give"]);
   assert.ok(POSES.includes("look") && POSES.includes("stretch"));
   for (const ok of ["far", "street", "left", { prop: "bench" }, { character: "maya" }, { x: 10, y: 20 }]) assert.equal(targetError(ok), null, JSON.stringify(ok));
   for (const bad of ["moon", { prop: 3 }, { x: "a" }, 7]) assert.ok(targetError(bad), JSON.stringify(bad));

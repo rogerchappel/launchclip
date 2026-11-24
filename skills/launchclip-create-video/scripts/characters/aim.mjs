@@ -66,3 +66,52 @@ export function pointAim({actor, facing, point = null, other = null, safe = null
   const tip = {x: shoulder.x + side * r * sin * s, y: shoulder.y + r * cos * s};
   return {side: facing === 'left' ? 'L' : 'R', arm: r1(arm), fore: r1(fore), tip: {x: r1(tip.x), y: r1(tip.y)}};
 }
+
+// ---------------------------------------------------------------------------
+// Reaching a point with a hand (contact actions, characters/contact.mjs).
+// The same two-bone reach in any direction, for either arm, on a body that
+// may lean: the bones keep their lengths, so a point past the arm's length
+// is not reached (`reached: false`); the caller moves the actor or the prop.
+
+const rad = d => (d * Math.PI) / 180;
+
+/** The reach of an arm to the centre of the hand (rig units). */
+export const armReach = g => g.upperArm + g.foreArm + g.hand * 0.3;
+
+/**
+ * Canvas px of a placed actor's shoulder joint. side 'L' | 'R'; j: joint
+ * values (lean, bodyY, shoulderY, squash; missing ones at rest); dx: the
+ * actor's walk offset. The torso pivots at the hip (rig.mjs).
+ */
+export function shoulderAt(actor, side, j = {}, dx = 0) {
+  const g = actor.geometry, s = actor.scale, lean = rad(j.lean ?? 0);
+  const ox = (side === 'L' ? -1 : 1) * g.armX, oy = (g.armY + (j.shoulderY ?? 0)) * (j.squash ?? 1);
+  return {x: actor.x + dx + (ox * Math.cos(lean) - oy * Math.sin(lean)) * s, y: actor.floor + (g.hipY + (j.bodyY ?? 0)) * s + (ox * Math.sin(lean) + oy * Math.cos(lean)) * s};
+}
+
+/** Canvas px of the hand's centre for arm and forearm angles (rig convention) from a shoulder. */
+export function handAt(shoulder, side, arm, fore, g, s, lean = 0) {
+  const k = side === 'L' ? -1 : 1, B = armReach(g) - g.upperArm;
+  const a1 = rad(k * arm - lean), a2 = rad(k * (arm + fore) - lean);
+  return {x: shoulder.x + (g.upperArm * Math.sin(a1) + B * Math.sin(a2)) * s, y: shoulder.y + (g.upperArm * Math.cos(a1) + B * Math.cos(a2)) * s};
+}
+
+/**
+ * Arm and forearm angles that put `side`'s hand on `target` (canvas px).
+ * The elbow bends to whichever side keeps it out from the body (below the
+ * line on a tie, as pointAim's). → {arm, fore, reached}; an unreachable
+ * target is reached for as far as the straight arm goes, never further.
+ */
+export function reachArm({shoulder, side, target, geometry: g, scale: s, lean = 0}) {
+  const k = side === 'L' ? -1 : 1, A = g.upperArm, B = armReach(g) - A;
+  const dx = (target.x - shoulder.x) / s, dy = (target.y - shoulder.y) / s;
+  const dist = Math.hypot(dx, dy);
+  const reached = dist <= A + B + 1;
+  const phi = k * (deg(Math.atan2(dx, dy)) + lean);
+  const r = clamp(dist, Math.abs(A - B) + 2, A + B);
+  if (r >= A + B - 0.5) return {arm: r1(phi), fore: 0, reached};
+  const gamma = deg(Math.acos(clamp((A * A + B * B - r * r) / (2 * A * B), -1, 1)));
+  const eps = deg(Math.acos(clamp((A * A + r * r - B * B) / (2 * A * r), -1, 1)));
+  const down = Math.sin(rad(phi - eps)), up = Math.sin(rad(phi + eps));
+  return up > down + 1e-6 ? {arm: r1(phi + eps), fore: r1(gamma - 180), reached} : {arm: r1(phi - eps), fore: r1(180 - gamma), reached};
+}

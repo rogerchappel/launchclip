@@ -161,7 +161,7 @@ test('narrative map cues: validation names every bad part; resolution cues to wo
   assert.deepEqual(validateCastCues(line, cast), []);
   const bad = {...line, set: 'kitchen', cast: [{id: 'zoe', pose: 'dance', expression: 'smug', at: 'word: x'}, {id: 'theo', pose: 'walk'}, {id: 'maya'}]};
   const errors = validateCastCues(bad, cast).join('\n');
-  for (const part of ['set "kitchen"', '"zoe" is not in the story cast', 'pose "dance"', 'expression "smug"', '.at must be', 'needs a pose or an expression']) assert.ok(errors.includes(part), part);
+  for (const part of ['set "kitchen"', '"zoe" is not in the story cast', 'pose "dance"', 'expression "smug"', '.at must be', 'needs a pose, an expression, an action or a squash']) assert.ok(errors.includes(part), part);
   assert.match(validateCastCues({set: 'desk-laptop', cast: [{id: 'theo', pose: 'walk'}]}, cast).join(), /walk does not fit/);
   const words = ['It', 'broke', 'down', 'again', 'and', 'again', 'today'].map((text, i) => ({text, start: i * 0.5, end: i * 0.5 + 0.4}));
   assert.equal(cueWordIndex('word:again', line, words), 3);

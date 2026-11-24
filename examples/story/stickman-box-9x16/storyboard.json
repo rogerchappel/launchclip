@@ -1,0 +1,278 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "One job (stickman test: rubber-hose, contact gags, lit worlds, camera landings)",
+  "notes": "No-AI end-to-end test of the stickman uplift: rubber-hose cast, cafe-terrace at dusk and the parlour at night with depth, a box handed over, a gag squash under its weight, a hit, a lift, a thrown coin caught, and camera landings with a purpose.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 13,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#2b2724",
+      "primary": "#9a3b2e",
+      "accent": "#c9a227",
+      "ink": "#1e1c1a",
+      "paper": "#f4efe4"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "camera": {
+    "mode": "world"
+  },
+  "cast": {
+    "style": "rubber-hose",
+    "characters": [
+      {
+        "id": "oliver",
+        "voice": "am_michael",
+        "position": "left"
+      },
+      {
+        "id": "maya",
+        "voice": "af_heart",
+        "position": "right"
+      }
+    ]
+  },
+  "audio": {
+    "words": "NARRATION.json",
+    "narration": {
+      "provider": "kokoro",
+      "voice": "bf_emma",
+      "lines": [
+        {
+          "speaker": "narrator",
+          "text": "Oliver had one job. Deliver the box."
+        },
+        {
+          "speaker": "narrator",
+          "text": "It was heavier than it looked."
+        },
+        {
+          "speaker": "maya",
+          "text": "What is in this thing?"
+        },
+        {
+          "speaker": "narrator",
+          "text": "So he opened it the hard way."
+        },
+        {
+          "speaker": "narrator",
+          "text": "Inside, one shiny coin."
+        },
+        {
+          "speaker": "oliver",
+          "text": "Worth it."
+        }
+      ]
+    }
+  },
+  "scenes": [
+    {
+      "id": "deliver",
+      "module": "cast-scene",
+      "start": 0,
+      "end": "word:thing?+0.6",
+      "params": {
+        "set": "standing",
+        "world": {
+          "kind": "cafe-terrace",
+          "time": "dusk",
+          "depth": true
+        },
+        "cast": [
+          {
+            "id": "oliver",
+            "pose": "stand",
+            "expression": "happy",
+            "holds": "box",
+            "cues": [
+              {
+                "at": "word:Oliver",
+                "action": "walk-to",
+                "target": {
+                  "character": "maya"
+                }
+              },
+              {
+                "at": "word:box.",
+                "action": "give",
+                "target": {
+                  "character": "maya"
+                },
+                "expression": "delighted"
+              }
+            ]
+          },
+          {
+            "id": "maya",
+            "pose": "stand",
+            "expression": "neutral",
+            "says": "auto",
+            "cues": [
+              {
+                "at": "word:heavier",
+                "expression": "surprised",
+                "squash": {
+                  "amount": 0.5,
+                  "hold": 0.5,
+                  "recover": 0.45
+                }
+              },
+              {
+                "at": "word:looked.",
+                "action": "drop",
+                "expression": "frustrated"
+              },
+              {
+                "at": "word:What",
+                "pose": "shrug",
+                "expression": "confused"
+              }
+            ]
+          }
+        ]
+      },
+      "zooms": [
+        {
+          "at": 0.2,
+          "land": "oliver",
+          "move": "reveal",
+          "purpose": "meet Oliver with the box before the job starts"
+        },
+        {
+          "at": "word:heavier",
+          "land": "maya",
+          "move": "push",
+          "shot": "close",
+          "purpose": "land on Maya buckling under the weight"
+        }
+      ]
+    },
+    {
+      "id": "open",
+      "module": "cast-scene",
+      "start": "word:thing?+0.6",
+      "end": 13,
+      "params": {
+        "set": "standing",
+        "world": {
+          "kind": "parlour",
+          "time": "night",
+          "depth": true
+        },
+        "objects": [
+          {
+            "id": "parcel",
+            "prop": "box",
+            "at": 0.5
+          },
+          {
+            "id": "coin",
+            "prop": "coin",
+            "at": 0.42
+          }
+        ],
+        "cast": [
+          {
+            "id": "oliver",
+            "pose": "stand",
+            "expression": "focused",
+            "says": "auto",
+            "cues": [
+              {
+                "at": "word:hard",
+                "action": "hit",
+                "target": {
+                  "prop": "parcel"
+                },
+                "expression": "angry"
+              },
+              {
+                "at": "word:Inside,",
+                "action": "walk-to",
+                "target": {
+                  "prop": "coin"
+                },
+                "expression": "surprised"
+              },
+              {
+                "at": "word:coin.+0.4",
+                "action": "lift",
+                "target": {
+                  "prop": "coin"
+                },
+                "expression": "delighted"
+              },
+              {
+                "at": "word:it.#4+0.5",
+                "squash": {
+                  "amount": -0.3,
+                  "hold": 0.3,
+                  "recover": 0.5
+                },
+                "pose": "cheer",
+                "expression": "delighted"
+              }
+            ]
+          },
+          {
+            "id": "maya",
+            "pose": "stand",
+            "expression": "confused",
+            "cues": [
+              {
+                "at": "word:it.#4",
+                "action": "catch",
+                "target": {
+                  "character": "oliver"
+                },
+                "expression": "delighted"
+              }
+            ]
+          }
+        ]
+      },
+      "zooms": [
+        {
+          "at": "word:opened",
+          "land": "oliver",
+          "move": "reveal",
+          "purpose": "find Oliver squaring up to the parcel"
+        },
+        {
+          "at": "word:shiny",
+          "land": "oliver",
+          "move": "push",
+          "shot": "close",
+          "purpose": "land on Oliver finding the coin"
+        },
+        {
+          "at": "word:it.#4",
+          "land": "maya",
+          "move": "cut",
+          "shot": "medium",
+          "screen": "center",
+          "purpose": "cut to Maya catching the payoff"
+        }
+      ]
+    }
+  ],
+  "ending": {
+    "final": "hold"
+  },
+  "overlays": [
+    {
+      "type": "captions",
+      "style": "word-highlight"
+    }
+  ]
+}

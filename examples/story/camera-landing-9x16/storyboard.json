@@ -1,0 +1,25 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "The rollback broke (golden, 9:16 camera landings, world)",
+  "notes": "Renderer-eval golden story for camera landings in a cast scene (kit/core/zooms.mjs LAND, kit/core/characters/landing.mjs) in camera.mode world: a reveal across to Maya, a push in on Sam's reaction, then a cut back to Maya on the left third.",
+  "lane": "motion",
+  "format": {"width": 1080, "height": 1920, "fps": 30, "duration": 10, "platform": "youtube-shorts"},
+  "brand": {
+    "colors": {"bg": "#14122b", "primary": "#6d5dfc", "accent": "#ffb547", "ink": "#14122b", "paper": "#f6f3ee"},
+    "fonts": {"display": "anton", "body": "inter", "meta": "jetbrains-mono"}
+  },
+  "camera": {"mode": "world"},
+  "cast": {"style": "flat", "characters": [{"id": "maya", "position": "left"}, {"id": "sam", "position": "right"}]},
+  "scenes": [
+    {"id": "talk", "module": "cast-scene", "start": 0, "end": 10,
+      "params": {"set": "standing", "shot": "wide", "cast": [
+        {"id": "maya", "pose": "stand", "expression": "neutral", "cues": [{"at": 7.6, "pose": "shrug", "expression": "happy"}]},
+        {"id": "sam", "pose": "stand", "expression": "neutral", "cues": [{"at": 4.6, "pose": "facepalm", "expression": "frustrated"}]}
+      ]},
+      "zooms": [
+        {"at": 1, "land": "maya", "move": "reveal", "purpose": "find Maya before she breaks the news"},
+        {"at": 4.4, "land": "sam", "move": "push", "shot": "close", "purpose": "land on Sam's reaction to the broken rollback"},
+        {"at": 7.8, "land": "maya", "move": "cut", "shot": "medium", "screen": "left-third", "purpose": "cut back to Maya for her answer"}
+      ]}
+  ]
+}

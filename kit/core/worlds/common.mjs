@@ -10,6 +10,7 @@
 
 import {mixColor} from '../catalog-b-base.mjs';
 import {f, pts} from './pen.mjs';
+import {painted, paintWall, paintFloor} from './paint.mjs';
 
 const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -193,6 +194,7 @@ export function wall(k, floorY, {color = null, shade = null, dado = false, strip
     out.push(p.rect(x0, dy - 6 * u, w, 12 * u, pal.trim, {stroke: d.outline ? true : false, sw: 0.6}));
     if (panel && d.n >= 1) for (let x = x0 + 30 * u; x < x0 + w; x += 220 * u) out.push(p.rect(x, dy + 26 * u, 170 * u, floorY - dy - 60 * u, 'none', {stroke: mixColor('#000000', pal.wallShade, 0.12), sw: 1.5, rx: 4 * u}));
   }
+  if (painted(k)) out.push(...paintWall(k, x0, 0, w, floorY - 20 * u, c));
   out.push(p.rect(x0, floorY - 20 * u, w, 22 * u, pal.trim, {stroke: d.outline ? true : false, sw: 0.6}));
   return out;
 }
@@ -222,6 +224,7 @@ export function floor(k, floorY, {kind = 'wood', color = null} = {}) {
   } else if (kind === 'carpet' && d.n >= 1) {
     out.push(p.rect(x0, floorY, w, 6 * u, mixColor('#000000', base, 0.2), {stroke: false, opacity: 0.6}));
   }
+  if (painted(k)) out.push(...paintFloor(k, x0, floorY, w, H - floorY, base));
   return out;
 }
 

@@ -129,14 +129,16 @@ code-drawn frame animated as is would keep the code-drawn look.
 | Field | From |
 |---|---|
 | Layout reference | the shot's first frame from the animatic, passed as a composition reference to the keyframe step where the provider accepts one, otherwise described in words (shot size, who is where) |
-| Start frame | the approved keyframe; the image-to-video first frame |
+| Start frame | the approved keyframe; the image-to-video first frame. With continuity on, a shot that carries straight on from the one before starts on that clip's last kept frame instead (§4.1.2) |
 | Character description | the bible's character entry, written out once as a fixed paragraph (silhouette, proportions, colours as hex, signature item, gesture, `must_keep`, the fixed imperfection), pasted word for word, never shortened |
+| Drawing | the drawing style's locked paragraph (`src/generate/style-paragraphs.js`): the figures' line, palette, light and what they never do, then the place drawn the same way; for a stick or rubber-hose style, its anatomy as constraints too. A plate gets the place sentence only |
 | Reference images | the bible's sheets for every character in frame, the crop the provider accepts |
 | Place | the bible's world entry and its light; for a plate, the place alone with nobody in it |
-| Action | the shot's one action, timed in beats from the shot list (`0–2 s: …`, `2–5 s: …`) |
+| Action | the shot's one action, timed in beats from the shot list (`0–0.5 s (setup): …`, `0.5–1.1 s (action): …`), as cause and effect |
 | Camera | the shot's camera move, in camera words (shot size, angle, movement) |
+| Audio | none by default: no music, no speech or narration, no sound effects (`video.audio: "none"`); with `--generate-sound-effects` or the storyboard's `generate.sound_effects`, the model's own effects only (`"effects"`). An adapter whose model takes an audio switch sets it from this |
 | Length, size, rate | the shot's frame count, the story's size and rate, plus edge padding (§6) |
-| Never | no text or lettering, no extra people, no mirrors, the bible's `rules` |
+| Never | no text or lettering, no extra people, no mirrors, the style's anatomy negatives (stick, rubber-hose), the bible's `rules` |
 
 Rules for the brief, enforced when it is written:
 
@@ -149,6 +151,115 @@ Rules for the brief, enforced when it is written:
   paraphrases a character inside a prompt. A variant (a character covered in
   flour) is its own bible entry with its own sheet.
 - **Plates are per place**, generated once and reused in every shot there.
+- **The drawing is locked.** One fixed paragraph per drawing style, pasted
+  word for word into every keyframe and plate of the story, never
+  rephrased per shot: the scene varies, the drawing does not. It is part of
+  the hashed brief, so editing a paragraph makes every shot in that style a
+  new brief. A style whose figures are lines (stick, stick-classic,
+  rubber-hose) also says its anatomy in the prompt, for models that ignore
+  the negative: exactly two arms and two legs, a raised arm replaces the
+  lowered one rather than adding a third, every limb connected, the spine
+  one thin line, no filled torso, no yellow face, no 3D shading; the same
+  list goes into the negative for that style only, and one line of it into
+  the video prompt. A new style with no paragraph yet gets its name in one
+  sentence until it is given one.
+- **Action as cause and effect.** Each timed beat names only what changes
+  (a pose, an expression, the action and its target, a prop gripped or let
+  go, a contact, a hand-off, a camera move), labelled setup, action (the
+  beat the shot's action lands on), consequence and reaction, so each beat
+  follows from the one before and the last one earns its hold. Cue fields
+  (`holds`, `contact`, `to`, `target` on a pose state) are read when a state
+  carries them and never required. The motion prompt ends with a narrow
+  continuity line (who is in frame, where they stand and the light stay as
+  in the start frame; nothing moves that the beats do not name) rather than
+  "nothing else moves", which also froze the action's own consequences.
+- **The mix is ours.** Narration, music and effects are laid in the edit,
+  so the video prompt says no music and no speech, and no effects unless
+  the story keeps the model's own.
+
+#### 4.1.1 One generation clip, several edited shots (designed, not built)
+
+A *generation clip* is one returned model asset; an *edited shot* is a
+continuous view the final timeline keeps. Today they are one-to-one: one
+shot of the shot list is one brief, one clip, and the edit keeps the clip
+less its edge padding. Many models now make 8–15 s per call and do better
+with a few connected beats than with one 2 s action, so the next step is to
+plan the timeline first and group it into clips:
+
+1. **Timeline first.** The shot list (from the animatic) is the final
+   timeline. Consecutive shots in the same set, with someone in both and
+   action that carries over, are grouped into one generation clip up to
+   the chosen model's longest supported length; a cut to another place, a
+   new character, or a shot that must be code-drawn closes the group. No
+   fixed clip length or count: the model's real settings decide.
+2. **One brief per group.** The group's beats are the shots' beats laid
+   end to end on the clip's own clock, with the camera change at each shot
+   boundary said as a cut or a move ("2.5–5 s cut closer: …").
+3. **A retained-range ledger.** Before generating, each edited shot is
+   mapped to a source range of its clip; after, the ranges are checked
+   against the returned clip and updated:
+
+   | Final timeline | Edited shot | Source clip | Requested / actual length | Kept in–out | Join and carried state |
+   |---|---|---|---|---|---|
+
+   HANDIN.json then names one clip for several shots, each with its own
+   `source_start` (and `source_end`), and unused stretches are discarded.
+   Generated length is not kept length: 30 s generated does not make a
+   30 s film.
+
+What exists now is the one-to-one case of that ledger: every video ledger
+line records `retained: {in, out}` (the pad trimmed off each end, §6), and
+HANDIN.json's `source_start` is its `in`. Grouping is left designed: it
+changes the brief's unit from a shot to a group, which touches the shot
+list, the hand-in manifest and the per-shot retakes, and is its own change.
+
+#### 4.1.2 Continuity between clips
+
+A cut between two generated clips joins only if the action, the pose, the
+grip, the prop and the screen direction carry across it. A keyframe made
+fresh for each shot redraws all of them, so consecutive shots that carry
+straight on are chained instead:
+
+- **Opt-in.** `finish --generate-continuity`, or `generate.continuity:
+  true` in the storyboard (which `generate brief` and the skill path read,
+  so their hashes agree). Off by default; nothing changes without it.
+- **Which shots.** A shot continues the one before when they share the set,
+  there is no gap between them (within a frame), someone is in both, and
+  the shot before is generated too (a code-drawn shot has no clip to take a
+  frame from).
+- **The brief.** `video.continue_from` names the shot before, and the
+  motion prompt opens with the carried state: each shared character as it
+  left off (its last pose, expression and held prop), same side of frame
+  and facing the same way. The brief hash covers it.
+- **The start frame.** The generator starts the clip on the last kept
+  frame of the shot before (`pad + seconds − one frame` of that clip),
+  written to `assets/shots/generated/<id>/start-from-<prev>.png`, and the
+  ledger line records `start_frame: {shot, at}`. When that clip was not
+  made in this run, or its frame cannot be read, it falls back to its own
+  keyframe with a note. The keyframe is still made and checked: it is the
+  fallback and the bible check. A cached chained clip is reused even if the
+  shot before is remade; keying the cache on that clip is left until it
+  matters.
+- **Reference vs first frame.** A reference image conditions identity and
+  style; a first frame is the literal opening composition. The bible's
+  sheets stay references and the keyframe (or the chained frame) stays the
+  first frame, the default. For a provider that takes reference images on
+  the video step, sending the sheets as a style input there too is a
+  follow-up behind its own flag; a start frame is never used for a picture
+  that is not meant to be the opening.
+
+The joins still need looking at: a prompt's intended continuity is not
+evidence that the cut works. The draft review (§6) and `handin check` look
+at each clip; checking the join itself (entry and exit pose, prop, camera
+direction at the cut) is an open question (§11).
+
+Provenance: the locked style paragraph, the stick anatomy constraints, the
+cause-and-effect beats, the audio line, the generation-clip/edited-shot
+split, the retained-range ledger and first-frame chaining are adapted from
+the MIT-licensed "directing-stickman-videos" agent skill (its A1 prompt
+structure, A7 four-block prompt contract and Model Engine production and
+review references). A few anatomy and rubber-hose sentences are copied with
+light edits; `style-paragraphs.js` marks them.
 
 ### 4.2 Footage shots
 
@@ -278,8 +389,13 @@ Every attempt is one line in `qa/generation-log.jsonl`:
   "changed": "the antenna bends right, not left",
   "cost": {"amount": 20, "unit": "credits"}, "seconds": 41,
   "file": "assets/shots/s3.draft.2.mp4",
-  "verdict": "rejected", "reason": "antenna bent the wrong way" }
+  "verdict": "rejected", "reason": "antenna bent the wrong way",
+  "retained": {"in": 0.3, "out": 2.81},
+  "start_frame": {"shot": "s2", "at": 2.777} }
 ```
+
+A video line's `retained` is the source range the edit keeps (§4.1.1);
+`start_frame` is there only for a chained clip (§4.1.2).
 
 - An unlogged good shot cannot be made again, so a generated file without
   a ledger line is treated as handed in, not generated.
@@ -350,6 +466,14 @@ Status (2026-11-20): phase 5's story shots are built for any provider
   draft was approved from.
 - A plate brief with no place (a shot with no set) is not generated.
 
+Status (2026-11-25): story briefs paste a locked paragraph per drawing
+style, with anatomy constraints for stick and rubber-hose figures; beats
+read as cause and effect; the video prompt says no music or speech, and
+fal models with an audio switch get it off. Continuity chaining
+(`--generate-continuity`) and the `retained` ledger field are built;
+grouping several edited shots into one generation clip (§4.1.1) is
+designed only.
+
 ## 10. Risks
 
 - **Character drift is the whole problem.** The bible check catches gross
@@ -382,6 +506,8 @@ Status (2026-11-20): phase 5's story shots are built for any provider
   or whether plates and whole shots cover the useful cases.
 - Whether the draft review should be the animatic with drafts swapped in,
   or a contact sheet of first, middle and last frames per shot.
+- How to check a join between two generated clips (entry and exit pose,
+  grip, prop and camera direction at the cut) rather than each clip alone.
 - ~~How the agent's own tools (skill path) report cost back into the
   ledger.~~ Answered: the agent hands each attempt in with `launchclip
   generate record` (provider `agent`, model from `--made-with`). A tool

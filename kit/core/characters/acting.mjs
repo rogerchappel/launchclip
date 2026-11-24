@@ -28,6 +28,8 @@
 import {set, tw} from '../catalog-b-view.mjs';
 import {HELD_AIDS, poseJoints} from './rig.mjs';
 
+// A walk eases in and out (slow, then at pace, then slow) rather than starting and stopping dead; what it carries goes with it on the same curve.
+export const WALK_EASE = 'sine.inOut';
 export const ACTING = Object.freeze({turn: 0.12, poseTween: 0.45, poseEase: 'power2.inOut', faceFade: 0.16, breath: 1.7, breathDepth: 0.012, sway: 2.6, swayDeg: 1.4, blinkEvery: 3.4, blinkDown: 0.06, blinkUp: 0.09,
   // Idle arms (styles whose geometry sets idleArms): a slow swing at the shoulder and a give at the elbow, and a slight sway of the body.
   armSway: 2.9, armDeg: 3, foreSway: 2.3, foreDeg: 7, bodySway: 3.7, bodyDeg: 0.9,
@@ -211,6 +213,14 @@ export function stateJoints(state, actor) {
   const j = sceneJoints(state.pose, {...actor, facing: state.facing ?? actor.facing, seated});
   // An aimed point (characters/aim.mjs): the pointing arm's own angles.
   if (state.aim) { j[`arm${state.aim.side}`] = state.aim.arm; j[`fore${state.aim.side}`] = state.aim.fore; }
+  // A contact action or a carried prop (characters/contact.mjs): the arms reach their
+  // grips ({armL, foreL, armR, foreR}, any of them) and the body takes its lean, crouch or dip.
+  if (state.arms) {
+    Object.assign(j, state.arms);
+    j.held = ['L', 'R'].filter(side => state.arms[`arm${side}`] !== undefined);
+    j.fingerL = 0; j.fingerR = 0;
+  }
+  if (state.body) Object.assign(j, state.body);
   if (actor.gaze) { j.gazeX = state.gaze?.x ?? 0; j.gazeY = state.gaze?.y ?? 0; j.gazeScale = state.gaze?.scale ?? 1; }
   return j;
 }
@@ -237,7 +247,10 @@ function gestureOps(ops, cid, j, t0, t1) {
   const half = g.period / 2;
   const cycles = Math.floor((t1 - t0) / g.period);
   const targets = jointTargets(cid, j);
+  // A hand on a prop (j.held) stays on it: its arm sits the gesture out.
+  const held = target => (j.held ?? []).some(side => target.endsWith(`-${side.toLowerCase()}`) && /-(arm|fore)-[lr]$/.test(target));
   const swing = (target, prop, amount, phaseShift) => {
+    if (held(target)) return;
     const base = targets[target][prop];
     for (let k = 0; k < cycles; k++) {
       const t = t0 + k * g.period;
@@ -295,7 +308,11 @@ export function actingOps(ops, actor) {
     const holdEnd = i + 1 < states.length ? states[i + 1].time : end;
     let settle = state.time;
     const from = jointTargets(cid, current), to = jointTargets(cid, next);
-    if (i > 0 && Object.keys(to).some(target => !same(from[target], to[target]))) {
+    if (i > 0 && state.tween) {
+      // A timed phase of a contact action (characters/contact.mjs): its own length and ease, already acted.
+      for (const target of Object.keys(to)) if (!same(from[target], to[target])) tw(ops, target, rt(state.time), state.tween, state.ease ?? A.poseEase, from[target], to[target]);
+      settle = rt(state.time + state.tween);
+    } else if (i > 0 && Object.keys(to).some(target => !same(from[target], to[target]))) {
       // The eyes close as a big move starts.
       if (poseChangeOps(ops, from, to, state.time, P) >= 0.8) moveBlinks.push(state.time + A.poseTween * P.pace * MOVE.anticipate);
       settle = rt(state.time + A.poseTween);
@@ -321,7 +338,7 @@ export function actingOps(ops, actor) {
   // Walks: the character crosses the floor on its own wrapper, at a steady pace.
   if (actor.walks) {
     set(ops, `${cid}-walk`, start, {x: states[0].x ?? 0});
-    for (const state of states) if (state.walk) tw(ops, `${cid}-walk`, rt(state.time), state.walk.duration, 'none', {x: state.walk.from}, {x: state.walk.to});
+    for (const state of states) if (state.walk) tw(ops, `${cid}-walk`, rt(state.time), state.walk.duration, WALK_EASE, {x: state.walk.from}, {x: state.walk.to});
   }
   // Faces: the first expression shows; each change crossfades.
   for (const name of actor.expressions) set(ops, `${cid}-face-${name}`, start, {opacity: name === states[0].expression ? 1 : 0});

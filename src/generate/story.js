@@ -6,6 +6,7 @@
 // video, or fallen back to code-drawn.
 //
 //   finish --generate <provider>[:<model>] [--generate-draft-video …] [--budget …]
+//          [--generate-continuity] [--generate-sound-effects]
 //          [--stop-after drafts | --approve drafts]
 //
 // Drafts, then finals. Every keyframe is made and checked against the bible
@@ -32,15 +33,16 @@ const castOf = (bible) => (Array.isArray(bible?.cast) ? bible.cast : Array.isArr
  * options: image, video (provider adapters), draft (the video provider has a
  * draft model), budget, daily, maxCalls, stopAfter, approved (--approve
  * drafts), ask(question) → boolean (attended) | null, judge (hand-in judge) | null,
- * notice, hooks (storyBriefs' frame).
+ * notice, hooks (storyBriefs' frame, and the generator's for a chained start frame),
+ * continuity, soundEffects (storyBriefs' options; undefined leaves the storyboard's generate fields).
  * → {status: "generated" | "awaiting-approval", shots, plates, quotes, stopped, notes}
  */
-export async function generateStoryAssets(project, { image, video = null, draft = false, budget = null, daily = null, maxCalls = null, candidates = 1, stopAfter = null, approved = false, ask = null, judge = null, notice = () => {}, hooks = {} } = {}) {
+export async function generateStoryAssets(project, { image, video = null, draft = false, budget = null, daily = null, maxCalls = null, candidates = 1, stopAfter = null, approved = false, ask = null, judge = null, notice = () => {}, hooks = {}, continuity, soundEffects } = {}) {
   const root = path.resolve(project);
   if (!existsSync(path.join(root, BIBLE_FILE))) throw new Error(`generating story shots needs a frozen show bible (${BIBLE_FILE}); make one with launchclip bible freeze`);
   const story = JSON.parse(await readFile(path.join(root, "storyboard.json"), "utf8"));
   const bible = JSON.parse(await readFile(path.join(root, BIBLE_FILE), "utf8"));
-  const entries = await storyBriefs(root, story, hooks);
+  const entries = await storyBriefs(root, story, hooks, { continuity, soundEffects });
   if (!entries.length) throw new Error("generating story shots needs the animatic (ANIMATIC.json): run launchclip finish --animatic first, or make --animation");
   const notes = [];
   const say = (line) => { notes.push(line); notice(`generate: ${line}`); };
@@ -53,7 +55,7 @@ export async function generateStoryAssets(project, { image, video = null, draft 
 
   // One pass of the generator over the requests at one tier; → Map id → shot | null.
   const pass = async (tier, requests) => {
-    const generator = createGenerator({ project: root, image, video, budget, daily, tier, maxCalls, candidates, check, approve: ask, notice, fps: Number(story.format?.fps) || undefined });
+    const generator = createGenerator({ project: root, image, video, budget, daily, tier, maxCalls, candidates, check, approve: ask, notice, fps: Number(story.format?.fps) || undefined, ...(hooks.frame ? { frame: hooks.frame } : {}) });
     try {
       const answers = await Promise.all(requests.map((request) => generator.findShot(request)));
       const report = generator.report();
@@ -150,6 +152,9 @@ export async function finishGenerate(project, options, adapters = {}) {
     ask: attended ? (question) => (adapters.ask ?? askYesNo)(question) : null,
     judge: adapters.handInJudge ?? (adapters.handInClient ? visionHandInJudge(adapters.handInClient) : null),
     notice,
-    hooks: adapters.generateHooks ?? {}
+    hooks: adapters.generateHooks ?? {},
+    // Opt-in; without the flag the storyboard's generate.continuity / generate.sound_effects decide.
+    ...(options.generateContinuity ? { continuity: true } : {}),
+    ...(options.generateSoundEffects ? { soundEffects: true } : {})
   });
 }

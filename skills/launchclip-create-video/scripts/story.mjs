@@ -719,9 +719,10 @@ export function validateStory(story, { modules, moduleParams } = {}) {
   // shape is checked here; kinds, times and props when a world scene resolves
   // (kit/core/catalog-world.mjs, kit/core/worlds/ storyWorldErrors).
   if (story.world !== undefined && story.world !== null) {
-    if (!isObject(story.world)) err("world must be {kind, time?, props?, detail?}");
+    if (!isObject(story.world)) err("world must be {kind, time?, props?, detail?, depth?}");
     else {
-      for (const key of Object.keys(story.world)) if (!["kind", "time", "props", "detail"].includes(key)) err(`world.${key} is not a world field (kind, time, props, detail)`);
+      for (const key of Object.keys(story.world)) if (!["kind", "time", "props", "detail", "depth"].includes(key)) err(`world.${key} is not a world field (kind, time, props, detail, depth)`);
+      if (story.world.depth !== undefined && typeof story.world.depth !== "boolean") err("world.depth must be true or false");
       for (const key of ["kind", "time", "detail"]) if (story.world[key] !== undefined && !nonEmpty(story.world[key])) err(`world.${key} must be a name`);
       if (story.world.props !== undefined && !Array.isArray(story.world.props)) err("world.props must be a list of props");
     }
@@ -1837,6 +1838,13 @@ function validateOverviews(overviews, { err, camera, timing }) {
 // or object zoom is measured on the module, so its safe-area check runs when
 // the compilers resolve it (dropped with a warning).
 export const STORY_ZOOM = Object.freeze({ min: 1.15, max: 3, fill: 0.7, move: 0.8, hold: 1.2, safe: 0.05, count: 8 });
+// Camera landings (zooms.mjs LAND; scene.zooms[].land on a cast-scene): the
+// moves, their default and allowed travel times, the least hold after
+// landing, the named screen anchors and the scale range. Whether the subject
+// can land (inside the plate, the face clear of the caption band) is checked
+// on the resolved cast (characters/landing.mjs), which fails the scene.
+export const STORY_LAND = Object.freeze({ moves: ["reveal", "push", "cut"], dur: { reveal: 1.4, push: 0.9, min: 0.4, max: 3 }, hold: 0.6, screens: ["center", "left-third", "right-third"], scale: { min: 1, max: 3 }, shots: ["wide", "medium", "close"], purpose: 12 });
+const LAND_KEYS = ["at", "land", "move", "purpose", "screen", "shot", "scale", "dur", "until"];
 
 // scene.carry (docs/FLUID_MOTION_RFC.md §6): false, or {from?, map} of full
 // element ids, the source's on the left and this scene's on the right.
@@ -1865,6 +1873,7 @@ function validateZooms(scene, { path, label, start, end, track, err, anchorField
   for (const [z, zoom] of zooms.entries()) {
     const zoomPath = `${path}.zooms[${z}]`;
     if (!isObject(zoom)) { err(`${zoomPath} must be an object {at, box | target | object, scale?, until?}`); times.push(null); continue; }
+    if (zoom.land !== undefined) { times.push(validateLanding(scene, zoom, zoomPath, { err, anchorField })); continue; }
     for (const key of Object.keys(zoom)) if (!["at", "box", "target", "object", "scale", "until"].includes(key)) err(`${zoomPath}.${key} is not supported (allowed: at, box, target, object, scale, until)`);
     const kinds = ["box", "target", "object"].filter((key) => zoom[key] !== undefined);
     if (kinds.length !== 1) err(`${zoomPath} needs exactly one of box, target or object`);
@@ -1891,10 +1900,12 @@ function validateZooms(scene, { path, label, start, end, track, err, anchorField
   }
   // Timing once the times are numbers (the resolved story is checked again).
   if (start === null || end === null || times.some((time) => !time || time.at === null || (time.explicit && time.until === null))) return;
-  const d = STORY_ZOOM.move;
   for (const [z, time] of times.entries()) {
     const zoomPath = `${path}.zooms[${z}]`;
     const next = times[z + 1];
+    // A landing travels for its own time (0 on a cut) and holds to the shot's end unless it has an until.
+    const d = time.travel ?? STORY_ZOOM.move;
+    const hold = time.travel !== undefined ? STORY_LAND.hold : STORY_ZOOM.hold;
     if (time.at <= start + EPS || time.at >= end - EPS) { err(`${zoomPath}.at (${time.at}) must fall inside ${label} (${start}, ${end})`); continue; }
     if (time.at < entryEnd - EPS) err(`${zoomPath}.at (${time.at}) falls during the shot's entry move (until ${round3(entryEnd)} s); zoom once it has landed`);
     if (z > 0 && time.at <= times[z - 1].at + EPS) err(`${zoomPath}.at (${time.at}) must come after zooms[${z - 1}].at`);
@@ -1903,9 +1914,32 @@ function validateZooms(scene, { path, label, start, end, track, err, anchorField
       else if (time.until > end - d + EPS) err(`${zoomPath}.until (${time.until}) must leave ${d} s to ease out before ${label} ends (${end})`);
       if (next && next.at < time.until + d - EPS) err(`${zoomPath} overlaps zooms[${z + 1}]: it eases out over ${d} s from ${time.until}, so the next may start at ${round3(time.until + d)} s at the earliest`);
     }
-    const leaves = time.explicit ? time.until : next ? next.at : end - d;
-    if (leaves - (time.at + d) < STORY_ZOOM.hold - EPS) err(`${zoomPath} holds ${round3(Math.max(0, leaves - time.at - d))} s; a zoom holds at least ${STORY_ZOOM.hold} s after its ${d} s move (until, the next zoom or the shot's end ${d} s out)`);
+    const leaves = time.explicit ? time.until : next ? next.at : time.travel !== undefined ? end : end - d;
+    if (leaves - (time.at + d) < hold - EPS) err(`${zoomPath} holds ${round3(Math.max(0, leaves - time.at - d))} s; a ${time.travel !== undefined ? "landing" : "zoom"} holds at least ${hold} s after its ${d} s move (until, the next zoom or the shot's end${time.travel !== undefined ? "" : ` ${d} s out`})`);
   }
+}
+
+// One camera landing (scene.zooms[].land): its fields, then its times as
+// validateZooms' timing pass takes them ({at, until, explicit, travel}).
+function validateLanding(scene, zoom, zoomPath, { err, anchorField }) {
+  for (const key of Object.keys(zoom)) if (!LAND_KEYS.includes(key)) err(`${zoomPath}.${key} is not supported on a landing (allowed: ${LAND_KEYS.join(", ")})`);
+  if (scene.module !== "cast-scene") err(`${zoomPath}.land is for cast-scene shots (this is ${scene.module}); zoom on a box, target or object`);
+  if (!(typeof zoom.land === "string" && /^[A-Za-z0-9_-]+$/.test(zoom.land))) err(`${zoomPath}.land must name a character in the scene, a world point (far, window, horizon, street, skyline) or a prop`);
+  for (const key of ["box", "target", "object"]) if (zoom[key] !== undefined) err(`${zoomPath} lands on its subject; drop ${key}`);
+  if (!STORY_LAND.moves.includes(zoom.move)) err(`${zoomPath}.move must be one of ${STORY_LAND.moves.join(", ")} (reveal: travel across to it; push: in on it, for a reaction; cut: an instant reframe)`);
+  // The purpose is review metadata: why the camera moves, in words.
+  if (!(typeof zoom.purpose === "string" && zoom.purpose.trim().length >= STORY_LAND.purpose)) err(`${zoomPath}.purpose is required: why the camera moves, in a few words (at least ${STORY_LAND.purpose} characters), e.g. "land on Sam noticing the bug"`);
+  const share = (value) => typeof value === "number" && value >= 0.05 && value <= 0.95;
+  if (zoom.screen !== undefined && !STORY_LAND.screens.includes(zoom.screen) && !(Array.isArray(zoom.screen) && zoom.screen.length === 2 && zoom.screen.every(share))) err(`${zoomPath}.screen must be one of ${STORY_LAND.screens.join(", ")} or [x, y] shares of the frame (0.05–0.95)`);
+  if (zoom.shot !== undefined && zoom.scale !== undefined) err(`${zoomPath} takes a shot or a scale, not both`);
+  if (zoom.shot !== undefined && !STORY_LAND.shots.includes(zoom.shot)) err(`${zoomPath}.shot must be one of ${STORY_LAND.shots.join(", ")}`);
+  if (zoom.scale !== undefined && !(typeof zoom.scale === "number" && zoom.scale >= STORY_LAND.scale.min && zoom.scale <= STORY_LAND.scale.max)) err(`${zoomPath}.scale must be a number from ${STORY_LAND.scale.min} to ${STORY_LAND.scale.max}`);
+  if (zoom.dur !== undefined && zoom.move === "cut") err(`${zoomPath}.dur: a cut takes no time`);
+  else if (zoom.dur !== undefined && !(typeof zoom.dur === "number" && zoom.dur >= STORY_LAND.dur.min && zoom.dur <= STORY_LAND.dur.max)) err(`${zoomPath}.dur must be ${STORY_LAND.dur.min}–${STORY_LAND.dur.max} s`);
+  const at = zoom.at === undefined ? (err(`${zoomPath}.at is required`), null) : anchorField(zoom.at, `${zoomPath}.at`);
+  const until = zoom.until === undefined ? null : anchorField(zoom.until, `${zoomPath}.until`);
+  const travel = zoom.move === "cut" ? 0 : typeof zoom.dur === "number" ? zoom.dur : STORY_LAND.dur[zoom.move] ?? STORY_LAND.dur.push;
+  return { at, until, explicit: zoom.until !== undefined, travel };
 }
 
 // ---------------------------------------------------------------------------

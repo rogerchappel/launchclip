@@ -135,3 +135,34 @@ export function timeLight(time, {dir = null, color = null, intensity = null, ins
     intensity: intensity ?? (warmNight ? 0.55 : sky.keyIntensity)
   };
 }
+
+// Early-cartoon scenery (detail palette 'early-cartoon', the rubber-hose
+// style's worlds): every colour of the world laid in as flat matte paint
+// from a muted ramp by its lightness (warm dark gray, gray-taupe, dusty
+// sage-gray, pearl gray, pale ivory), keeping a little of its own hue, and
+// warm reds kept as small faded brick-red accents. Subdued colour, not
+// monochrome or sepia; lamps and screens are painted, not lit.
+const CARTOON_RAMP = [[0, '#2b2926'], [0.3, '#5f5a51'], [0.5, '#8a8576'], [0.64, '#96a08e'], [0.8, '#c6c6be'], [1, '#efe9d6']];
+const CARTOON_BRICK = '#a5584a';
+
+function rgbOf(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** One colour as early-cartoon paint (see above). */
+export function earlyCartoonColor(hex) {
+  if (!hexOk(hex)) return hex;
+  const [r, g, b] = rgbOf(hex);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const lightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  let i = 1;
+  while (i < CARTOON_RAMP.length - 1 && CARTOON_RAMP[i][0] < lightness) i++;
+  const [t0, c0] = CARTOON_RAMP[i - 1], [t1, c1] = CARTOON_RAMP[i];
+  const base = mixColor(c1, c0, Math.min(1, Math.max(0, (lightness - t0) / (t1 - t0))));
+  // A saturated warm red (a brick, an awning, a mug) stays a faded brick red.
+  const red = max > 0 && r === max && (max - min) / max > 0.4 && g - b < 70 && r - g > 50;
+  if (red) return mixColor(CARTOON_BRICK, base, 0.7);
+  return mixColor(hex.toLowerCase(), base, 0.15);
+}
+

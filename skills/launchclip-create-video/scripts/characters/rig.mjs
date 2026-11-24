@@ -252,8 +252,9 @@ export function poseJoints(name, {facing = 'right', seated = false, geometry} = 
   for (const [key, value] of Object.entries({...pose.upper, ...geometry?.poses?.[name]})) upper[key.replace(/A$/, a).replace(/O$/, o)] = value;
   const lowerName = seated ? 'sit' : pose.lower;
   // A style may seat its legs its own way (a stick figure's hips are one
-  // point, so the toon's knees-in would cross its shins).
-  const lower = lowerName === 'sit' && geometry?.sitLegs ? {...LOWER.sit, ...geometry.sitLegs} : LOWER[lowerName];
+  // point, so the toon's knees-in would cross its shins), and stand its own
+  // way (geometry.stance: a lower body by name).
+  const lower = lowerName === 'sit' && geometry?.sitLegs ? {...LOWER.sit, ...geometry.sitLegs} : {...LOWER[lowerName], ...geometry?.stance?.[lowerName]};
   if (name === 'sit' && geometry?.sitArms) Object.assign(upper, geometry.sitArms);
   // A body that lies down when seated folds its front legs in any pose (a four-legged kind, kinds.mjs).
   if (lowerName === 'sit' && geometry?.seatedArms) Object.assign(upper, geometry.seatedArms);

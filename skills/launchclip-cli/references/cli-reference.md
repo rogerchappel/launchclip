@@ -1448,6 +1448,18 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
   launchclip handin check <project> [--look mixed] [--model provider:model] [--json] # check HANDIN.json art against the story and the bible; writes qa/hand-in.json
   ```
 
+- `review-motion`: Make a motion review pack (docs/ANIMATION_MEASUREMENT.md, Motion review): per shot a clip and three-frame strips at the cut in, each pose change (from the project's shot list; a bare video is cut where the picture changes) and the cut out; the --reference clip's excerpts (--reference-range, default the whole clip) beside them; an index.html contact sheet; and motion-review.json with every check pending, bound to the video and reference by sha256. A project reviews renders/final.mp4 (or draft.mp4) unless --video names one. Limb weight (stroke width over head width) is measured from the frames as a guide. --previous carries an earlier review's failures into the repair log. --model names a model that takes images to suggest observations; a suggestion never sets a verdict. Writes <project>/qa/motion-review/ unless --out; refuses to overwrite a review.
+
+  ```text
+  launchclip review-motion <project|video> [--video <file>] [--reference <clip>] [--reference-range 0-3,5-8] [--previous <motion-review.json>] [--out <dir>] [--model provider:model] [--json] # a motion review pack against a reference clip, every check pending
+  ```
+
+- `review-motion check`: Check a filled motion review: the video, reference and pack files are unchanged; every check is pass, needs_repair or not_applicable with a reason, and has an observation and evidence; limb_weight has its comparison_basis and is not n/a when there is a reference; decisions.motion names who reviewed, how and when, and is pass only when nothing is open; every failure of the previous review is in the repair log and resolved (an implementation change needs a different video). Exits 1 when the review is incomplete and 2 when it is complete but needs repair. The technical and user decisions are reported, not checked.
+
+  ```text
+  launchclip review-motion check <motion-review.json|pack dir> [--previous <motion-review.json>] [--json] # a filled review is complete, current and resolves earlier failures
+  ```
+
 - `carousel make`: Plan, render and check a carousel or a single-image post from a brief (docs/CAROUSELS_RFC.md): a story whose scenes are slides, each a still (the slide's settled frame) or a short motion loop, with a post caption and alt text per destination.
 
   ```text
@@ -1753,7 +1765,7 @@ Every command answers `--help` or `-h` with its own usage (`launchclip finish --
 
   ```text
   launchclip finish <project> [--renderer remotion|hyperframes] [--quality draft|high] [--concurrency <cores>] [--voice kokoro|elevenlabs|supplied|test] [--music synth|elevenlabs|none] [--music-volume <0-1>] [--music-duck <0-1>] [--music-prompt "..."] [--music-regenerate] [--out renders/final.mp4] [--sfx-library dir] [--sfx-density low|normal|high] [--sfx generated|kit|off|earshot] [--scene s3[,s4] | --preview-scene s3 | --chapter c2] [--look mixed] [--library <path>] [--force] [--json]
-  launchclip finish <project> --generate <provider>[:<model>] [--generate-image <provider>:<model>] [--generate-video <provider>:<model>] [--generate-draft-video <provider>:<model>] [--budget <n>[usd|credits]] [--budget-daily <n>[usd|credits]] [--max-generations <n>] [--keyframe-candidates <n>] [--stop-after drafts | --approve drafts] # a character story's shots and plates generated into HANDIN.json (keyframes checked against the bible, drafts then finals), then the hand-in path
+  launchclip finish <project> --generate <provider>[:<model>] [--generate-image <provider>:<model>] [--generate-video <provider>:<model>] [--generate-draft-video <provider>:<model>] [--budget <n>[usd|credits]] [--budget-daily <n>[usd|credits]] [--max-generations <n>] [--keyframe-candidates <n>] [--generate-continuity] [--generate-sound-effects] [--stop-after drafts | --approve drafts] # a character story's shots and plates generated into HANDIN.json (keyframes checked against the bible, drafts then finals), then the hand-in path; --generate-continuity starts a shot that carries straight on from the one before on that clip's last kept frame, --generate-sound-effects keeps the video model's own effects (never its music or speech)
   launchclip finish <project> --plan-only [--renderer remotion|hyperframes] [--music synth|elevenlabs|none] [--sfx generated|kit|off|earshot] # everything up to the render: the resolved story, PLAYER-MANIFEST.json and the checks that need no render
   launchclip finish <project> --prototype [--renderer remotion|hyperframes] [--quality draft|high] # the opening 20–30 s only
   launchclip finish <project> --animatic [--review | --retake [--critic-repairs 3]] [--model provider:model] [--scene s3[,s4]] [--renderer remotion|hyperframes] # a character story's animatic, its staging review and retakes

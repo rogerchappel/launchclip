@@ -611,7 +611,14 @@ what the call cost. Map the brief onto whatever parameters yours has.
    with the accepted keyframe as the start frame, `brief.video.prompt` as the
    motion prompt, and a length of `brief.video.seconds + 2 ×
    brief.video.pad_seconds` (LaunchClip trims the padding back). A brief with
-   steps `["image"]` stops at the keyframe.
+   steps `["image"]` stops at the keyframe. A story shot's `brief.video.audio`
+   says what the clip may carry: `none` turns the tool's own audio off,
+   `effects` keeps only its sound effects (never music or speech; the mix
+   is LaunchClip's). A brief with `brief.video.continue_from` carries straight
+   on from that shot: when its clip is accepted, start this clip on its last
+   kept frame (at that brief's `pad_seconds + seconds` minus one frame)
+   instead of this shot's keyframe. With no clip for it,
+   use the keyframe.
 7. **Record every attempt**, accepted or rejected:
 
    ```bash

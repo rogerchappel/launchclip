@@ -6,7 +6,9 @@ import {createHash} from 'node:crypto';
 import {EXPRESSIONS, POSES, poseJoints, rigGeometry} from '@launchclip/core/characters/rig.mjs';
 import {STARTER_CAST, characterLook, starterCharacter} from '@launchclip/core/characters/cast.mjs';
 import {drawFlat} from '@launchclip/core/characters/style-flat.mjs';
-import {DRAWING_STYLES, drawCharacter, styleGeometry, styleHeight} from '@launchclip/core/characters/styles.mjs';
+import {DRAWING_STYLES, MIN_LIMB_WEIGHT, drawCharacter, limbWeight, styleGeometry, styleHeight} from '@launchclip/core/characters/styles.mjs';
+import {cubicPoints, pathBox, pressureStroke} from '@launchclip/core/characters/pens.mjs';
+import {asHead} from '@launchclip/core/characters/toon.mjs';
 import {DEFAULT_LIGHT, lightErrors, normalizeLight} from '@launchclip/core/characters/light.mjs';
 import {resolveModule} from '@launchclip/core/modules.mjs';
 import {charactersView} from '@launchclip/core/catalog-characters.mjs';
@@ -228,4 +230,105 @@ test('chibi-plain: the chibi figure with no skin tone', () => {
     assert.ok(!plain.includes(colors.skin) && plain.includes('#fbf7ef'), `${id}: paper white, not ${colors.skin}`);
     assert.ok(plain.includes(colors.hair) && plain.includes(colors.top), 'hair and clothes keep their colours');
   }
+});
+
+test('pressure ink: a ribbon that tapers at its ends, uneven along it, the same for the same seed', () => {
+  const points = cubicPoints([0, 0], [-10, 40], [-10, 80], [0, 120], 10);
+  const a = pressureStroke(points, 12, '#111111', {seed: 's', taper: [0.3, 0.3]});
+  assert.deepEqual(pressureStroke(points, 12, '#111111', {seed: 's', taper: [0.3, 0.3]}), a, 'deterministic');
+  assert.notDeepEqual(pressureStroke(points, 12, '#111111', {seed: 't', taper: [0.3, 0.3]}), a, 'another seed, another pressure');
+  assert.equal(a.attrs.fill, '#111111');
+  assert.match(a.attrs.d, /^M[-\d. L]+Z$/, 'absolute M/L only, for bounds.mjs');
+});
+
+test('rubber-hose: a white round face, ink-only strokes and white gloves, every part id, and limbs that keep their weight', () => {
+  assert.ok(DRAWING_STYLES.includes('rubber-hose'));
+  for (const id of ['maya', 'kwame', 'fatima', 'nia']) {
+    const {params} = starterCharacter(id);
+    const {colors} = characterLook(params, {style: 'rubber-hose'});
+    const geometry = styleGeometry('rubber-hose', params);
+    const drawn = (pose, isStatic) => drawCharacter('rubber-hose', params, colors, {id: 'k', joints: poseJoints(pose, {geometry}), expression: 'happy', expressions: ['happy', 'sad'], static: isStatic});
+    const json = JSON.stringify(drawn('wave', true));
+    // Ink, paper and muted greys only: the figure is drawn, not coloured (hair keeps a trace of its colour).
+    for (const hex of new Set(json.match(/#[0-9a-f]{6}/gi).map(hex => hex.toLowerCase()))) {
+      const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+      assert.ok(Math.max(r, g, b) - Math.min(r, g, b) <= 32, `${id}: ${hex} is a muted grey, not a colour`);
+    }
+    // No big solid ink shape (dark hair or a headscarf is line art over a light tone): only the shoes and small marks are filled ink.
+    const inkBlobs = node => (node && typeof node === 'object' ? (node.tag === 'path' && node.attrs?.fill === '#221d27' && (box => box.x1 - box.x0)(pathBox(node.attrs.d)) > 60 ? 1 : 0) + (node.children ?? []).reduce((sum, child) => sum + inkBlobs(child), 0) : 0);
+    assert.equal(inkBlobs(drawn('stand', true)), 0, `${id}: no solid ink hair`);
+    // Arms are drawn before the head, so a raised hand never strokes across the face.
+    const order = [];
+    const walk = node => { if (!node || typeof node !== 'object') return; const nid = node.id ?? node.attrs?.id; if (/^k-(arm-[lr]|head)$/.test(nid ?? '')) order.push(nid); (node.children ?? []).forEach(walk); };
+    walk(drawn('cheer', true));
+    assert.deepEqual(order, ['k-arm-l', 'k-arm-r', 'k-head']);
+    // The resting arms hang clear of the body, for this style only.
+    assert.ok(poseJoints('stand', {geometry}).armL > poseJoints('stand').armL);
+    // The same animated part ids as the stick figure.
+    const ids = node => (node && typeof node === 'object' ? [...(node.id ? [node.id] : []), ...(node.children ?? []).flatMap(ids)] : []);
+    const stick = drawCharacter('stick-classic', params, characterLook(params, {style: 'stick-classic'}).colors, {id: 'k', joints: poseJoints('wave', {geometry: styleGeometry('stick-classic', params)}), expression: 'happy', expressions: ['happy', 'sad']});
+    assert.deepEqual(new Set(ids(drawn('wave', false))), new Set(ids(stick)), `${id}: same part ids`);
+    // The face stays paper-white whatever a scene's light or grade does to the character's colours.
+    const dimmed = Object.fromEntries(Object.entries(colors).map(([key, hex]) => [key, /^#[0-9a-f]{6}$/i.test(hex) ? '#202428' : hex]));
+    assert.match(JSON.stringify(drawCharacter('rubber-hose', params, dimmed, {id: 'k', joints: poseJoints('stand', {geometry}), static: true, light: {dir: 200, color: '#203060', intensity: 1}})), /"fill":"#fdfcf8","stroke":"#1c1a1f"/);
+    const weight = limbWeight(drawn('stand', true), 'k');
+    assert.ok(weight.ratio >= MIN_LIMB_WEIGHT && weight.ratio <= 0.09, `${id}: limb ${weight.limb} on a ${weight.head} head (${weight.ratio})`);
+    // The head is about a fifth of the figure's height, as the period cartoons draw it.
+    const share = weight.head / styleHeight('rubber-hose', params);
+    assert.ok(share > 0.17 && share < 0.24, `${id}: head ${share} of the height`);
+  }
+});
+
+test('limb weight: limb width over head width in every style; a wire-thin figure falls under the floor', () => {
+  const {params} = starterCharacter('maya');
+  for (const style of DRAWING_STYLES) {
+    const {colors} = characterLook(params, {style});
+    const weight = limbWeight(drawCharacter(style, params, colors, {id: 'k', joints: poseJoints('stand', {geometry: styleGeometry(style, params)}), static: true}), 'k');
+    assert.ok(weight && weight.ratio >= MIN_LIMB_WEIGHT, `${style}: ${JSON.stringify(weight)}`);
+  }
+  // The same head with 2-unit wire limbs.
+  const wire = {tag: 'g', children: [
+    asHead({tag: 'ellipse', attrs: {cx: 0, cy: -400, rx: 80, ry: 80}, children: []}),
+    {tag: 'g', attrs: {id: 'w-fore-l'}, children: [{tag: 'path', attrs: {d: 'M0 0L0 120', fill: 'none', stroke: '#000000', strokeWidth: 2}}]}
+  ]};
+  assert.deepEqual(limbWeight(wire, 'w'), {limb: 2, head: 160, ratio: 0.013});
+  assert.ok(limbWeight(wire, 'w').ratio < MIN_LIMB_WEIGHT);
+  assert.equal(limbWeight({tag: 'g', children: []}, 'w'), null, 'nothing to measure');
+});
+
+test('stick: pressure ink is an option; without it the stick figure draws as before', () => {
+  const {params} = starterCharacter('maya');
+  for (const style of ['stick', 'stick-classic']) {
+    const {colors} = characterLook(params, {style});
+    const options = {id: 'k', joints: poseJoints('wave', {geometry: styleGeometry(style, params)}), static: true};
+    const plain = drawCharacter(style, params, colors, options);
+    assert.deepEqual(drawCharacter(style, params, colors, {...options, ink: null}), plain);
+    const pressed = drawCharacter(style, params, colors, {...options, ink: 'pressure'});
+    assert.deepEqual(drawCharacter(style, params, colors, {...options, ink: 'pressure'}), pressed, `${style}: deterministic`);
+    const ribbons = node => (node && typeof node === 'object' ? (node.tag === 'path' && node.attrs?.stroke === 'none' && /^M[^CQ]+Z$/.test(node.attrs.d) ? 1 : 0) + (node.children ?? []).reduce((sum, child) => sum + ribbons(child), 0) : 0);
+    assert.ok(ribbons(pressed) > ribbons(plain) + 8, `${style}: the sticks are pressure strokes`);
+    assert.ok(limbWeight(pressed, 'k').ratio >= MIN_LIMB_WEIGHT);
+  }
+});
+
+test('rubber-hose: pie eyes, four-fingered gloves, a line of action standing, and the shared rig untouched', () => {
+  const {params} = starterCharacter('maya');
+  const {colors} = characterLook(params, {style: 'rubber-hose'});
+  const geometry = styleGeometry('rubber-hose', params);
+  const json = JSON.stringify(drawCharacter('rubber-hose', params, colors, {id: 'k', joints: poseJoints('stand', {geometry}), expression: 'happy', static: true}));
+  const nodes = [];
+  const walk = node => { if (node && typeof node === 'object') { nodes.push(node); (node.children ?? []).forEach(walk); } };
+  walk(JSON.parse(json));
+  // Tall black ovals, each with a wedge of paper cut into it.
+  const pupils = nodes.filter(n => n.tag === 'ellipse' && n.attrs.fill === '#1c1a1f' && n.attrs.ry > n.attrs.rx * 1.5);
+  assert.equal(pupils.length, 2);
+  // Each glove: three fingers, a palm, a cover and a thumb (paper ellipses), and a cuff.
+  assert.ok(nodes.filter(n => n.tag === 'ellipse' && n.attrs.fill === '#fdfcf8').length >= 12);
+  // Standing: the weight on one leg and the arms not mirror images; other styles stand as the rig does.
+  const stand = poseJoints('stand', {geometry});
+  assert.notEqual(stand.legL, stand.legR);
+  assert.notEqual(stand.armL, stand.armR);
+  assert.deepEqual(poseJoints('stand', {geometry: styleGeometry('stick', params)}), poseJoints('stand', {geometry: styleGeometry('stick', params)}));
+  const stick = poseJoints('stand', {geometry: styleGeometry('stick', params)});
+  assert.equal(stick.legL, stick.legR);
 });

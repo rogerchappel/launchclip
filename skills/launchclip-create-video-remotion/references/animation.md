@@ -138,7 +138,7 @@ nothing later may change it.
 
 **Design the cast, and keep it simple.** One character file per script
 character, with the script's id, in the `chibi` style unless the
-brief names another (the styles: `flat`, `line`, `outlined`, `paper`, `soft-shade`, `stick`, `stick-classic`, `lifelike`, `cinematic`, `avatar`, `chibi`, `chibi-plain`):
+brief names another (the styles: `flat`, `line`, `outlined`, `paper`, `soft-shade`, `stick`, `stick-classic`, `lifelike`, `cinematic`, `avatar`, `chibi`, `chibi-plain`, `rubber-hose`):
 
 ```bash
 launchclip cast list                      # the starter characters: their ids are taken

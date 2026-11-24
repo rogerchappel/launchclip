@@ -35,6 +35,10 @@ export const CAMERA_PARITY = Object.freeze([
   // mid-move, through the world camera and through cuts-mode wrappers.
   {id: 'zoom-world-9x16', threshold: 0.97, times: [0.8, 1.5, 2.6, 6.8, 8.0, 9.4, 10.6, 11.8]},
   {id: 'zoom-cuts-9x16', threshold: 0.97, times: [0.8, 1.5, 2.6, 6.8, 8.0, 9.4, 10.6, 11.8]},
+  // Camera landings in a cast scene (kit/core/characters/landing.mjs): at
+  // rest, mid-reveal (blurred), landed on Maya, mid-push on Sam, landed
+  // close, just after the cut back and held on the left third.
+  {id: 'camera-landing-9x16', threshold: 0.97, times: [0.5, 1.7, 3.0, 4.8, 6.0, 7.9, 9.5]},
   // The overview move: out over four held, frozen shots plus the incoming
   // one, the hold, the push in and settled.
   {id: 'overview-world-9x16', threshold: 0.97, times: [10.0, 16.6, 17.4, 18.2, 19.5]},

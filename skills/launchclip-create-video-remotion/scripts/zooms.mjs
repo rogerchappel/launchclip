@@ -5,6 +5,7 @@
 // shot".
 //
 //   scene.zooms = [{at, box | target | object, scale?, until?}]
+//              | [{at, land, move, purpose, screen?, shot?, scale?, dur?, until?}]
 //     at, until   seconds or narration anchors ("word:57.6%"), like hits
 //     box         {x, y, width, height} in plate px (every module)
 //     target      a shot-state target: an item index or element id, or an
@@ -29,10 +30,21 @@
 //   translate, which is exactly the world camera's zoom-over-pan math.
 // - Captions sit outside the camera and the wrappers, so a zoom never moves
 //   or dips them.
+// - A landing (`land`, cast scenes: kit/core/characters/landing.mjs) solves
+//   the camera so one named subject (a character's face, a world point or a
+//   prop) lands on a screen anchor: centre = subject − (anchor − canvas
+//   centre) / scale. `move` says why it moves: reveal (lateral travel),
+//   push (in toward the subject, for a reaction) or cut (an instant
+//   reframe). It travels on LAND.ease (slow, fast, slow, no overshoot,
+//   whatever the grammar's camera ease), then holds: until `until`, the
+//   next zoom, or the shot's end. Its `purpose` rides on the key (and the
+//   world camera's move) for review. The landing idea (solve the camera for
+//   one world anchor at one screen point, travel, then hold) is adapted from
+//   an MIT-licensed stickman-directing skill.
 
 import { characterKeys } from './character-camera.mjs';
 import { resolveGrammar } from './grammar.mjs';
-import { scaleStepAt, scaleTweenOps } from './motion.mjs';
+import { getEase, scaleStepAt, scaleTweenOps } from './motion.mjs';
 
 export const ZOOM = Object.freeze({
   min: 1.15, max: 3,
@@ -48,6 +60,52 @@ export const ZOOM = Object.freeze({
   // At most this many zooms in one shot.
   count: 8
 });
+
+// Camera landings (scene.zooms[].land): the moves, their default travel
+// times, the ease every landing travels on (zero speed at both ends, never
+// past its landing), the velocity-blur strength while it travels (the world
+// camera's velocityBlur, zero at the slow ends), the least hold after
+// landing, the named screen anchors ([x, y] shares of the frame: faces sit
+// on the upper part of the frame, clear of the caption band), and how long
+// a cut takes (a jump between two frames).
+export const LAND = Object.freeze({
+  moves: Object.freeze(['reveal', 'push', 'cut']),
+  dur: Object.freeze({ reveal: 1.4, push: 0.9, min: 0.4, max: 3 }),
+  ease: 'power3.inOut',
+  blur: 0.5,
+  hold: 0.6,
+  screen: Object.freeze({ center: Object.freeze([0.5, 0.4]), 'left-third': Object.freeze([1 / 3, 0.4]), 'right-third': Object.freeze([2 / 3, 0.4]) }),
+  scale: Object.freeze({ min: 1, max: 3 }),
+  cut: 0.001,
+  // Following a landed character (characters/landing.mjs): a move of the face under `still` of the frame's height is a
+  // gesture the camera holds through; a pose change is followed over at least `min` s; a walk from `lead` of its time
+  // before it starts to as long after it arrives (sine.inOut, whose peak speed then matches the even walk); and it
+  // averages at most `speed` frame heights a second, however fast the pose snaps.
+  follow: Object.freeze({ still: 0.04, min: 0.5, lead: 0.285, speed: 1.5 })
+});
+
+/** A landing's screen anchor (a LAND.screen name or [x, y] shares; default center) → canvas px. */
+export function landingScreen(screen, { width, height }) {
+  const [fx, fy] = Array.isArray(screen) ? screen : LAND.screen[screen ?? 'center'];
+  return { x: fx * width, y: fy * height };
+}
+
+/**
+ * The least scale that lands plate point `point` on screen point `target`
+ * with the view inside the plate (at scale 1 only the centre lands on the
+ * centre): per side, the subject's distance from that plate edge must cover
+ * the target's distance from the same screen edge.
+ */
+export function landingMinScale(point, target, { width, height }) {
+  const need = (a, p, side) => Math.max(p / Math.max(a, EPS), (side - p) / Math.max(side - a, EPS));
+  // Rounded up, so the view never leaves the plate by a rounding.
+  return Math.ceil(Math.max(1, need(point.x, target.x, width), need(point.y, target.y, height)) * 1e6 - 1e-3) / 1e6;
+}
+
+/** The camera state {x, y, s} that puts plate point `point` at screen point `target` at scale s. */
+export function landingState(point, target, s, { width, height }) {
+  return { x: round(point.x - (target.x - width / 2) / s), y: round(point.y - (target.y - height / 2) / s), s: round(s, 6) };
+}
 
 const EPS = 1e-6;
 const round = (value, digits = 4) => { const f = 10 ** digits; return Math.round(value * f) / f + 0; };
@@ -90,10 +148,12 @@ const REST = (width, height) => ({ x: width / 2, y: height / 2, s: 1 });
  * numeric zoom times); rects: per zoom index, {rect} | {error} | null (the
  * scene's model.zoomRects, modules.mjs; a box needs none).
  * → {zooms: [{index, at, until, rect, scale, centre, screen}],
- *    keys: [{start, duration, ease, from: {x, y, s}, to: {x, y, s}}],
+ *    keys: [{start, duration, ease, from: {x, y, s}, to: {x, y, s}, and on a
+ *            landing's keys blur (world-camera strength), land, move, purpose, cut}],
  *    warnings: [message]}
  * A zoom whose rect cannot be found, or that leaves the safe area, is
- * dropped with a warning.
+ * dropped with a warning. A landing's rects entry carries its solved state
+ * ({landing: {x, y, s}}, characters/landing.mjs).
  */
 export function shotZooms(story, entry, rects = null) {
   const width = Number(story.format.width), height = Number(story.format.height);
@@ -104,6 +164,13 @@ export function shotZooms(story, entry, rects = null) {
   if (!list.length) return { ...out, keys: characterKeys(story, entry?.scene) };
   const { duration, ease } = zoomTiming(story);
   for (const [index, zoom] of list.entries()) {
+    // A landing: solved on the module (modules.mjs zoomRects), which fails the scene when it cannot land.
+    if (typeof zoom?.land === 'string') {
+      const landing = rects?.[index]?.landing;
+      if (!landing) { out.warnings.push(`${entry.id}: zooms[${index}] skipped: ${rects?.[index]?.error ?? 'its landing was not solved'}`); continue; }
+      out.zooms.push({ index, at: Number(zoom.at), until: Number.isFinite(Number(zoom.until)) && zoom.until !== null ? Number(zoom.until) : null, land: zoom.land, move: zoom.move, purpose: zoom.purpose, dur: zoom.move === 'cut' ? LAND.cut : Number(zoom.dur ?? LAND.dur[zoom.move]), centre: { x: landing.x, y: landing.y }, scale: landing.s, follow: rects[index].follow ?? [] });
+      continue;
+    }
     const found = isRect(zoom?.box) ? { rect: zoom.box } : rects?.[index] ?? { error: 'its rect was not resolved' };
     if (!isRect(found.rect)) { out.warnings.push(`${entry.id}: zooms[${index}] skipped: ${found.error ?? 'no rect'}`); continue; }
     const rect = { x: Number(found.rect.x), y: Number(found.rect.y), width: Number(found.rect.width), height: Number(found.rect.height) };
@@ -115,21 +182,42 @@ export function shotZooms(story, entry, rects = null) {
   const rest = REST(width, height);
   let state = rest;
   const end = Number(entry.scene.end);
+  let held = false;
   for (const [k, zoom] of out.zooms.entries()) {
     const next = out.zooms[k + 1];
     const to = { x: zoom.centre.x, y: zoom.centre.y, s: zoom.scale };
-    out.keys.push({ start: round(zoom.at, 6), duration, ease, from: state, to });
+    const land = zoom.land !== undefined;
+    if (land) out.keys.push({ start: round(zoom.at, 6), duration: round(zoom.dur, 6), ease: zoom.move === 'cut' ? 'none' : LAND.ease, from: state, to, blur: zoom.move === 'cut' ? 0 : LAND.blur, land: zoom.land, move: zoom.move, purpose: zoom.purpose, ...(zoom.move === 'cut' ? { cut: true } : {}) });
+    else out.keys.push({ start: round(zoom.at, 6), duration, ease, from: state, to });
     state = to;
+    // While it holds, the camera follows the landed character's later moves (characters/landing.mjs followKeys).
+    if (land) for (const follow of zoom.follow) {
+      // A move during the travel (or the follow before) cuts it short where it had reached, so the camera never jumps.
+      const prev = out.keys.at(-1);
+      if (prev.start + prev.duration > follow.start + EPS) {
+        const reached = zoomStateAt([prev], follow.start, getEase, size);
+        prev.to = { x: round(reached.x), y: round(reached.y), s: round(reached.s, 6) };
+        prev.duration = round(follow.start - prev.start, 6);
+        state = prev.to;
+      }
+      out.keys.push({ start: follow.start, duration: follow.duration, ease: follow.ease, from: state, to: follow.to, blur: LAND.blur, land: zoom.land, move: 'follow', purpose: `${zoom.purpose} (following the ${follow.cue})` });
+      state = follow.to;
+    }
+    held = false;
     if (zoom.until === null && next) continue;
-    out.keys.push({ start: round(zoom.until ?? end - duration, 6), duration, ease, from: state, to: rest });
+    // A landing holds to the shot's end unless it has an until.
+    if (land && zoom.until === null) { held = true; continue; }
+    out.keys.push({ start: round(zoom.until ?? end - duration, 6), duration, ease: land ? LAND.ease : ease, from: state, to: rest, ...(land ? { blur: LAND.blur } : {}) });
     state = rest;
   }
+  // Under the world camera a held landing is back at rest as the shot ends (as character-camera.mjs does), so the next shot starts from its own framing.
+  if (held && story?.camera?.mode === 'world') out.keys.push({ start: round(end, 6), duration: round(1 / 30, 6), ease: 'none', from: state, to: rest, blur: 0 });
   // Validation keeps keys apart; clamp anyway so the chain of absolute
   // fromTo tweens always matches the frame-pure state.
   out.keys.sort((a, b) => a.start - b.start);
   for (let i = 0; i < out.keys.length; i += 1) {
     const limit = (out.keys[i + 1]?.start ?? end) - out.keys[i].start;
-    out.keys[i].duration = round(Math.max(1 / 30, Math.min(out.keys[i].duration, limit)), 6);
+    out.keys[i].duration = round(Math.max(out.keys[i].cut ? LAND.cut : 1 / 30, Math.min(out.keys[i].duration, limit)), 6);
   }
   return out;
 }

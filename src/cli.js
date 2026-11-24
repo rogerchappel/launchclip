@@ -21,7 +21,7 @@ import { commandHelp, helpText, USAGE_GROUPS, wantsHelp } from "./cli_usage.js";
 import { parseSubjectInvocation } from "./subject/cli.js";
 
 const PRODUCTION_COMMANDS = new Set(["evidence", "source-preprocess", "source-media", "resolve-entities", "concept-tournament", "retention-story", "cinematic-narration", "creative-plan", "direct-frames", "production-audio", "assemble", "production-verify", "production-draft", "production-preview", "production-critique", "production-repair", "production-render", "produce"]);
-const COMMANDS = new Set(["doctor", "queue", "library", "skills", "style", "profile", "skeletons", "cast", "bible", "handin", "generate", "carousel", "approval", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "preview", "publish-manifest", "make", "research", "history", "fx", "voice", "export", "cutdown", "reel", "sfx", "sound", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "score", "align", "motion-render", "music", "direct", "preprocess-presenter"]);
+const COMMANDS = new Set(["doctor", "queue", "library", "skills", "style", "profile", "skeletons", "cast", "bible", "handin", "generate", "carousel", "approval", "collection", "recipe", "intake", ...PRODUCTION_COMMANDS, "edit-recording", "broll-plan", "cinematic-check", "layout-check", "module", "subject", "story", "finish", "preview", "publish-manifest", "make", "research", "history", "fx", "voice", "export", "cutdown", "reel", "sfx", "sound", "init", "demo", "plan", "captions", "render", "analyze-render", "submit-review", "review", "validate", "run", "script", "score", "align", "motion-render", "music", "direct", "preprocess-presenter", "review-motion"]);
 
 export async function runCli(argv, io = {}) {
   const { stdout = process.stdout, stderr = process.stderr, stdin = process.stdin, fetch: baseFetch = globalThis.fetch, doctor = diagnoseInstallation, productionAdapters = {}, skillOptions = {} } = io;
@@ -83,6 +83,11 @@ export async function runCli(argv, io = {}) {
   const scoreAction = command === "score" && ["hooks", "batch", "library", "rubric", "fit", "predict", "niche"].includes(firstArg) ? firstArg : null;
   const scoreArgs = scoreAction ? rest.slice(0, scoreAction === "library" ? 3 : scoreAction === "rubric" ? 2 : 1).filter((arg, index, all) => !arg.startsWith("--") && all.slice(0, index).every((before) => !before.startsWith("--"))) : [];
   const scoreInvocation = scoreAction ? { action: scoreAction, args: scoreArgs, flagArgs: rest.slice(scoreArgs.length) } : null;
+  // launchclip review-motion <project|video> [flags] | review-motion check <review> [flags]
+  const reviewMotionCheck = command === "review-motion" && firstArg === "check";
+  const reviewMotionArgs = command === "review-motion" ? (reviewMotionCheck ? rest : [firstArg, ...rest]).filter((arg) => arg !== undefined) : [];
+  const reviewMotionTarget = reviewMotionArgs[0] && !reviewMotionArgs[0].startsWith("--") ? reviewMotionArgs[0] : null;
+  const reviewMotionInvocation = command === "review-motion" ? { check: reviewMotionCheck, target: reviewMotionTarget, flagArgs: reviewMotionArgs.slice(reviewMotionTarget ? 1 : 0) } : null;
   // launchclip script check <file> [flags]; plain `script <workspace>` is the teleprompter.
   const scriptCheckFile = command === "script" && firstArg === "check" && rest[0] && !rest[0].startsWith("--") ? rest[0] : null;
   const scriptCheckInvocation = command === "script" && firstArg === "check" ? { file: scriptCheckFile, flagArgs: scriptCheckFile ? rest.slice(1) : rest } : null;
@@ -107,7 +112,7 @@ export async function runCli(argv, io = {}) {
   const researchCaptureInvocation = command === "research" && firstArg === "capture" ? { target: researchCaptureTarget ?? "research", flagArgs: researchCaptureTarget ? rest.slice(1) : rest } : null;
   // launchclip reel <project> | reel check <video>: the positional after "check" is the video.
   const reelFlagArgs = command === "reel" ? (firstArg === "check" ? rest.slice(1) : rest) : null;
-  const flags = parseFlags(reelFlagArgs ?? researchCaptureInvocation?.flagArgs ?? researchAttachInvocation?.flagArgs ?? evidenceInvocation?.flagArgs ?? libraryInvocation?.flagArgs ?? styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? bibleInvocation?.flagArgs ?? handinInvocation?.flagArgs ?? generateInvocation?.flagArgs ?? carouselInvocation?.flagArgs ?? approvalInvocation?.flagArgs ?? collectionInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? skeletonsInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? soundInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? scoreInvocation?.flagArgs ?? historyInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? (command === "doctor" ? rest.filter((arg) => arg !== "--agent") : rest));
+  const flags = parseFlags(reelFlagArgs ?? researchCaptureInvocation?.flagArgs ?? researchAttachInvocation?.flagArgs ?? evidenceInvocation?.flagArgs ?? libraryInvocation?.flagArgs ?? styleInvocation?.flagArgs ?? skillsInvocation?.flagArgs ?? castInvocation?.flagArgs ?? bibleInvocation?.flagArgs ?? handinInvocation?.flagArgs ?? generateInvocation?.flagArgs ?? carouselInvocation?.flagArgs ?? approvalInvocation?.flagArgs ?? collectionInvocation?.flagArgs ?? storyInvocation?.flagArgs ?? profileInvocation?.flagArgs ?? skeletonsInvocation?.flagArgs ?? sfxInvocation?.flagArgs ?? soundInvocation?.flagArgs ?? voiceInvocation?.flagArgs ?? moduleInvocation?.flagArgs ?? subjectInvocation?.flagArgs ?? scriptCheckInvocation?.flagArgs ?? scoreInvocation?.flagArgs ?? reviewMotionInvocation?.flagArgs ?? historyInvocation?.flagArgs ?? fxInvocation?.flagArgs ?? demoInvocation?.flagArgs ?? (command === "doctor" ? rest.filter((arg) => arg !== "--agent") : rest));
   // Model calls in flight together each take their own connection (src/own_connection_fetch.js); a fetch the caller passed is used as it is.
   const tracker = createCostTracker({ fetch: io.fetch ? baseFetch : ownConnectionFetch(baseFetch), limitUsd: parseCostLimit(flags["max-cost-usd"] ?? process.env.LAUNCHCLIP_MAX_COST_USD) });
   const previousFetch = globalThis.fetch;
@@ -346,6 +351,8 @@ export async function runCli(argv, io = {}) {
         budgetDaily: flags["budget-daily"],
         maxGenerations: flags["max-generations"],
         keyframeCandidates: flags["keyframe-candidates"],
+        generateContinuity: Boolean(flags["generate-continuity"]),
+        generateSoundEffects: Boolean(flags["generate-sound-effects"]),
         stopAfter: flags["stop-after"],
         approve: flags.approve,
         planOnly: Boolean(flags["plan-only"]),
@@ -519,6 +526,25 @@ export async function runCli(argv, io = {}) {
       const report = await runScriptCheck(scriptCheckInvocation.file, flags);
       stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatScriptCheck(report, { label: report.source }));
       if (!report.ok) throw new Error(`launchclip script check: ${report.errors.length} error(s) in ${report.source}`);
+      return;
+    } else if (reviewMotionInvocation) {
+      const { buildMotionReviewPack, checkMotionReview, formatMotionReview, visionMotionJudge } = await import("../eval/motion-review.mjs");
+      const target = required(reviewMotionInvocation.target, reviewMotionInvocation.check ? "motion-review.json or pack folder" : "project or video path");
+      let report;
+      if (reviewMotionInvocation.check) {
+        report = await checkMotionReview(target, { previous: flags.previous });
+      } else {
+        let judge = null;
+        if (typeof flags.model === "string") {
+          const { createMakeClient } = await import("./make/models.js");
+          const made = createMakeClient(flags.model);
+          if (!made.vision) throw new Error(`--model ${flags.model} does not take images, so it cannot suggest motion observations`);
+          judge = visionMotionJudge(made.client);
+        }
+        report = await buildMotionReviewPack(target, { video: flags.video, reference: flags.reference, referenceRanges: flags["reference-range"], previous: flags.previous, out: flags.out, judge, model: flags.model });
+      }
+      stdout.write(flags.json ? `${JSON.stringify(report, null, 2)}\n` : formatMotionReview(report));
+      if (reviewMotionInvocation.check && !report.ok) throw Object.assign(new Error(`launchclip review-motion check: ${report.errors.length ? `${report.errors.length} problem(s)` : "complete, needs repair"}`), { exitCode: report.errors.length ? 1 : 2 });
       return;
     } else if (scoreInvocation) {
       const { runScoreCommand } = await import("./scoring/cli.js");
@@ -785,7 +811,7 @@ export function parseFlags(args) {
       index += 1;
       continue;
     }
-    if (name === "keep-fillers" || name === "slack" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "comfy-allow-remote" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "allow-needs-repair" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "base-edited" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "face-track" || name === "no-direction" || name === "prototype" || name === "overshoot" || name === "off" || name === "refresh-free-vision-models" || name === "capacity" || name === "still" || name === "models" || name === "no-sheet" || name === "no-pin" || name === "animatic" || name === "retake" || name === "comps" || name === "own" || name === "render" || name === "widen" || name === "text-only" || name === "with-video" || name === "no-transcribe" || name === "formats-only" || name === "free") {
+    if (name === "keep-fillers" || name === "slack" || name === "no-audio-silence" || name === "edit-recording" || name === "dry-run" || name === "submit" || name === "no-render" || name === "force" || name === "approve" || name === "review" || name === "critic-pro" || name === "transcribe-all" || name === "allow-placeholder-sfx" || name === "allow-frame-fallback" || name === "repair-text-only" || name === "repair-scoped-source" || name === "refresh-free-models" || name === "no-music" || name === "no-voice" || name === "no-sfx" || name === "no-audio" || name === "no-open" || name === "allow-timing-drift" || name === "foreground" || name === "fast-eval" || name === "no-trim-silence" || name === "skip-quality-gates" || name === "skip-hyperframes-quality" || name === "strict" || name === "strict-all" || name === "pro" || name === "expect-audio" || name === "json" || name === "absolute" || name === "undo" || name === "music-regenerate" || name === "missing" || name === "comfy-allow-remote" || name === "no-seed" || name === "no-start" || name === "plan-only" || name === "headed" || name === "reject" || name === "replan" || name === "allow-needs-repair" || name === "critic" || name === "no-critic" || name === "approve-demo" || name === "base-edited" || name === "redemo" || name === "no-download" || name === "no-subject" || name === "face-track" || name === "no-direction" || name === "prototype" || name === "overshoot" || name === "off" || name === "refresh-free-vision-models" || name === "capacity" || name === "still" || name === "models" || name === "no-sheet" || name === "no-pin" || name === "animatic" || name === "retake" || name === "comps" || name === "own" || name === "render" || name === "widen" || name === "text-only" || name === "with-video" || name === "no-transcribe" || name === "formats-only" || name === "free" || name === "generate-continuity" || name === "generate-sound-effects") {
       flags[name] = true;
       continue;
     }

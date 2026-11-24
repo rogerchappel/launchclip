@@ -157,7 +157,8 @@ const CHARACTER_MODULES = ["cast-scene", "character-cameo"];
 
 /** Does a directed state perform a verb (an acting cue, or a pose)? */
 function performs(state, verb) {
-  if (state.action === verb || state.pose === verb) return true;
+  // A contact action plays as phases that name it (kit/core/characters/contact.mjs acts); a catch's thrower throws.
+  if (state.action === verb || state.pose === verb || state.acts === verb) return true;
   // A character whose head is turned to a target is looking at it, cue or no cue.
   if (verb === "gaze-at" && state.target !== null && state.target !== undefined && (state.gaze?.x || state.gaze?.y)) return true;
   // A walk ends on its arrival state, which is still the walk-to.

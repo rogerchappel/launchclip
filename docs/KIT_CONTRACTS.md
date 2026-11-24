@@ -3336,6 +3336,84 @@ without a cut. The shape matches `evidence-clip`'s `focus`.
   next zoom (the camera travels box to box) or, on the last zoom, eases out
   so it is back at rest when the shot ends, before the next shot's move.
 
+**Camera landings in a cast scene** (`LAND` in `kit/core/zooms.mjs`,
+`kit/core/characters/landing.mjs`). A zoom with `land` instead of a box puts
+one named subject on a chosen point of the screen, for a reason the plan
+states. The camera solves its centre so the subject lands exactly there,
+`centre = subject − (anchor − canvas centre) / scale`, travels from wherever
+it is, and holds there: until `until`, the next zoom, or the shot's end.
+
+```json
+{"id": "talk", "module": "cast-scene", "start": 0, "end": 10,
+  "params": {"set": "standing", "shot": "wide", "cast": [
+    {"id": "maya", "pose": "stand", "cues": [{"at": 7.6, "pose": "shrug", "expression": "happy"}]},
+    {"id": "sam", "pose": "stand", "cues": [{"at": 4.6, "pose": "facepalm", "expression": "frustrated"}]}
+  ]},
+  "zooms": [
+    {"at": 1, "land": "maya", "move": "reveal", "purpose": "find Maya before she breaks the news"},
+    {"at": 4.4, "land": "sam", "move": "push", "shot": "close", "purpose": "land on Sam's reaction to the broken rollback"},
+    {"at": 7.8, "land": "maya", "move": "cut", "shot": "medium", "screen": "left-third", "purpose": "cut back to Maya for her answer"}
+  ]}
+```
+
+(The golden `examples/story/camera-landing-9x16`; times may be narration
+anchors, as on any zoom.)
+
+- `land`: a character in the scene (its face: the head between crown and
+  chin, in the pose and place it has once the move ends), or, in a world the
+  scene draws itself, a world point (`far`, `window`, `horizon`, `street`,
+  `skyline`) or one of its props.
+- `move` (required): `reveal` travels across to the subject (lateral
+  travel; default 1.4 s), `push` comes in on it for a reaction (depth;
+  default 0.9 s), `cut` reframes at once (a jump between two frames, no
+  blur). `dur` 0.4–3 s overrides the travel time (not on a cut).
+- `purpose` (required, at least 12 characters): why the camera moves, kept
+  on the zoom keys and the world camera's moves (`move.purpose`) for review.
+  Move for a reason: a reveal, a reaction, a change of place; never to fill
+  a quota.
+- `screen`: `center` (default), `left-third`, `right-third` (faces at 40 %
+  of the frame's height, clear of the caption band) or `[x, y]` shares of
+  the frame (0.05–0.95).
+- `shot` (`wide`, `medium`, `close`, a character only) frames the face as a
+  single-character shot at that distance (`frameCast`; at most 3×), or
+  `scale` 1–3. With neither, the least scale that keeps the view inside the
+  plate (`landingMinScale`): at 1× only the centre can land on the centre, so
+  a reveal comes in just far enough to travel. In 9:16 a character landed
+  with neither lands at least at `medium`, so its face reads on a phone.
+- Follow: while a landing holds (from its start, so a move during the
+  travel retargets it, to `until`, the next zoom or the shot's end), the
+  camera keeps a landed character's face on its anchor through the
+  character's own moves, at the landing's scale (`followKeys`, keys
+  `{move: "follow"}` whose purpose names the cue they follow). A walk is
+  followed from `LAND.follow.lead` (28.5 %) of its time before it starts to
+  as long after it arrives; a pose change (a crouch to lift, a lunge to hit)
+  over its tween, at least 0.5 s and slow enough to average at most
+  `LAND.follow.speed` (1.5) frame heights a second. Every follow eases on
+  `sine.inOut` (zero speed at both ends, no overshoot); a move under
+  `LAND.follow.still` (4 %) of the frame's height is a gesture and the
+  camera holds; a key cut short by the next move ends where it had reached,
+  so the camera never jumps. The view stays inside the plate.
+- Feel: every travel is one key on `LAND.ease` (`power3.inOut`): zero speed
+  at both ends, fastest in the middle, never past its landing, whatever the
+  grammar's camera ease. Under the world camera it carries velocity blur at
+  `LAND.blur` (0.5 of a whip-pan's shutter, unless `camera.blur` forces it),
+  which is zero at the slow ends and shows only near peak speed. A story
+  with a landing takes no camera drift, so a landed subject stays put. In
+  world mode a landing held to the shot's end is back at rest as it ends,
+  as the default moves are.
+- A landing that cannot hold the frame's rules fails the scene (the module
+  throws, so `validate` reports it): a subject it names that is not there,
+  a view that would leave the plate at the scale asked (it says the least
+  scale that works), more than 3× needed, a landed face whose crown leaves
+  the safe zone, whose chin drops into the caption band, or whose head
+  passes the safe zone's sides, at the landing or once a move it follows
+  has settled (the message names the cue: "cannot keep sam in frame through
+  the walk-to cue at 4 s"). A scene with cue shots (`cues[].shot`) cannot
+  also land: both reframe it.
+- Timing (`validateZooms`): a landing holds at least `LAND.hold` (0.6 s)
+  after its travel, before `until`, the next zoom or the shot's end. A
+  scene's zooms replace its default character move.
+
 **A character story's default moves** (`kit/core/character-camera.mjs`). In
 a character story (`isCharacterStory`) a track-0 cast scene with no `zooms`
 of its own takes one move for as long as it is up; `shotZooms` returns its
@@ -3415,7 +3493,12 @@ export function zoomFitError(frame, size)  // → message | null
 export function shotZooms(story, entry, rects?) // → {zooms, keys: [{start, duration, ease, from, to}], warnings}
 export function zoomStateAt(keys, t, getEase, size) // plate-local {x, y, s}
 export function zoomOps(keys, size)        // cuts-mode ops on "zoom" and "pan"
-// kit/core/modules.mjs: model.zoomRects = zoomRects(scene, model) → [{rect} | {error}]
+export const LAND                          // {moves, dur, ease, blur, hold, screen, scale, cut}
+export function landingScreen(screen, size) // → {x, y} canvas px
+export function landingMinScale(point, target, size) // least scale with the view inside the plate
+export function landingState(point, target, s, size) // → {x, y, s}
+// kit/core/characters/landing.mjs: landingSubject(model, name, t), solveLanding(model, zoom, {until, cues}) → {landing, follow, rect, point}
+// kit/core/modules.mjs: model.zoomRects = zoomRects(scene, model) → [{rect} | {landing, rect, point} | {error}]
 // kit/core/camera-world.mjs: sceneObjectLookup(...).zoomRects(sceneId)
 ```
 
@@ -4559,7 +4642,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
 
 | Module | Params | Events | Notes |
 | --- | --- | --- | --- |
-| `cast-scene` | `set` desk-laptop/phone/meeting/screen/kitchen-counter/sofa/podium/stage/car/park-bench/video-call/standing-desk, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `shot?` wide/medium/close, `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?, action?, target?, shot?}], says?: [{from, to, words?: [[start, end, text?]]}], holds?: phone}`, `light?` `{dir?, color?, intensity?}` | `<character>-cue-<i>` | Fills the frame and fades in place. Framed by `shot` (see "Shot framing"). Seated sets (desk-laptop, meeting, sofa, car, park-bench, video-call) seat the cast and refuse `walk`; standing sets refuse `sit` (except for a wheelchair user). In `podium` the first character speaks at the lectern; in `car` the first drives; `video-call` gives each character a tile (a row in landscape, a column in portrait) and masks everything outside the tiles. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
+| `cast-scene` | `set` desk-laptop/phone/meeting/screen/kitchen-counter/sofa/podium/stage/car/park-bench/video-call/standing-desk, `screen` `{src, sourceStart?, fit?}` (required for screen, optional for meeting, refused elsewhere), `shot?` wide/medium/close, `cast` 1–3 `{id, position?, pose?, expression?, facing?, cues?: [{at, pose?, expression?, action?, target?, shot?, squash?}], says?: [{from, to, words?: [[start, end, text?]]}], holds?: phone or a hand prop}`, `objects?` `[{id, prop, at?}]`, `light?` `{dir?, color?, intensity?}` | `<character>-cue-<i>` | Fills the frame and fades in place. Framed by `shot` (see "Shot framing"). Seated sets (desk-laptop, meeting, sofa, car, park-bench, video-call) seat the cast and refuse `walk`; standing sets refuse `sit` (except for a wheelchair user). In `podium` the first character speaks at the lectern; in `car` the first drives; `video-call` gives each character a tile (a row in landscape, a column in portrait) and masks everything outside the tiles. The screen plays the supplied capture (an assets/ image, video or demo-autopilot recording) as media between the room and the cast; there is no screen without one |
 | `character-cameo` | `character`, `shot?` wide/medium/close, `pose?`, `expression?`, `facing?`, `cues?`, `says?`, `side` left/right, `card?` `{kicker? ≤ 32, title ≤ 64, body? ≤ 140}`, `panel?`, `light?` | `<character>-cue-<i>` | One character beside a card (landscape: a column; portrait: under the card), or alone on a panel. At medium or close its head sits at the top of its area and its body runs off the frame's bottom edge (no floor needed). `sit` is refused. Placed in the safe zone narrowed to the brand frame's safe area (`createBase(..., {frameSafe: true})`); `rect?` (guided and bespoke tiers) places it inside that |
 | `sprite-scene` | `plate` assets/ image, `move?` push-in/pull-out/pan-left/pan-right/none, `zoom?` 0.02–0.15, `cast` 1–3 `{id, art?, pose?, cues?: [{at, pose}], says?, talk?, blink?, position?, x?, height?, aspect?, facing?, depth?}`, `props?` 0–4 `{src, box, at?, from?}`, `card?` `{name ≤ 24, role? ≤ 32, at?, for?}`, `enter?`/`exit?` fade/cut | `cast`, `<character>-cue-<i>`, `prop-<i>`, `card` | Illustrated characters (`kit/core/catalog-sprites.mjs`): a painted plate on a slow move, each character a sprite folder (`<art>/<pose>.png`, `-talk.png` mouth open, `-blink.png` eyes closed; same size and framing). One sprite shows per character at a time: pose cues swap it, its spoken words show the talk sprite (a jaw bounce without one), blinks fall between words, a slow breath and parallax against the plate. `art` defaults to the story cast entry's. Opens on a cut when it is the video's first scene. Sprite casts are drawn by `launchclip cast sprites` (`src/sprite_cast.js`) |
 
@@ -4642,8 +4725,8 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   | `lean-in` | steps forward, leaning toward the facing side |
   | `sit`, and any pose in a seated set | lies down: the legs fold under it (`geometry.seatedArms`, `sitLegs`, `sitDrop`) |
 
-- Stick figures: in `stick` and `stick-classic` every kind is a few lines.
-  Limbs are lines (ink alone in `stick-classic`, the limb's colour with an
+- Stick figures: in `stick`, `stick-classic` and `rubber-hose` every kind is a few lines.
+  Limbs are lines (ink alone in `stick-classic` and `rubber-hose`, the limb's colour with an
   ink edge in `stick`); a headed kind's trunk is its spine and its tail a
   line; a horse is a line for the body, four for the legs and one each for
   the neck and the tail; a single body keeps its outline. The head (or the
@@ -4660,7 +4743,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   the body leans and squashes on `C-torso`, and from behind the face is
   gone). Part ids are the toon's. A dark face area takes light ink. The
   cast's drawing style chooses the pen: flat fills with the chibi outline
-  for most, line art for `line` and `stick-classic`, comic ink for
+  for most, line art for `line`, `stick-classic` and `rubber-hose`, comic ink for
   `outlined`, cut paper for `paper`, soft shading for `soft-shade`,
   `avatar`, `lifelike` and `cinematic`. A size resizes shapes, pivots and
   line weights and leaves joint values alone.
@@ -4701,7 +4784,7 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   out every shape from the rig and hands each to a pen (`shape`, `ellipse`,
   `line`, `limb`, `strand`, `ground`, `within`, `defs?`), which decides how it
   is drawn.
-- The nine drawing styles (`DRAWING_STYLES`, in this order):
+- The drawing styles (`DRAWING_STYLES`, in this order):
   | Style | File | Look |
   |---|---|---|
   | `flat` | `style-flat.mjs` | flat fills and a dark outline (the default) |
@@ -4716,6 +4799,14 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
   | `avatar` | `style-avatar.mjs` | cute avatar proportions: the toon body with a head 1.7 times the rig's (hair, face and headwear with it), bigger eyes, a short chunky torso and limbs, soft shading, a pin at each shoulder, elbow and knee; raised arms (wave, cheer, stretch) restated wide of the head (`geometry.poses`) |
   | `chibi` | `style-chibi.mjs` | the cute family: the toon body with a round head 2.1 times the rig's on a body about two heads tall (short legs, chunky limbs, half the rig's height range), the toon's cute face (`drawToon` `face: 'cute'`: large glossy eyes set low and wide, no nose, a small mouth, cheeks that always blush, glasses enlarged to the eyes), flat fills and one even heavy outline (`headPen` restates the scaled head's line weights); raised and face-touching arms restated wide of the head; a headscarf wraps close under the chin |
   | `chibi-plain` | `style-chibi.mjs` | the chibi figure with no skin tone: skin drawn paper white, hair and clothes in their own colours, for a neutral cast |
+  | `rubber-hose` | `style-rubber-hose.mjs` | early theatrical cartoon: a paper-white round head (radius 92, about a fifth of the figure) with the toon face in line art, pie eyes (tall black ovals with a cut wedge), arched tapered brows and two curved hair tufts (short hair; longer hair and headwear keep their line art), no clothes; the spine and each limb segment a `pens.mjs pressureStroke` bowed outward so a limb reads as one hose (one stroke per segment, since the renderers animate joint rotations only), four-fingered white gloves with a flared cuff and stitching (a pointing hand shows one gloved finger), short black curved shoes; standing on a line of action (a bowed spine, uneven arms, weight on one leg: `geometry.stance`, a style's own lower body by name in `rig.mjs poseJoints`); the arms are drawn behind the head (a hand at the head touches it, never strokes across the face); resting and side arms hang a little out and wave and cheer go wide of the head (`geometry.poses`); hair and a headscarf are line art over a light gray-taupe holding a trace of their colour, stubble left out; the face and ink are fixed colours, so no scene light or grade tints them |
+
+  `pens.mjs pressureStroke(points, width, colour, {seed, taper, tip, wobble})`
+  is a pressure ink stroke: one filled absolute M/L ribbon that thins to
+  `tip` over its tapered ends, with round ends and an uneven pressure taken
+  from `seed` alone, so re-renders and both renderers match (`cubicPoints`
+  samples a curve for it). `stick` and `stick-classic` ink with it when
+  drawn with `options.ink: 'pressure'`; without it they draw as before.
 
   The first five are pens over the toon body; `stick` and the realistic
   pair are their own bodies with the same joints and part ids, and they
@@ -4899,6 +4990,85 @@ HyperFrames emitter and Remotion component are catalogue E's `emitParts` and
     nervous character lands early and holds), `anticipation`, `settle`,
     `lag`, the rates of `blinks`, `darts` and `shifts`, and `breath` and
     `breathRate`. Every value of `default` is 1.
+- **Contact acting** (`contact.mjs`, `props.mjs`; cast-scene). Physical
+  comedy with cause and effect. The contact actions are `push`, `pull`,
+  `hit`, `catch`, `lift`, `drop`, `throw` and `give`; a cue's `at` is the
+  **contact** (put it on the word the hit lands on), and the action plays
+  as a timed chain around it: anticipation (a wind-up leaning against the
+  direction, `power2.out`) → contact (a fast `power2.in`/`power3.in`
+  strike arriving on `at`, then a held frame) → follow-through → recovery
+  (`sine.inOut`, back to the cue's pose, else the pose it interrupted).
+  Phase lengths are `CONTACT` (e.g. hit: 0.28 s wind-up, 0.08 s strike,
+  0.06 s hold). No other cue of that character may fall inside the chain,
+  and it must fit inside the scene. Each phase is a state with its own
+  `tween`/`ease`, `arms` (two-bone reach to a point, `aim.mjs reachArm`:
+  bones keep their lengths, the elbow bends out from the body) and `body`
+  (lean, and a crouch for something low: the legs shorten with the body
+  dropped onto them, feet on the floor). Each phase names its action
+  (`acts`), which the acting gate reads. A strike leans at most
+  `STRIKE_LEAN` (35°); a hit or push on a prop on the floor is a kick with
+  the facing leg. Out of reach, a strike steps in one stride (`STEP`)
+  before its wind-up; further than that is an error: walk-to the target
+  first (walk-to a character stops at arm's length, walk-to a scene prop
+  right beside it, where earlier pushes, pulls and throws left it) or
+  change positions; a limb is never stretched. A push slides a prop until
+  it would meet someone or the frame's edge. Walks, and props carried on
+  them, ease in and out (`WALK_EASE`, sine.inOut). A `catch` cue drives
+  its thrower's throw; a throw cue at the catcher that lands on the catch
+  is the same throw.
+  - **What it meets reacts.** A struck or pushed character staggers away
+    (pulled: toward) and tips on its gag layer (`<cid>-gag`, about its
+    feet), a hit also squashes it, and it changes face to `surprised` on
+    the contact. A prop squashes about its base on contact or landing and
+    rebounds past rest, a push slides it, a pull hauls it short of the
+    puller, a hit hops it; a `paper-stack`'s five sheets (`<id>-l0…4`) lag
+    and spring back; a `ball` bounces; a heavy `box` strains before a lift.
+  - **Props** (`HAND_PROPS`: `box`, `paper-stack` (both hands), `ball`,
+    `cup`, `sign`, `coin` (the facing hand)) are drawn on the scene, not in
+    a hand: `<scene>-obj-<id>` (x, y, rotation in px), its scale, and
+    `<scene>-obj-<id>-sq` (squash). Hands reach the prop's grips
+    (`gripPoints`), so hand and prop share one coordinate source. A prop
+    is held from the start (`holds: "box"`, id = the prop's name; `holds:
+    "phone"` keeps the in-hand phone) or stands on the floor
+    (`params.objects: [{id, prop, at?: 0–1 across the set}]` ≤ 4; targets
+    name it `{prop: id}`). One owner at a time: a holder's every state
+    keeps its hands on it (walks carry it along; gestures sit out on the
+    holding arm); `give` goes giver alone → both hands on it from `at`
+    (0.3 s) → receiver alone; a `throw` to a character is a pass it
+    catches (a `catch` cue on the receiver times the throw to land on it),
+    otherwise it arcs (one turn) to the point and lands.
+  - **Gag squash.** `squash: {amount, hold?, recover?}` on any cue
+    (cast-scene and cameo): a planned whole-body flatten (`amount` > 0,
+    up to 0.8) or stretch (< 0, down to −0.6) on the `<cid>-gag` wrapper:
+    in over 0.08 s (`power3.out`), held (default 0.25 s), then a rebound
+    past rest and a settle (`recover`, default 0.4 s). The rig's joints and
+    bone lengths are untouched; `MOVE.squash` (the small dip before an
+    ordinary move) is unchanged.
+  - **Contact events.** `contactEvents(model)` (`catalog-characters.mjs`)
+    → `[{at, actor, action, kind, target}]` in story seconds; `kind` is
+    `impact` (push, hit), `grip` (pull, lift, catch, a handover's
+    receiver), `release` (throw, drop, the giver, a pull's end) or `land`;
+    each is also a timeline event `<character>-<kind>-<n>`. Sound and VFX
+    (`hit-spark`, `impact-frame`) spot onto these.
+
+  Both renderers draw it from the one op list (x, y, rotation, scaleX,
+  scaleY on the wrappers above). A storyboard:
+
+  ```json
+  {"id": "office-gag", "module": "cast-scene", "start": 0, "end": 7,
+   "params": {"set": "standing",
+     "objects": [{"id": "reports", "prop": "paper-stack", "at": 0.5}],
+     "cast": [
+       {"id": "maya", "holds": "box", "cues": [
+         {"at": 0.3, "action": "walk-to", "target": {"character": "theo"}},
+         {"at": "word:here", "action": "give", "target": {"character": "theo"}},
+         {"at": 4.5, "action": "hit", "target": {"prop": "reports"}, "expression": "angry"}]},
+       {"id": "theo", "cues": [
+         {"at": 3.2, "expression": "surprised", "squash": {"amount": 0.45, "hold": 0.3, "recover": 0.5}},
+         {"at": 4.6, "action": "drop"}]}]}}
+  ```
+
+  Direction-map cast cues take `action`, `target` and `squash` too.
 - `cues.mjs`: story casts, direction-map cues and the consistency check.
   A character scene may name a character by place: `"@1"` is the first
   story-cast character, `"@2"` the second (`CAST_REF` in story.mjs;
@@ -5828,11 +5998,12 @@ E's `emitParts` and `PartsModule`.
 
 | Module | Params | Events | Notes |
 | --- | --- | --- | --- |
-| `world` | `kind?` (a world kind; default `story.world.kind`), `time?` day/dusk/night (default `story.world.time`, else day), `props?` ≤ 12 (default `story.world.props`), `camera?` still/drift/pan-left/pan-right/push/pull or `{move, amount 0..1}` (default drift), `detail?` simple/standard/rich (default from `story.cast.style`), `scrim?` auto/top/bottom/left/right/centre/none or `true` (default none), `foreground?` boolean (default true; false when a cast-scene stands in this world, `castStandsIn`, so a parked car or a desk never sits under the cast's feet) | none | A plate (track 0) never fades itself: it arrives and leaves by its scene transition (`in`), or cuts, so a cut between two worlds is a cut, not a dip through the background. On a higher track it fades in place like a card. In world-camera mode a plate draws past its frame by half the gap to its neighbours (`plateBleed`: camera.spacing / 2 across and along), on a canvas that much larger, so the drift and the travel between plates never uncover the background; a cast standing in it takes the ground from the same canvas. Layout role `decor`. `params.kind` is allowed on world scenes only (story.mjs keeps it reserved elsewhere) |
+| `world` | `kind?` (a world kind; default `story.world.kind`), `time?` day/dusk/night (default `story.world.time`, else day), `props?` ≤ 12 (default `story.world.props`), `camera?` still/drift/pan-left/pan-right/push/pull or `{move, amount 0..1}` (default drift), `detail?` simple/standard/rich (default from `story.cast.style`), `scrim?` auto/top/bottom/left/right/centre/none or `true` (default none), `foreground?` boolean (default true; false when a cast-scene stands in this world, `castStandsIn`, so a parked car or a desk never sits under the cast's feet; the front layer's edge pieces stay, see "Depth and light"), `depth?` boolean (default `story.world.depth`, else false: the depth pass below) | none | A plate (track 0) never fades itself: it arrives and leaves by its scene transition (`in`), or cuts, so a cut between two worlds is a cut, not a dip through the background. On a higher track it fades in place like a card. In world-camera mode a plate draws past its frame by half the gap to its neighbours (`plateBleed`: camera.spacing / 2 across and along), on a canvas that much larger, so the drift and the travel between plates never uncover the background; a cast standing in it takes the ground from the same canvas. Layout role `decor`. `params.kind` is allowed on world scenes only (story.mjs keeps it reserved elsewhere) |
 
-**story.world** `{kind, time?, props?, detail?}` is the video-wide world:
-every world scene without its own `kind`, `time` or `props` takes them from
-it. A style pack's `world` reaches the story through `applyStyle`.
+**story.world** `{kind, time?, props?, detail?, depth?}` is the video-wide world:
+every world scene without its own `kind`, `time`, `props` or `depth` takes them from
+it, and a cast-scene that draws the world itself (no world scene beneath)
+draws it with `depth` too. A style pack's `world` reaches the story through `applyStyle`.
 `story.mjs` checks the shape (import-free); `storyWorldErrors(world)`
 (`kit/core/worlds/index.mjs`) checks kinds, times and props, and a world
 scene fails to resolve on an unknown one.
@@ -5840,16 +6011,17 @@ scene fails to resolve on an unknown one.
 ### The library (`kit/core/worlds/`)
 
 - `index.mjs`: `WORLDS`, `WORLD_KINDS`, `WORLD_GROUPS`, `WORLD_TIMES`;
-  `renderWorld({id, kind, time, colors, canvas, style?, detail?, props?})` →
-  `{layers: {back, mid, front, fx}, defs, anchors, quiet, light, palette,
+  `renderWorld({id, kind, time, colors, canvas, style?, detail?, props?, depth?})` →
+  `{layers: {back, mid, front, fx}, defs, edge, depth, anchors, quiet, light, palette,
   props, overscan, detail}`; `worldLight(kind, time)`; `drawProp(…)` for prop
   sheets; `storyWorldErrors`; `worldCatalogue()`; `worldAnchors(kind,
   {canvas})` (anchors without drawing); `worldGrade(kind, time, strength)`
-  (the time-of-day grade as hex → hex).
-- 25 worlds in three groups. Inside: office, home-desk, kitchen,
-  living-room, classroom, cafe, workshop, server-room, studio, gym. Street:
-  city-street, shopfronts, crossing, alley, rooftop, skyline. Outside: park,
-  beach, mountains, forest, space, abstract-stage, and the racing worlds
+  (the time-of-day grade as hex → hex; a world may bring its own, `def.grade`).
+- 28 worlds in three groups. Inside: office, home-desk, kitchen,
+  living-room, classroom, cafe, workshop, server-room, studio, gym, parlour.
+  Street: city-street, shopfronts, crossing, alley, rooftop, skyline,
+  cafe-terrace. Outside: park, beach, mountains, forest, space,
+  abstract-stage, void-stage, and the racing worlds
   (`RACING_WORLDS`, `racing.mjs`): racetrack (turf, the running rail, a dirt
   track and far rail, a grandstand in the distance, the winning post),
   stable-yard (a stable block with half-door stalls, a lantern, hay, a water
@@ -5880,8 +6052,13 @@ scene fails to resolve on an unknown one.
   may override it (the server room is cool, the alley neon pink at night).
   The model carries it as `content.light`; character renderers use it for
   shading and cast shadows.
-- `detail.mjs`: the drawing style picks the detail: stick and line →
-  simple (flat fills, ink outlines, pale fills, fewer small objects); flat,
+- `detail.mjs`: the drawing style picks the detail: stick, line and
+  rubber-hose → simple (flat fills, ink outlines, pale fills, fewer small
+  objects; rubber-hose instead repaints every colour early-cartoon,
+  `palette.mjs earlyCartoonColor`: a muted ramp by lightness from warm dark
+  gray through gray-taupe, dusty sage-gray and pearl gray to pale ivory,
+  saturated reds kept as faded brick, no glows or pools: `detail.palette`
+  `'early-cartoon'`, `detail.glows` false; `paint.mjs` lays painted texture over it: plaster stipple, weathering stains with drips, cracks and a patch of brick courses on walls and facades, stipple and wear on floors and fields, cobbled streets; seeded per piece); flat,
   outlined, paper and soft-shade → standard (gradients, shadows, glows, haze,
   light pools); lifelike and cinematic → rich (shading, depth of field on
   the back layer, volumetric rays, vignette; cinematic adds a colour grade).
@@ -5944,6 +6121,89 @@ scene fails to resolve on an unknown one.
   chooses from a row; the seed varies among its worlds.
 - `view.mjs`: the layer divs (`<scene>-back|mid|front|fx`).
 
+### The void stage (`void-stage.mjs`)
+
+The classic black-and-white stick-figure look with 3D-feeling elements. A
+flat figure stands on an empty floor plane between extruded slabs in one
+bold red (`VOID_RED`), drawn as flat faces in one-point perspective toward a
+vanishing point above the cast: far pillars and a doorway frame in back
+(dimmed by distance), a tall pillar and a low step in mid, monoliths cropped
+by the frame edges in front, so a pan or push shows depth. Light: a
+spotlight cone and pool, rim light on the slab edges, a glossy floor that
+mirrors the red, a red ground line under the cast. Times: `night` a black
+void, `dusk` a red-backlit void, `day` white paper with long soft shadows.
+
+- The palette is fixed (black, white, red) whatever the brand.
+- Its grade (`worldGrade('void-stage', time)`) leaves the cast's colours
+  alone and, on a dark stage, maps the character outline (`OUTLINE`) to
+  white: the `stick-classic` figure draws white limbs and a white head with
+  its face in ink, as the classic white-on-black shorts do; other styles get
+  white outlines.
+- Its front slabs are edge pieces (`def.edgeFront`): they stay when a cast
+  stands on the stage. The `standing` and `phone` sets bring no pot plant
+  there.
+- `depth` leaves it unchanged: it draws its own.
+
+```json
+{"id": "intro", "module": "world", "start": 0, "end": 5, "params": {"kind": "void-stage", "time": "night", "camera": {"move": "push", "amount": 0.6}}}
+```
+
+With `story.cast.style: "stick-classic"` and a `cast-scene` over it (`set:
+"standing"`), or `story.world: {"kind": "void-stage", "time": "night"}` for
+the whole video.
+
+### Filled worlds (`period.mjs`)
+
+Two worlds that fill the frame edge to edge and light it from inside the
+picture, for character stories:
+
+- `parlour` (inside): damask wallpaper over panelling, a gilt picture rail, a
+  tall draped window, a fireplace with a gilt mirror, candles and a clock on
+  the mantel, a wingback armchair, a fringed table lamp and a Persian rug.
+  The fire glows at dusk and night (and lights the wall and floor). The
+  mantel is a `surface` anchor.
+- `cafe-terrace` (street): stone townhouses with shutters, flower boxes and
+  iron balconies under mansard roofs, a green café front with lit paned
+  windows and a striped awning, bistro tables with cups on cobbles, a lamp
+  post, and the far side of the square in haze with a clock tower; string
+  lights under the awning at dusk and night. The terrace is seen closer than
+  a street (0.74 of the inside scale).
+
+```json
+{"id": "cafe", "module": "world", "start": 0, "end": 6, "params": {"kind": "cafe-terrace", "time": "dusk", "depth": true, "camera": "pan-right"}}
+{"id": "home", "module": "world", "start": 6, "end": 12, "params": {"kind": "parlour", "time": "night", "depth": true}}
+```
+
+### Depth and light (`depth.mjs`)
+
+`depth: true` (a world scene's `params.depth`, or `story.world.depth`) runs
+`depthPass` over any world kind; a world without it draws exactly as before.
+
+- Atmospheric perspective: outside and on streets the back layer is veiled
+  toward the horizon in the time's haze, so far reads lighter and less
+  saturated than near.
+- Light: on streets at dusk and night, warm pools on the pavement with spill
+  shafts and an amber wash (amber noir); outside at night, a pool under the
+  near lamp post; inside, the window's light on the floor (moonlight at
+  night, low sun at dusk, daylight by day) and, at dusk and night, a lamp
+  pool where the cast stands; a ceiling falloff indoors and a light falloff
+  at the frame edges.
+- Grounding: a soft contact band along the ground line, and ambient
+  occlusion where an inside wall meets the floor. (Characters draw their own
+  contact shadows.)
+- A foreground occluder at the frame edges: a tall lamp post and a bush
+  outside, a plant and a table edge with a mug inside. It is returned as
+  `world.edge` and drawn in the front layer, so the camera's parallax slides
+  it past fastest, and `withoutForeground` keeps it when a cast stands in
+  the world. It is a plate layer: it passes behind the cast, never in front.
+- Lights pass `{glow: true}` and force their gradients, so they draw at
+  every detail level; occluders go through the pen like the rest of the
+  world.
+
+```json
+{"world": {"kind": "city-street", "time": "night", "depth": true}}
+```
+
 **Camera.** `params.camera` moves the back, mid and front layers at the
 world camera's depths (`camera-world.mjs` `PARALLAX`: back 0.3 = the
 background, front 1 = the plate, mid 0.65), with `sine.inOut` over the whole
@@ -5963,6 +6223,11 @@ are seen from further back (0.62 of the inside scale).
   [--detail …] [--props …] [--scrim]` renders every world at day, dusk and
   night (one PNG per still and `sheet*.png`); `--scrim` marks the quiet area
   with its scrim and sample text.
+- `node scripts/depth-sheet.mjs [--out qa/depth] [--kinds void-stage,cafe-terrace]
+  [--depth on|off|both] [--style stick-classic] [--portrait]` renders worlds
+  with two of the cast standing in them (a cast scene drawing
+  `story.world`), one row of times per world: for the void stage, the
+  filled worlds and the depth pass.
 - `node scripts/prop-sheet.mjs [out.png]` renders every prop at simple,
   standard and rich detail, by day and night.
 - `test/fixtures/parity/world-*.json`: landscape and portrait, the three

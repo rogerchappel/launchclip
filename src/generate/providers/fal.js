@@ -173,6 +173,8 @@ async function videoInput(brief, startFrame, duration, props) {
   const off = (value) => { const [w, h] = value.split(':').map(Number); return Math.abs(Math.log(w / h) - Math.log(brief.image.width / brief.image.height)); };
   if (offered.length) input.aspect_ratio = offered.includes(ratio) ? ratio : offered.reduce((best, value) => (off(value) < off(best) ? value : best));
   if (brief.image.negative && props?.negative_prompt) input.negative_prompt = brief.image.negative;
+  // A story brief's mix is ours: the model's own audio only when the brief keeps its sound effects.
+  if (brief.video.audio && props?.generate_audio) input.generate_audio = brief.video.audio !== 'none';
   return input;
 }
 

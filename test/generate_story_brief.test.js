@@ -9,7 +9,9 @@ import path from "node:path";
 import test from "node:test";
 import { animaticInputs, ANIMATIC_SCHEMA } from "../src/animatic.js";
 import { storyShotsCommand } from "../src/story_shots.js";
-import { formatBriefs, layoutFramePath, plateBrief, projectBriefs, STORY_NEGATIVE, storyBrief, storyRefusalReason } from "../src/generate/brief.js";
+import { causalBeats, continuesFrom, formatBriefs, layoutFramePath, plateBrief, projectBriefs, retainedRange, STORY_NEGATIVE, storyBrief, storyRefusalReason, third } from "../src/generate/brief.js";
+import { STYLE_PARAGRAPHS } from "../src/generate/style-paragraphs.js";
+import { DRAWING_STYLES } from "@launchclip/core/characters/styles.mjs";
 
 const FIXTURES = new URL("./fixtures/", import.meta.url);
 
@@ -62,8 +64,18 @@ test("the motion prompt is camera and the one action in timed beats; the negativ
   const { bible, story, animatic, shot } = await inputs(dir);
   const brief = storyBrief(shot("gate-opens"), { bible, animatic, story, project: dir });
   assert.match(brief.video.prompt, /^Camera: wide shot/);
-  assert.match(brief.video.prompt, /Action: Foal cheer the closed gate\./);
-  assert.match(brief.video.prompt, /0–0\.5 s: Foal \(left\) look, happy/);
+  assert.match(brief.video.prompt, /Action: Foal cheers the closed gate\./);
+  // Cause and effect: the setup, then the beat the action lands on, then what follows; each beat names only what changes.
+  assert.match(brief.video.prompt, /0–0\.5 s \(setup\): Foal \(left\) looks, happy; Mare \(right\) looks, happy\. 0\.5–1\.1 s \(action\): Foal \(left\) cheers, now delighted/);
+  assert.match(brief.video.prompt, /1\.1–2\.5 s \(consequence\): Foal \(left\) walks; Mare \(right\) gazes\./);
+  assert.match(brief.video.prompt, /nothing moves that the beats do not name/);
+  assert.doesNotMatch(brief.video.prompt, /Nothing else moves/);
+  // The mix is ours: no native soundtrack by default.
+  assert.match(brief.video.prompt, /Audio: none; no music, no speech or narration, no sound effects\./);
+  assert.equal(brief.video.audio, "none");
+  const effects = storyBrief(shot("gate-opens"), { bible, animatic, story, project: dir, soundEffects: true });
+  assert.match(effects.video.prompt, /Audio: only the sound effects of the actions on screen; no music, no speech or narration\./);
+  assert.notEqual(effects.brief_hash, brief.brief_hash);
   assert.ok(!brief.video.prompt.includes("chestnut") && !brief.video.prompt.includes("#b9652f"), "who lives in the keyframe");
   assert.equal(brief.video.seconds, 2.51);
   assert.equal(brief.video.fps, 30);
@@ -130,4 +142,76 @@ test("no animatic, no story entries: footage output is unchanged", async () => {
   const dir = await project({ animatic: false });
   const all = await projectBriefs(dir, { frame: () => assert.fail("no frame without an animatic") });
   assert.ok(all.every((entry) => !["story", "plate"].includes(entry.request.role)));
+});
+
+test("the style's locked paragraph is pasted word for word; stick figures add anatomy to the prompt and the negative", async () => {
+  const dir = await project();
+  const { bible, story, animatic, shot } = await inputs(dir);
+  for (const style of DRAWING_STYLES) assert.ok(STYLE_PARAGRAPHS[style]?.drawing && STYLE_PARAGRAPHS[style]?.place, style);
+  assert.ok(STYLE_PARAGRAPHS["rubber-hose"].anatomy);
+  const stick = structuredClone(bible);
+  stick.cast.style = "stick";
+  const brief = storyBrief(shot("gate-opens"), { bible: stick, animatic, story, project: dir });
+  const { drawing, place, anatomy, negative, motion } = STYLE_PARAGRAPHS.stick;
+  assert.ok(brief.image.prompt.includes(`${drawing} ${place} ${anatomy} Match the reference sheets exactly.`));
+  assert.match(brief.image.prompt, /Exactly two arms and two legs/);
+  assert.ok(brief.image.negative.includes(negative) && brief.image.negative.endsWith("Mare never runs."));
+  assert.ok(brief.video.prompt.includes(motion));
+  // Another style: its own paragraph, no stick anatomy.
+  const chibi = storyBrief(shot("gate-opens"), { bible, animatic, story, project: dir });
+  assert.ok(chibi.image.prompt.includes(STYLE_PARAGRAPHS.chibi.drawing));
+  assert.ok(!chibi.image.prompt.includes("Exactly two arms") && !chibi.image.negative.includes("ghost limbs") && !chibi.video.prompt.includes("Throughout:"));
+  assert.notEqual(chibi.brief_hash, brief.brief_hash);
+  // A plate gets the place sentence, never the figures.
+  const plate = plateBrief("standing", { bible: stick, story });
+  assert.ok(plate.image.prompt.includes(place) && !plate.image.prompt.includes(drawing));
+  // A style with no paragraph yet still says its name.
+  stick.cast.style = "brand-new";
+  assert.match(storyBrief(shot("gate-opens"), { bible: stick, animatic, story, project: dir }).image.prompt, /Drawing: the brand-new style\./);
+});
+
+test("beats name grips, releases, contacts and hand-offs when the states carry them", () => {
+  const shot = {
+    start: 10, seconds: 3, who: ["a", "b"], actions: [{ who: "a", verb: "push", target: "the cart" }],
+    poses: {
+      a: [{ at: 10, pose: "stand", expression: "calm", holds: "ball" }, { at: 10.5, pose: "stand", action: "handoff", holds: null, to: "b" }, { at: 11, pose: "lean", action: "push", contact: "both hands on the cart" }, { at: 12, pose: "stand", expression: "proud" }],
+      b: [{ at: 10, pose: "stand" }, { at: 10.5, pose: "stand", holds: { name: "ball" } }]
+    }
+  };
+  const beats = causalBeats(shot, { nameOf: (id) => id.toUpperCase() });
+  assert.deepEqual(beats, [
+    "0–0.5 s (setup): a stands, calm, holding the ball; b stands.",
+    "0.5–1 s (setup): a lets go of the ball, handoffs to B; b grips the ball.",
+    "1–2 s (action): a leans, pushes the cart, both hands on the cart.",
+    "2–3 s (consequence): a stands, now proud."
+  ]);
+  assert.equal(third("turn-to-look"), "turns to look");
+  assert.equal(third("catch"), "catches");
+  assert.equal(third("carry"), "carries");
+});
+
+test("continuity: a shot that carries straight on starts from the last kept frame of the one before", async () => {
+  const dir = await project();
+  const { bible, story, animatic, shots, shot } = await inputs(dir);
+  const [a, b] = shots;
+  assert.equal(continuesFrom(a, b, 30), true, "same set, no gap, the foal in both");
+  assert.equal(continuesFrom(a, { ...b, set: "elsewhere" }, 30), false);
+  assert.equal(continuesFrom(a, { ...b, start: b.start + 1 }, 30), false);
+  assert.equal(continuesFrom(a, { ...b, who: ["stranger"] }, 30), false);
+  const plain = storyBrief(shot("gate-opens"), { bible, animatic, story, project: dir });
+  const chained = storyBrief(shot("gate-opens"), { bible, animatic, story, project: dir, follows: shot("gate-wide") });
+  assert.equal(chained.video.continue_from, "gate-wide");
+  assert.equal(plain.video.continue_from, undefined);
+  assert.match(chained.video.prompt, /The start frame is the last frame of the shot before; carry straight on from it: Foal \(left\) as it left off \(looks, thinking\); Mare \(right\) as it left off \(stands, neutral\), same side of frame/);
+  assert.notEqual(chained.brief_hash, plain.brief_hash);
+  assert.deepEqual(retainedRange(chained.video), { in: 0.3, out: 2.81, last: 2.777 });
+  // Opt-in through the storyboard; a shot is chained only to a generated one (here every neighbour is refused).
+  story.generate = { continuity: true, sound_effects: true };
+  await writeFile(path.join(dir, "storyboard.json"), JSON.stringify(story));
+  const all = await projectBriefs(dir, { frame: async () => {} });
+  const made = all.filter((entry) => entry.request.role === "story" && entry.brief);
+  assert.ok(made.every((entry) => entry.brief.video.audio === "effects"));
+  assert.ok(made.every((entry) => !entry.brief.video.continue_from));
+  assert.match(formatBriefs(made), /keep: 0\.3–2\.81 s of the clip; native sound effects only/);
+  assert.match(formatBriefs([{ request: { id: "gate-opens", role: "story" }, brief: chained }]), /start frame: the last kept frame of gate-wide's clip, not this shot's keyframe/);
 });

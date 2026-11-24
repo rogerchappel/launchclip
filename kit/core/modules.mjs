@@ -35,6 +35,7 @@ import { resolveShotStates, stateSpec, stateTargetRect } from './shot-states.mjs
 import { scenePassage } from './media-passage.mjs';
 import { publishAnchors } from './anchors.mjs';
 import { applyFlow, pinnedInto } from './flow.mjs';
+import { solveLanding } from './characters/landing.mjs';
 
 const EDITORIAL_CANVAS = { '9:16': { width: 1080, height: 1920 }, '16:9': { width: 1920, height: 1080 } };
 const DOM_ID = /^[a-z][a-z0-9-]{0,59}$/;
@@ -224,7 +225,12 @@ export function resolveModule(scene, story, { track, end, carry = true } = {}) {
       if (Array.isArray(model.events)) model.events.push(...model.shotStates.events);
     }
     // Zooms inside the shot (kit/core/zooms.mjs): each zoom's rect on the plate.
-    if (Array.isArray(scene?.zooms) && scene.zooms.length) model.zoomRects = zoomRects(scene, model);
+    if (Array.isArray(scene?.zooms) && scene.zooms.length) {
+      model.zoomRects = zoomRects(scene, model);
+      // A camera landing that cannot land fails the scene rather than breaking the frame (characters/landing.mjs).
+      const missed = scene.zooms.findIndex((zoom, z) => typeof zoom?.land === 'string' && model.zoomRects[z]?.error);
+      if (missed >= 0) throw new Error(`zooms[${missed}].land: ${model.zoomRects[missed].error}`);
+    }
     // Elements carried across scenes (kit/core/flow.mjs, docs/FLUID_MOTION_RFC.md §6).
     if (carry) applyFlow(model, scene, story, (other) => resolveModule(other, story, { end: sceneRenderEnd(story, other), carry: false }));
     return model;
@@ -244,13 +250,16 @@ function modelView(model) {
 
 /**
  * scene.zooms → per zoom, its rect on the plate (canvas px): {rect} or
- * {error}. A box is its own rect; an object is model.objects[name].rect; a
+ * {error}. A landing is solved on the cast (characters/landing.mjs:
+ * {landing, rect, point}); a box is its own rect; an object is model.objects[name].rect; a
  * target is a shot-state target measured on the module's view at rest.
  */
 export function zoomRects(scene, model) {
   return scene.zooms.map((zoom, index) => {
     const path = `zooms[${index}]`;
     try {
+      // A landing holds (and follows its subject) until its own until, the next zoom or the shot's end.
+      if (typeof zoom?.land === 'string') return solveLanding(model, zoom, { until: zoom.until ?? scene.zooms[index + 1]?.at ?? scene.end, cues: scene.params?.cast?.find?.((entry) => entry?.id === zoom.land)?.cues });
       if (zoom?.box) return { rect: { ...zoom.box } };
       if (typeof zoom?.object === 'string') {
         const rect = model?.objects?.[zoom.object]?.rect;

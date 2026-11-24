@@ -209,3 +209,111 @@ if (script.status !== "skipped") gates.script = script;
 
 `eval/fixtures/animation/broken-script` fails all four named rules;
 `examples/story/dialogue-9x16` passes.
+
+## Motion review against a reference clip
+
+A video can pass every gate and still move badly: the arm swings with no
+wind-up, a "depth move" is a zoom of the whole frame, the limbs are half the
+weight of the stickman Short it is meant to match. Gates cannot see that, so
+a person (or an agent) watches the video against a reference clip and writes
+down what they saw. `launchclip review-motion` makes the pack to do that in
+and checks the filled review.
+
+```bash
+# The pack: qa/motion-review/ in the project (or --out)
+launchclip review-motion <project|video> --reference best-short.mp4 --reference-range 2-6,11-15
+
+# After filling qa/motion-review/motion-review.json
+launchclip review-motion check <project>/qa/motion-review
+
+# The next render, carrying the first review's failures
+launchclip review-motion <project> --reference best-short.mp4 --previous review-01/motion-review.json --out review-02
+```
+
+The pack holds, per shot, a clip and three-frame strips (the frame before,
+the frame, the frame after) at the cut in, at each pose change in the
+project's shot list (`launchclip story shots`; a contact or a new pose) and
+at the cut out, so both sides of every cut are seen. A bare video is cut into
+shots where the picture changes. The reference clip's excerpts (the
+`--reference-range` list, default the whole clip) sit beside every shot in
+`index.html`. A project reviews `renders/final.mp4`, else `renders/draft.mp4`,
+unless `--video` names one.
+
+`motion-review.json` (`launchclip.motion-review.v1`) starts with every check
+`pending`:
+
+```json
+{
+  "schema": "launchclip.motion-review.v1",
+  "video": {"path": "…", "sha256": "…", "width": 1080, "height": 1920, "fps": 30, "duration": 20.5},
+  "reference": {"path": "…", "sha256": "…", "segments": [{"id": "reference-01", "start": 2, "end": 6, "clip": "reference-01.mp4", "moments": [], "limb_weight": []}]},
+  "questions": {"space_camera": "…", "gesture": "…", "reaction": "…", "rhythm": "…", "drawing": "…", "limb_weight": "…"},
+  "decisions": {
+    "technical": {"status": "pending", "by": "", "note": ""},
+    "motion": {"status": "pending", "reviewer": "", "method": "", "reviewed_at": ""},
+    "user": {"status": "pending", "by": "", "note": ""}
+  },
+  "checks": {"limb_weight": {"status": "pending", "observation": "", "evidence": [], "reason": "", "comparison_basis": "",
+    "measured": {"candidate_ratio": 0.11, "reference_ratio": 0.16, "relative": 0.688}}},
+  "shots": [{"id": "ask", "start": 2.156, "end": 8.524, "clip": "shot-02.mp4",
+    "moments": [{"at": 2.406, "why": "sam: think, happy", "strip": "shot-02-m1.png"}],
+    "limb_weight": [{"at": 2.406, "head_px": 44, "stroke_px": 5, "ratio": 0.114}],
+    "checks": {"space_camera": {"status": "pending", "observation": "", "evidence": [], "reason": ""}, "gesture": {}, "reaction": {}, "rhythm": {}, "drawing": {}}}],
+  "previous_review": null,
+  "repair_log": [],
+  "remaining_gaps": [],
+  "artifacts": {"shot-02-m1.png": "<sha256>", "index.html": "<sha256>"}
+}
+```
+
+Each shot is asked five things: did the promised space or camera effect
+happen; does the gesture read (anticipation, action, contact, release,
+recovery, carried by the body and not only the wrists); does the reaction
+develop; does the rhythm guide attention; is the drawing and composition
+intact. The video is asked once whether limb weight matches the reference at
+matched head width. A verdict is `pass`, `needs_repair` or `not_applicable`
+with a `reason`. A deliberate still pose is a pass with the reason in the
+observation, not an n/a.
+
+`review-motion check` fails (exit 1) until:
+
+- the video, the reference and every file in the pack have the sha256 the
+  pack recorded: a new render needs a new pack;
+- every check has a verdict, and a `pass` or `needs_repair` has an
+  observation and evidence (pack files, which must exist, or time ranges);
+- `limb_weight` has a `comparison_basis` (which frames, how head width was
+  matched) and is not n/a when there is a reference;
+- `decisions.motion` is `pass` or `needs_repair` and names the reviewer,
+  method and time, and is `pass` only when no check, gap or repair is open;
+- every failure of the previous review (a `needs_repair` check, a pending
+  check with an observation, a remaining gap, an unresolved repair) is in
+  `repair_log` and `resolved` with the change, a new observation and
+  evidence. An `implementation_change` on the same video file is refused; a
+  `review_correction` (the earlier review was wrong) needs its
+  `correction_reason`.
+
+A complete review that needs repair exits 2. The three decisions stay
+separate: technical (gates and encode), motion (this review) and the user's.
+The check covers only the motion decision and reports the others. Passing it
+proves the review is complete and current, not that the observations are
+true.
+
+**A model's first pass.** `--model provider:model` (a model that takes
+images, as for `handin check`) shows each shot's strips and the reference's
+to the model and writes its answer as `suggested` beside each check. It never
+sets a status, so the review stays pending until someone watches the video.
+With no `--model` nothing is called and no key is needed.
+
+**Limb weight from pixels.** `eval/limb-weight.mjs` measures each decoded
+frame: the figure is the largest patch of ink against the frame's median
+tone, its head width is the widest row above the neck, and its stroke width
+is twice the median distance to the edge along the limbs' centre lines. The
+ratio (stroke over head) of the candidate's pose-change frames and the
+reference's is in `checks.limb_weight.measured`. It assumes one upright
+figure on a plain ground; arms above the head, touching figures or a painted
+background give `ratio: null` with the reason, never a guess. It is a guide
+for the reviewer and never decides the check.
+
+The review's shape (pending checks, three decisions, a repair log bound to
+fingerprints) follows the motion review of an MIT-licensed stickman director
+skill, rewritten for LaunchClip's shot list and cut down to six questions.

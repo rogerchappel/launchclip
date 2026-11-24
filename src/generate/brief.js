@@ -6,7 +6,9 @@
 //    image: {prompt, negative, width, height, references: [absolute paths]},
 //    video: {prompt, seconds, pad_seconds, fps} | null,
 //      (seconds is the shot's own length; adapters request
-//      seconds + 2 * pad_seconds and source_start trims the pad back),
+//      seconds + 2 * pad_seconds and source_start trims the pad back;
+//      a story shot adds audio: "none" | "effects", the model's own soundtrack,
+//      and, chained, continue_from: the shot whose last kept frame starts it),
 //    brief_hash: "sha256:…" (over the canonical JSON of everything else)}
 //
 // Step 1 (image) is the keyframe: subject, look and composition. Step 2
@@ -24,6 +26,7 @@ import { readAnimatic } from "../animatic.js";
 import { storyShotsCommand } from "../story_shots.js";
 import { hashValue, loadWords } from "../finish.js";
 import { resolveShots } from "../asset_provider.js";
+import { styleParagraph } from "./style-paragraphs.js";
 
 // Generated clips drift at their ends, so the adapter asks for this much
 // longer at each end and source_start trims it back (§6). A constant to tune on fixtures.
@@ -147,13 +150,13 @@ export function storyRefusalReason(shot, { bible } = {}) {
  * frame is the layout reference, at layoutFramePath()); story: the storyboard
  * (size and rate); project: the folder the bible's sheet paths are relative to.
  */
-export function storyBrief(shot, { bible, animatic = null, story = null, project = "." } = {}) {
+export function storyBrief(shot, { bible, animatic = null, story = null, project = ".", follows = null, soundEffects = false } = {}) {
   if (storyRefusalReason(shot, { bible })) return null;
   const cast = castOf(bible);
   const entry = (id) => cast.find((member) => member?.id === id);
   const where = (id) => `${nameOf(entry(id), id)}${entry(id)?.position ? ` (${entry(id).position})` : ""}`;
   const opening = (id) => shot.poses?.[id]?.[0];
-  const style = bible?.cast?.style ?? bible?.style?.drawing_style;
+  const drawing = styleParagraph(bible?.cast?.style ?? bible?.style?.drawing_style);
   const prompt = [
     // Pasted word for word, never paraphrased (§4.1 "The description is the bible's").
     ...shot.who.map((id) => entry(id).description),
@@ -162,33 +165,42 @@ export function storyBrief(shot, { bible, animatic = null, story = null, project
       const pose = opening(id);
       return `${where(id)}${pose ? `: ${[pose.pose, pose.expression].filter(Boolean).join(", ")}` : ""}`;
     }).join("; ")}.`,
-    style ? `Drawn in the ${style} style of the reference sheets; match them exactly.` : "Match the reference sheets exactly."
-  ].join(" ");
+    // The style's locked paragraph, word for word (style-paragraphs.js), then its anatomy as constraints.
+    drawing?.drawing,
+    drawing?.place,
+    drawing?.anatomy,
+    "Match the reference sheets exactly."
+  ].filter(Boolean).join(" ");
   const sheets = shot.who.map((id) => entry(id)?.sheet).filter((sheet) => typeof sheet === "string").map((sheet) => path.resolve(project, sheet));
   const layout = (animatic?.shots ?? []).some((entry) => entry?.id === shot.id) ? [layoutFramePath(project, shot.id)] : [];
-
-  // The motion: each pose change in the shot, timed from its start.
-  const events = new Map();
-  for (const id of shot.who) for (const state of shot.poses?.[id] ?? []) {
-    const t = Math.max(0, round1(state.at - shot.start));
-    const what = [state.pose, state.expression, state.action ? `does ${state.action}` : null, state.shot ? `camera moves to a ${state.shot} shot` : null].filter(Boolean).join(", ");
-    if (what) events.set(t, [...(events.get(t) ?? []), `${where(id)} ${what}`]);
-  }
-  const times = [...events.keys()].sort((a, b) => a - b);
-  const beats = times.map((t, i) => `${t}–${round1(times[i + 1] ?? shot.seconds)} s: ${events.get(t).join("; ")}.`);
   const action = shot.actions?.[0];
+  const beats = causalBeats(shot, { where, nameOf: (id) => nameOf(entry(id), id), action });
+  // Continuity (§4.1 "Continuity between clips"): the clip starts on the last retained frame of the shot before it.
+  const carried = follows ? follows.who.filter((id) => shot.who.includes(id)).map((id) => {
+    const last = (follows.poses?.[id] ?? []).reduce((state, next) => ({ ...state, ...next }), {});
+    return `${where(id)} as it left off (${[last.pose && third(last.pose), last.expression, propOf(last.holds) && `holding the ${propOf(last.holds)}`].filter(Boolean).join(", ") || "same pose"})`;
+  }) : [];
   const body = {
     id: shot.id,
     kind: "story",
     steps: ["image", "video"],
-    image: { prompt, negative: [STORY_NEGATIVE, ...(bible?.rules ?? [])].join(", "), width: story?.format?.width ?? null, height: story?.format?.height ?? null, references: [...sheets, ...layout] },
+    image: { prompt, negative: [STORY_NEGATIVE, drawing?.negative, ...(bible?.rules ?? [])].filter(Boolean).join(", "), width: story?.format?.width ?? null, height: story?.format?.height ?? null, references: [...sheets, ...layout] },
     video: {
       prompt: [
         `Camera: ${shot.framing ?? "medium"} shot, steady.`,
-        action ? `Action: ${nameOf(entry(action.who), action.who)} ${action.verb}${action.target ? ` ${action.target}` : ""}.` : null,
+        action ? `Action: ${nameOf(entry(action.who), action.who)} ${third(action.verb)}${targetWords(action.target)}.` : null,
+        follows ? `The start frame is the last frame of the shot before; carry straight on from it: ${carried.join("; ")}, same side of frame and facing the same way.` : null,
         ...beats,
-        "Nothing else moves; who, where and the light stay as in the start frame."
+        beats.length > 1 ? "Play the beats in order, each caused by the one before: every grip, release and contact lands on screen, and what an action changes stays changed." : null,
+        drawing?.motion,
+        "Continuity: who is in frame, where they stand and the light stay as in the start frame; nothing moves that the beats do not name.",
+        // The mix is ours (narration, music and effects are laid in the edit), so the model's own soundtrack is off by default.
+        soundEffects
+          ? "Audio: only the sound effects of the actions on screen; no music, no speech or narration."
+          : "Audio: none; no music, no speech or narration, no sound effects."
       ].filter(Boolean).join(" "),
+      audio: soundEffects ? "effects" : "none",
+      ...(follows ? { continue_from: follows.id } : {}),
       seconds: Math.round(shot.seconds * 1000) / 1000,
       pad_seconds: EDGE_PAD_SECONDS,
       fps: Number(story?.format?.fps) || DEFAULT_FPS
@@ -197,18 +209,84 @@ export function storyBrief(shot, { bible, animatic = null, story = null, project
   return { ...body, brief_hash: `sha256:${hashValue(body)}` };
 }
 
+// A verb id of the shot list ("gaze-at", "turn-to-look") in the third person: "gazes at", "turns to look".
+export function third(id) {
+  const [first, ...rest] = String(id).split(/[-_\s]+/);
+  const verb = /(s|sh|ch|x|z|o)$/.test(first) ? `${first}es` : /[^aeiou]y$/.test(first) ? `${first.slice(0, -1)}ies` : `${first}s`;
+  return [verb, ...rest].join(" ");
+}
+// A prop or target in words; cue fields may give a string or {name | prop | id}.
+const propOf = (value) => (typeof value === "string" ? value : value?.name ?? value?.prop ?? value?.id ?? null);
+const targetWords = (target) => (propOf(target) ? ` ${propOf(target)}` : "");
+
+/**
+ * The shot's states as timed beats of cause and effect (§4.1 "Action"): the
+ * setup, the shot's action, what it changes, the reaction. Each beat names
+ * only what changes: a pose, an expression, an action and its target, a prop
+ * gripped or let go (`holds`), a contact (`contact`), a hand-off (`to`), a
+ * camera move. Fields other than pose, expression, action and shot are read
+ * when a state has them and never required.
+ */
+export function causalBeats(shot, { where = (id) => id, nameOf = (id) => id, action = shot.actions?.[0] } = {}) {
+  const events = new Map();
+  const add = (t, line) => events.set(t, [...(events.get(t) ?? []), line]);
+  let actionAt = null;
+  for (const id of shot.who ?? []) {
+    let prev = null;
+    let held = null;
+    for (const state of shot.poses?.[id] ?? []) {
+      const t = Math.max(0, round1(state.at - shot.start));
+      const parts = [];
+      if (!prev) parts.push([state.pose && third(state.pose), state.expression].filter(Boolean).join(", "));
+      else {
+        if (state.pose && state.pose !== prev.pose) parts.push(third(state.pose));
+        if (state.expression && state.expression !== prev.expression) parts.push(`now ${state.expression}`);
+      }
+      // A state without `holds` keeps the prop the last one held.
+      const holding = "holds" in state ? propOf(state.holds) : held;
+      if (holding !== held) {
+        if (held) parts.push(`lets go of the ${held}`);
+        if (holding) parts.push(prev ? `grips the ${holding}` : `holding the ${holding}`);
+      }
+      held = holding;
+      if (state.action && (state.action !== prev?.action || propOf(state.target) !== propOf(prev?.target))) {
+        const target = propOf(state.target) ?? (action?.who === id && action?.verb === state.action ? propOf(action.target) : null);
+        // With no target, a verb's trailing preposition goes ("gazes at" → "gazes").
+        parts.push(`${target ? `${third(state.action)} ${target}` : third(state.action).replace(/ (at|to|toward|towards|on|onto|into|with|from)$/, "")}${state.to ? ` to ${nameOf(state.to)}` : ""}`);
+      }
+      // The shot's action lands on the first state that plays it, as an action or as a pose.
+      if (actionAt === null && action?.who === id && (state.action === action.verb || (state.pose === action.verb && state.pose !== prev?.pose))) actionAt = t;
+      if (typeof state.contact === "string" && state.contact) parts.push(state.contact);
+      if (state.shot && state.shot !== prev?.shot) add(t, `camera moves to a ${state.shot} shot`);
+      const what = parts.filter(Boolean).join(", ");
+      if (what) add(t, `${where(id)} ${what}`);
+      prev = state;
+    }
+  }
+  const times = [...events.keys()].sort((a, b) => a - b);
+  const at = times.indexOf(actionAt);
+  const label = (i) => {
+    if (times.length < 2) return null;
+    if (at < 0) return i === 0 ? "setup" : null;
+    if (i < at) return "setup";
+    if (i === at) return "action";
+    return i === times.length - 1 && i > at + 1 ? "reaction" : "consequence";
+  };
+  return times.map((t, i) => `${t}–${round1(times[i + 1] ?? shot.seconds)} s${label(i) ? ` (${label(i)})` : ""}: ${events.get(t).join("; ")}.`);
+}
+
 /**
  * A plate: one place with nobody in it, made once and reused in every shot
  * there (§4.1). place: a set name, or null for the world alone. Image only.
  */
 export function plateBrief(place, { bible, story = null } = {}) {
-  const style = bible?.cast?.style ?? bible?.style?.drawing_style;
+  const drawing = styleParagraph(bible?.cast?.style ?? bible?.style?.drawing_style);
   const body = {
     id: `plate-${bible?.world?.kind ?? "world"}${place ? `-${place}` : ""}`,
     kind: "story",
     steps: ["image"],
     image: {
-      prompt: [placeWords(bible?.world, place), "Nobody in frame: an empty place, ready for the characters.", style ? `Drawn in the ${style} style.` : null].filter(Boolean).join(" "),
+      prompt: [placeWords(bible?.world, place), "Nobody in frame: an empty place, ready for the characters.", drawing?.place].filter(Boolean).join(" "),
       negative: [STORY_NEGATIVE, "people, characters, animals, figures", ...(bible?.rules ?? [])].join(", "),
       width: story?.format?.width ?? null,
       height: story?.format?.height ?? null,
@@ -219,8 +297,19 @@ export function plateBrief(place, { bible, story = null } = {}) {
   return { ...body, brief_hash: `sha256:${hashValue(body)}` };
 }
 
+/**
+ * The part of a generated clip the edit keeps, in source seconds: the pad
+ * trimmed off each end (§6). {in, out, last}: last is the time of the last
+ * kept frame, the next clip's start frame when it continues this one.
+ */
+export function retainedRange(video) {
+  const pad = Number(video?.pad_seconds) || 0, seconds = Number(video?.seconds) || 0, fps = Number(video?.fps) || DEFAULT_FPS;
+  const r3 = (value) => Math.round(value * 1000) / 1000;
+  return { in: r3(pad), out: r3(pad + seconds), last: r3(Math.max(pad, pad + seconds - 1 / fps)) };
+}
+
 const run = promisify(execFile);
-const grabFrame = (video, seconds, out) => run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-ss", String(seconds), "-i", video, "-frames:v", "1", out]);
+export const grabFrame = (video, seconds, out) => run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-ss", String(seconds), "-i", video, "-frames:v", "1", out]);
 
 /**
  * Every footage shot request in a project's storyboard, with its brief (or the
@@ -250,11 +339,24 @@ export async function projectBriefs(project, hooks = {}) {
  * place, in a project with a show bible and an animatic; [] without them.
  * → [{request: {id, scene_id, role: "story" | "plate"}, shot | place, brief, reason}]
  */
-export async function storyBriefs(project, story, hooks = {}) {
-  return storyEntries(project, story, hooks);
+export async function storyBriefs(project, story, hooks = {}, options = {}) {
+  return storyEntries(project, story, hooks, options);
 }
 
-async function storyEntries(project, story, { frame = grabFrame } = {}) {
+/**
+ * Whether a shot carries straight on from the one before (§4.1 "Continuity
+ * between clips"): the same set, no gap between them (within a frame) and
+ * someone in both.
+ */
+export function continuesFrom(prev, shot, fps = DEFAULT_FPS) {
+  return Boolean(prev && shot && (prev.set ?? null) === (shot.set ?? null) && Math.abs(Number(shot.start) - Number(prev.end)) <= 1 / fps + 1e-6 && (prev.who ?? []).some((id) => (shot.who ?? []).includes(id)));
+}
+
+// options: {continuity, soundEffects} (finish's --generate-continuity, --generate-sound-effects);
+// each defaults to the storyboard's generate.continuity / generate.sound_effects, else off.
+async function storyEntries(project, story, { frame = grabFrame } = {}, options = {}) {
+  const continuity = Boolean(options.continuity ?? story?.generate?.continuity);
+  const soundEffects = Boolean(options.soundEffects ?? story?.generate?.sound_effects);
   if (!existsSync(path.join(project, BIBLE_FILE))) return [];
   const { animatic: found, fresh } = await readAnimatic(project);
   if (!found) return [];
@@ -265,9 +367,12 @@ async function storyEntries(project, story, { frame = grabFrame } = {}) {
   const video = path.join(project, found.video);
   const fps = Number(found.fps) || DEFAULT_FPS;
   const out = [];
-  for (const shot of shots) {
+  for (const [i, shot] of shots.entries()) {
     const reason = storyRefusalReason(shot, { bible });
-    const brief = reason ? null : storyBrief(shot, { bible, animatic, story, project });
+    // Chained only to a shot that is generated too: a code-drawn shot has no clip to take a frame from.
+    const prev = out[i - 1]?.brief ? shots[i - 1] : null;
+    const follows = continuity && continuesFrom(prev, shot, Number(story?.format?.fps) || DEFAULT_FPS) ? prev : null;
+    const brief = reason ? null : storyBrief(shot, { bible, animatic, story, project, follows, soundEffects });
     const layout = brief?.image.references.find((file) => file.startsWith(path.join(path.resolve(project), LAYOUT_DIR)));
     if (layout) {
       const first = animatic.shots.find((entry) => entry.id === shot.id)?.first_frame ?? 0;
@@ -292,7 +397,11 @@ export function formatBriefs(briefs) {
     if (!brief) return `${head}\nrefused: ${reason}\n`;
     const lines = [head, `steps: ${brief.steps.join(" → ")}`, `size: ${brief.image.width}×${brief.image.height}`, "", "image prompt:", brief.image.prompt, "", "negative:", brief.image.negative];
     if (brief.image.references.length) lines.push("", "references:", ...brief.image.references);
-    if (brief.video) lines.push("", `video prompt (${brief.video.seconds} s at ${brief.video.fps} fps; request ${Math.round((brief.video.seconds + 2 * brief.video.pad_seconds) * 1000) / 1000} s, ${brief.video.pad_seconds} s padding each end):`, brief.video.prompt);
+    if (brief.video) {
+      const kept = retainedRange(brief.video);
+      lines.push("", `video prompt (${brief.video.seconds} s at ${brief.video.fps} fps; request ${Math.round((brief.video.seconds + 2 * brief.video.pad_seconds) * 1000) / 1000} s, ${brief.video.pad_seconds} s padding each end):`, brief.video.prompt, "", `keep: ${kept.in}–${kept.out} s of the clip${brief.video.audio === "none" ? "; native audio off" : brief.video.audio === "effects" ? "; native sound effects only" : ""}`);
+      if (brief.video.continue_from) lines.push(`start frame: the last kept frame of ${brief.video.continue_from}'s clip, not this shot's keyframe`);
+    }
     lines.push("", brief.brief_hash);
     return `${lines.join("\n")}\n`;
   }).join("\n");

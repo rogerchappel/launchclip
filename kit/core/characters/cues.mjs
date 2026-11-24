@@ -17,7 +17,10 @@
 // id only, so every shot draws the same person.
 //
 // Cues on a narrative direction-map line:
-//   {words: [12, 24], …, cast: [{id, pose?, expression?, at?}], set?}
+//   {words: [12, 24], …, cast: [{id, pose?, expression?, action?, target?, squash?, at?}], set?}
+// action is an acting cue (characters/actions.mjs ACTIONS, the contact
+// actions among them: `at` is then the contact); squash is a gag squash
+// {amount, hold?, recover?} (characters/contact.mjs).
 // `at` is "word:<text>[#n]" (searched inside the line's words first), "start",
 // "end", or a narration word index. validateCastCues checks names;
 // resolveCastCues turns them into seconds.
@@ -31,6 +34,8 @@ import {SEATED_SETS, SETS} from './sets.mjs';
 import {DRAWING_STYLES} from './styles.mjs';
 import {ACTING_PROFILE_NAMES} from './acting.mjs';
 import {isKind, kindPhrase} from './kinds.mjs';
+import {ACTIONS, TARGET_REQUIRED, targetError} from './actions.mjs';
+import {squashError} from './contact.mjs';
 
 export {DRAWING_STYLES};
 export const KOKORO_VOICES = Object.freeze([
@@ -180,16 +185,20 @@ export function validateCastCues(line, cast, {path = 'line'} = {}) {
   const ids = castIds(cast);
   if (line.set !== undefined && !SETS.includes(line.set)) errors.push(`${path}.set "${line.set}" is not a set (${SETS.join(', ')})`);
   if (line.cast === undefined) return errors;
-  if (!Array.isArray(line.cast) || !line.cast.length) return [...errors, `${path}.cast must be a non-empty array of {id, pose?, expression?, at?}`];
+  if (!Array.isArray(line.cast) || !line.cast.length) return [...errors, `${path}.cast must be a non-empty array of {id, pose?, expression?, action?, target?, squash?, at?}`];
   line.cast.forEach((cue, i) => {
     const where = `${path}.cast[${i}]`;
     if (!isObj(cue)) { errors.push(`${where} must be an object`); return; }
-    for (const key of Object.keys(cue)) if (!['id', 'pose', 'expression', 'at'].includes(key)) errors.push(`${where}.${key} is not supported (allowed: id, pose, expression, at)`);
+    for (const key of Object.keys(cue)) if (!CUE_FIELDS.includes(key)) errors.push(`${where}.${key} is not supported (allowed: ${CUE_FIELDS.join(', ')})`);
     if (typeof cue.id !== 'string') errors.push(`${where}.id must name a character`);
     else if (!ids.has(cue.id)) errors.push(`${where}.id "${cue.id}" is not in the story cast (${[...ids].join(', ') || 'none'})`);
     if (cue.pose !== undefined && !POSES.includes(cue.pose)) errors.push(`${where}.pose "${cue.pose}" is not a pose (${POSES.join(', ')})`);
     if (cue.expression !== undefined && !EXPRESSIONS.includes(cue.expression)) errors.push(`${where}.expression "${cue.expression}" is not an expression (${EXPRESSIONS.join(', ')})`);
-    if (cue.pose === undefined && cue.expression === undefined) errors.push(`${where} needs a pose or an expression`);
+    if (cue.action !== undefined && !ACTIONS.includes(cue.action)) errors.push(`${where}.action "${cue.action}" is not an action (${ACTIONS.join(', ')})`);
+    if (ACTIONS.includes(cue.action) && TARGET_REQUIRED.includes(cue.action) && cue.target === undefined) errors.push(`${where}.target is required for ${cue.action}`);
+    if (cue.target !== undefined) { const problem = targetError(cue.target); if (problem) errors.push(`${where}.target ${problem}`); }
+    if (cue.squash !== undefined) { const problem = squashError(cue.squash); if (problem) errors.push(`${where}.squash ${problem.replace(/^\./, '')}`); }
+    if (cue.pose === undefined && cue.expression === undefined && cue.action === undefined && cue.squash === undefined) errors.push(`${where} needs a pose, an expression, an action or a squash`);
     if (cue.at !== undefined && !validAt(cue.at)) errors.push(`${where}.at must be "word:<text>[#n]", "start", "end" or a word index; got ${JSON.stringify(cue.at)}`);
     if (cue.pose === 'walk' && SEATED_SETS.includes(line.set)) errors.push(`${where}.pose walk does not fit the seated set ${line.set}`);
     if (cue.pose === 'sit' && line.set !== undefined && !SEATED_SETS.includes(line.set)) errors.push(`${where}.pose sit needs a seated set (${SEATED_SETS.join(', ')})`);
@@ -204,6 +213,9 @@ function castIds(cast) {
   return new Set(entries.map(entry => entry?.id).filter(Boolean));
 }
 
+const CUE_FIELDS = ['id', 'pose', 'expression', 'action', 'target', 'squash', 'at'];
+// The acting fields a resolved cue carries on (pose, expression, action, target, squash).
+const acted = cue => Object.fromEntries(CUE_FIELDS.slice(1, -1).filter(key => cue[key] !== undefined).map(key => [key, cue[key]]));
 const WORD_AT = /^word:([^#\s]+?)(?:#(\d+))?$/;
 const validAt = at => at === 'start' || at === 'end' || (Number.isInteger(at) && at >= 0) || (typeof at === 'string' && WORD_AT.test(at));
 const norm = text => String(text ?? '').toLowerCase().replace(/[^\p{L}\p{N}'-]+/gu, '');
@@ -230,8 +242,8 @@ export function cueWordIndex(at, line, words) {
 }
 
 /**
- * A line's cues in seconds: [{id, pose, expression, time, word}] sorted by
- * time. words: narration words [{text, start, end}].
+ * A line's cues in seconds: [{id, pose?, expression?, action?, target?,
+ * squash?, time, word}] sorted by time. words: narration words [{text, start, end}].
  */
 export function resolveCastCues(line, {words = []} = {}) {
   if (!Array.isArray(line?.cast)) return [];
@@ -239,14 +251,14 @@ export function resolveCastCues(line, {words = []} = {}) {
     const word = cueWordIndex(cue.at, line, words);
     const entry = words[word];
     if (!entry) throw new Error(`cue for ${cue.id}: word ${word} is outside the narration (${words.length} words)`);
-    return {id: cue.id, ...(cue.pose ? {pose: cue.pose} : {}), ...(cue.expression ? {expression: cue.expression} : {}), time: Number(entry.start), word};
+    return {id: cue.id, ...acted(cue), time: Number(entry.start), word};
   }).sort((a, b) => a.time - b.time);
 }
 
 /**
  * Scene params cues for one scene from a direction map: every line naming
  * the scene contributes its cast cues, as scene-relative seconds.
- * → {set: string | null, cues: {[id]: [{at, pose?, expression?}]}}
+ * → {set: string | null, cues: {[id]: [{at, pose?, expression?, action?, target?, squash?}]}}
  */
 export function sceneCastCues(map, sceneId, {words = [], start = 0} = {}) {
   const cues = {};
@@ -256,7 +268,7 @@ export function sceneCastCues(map, sceneId, {words = [], start = 0} = {}) {
       if (!Array.isArray(line?.scenes) || !line.scenes.includes(sceneId)) continue;
       if (line.set && !set) set = line.set;
       for (const cue of resolveCastCues(line, {words})) {
-        (cues[cue.id] ??= []).push({at: Math.max(0, Math.round((cue.time - start) * 1000) / 1000), ...(cue.pose ? {pose: cue.pose} : {}), ...(cue.expression ? {expression: cue.expression} : {})});
+        (cues[cue.id] ??= []).push({at: Math.max(0, Math.round((cue.time - start) * 1000) / 1000), ...acted(cue)});
       }
     }
   }
