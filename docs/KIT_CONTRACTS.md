@@ -3336,6 +3336,68 @@ without a cut. The shape matches `evidence-clip`'s `focus`.
   next zoom (the camera travels box to box) or, on the last zoom, eases out
   so it is back at rest when the shot ends, before the next shot's move.
 
+**Camera landings in a cast scene** (`LAND` in `kit/core/zooms.mjs`,
+`kit/core/characters/landing.mjs`). A zoom with `land` instead of a box puts
+one named subject on a chosen point of the screen, for a reason the plan
+states. The camera solves its centre so the subject lands exactly there,
+`centre = subject − (anchor − canvas centre) / scale`, travels from wherever
+it is, and holds there: until `until`, the next zoom, or the shot's end.
+
+```json
+{"id": "talk", "module": "cast-scene", "start": 0, "end": 10,
+  "params": {"set": "standing", "shot": "wide", "cast": [
+    {"id": "maya", "pose": "stand", "cues": [{"at": 7.6, "pose": "shrug", "expression": "happy"}]},
+    {"id": "sam", "pose": "stand", "cues": [{"at": 4.6, "pose": "facepalm", "expression": "frustrated"}]}
+  ]},
+  "zooms": [
+    {"at": 1, "land": "maya", "move": "reveal", "purpose": "find Maya before she breaks the news"},
+    {"at": 4.4, "land": "sam", "move": "push", "shot": "close", "purpose": "land on Sam's reaction to the broken rollback"},
+    {"at": 7.8, "land": "maya", "move": "cut", "shot": "medium", "screen": "left-third", "purpose": "cut back to Maya for her answer"}
+  ]}
+```
+
+(The golden `examples/story/camera-landing-9x16`; times may be narration
+anchors, as on any zoom.)
+
+- `land`: a character in the scene (its face: the head between crown and
+  chin, in the pose and place it has once the move ends), or, in a world the
+  scene draws itself, a world point (`far`, `window`, `horizon`, `street`,
+  `skyline`) or one of its props.
+- `move` (required): `reveal` travels across to the subject (lateral
+  travel; default 1.4 s), `push` comes in on it for a reaction (depth;
+  default 0.9 s), `cut` reframes at once (a jump between two frames, no
+  blur). `dur` 0.4–3 s overrides the travel time (not on a cut).
+- `purpose` (required, at least 12 characters): why the camera moves, kept
+  on the zoom keys and the world camera's moves (`move.purpose`) for review.
+  Move for a reason: a reveal, a reaction, a change of place; never to fill
+  a quota.
+- `screen`: `center` (default), `left-third`, `right-third` (faces at 40 %
+  of the frame's height, clear of the caption band) or `[x, y]` shares of
+  the frame (0.05–0.95).
+- `shot` (`wide`, `medium`, `close`, a character only) frames the face as a
+  single-character shot at that distance (`frameCast`; at most 3×), or
+  `scale` 1–3. With neither, the least scale that keeps the view inside the
+  plate (`landingMinScale`): at 1× only the centre can land on the centre, so
+  a reveal comes in just far enough to travel.
+- Feel: every travel is one key on `LAND.ease` (`power3.inOut`): zero speed
+  at both ends, fastest in the middle, never past its landing, whatever the
+  grammar's camera ease. Under the world camera it carries velocity blur at
+  `LAND.blur` (0.5 of a whip-pan's shutter, unless `camera.blur` forces it),
+  which is zero at the slow ends and shows only near peak speed. A story
+  with a landing takes no camera drift, so a landed subject stays put. In
+  world mode a landing held to the shot's end is back at rest as it ends,
+  as the default moves are.
+- A landing that cannot hold the frame's rules fails the scene (the module
+  throws, so `validate` reports it): a subject it names that is not there,
+  a view that would leave the plate at the scale asked (it says the least
+  scale that works), more than 3× needed, a landed face whose crown leaves
+  the safe zone, whose chin drops into the caption band, or whose head
+  passes the safe zone's sides. A scene with cue shots (`cues[].shot`)
+  cannot also land: both reframe it.
+- Timing (`validateZooms`): a landing holds at least `LAND.hold` (0.6 s)
+  after its travel, before `until`, the next zoom or the shot's end. A
+  scene's zooms replace its default character move.
+
 **A character story's default moves** (`kit/core/character-camera.mjs`). In
 a character story (`isCharacterStory`) a track-0 cast scene with no `zooms`
 of its own takes one move for as long as it is up; `shotZooms` returns its
@@ -3415,7 +3477,12 @@ export function zoomFitError(frame, size)  // → message | null
 export function shotZooms(story, entry, rects?) // → {zooms, keys: [{start, duration, ease, from, to}], warnings}
 export function zoomStateAt(keys, t, getEase, size) // plate-local {x, y, s}
 export function zoomOps(keys, size)        // cuts-mode ops on "zoom" and "pan"
-// kit/core/modules.mjs: model.zoomRects = zoomRects(scene, model) → [{rect} | {error}]
+export const LAND                          // {moves, dur, ease, blur, hold, screen, scale, cut}
+export function landingScreen(screen, size) // → {x, y} canvas px
+export function landingMinScale(point, target, size) // least scale with the view inside the plate
+export function landingState(point, target, s, size) // → {x, y, s}
+// kit/core/characters/landing.mjs: landingSubject(model, name, t), solveLanding(model, zoom) → {landing, rect, point}
+// kit/core/modules.mjs: model.zoomRects = zoomRects(scene, model) → [{rect} | {landing, rect, point} | {error}]
 // kit/core/camera-world.mjs: sceneObjectLookup(...).zoomRects(sceneId)
 ```
 
