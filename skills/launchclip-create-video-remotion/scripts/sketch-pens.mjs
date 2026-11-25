@@ -159,6 +159,12 @@ const BUILD = {
   }
 };
 
+/** How high (px at unit 1) the pen reaches above its tip, barrel and lift included: the room it needs below anything it must not cover. */
+export function penRise(kind) {
+  const {length, thick} = BUILD[check(kind)](DEFAULT_INK, DEFAULT_BODY[kind]);
+  return Math.round(length * Math.sin(ANGLE * Math.PI / 180) + thick + LIFT[kind]);
+}
+
 /**
  * One pen node with its writing tip at (0, 0).
  * opts: {u, ink, body?, barrel?: {text, color?}, family?}

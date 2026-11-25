@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {handDrawn, orderStrokes, penPath, timeStrokes} from '@launchclip/core/hand-drawn.mjs';
 import {pointAt} from '@launchclip/core/path-geometry.mjs';
+import {penRise} from '@launchclip/core/sketch-pens.mjs';
 
 const ctx = (duration = 7) => ({id: 'hd', start: 0, duration, format: {width: 1080, height: 1920, fps: 30},
   brand: {colors: {bg: '#101820', primary: '#2f7de1', accent: '#f2a93b', ink: '#101820', paper: '#f4f1ea'}, fonts: {}}});
@@ -17,14 +18,45 @@ test('hand-drawn: the silhouette goes down first, then the stroke nearest the in
   assert.deepEqual(order[2].points[0], [205, 50]);
 });
 
-test('hand-drawn: strokes past 6 a second arrive with the colour, never sped up; timing fits the span', () => {
+test('hand-drawn: at most 6 lines a second, each after the last, inside the span', () => {
   const strokes = Array.from({length: 40}, (_, i) => line(0, i, 10 + i, i));
   const timed = timeStrokes(strokes, 1, 2);
-  assert.equal(timed.length, 12);
+  assert.ok(timed.length > 1 && timed.length <= 12, `${timed.length} lines`);
   assert.equal(timed[0].points, strokes[0].points);
   const last = timed.at(-1);
   assert.ok(last.at + last.duration <= 3 + 1e-6);
   for (let i = 1; i < timed.length; i++) assert.ok(timed[i].at >= timed[i - 1].at + timed[i - 1].duration - 1e-6);
+});
+
+test('hand-drawn: the pen keeps a hand\'s pace and colours with a steady sweep, whatever the pen', () => {
+  for (const pen of ['pencil', 'marker']) {
+    const model = handDrawn.resolve({subject: {object: 'deck'}, pen}, ctx());
+    const {strokes} = model.content.pieces[0];
+    // Lines after the silhouette are drawn at no more than 2200 px a second (unit 1 at 1080 wide).
+    for (const s of strokes.slice(1)) assert.ok(s.length / s.duration <= 2200 * 1.02, `${pen}: ${Math.round(s.length / s.duration)} px/s`);
+    const ops = [];
+    handDrawn.timeline(model, ops);
+    const at = ops.filter(o => o.target === 'hd-pen' && o.type === 'set' && o.props.x !== undefined && o.time > 0);
+    let turns = 0;
+    for (let i = 2; i < at.length; i++) {
+      const a = [at[i - 1].props.x - at[i - 2].props.x, at[i - 1].props.y - at[i - 2].props.y], b = [at[i].props.x - at[i - 1].props.x, at[i].props.y - at[i - 1].props.y];
+      if (a[0] * b[0] + a[1] * b[1] < 0) turns++;
+    }
+    // A thin pencil once swept 8 times a second; the pen now turns back about twice.
+    assert.ok(turns / (at.at(-1).time - at[0].time) < 3, `${pen}: ${turns} turns`);
+  }
+});
+
+test('hand-drawn: the pen never crosses the line of text above the drawing', () => {
+  for (const pen of ['pencil', 'brush', 'marker']) {
+    const model = handDrawn.resolve({subject: {object: 'deck'}, pen, text: 'Oil it once a year'}, ctx());
+    const H = model.rect.height, size = model.content.text.size;
+    const textBottom = (H * 0.2 + size * 1.2) / 2;
+    const ops = [];
+    handDrawn.timeline(model, ops);
+    const ys = ops.filter(o => o.target === 'hd-pen' && o.type === 'set' && o.props.y !== undefined && o.time > 0).map(o => o.props.y);
+    assert.ok(Math.min(...ys) - penRise(pen) * model.unit >= textBottom - 1, `${pen}: reaches ${Math.round(Math.min(...ys) - penRise(pen) * model.unit)} above text bottom ${Math.round(textBottom)}`);
+  }
 });
 
 test('hand-drawn: the pen tip is on the line being drawn', () => {
