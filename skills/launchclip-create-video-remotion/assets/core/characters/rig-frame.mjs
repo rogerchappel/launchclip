@@ -223,7 +223,8 @@ function walkProgress(u, r = WALK.ramp) {
  * right at the start); positions are world x. Landing k (1..N) moves the
  * foot at q[k-1] to q[k+1]: q[0], q[1] are the feet before the walk (back,
  * front), q[N], q[N+1] the final stance, the landings between evenly spaced.
- * A walk faces its travel: it adds a facing key a little before it starts.
+ * A walk faces its travel (or its own facing: a step back keeps facing the
+ * target): it adds a facing key a little before it starts.
  * → {f0, facings: [{t, f}], plans: [{t0, t1, d, N, x1, q, landings: [{foot, from, to}]}], initialFeet}
  */
 export function planWalks(track) {
@@ -235,7 +236,7 @@ export function planWalks(track) {
   for (const w of track.walks ?? []) {
     const d = Math.sign(w.to - x);
     if (!d) continue;
-    facings.push({t: w.start - TURN * 0.6, f: d});
+    facings.push({t: w.start - TURN * 0.6, f: w.facing ? sideSign(w.facing) : d});
     const half = w.stance ?? half0, u = v => d * v;
     // The foot behind (along the travel) steps first.
     const back = u(feet.l) <= u(feet.r) ? 'l' : 'r', front = back === 'l' ? 'r' : 'l';
@@ -433,7 +434,7 @@ export function springCheckpoints(character, track, until, plan = planWalks(trac
  *   character: {params, style: 'rubber-hose' | 'stick' | 'stick-classic'}
  *   track: {x, facing: 'left'|'right', stance?,
  *           facings?: [{t, facing}]                   turns (a walk also faces its travel),
- *           walks?: [{start, end, to, stance?, stepLength?}],
+ *           walks?: [{start, end, to, stance?, stepLength?, facing?}],  (facing: a step back keeps it)
  *           keys?: [{t, lean?, crouch?, shift?, head?, look?}],
  *           hands?: {l|r: [{t, at?: [along the facing, down], bend?, grip?: propId}]}  (shoulder-relative),
  *           feet?: {l|r: [{t, at: [along the facing, down], bend?}]}                    (hip-relative),

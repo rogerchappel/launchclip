@@ -236,7 +236,13 @@ function compileActor(actor, index, {start, end, ops, prefix, grips, single}) {
   const facings = [];
   let now = facing;
   for (const state of actor.states) if ((state.facing ?? now) !== now) { now = state.facing; facings.push({t: rel(state.time), facing: now}); }
-  const walks = actor.states.filter(state => state.walk && Math.abs(state.walk.to - state.walk.from) > 0.5).map(state => ({start: rel(state.time), end: rel(state.time + state.walk.duration), to: r1(state.walk.to / s)}));
+  // A walk faces its travel. A walk-to then turns to its state's facing (the target) when it ends;
+  // a contact's step back (no action) keeps facing the prop all the way.
+  const moving = actor.states.filter(state => state.walk && Math.abs(state.walk.to - state.walk.from) > 0.5);
+  const against = state => state.facing && signOf(state.facing) !== Math.sign(state.walk.to - state.walk.from);
+  const walks = moving.map(state => ({start: rel(state.time), end: rel(state.time + state.walk.duration), to: r1(state.walk.to / s), ...(against(state) && state.action !== 'walk-to' ? {facing: state.facing} : {})}));
+  for (const state of moving) if (against(state) && state.action === 'walk-to') facings.push({t: rel(state.time + state.walk.duration), facing: state.facing});
+  facings.sort((a, b) => a.t - b.t);
   const expressions = [];
   for (const state of actor.states) if (expressions.at(-1)?.expression !== state.expression) {
     if (expressions.length && rel(state.time) - expressions.at(-1).t < 1e-4) expressions.pop();

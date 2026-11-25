@@ -100,6 +100,10 @@ test('the walk plan covers the travel in even steps that alternate feet, and fac
   const right = planWalks({x: 0, facing: 'left', walks: [{start: 1, end: 2, to: 300}]});
   assert.equal(right.plans[0].d, 1);
   assert.ok(right.facings.some(k => k.f === 1 && k.t < 1));
+  // A step back keeps its own facing.
+  const back = planWalks({x: 0, facing: 'right', walks: [{start: 1, end: 1.5, to: -80, facing: 'right'}]});
+  assert.equal(back.plans[0].d, -1);
+  assert.ok(back.facings.every(k => k.f === 1));
 });
 
 test('a turn passes the head through front and flips the facing halfway', () => {

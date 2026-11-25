@@ -41,7 +41,7 @@
 //
 //   track = {x, facing: 'left'|'right', stance?,
 //     facings?: [{t, facing}]                       turns over TURN s from t (a walk also turns to face its travel),
-//     walks?: [{start, end, to, stance?, stepLength?}],
+//     walks?: [{start, end, to, stance?, stepLength?, facing?}],  facing: a step back keeps it (default: the travel),
 //     keys?: [{t, lean?, crouch?, shift?, head?, look?}],   look: 0 front … 1 three-quarter (default: by walk and gesture),
 //     hands?: {l|r: [{t, at?: [along the facing, down], bend?, grip?: propId}]},  shoulder-relative;
 //                                                   consecutive grip keys lock the hand on that prop's grip
@@ -326,6 +326,7 @@ export function validateRigScenePlan(plan) {
         const wh = `${at}.track.walks[${i}]`;
         if (!(num(w?.start) && num(w?.end) && w.end > w.start)) err(wh, 'needs start < end');
         if (!num(w?.to)) err(wh, 'needs to');
+        if (w?.facing !== undefined && !['left', 'right'].includes(w.facing)) err(`${wh}.facing`, 'must be left or right');
         if (i && num(w?.start) && num(tr.walks[i - 1]?.end) && w.start < tr.walks[i - 1].end) err(wh, 'overlaps the walk before');
       });
     }
