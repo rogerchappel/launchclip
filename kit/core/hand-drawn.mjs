@@ -25,7 +25,7 @@ import {svgRoot} from './catalog-b-view.mjs';
 import {EDITORIAL_OBJECTS, objectGeometry, objectLook} from './illustration-objects.mjs';
 import {aspectOf, objectSpec, subjectNodes} from './illustration.mjs';
 import {area, bounds, pointAt, polylineLength, shapeSubpaths, toPathD, walkShapes} from './path-geometry.mjs';
-import {PENS, PEN_INK, penNode, penTipLift} from './sketch-pens.mjs';
+import {PENS, PEN_INK, penNode, penRise, penTipLift} from './sketch-pens.mjs';
 
 export const HAND_PENS = Object.freeze([...PENS, 'none']);
 const PAPER = '#f7f3ea', INK = '#22252b';
@@ -167,7 +167,10 @@ function resolve(params, ctx) {
 
   // Layout: the line across the top, the objects side by side below it, low and large.
   const W = rect.width, H = rect.height;
-  const band = text ? r2(H * 0.2) : 0;
+  const top = r2(H * 0.2);
+  const textFit = text ? fitText(check, 'params.text', text, {family: 'display', width: W, preferred: r2(Math.min(u(96), top * 0.6)), min: b.min.key}) : null;
+  // The objects start a pen's height below the line, so the pen never crosses the words while it draws their top edge.
+  const band = !text ? 0 : pen === 'none' ? top : r2(Math.max(top, (top + textFit.size * 1.2) / 2 + penRise(pen) * b.unit));
   const objects = [subject, second].filter(Boolean);
   // Two objects stack in a tall frame and sit side by side in a wide one; each sits low in its slot.
   const n = objects.length, tall = H > W;
@@ -178,7 +181,6 @@ function resolve(params, ctx) {
     const sx = tall ? 0 : slotW * i, sy = band + (tall ? slotH * i : 0);
     return {x: r2(sx + (slotW - w) / 2), y: r2(sy + (slotH - h) * 0.7), width: r2(w), height: r2(h)};
   });
-  const textFit = text ? fitText(check, 'params.text', text, {family: 'display', width: W, preferred: r2(Math.min(u(96), band * 0.6)), min: b.min.key}) : null;
 
   // The art each object is drawn as (the illustration module's own drawing), and its strokes.
   const look = objectLook(b.colors, b.unit);

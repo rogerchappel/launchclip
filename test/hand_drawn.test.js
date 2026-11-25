@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {handDrawn, orderStrokes, penPath, timeStrokes} from '../kit/core/hand-drawn.mjs';
 import {pointAt} from '../kit/core/path-geometry.mjs';
+import {penRise} from '../kit/core/sketch-pens.mjs';
 
 const ctx = (duration = 7) => ({id: 'hd', start: 0, duration, format: {width: 1080, height: 1920, fps: 30},
   brand: {colors: {bg: '#101820', primary: '#2f7de1', accent: '#f2a93b', ink: '#101820', paper: '#f4f1ea'}, fonts: {}}});
@@ -43,6 +44,18 @@ test('hand-drawn: the pen keeps a hand\'s pace and colours with a steady sweep, 
     }
     // A thin pencil once swept 8 times a second; the pen now turns back about twice.
     assert.ok(turns / (at.at(-1).time - at[0].time) < 3, `${pen}: ${turns} turns`);
+  }
+});
+
+test('hand-drawn: the pen never crosses the line of text above the drawing', () => {
+  for (const pen of ['pencil', 'brush', 'marker']) {
+    const model = handDrawn.resolve({subject: {object: 'deck'}, pen, text: 'Oil it once a year'}, ctx());
+    const H = model.rect.height, size = model.content.text.size;
+    const textBottom = (H * 0.2 + size * 1.2) / 2;
+    const ops = [];
+    handDrawn.timeline(model, ops);
+    const ys = ops.filter(o => o.target === 'hd-pen' && o.type === 'set' && o.props.y !== undefined && o.time > 0).map(o => o.props.y);
+    assert.ok(Math.min(...ys) - penRise(pen) * model.unit >= textBottom - 1, `${pen}: reaches ${Math.round(Math.min(...ys) - penRise(pen) * model.unit)} above text bottom ${Math.round(textBottom)}`);
   }
 });
 
