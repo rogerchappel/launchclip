@@ -210,3 +210,14 @@ test('checkpoints make late frames as cheap as early ones', () => {
   time(1); // warm up
   assert.ok(time(7.9) < Math.max(2, time(0.4) * 4), 'a late frame costs about what an early one does');
 });
+
+test('a grip past the hand crouches the body so the palm lands on it (a short stick hand at a floor pick-up)', () => {
+  const character = {params: starterCharacter('sam').params, style: 'stick-classic'};
+  const t0 = {x: 0, facing: 'right', keys: [{t: 0, crouch: 0}], hands: {r: [{t: 0.5, at: [60, 200], grip: 'ball'}, {t: 1.5, at: [60, 200], grip: 'ball'}]}};
+  const walk = planWalks(t0), floor = [120, -20];
+  const frame = rigFrame(character, t0, 1, {plan: walk, grip: () => floor});
+  const free = rigFrame(character, t0, 1, {plan: walk});
+  assert.ok(dist(frame.arms.r.palm, floor) < 1, `palm ${frame.arms.r.palm} on ${floor}`);
+  assert.ok(frame.joints.pelvis[1] > free.joints.pelvis[1] + 1, 'the body went down for it');
+  for (const side of ['l', 'r']) assert.ok(Math.abs(frame.legs[side].ankle[1] - free.legs[side].ankle[1]) < 1e-6, 'the feet stay planted');
+});

@@ -460,11 +460,19 @@ export function rigFrame(character, track, t, options = {}) {
   for (let i = from + 1; i <= total; i++) step(ctx, x, v, i * SUBSTEP, SUBSTEP);
   if (t - total * SUBSTEP > 1e-9) step(ctx, x, v, t, t - total * SUBSTEP);
   const s = Object.fromEntries(CHANNELS.map((n, i) => [n, x[i]]));
-  return assemble(ctx, s, goals(ctx, t), t, opts);
+  const now = goals(ctx, t);
+  // A grip out of reach (a short hand at a floor pick-up, the body still on its way down): the legs give the rest,
+  // refined twice since the soft floor on the pelvis and the shoulders' lean take a little of each drop.
+  let drop = 0, out = {short: 0}, frame = assemble(ctx, s, now, t, opts, out);
+  for (let pass = 0; pass < 3 && out.short > 0.25; pass++) {
+    drop += out.short; out = {short: 0};
+    frame = assemble(ctx, {...s, crouch: s.crouch + drop}, now, t, opts, out);
+  }
+  return frame;
 }
 
 /** Joints from the sprung channels, the walk and the locks. */
-function assemble(ctx, s, now, t, opts) {
+function assemble(ctx, s, now, t, opts, out = {}) {
   const {track, plan, L} = ctx;
   const {f, fc, turning} = facingAt(plan, t);
   const walk = now.walk;
@@ -519,6 +527,11 @@ function assemble(ctx, s, now, t, opts) {
     const lockTo = (point, w, palm = false) => {
       if (!(w > 0) || !point) return;
       const ik = palm ? twoBone(A.shoulder, point, L.upper, L.fore + L.palm, f) : twoBone(A.shoulder, [point[0], point[1] - L.palm * 0.6], L.upper, L.fore, f);
+      // How far the shoulder must drop for a grip below it to come in reach, by its weight (rigFrame crouches by it).
+      if (palm) {
+        const R = (L.upper + L.fore + L.palm) * REACH * 0.999, dx = point[0] - A.shoulder[0], dy = point[1] - A.shoulder[1];
+        if (dy > 0 && Math.abs(dx) < R) out.short = Math.max(out.short ?? 0, w * (dy - Math.sqrt(R * R - dx * dx)));
+      }
       A.th1 = lerp(A.th1, A.th1 + wrap(ik.th1 - A.th1), w);
       A.th2 = lerp(A.th2, A.th2 + wrap(ik.th2 - A.th2), w);
       A.glove = lerp(A.glove, A.glove + wrap(A.th2 - A.glove), w);
