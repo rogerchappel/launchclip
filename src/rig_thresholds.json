@@ -1,0 +1,15 @@
+{
+  "schema_version": "launchclip.rig-thresholds.v1",
+  "description": "Limits for the rig gate in launchclip finish (src/rig_gate.js) on scenes drawn by the per-frame rig (content.rigScene), measured by kit/core/characters/rig-metrics.mjs at the story's fps in canvas px. errors fail the gate: any joint or prop position that is not a number, a bone that changes length by more than bone_drift_px, a planted foot whose ground contact moves more than foot_slide_px during one step, a hand more than grip_loss_px from a prop when it takes or lets go of it, and an unheld prop that moves more than prop_teleport_px in one frame. warnings are guides calibrated on the approved production prototype (docs/rd/per-frame-rig.md §4, prototypePlan(): jerk per unit of motion 1107/s², about today's 1111 with far more motion, 3 hand corners in 8 s, an arm crossing the body in 31% of frames as the ball arm carries across in profile): jerk_per_motion (1/s²), hand_corners_per_s (turns over 45 degrees in a frame, per scene second), limb_cross_share (share of frames with an arm crossing a limb, or legs crossing while the hips are apart).",
+  "errors": {
+    "bone_drift_px": 1,
+    "foot_slide_px": 3,
+    "grip_loss_px": 4,
+    "prop_teleport_px": 120
+  },
+  "warnings": {
+    "jerk_per_motion": 1300,
+    "hand_corners_per_s": 1.5,
+    "limb_cross_share": 0.4
+  }
+}

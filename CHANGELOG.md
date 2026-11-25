@@ -4,6 +4,16 @@
 
 ### Added
 
+- A per-frame character rig, opt-in with `story.cast.rig: "frame"` (or a
+  cast-scene's `params.rig`), for the `rubber-hose`, `stick` and
+  `stick-classic` styles: each frame is drawn from a pure function of time,
+  so walks plant their feet and bend their knees, limbs curve and trail on
+  springs, hands follow arcs, and props stay in the hand that holds them,
+  pass hand to hand and fly from the release hand into the catching one.
+  Today's cues compile to it; Remotion and HyperFrames draw the same frames
+  (one inlined runtime); `launchclip finish` runs a `rig` gate on such
+  scenes (foot slide, bone drift, grip loss, prop teleports). Without the
+  opt-in the op-list rig is unchanged. See docs/rd/per-frame-rig.md.
 - `launchclip review-motion <project|video> --reference <clip>` makes a
   motion review pack (per-shot clips and frame strips at cuts and pose
   changes beside the reference's, an `index.html` contact sheet and

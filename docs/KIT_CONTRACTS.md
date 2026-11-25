@@ -5138,6 +5138,43 @@ is an illustrated character: it takes no rig params, acts only in
 provider's voice id (a Kokoro id under Kokoro, an ElevenLabs voice id under
 ElevenLabs), so each character in a dialogue speaks in its own voice.
 
+**The per-frame rig (experimental, opt-in).** `story.cast.rig` is `"ops"`
+(the op list; the default, unchanged) or `"frame"`; a cast-scene's
+`params.rig` (same values) overrides it for that scene. With `"frame"`, the
+cast-scene directs and plans its contacts as always, then
+`compileRigScene` (`characters/rig-compile.mjs`) compiles the actors into a
+`launchclip.rig-scene.v1` plan on `content.rigScene` (rig-scene.mjs draws
+it): each state's pose becomes body keys (lean toward the facing, crouch
+from the body drop, the weight following the lean, the head tilted toward
+what it looks at) reached `tween` seconds after the state's time, and hand
+targets by forward kinematics of the pose's arm angles (shoulder-relative,
+along the facing; an arm within 5° of the stand pose is left to the rig's
+own swing); gestures loop as hand or crouch keys while the pose holds;
+walks and contact step-ins become `walks`, facing changes `facings`; a
+contact action's phases become hand keys (the contact lands on the cue's
+time) and, for a kick, foot keys (hip-relative); a hand key on a prop
+carries `grip` from the contact's grip (the hand's reach) until it takes
+the prop (for a pull, until it lets go); a prop's path has a `holder` key
+where a hand takes it and another where it lets go, so it stays in that
+hand between them (a handover passes from the giver's key at the
+receiver's grip to the receiver's at the giver's release; a lift takes it
+as its hold at the bottom ends, when the rig's body has crouched), rests on
+two equal `at` keys until just before a pick-up, and is free where the op
+list moves it, sampled at 15 Hz, leaving the first and last 0.1 s of a
+flight to the rig's curve from the release hand and into the taking hand (a
+throw caught hand to hand keeps only the flight's top); squashes (gag cues,
+impacts, landings) become `squash`, and a stagger adds lean and
+weight-shift keys on the target. A person shared with the neighbouring
+scene gets `visible` keys, hidden until the way in has passed or from the
+way out, as the op list hides them.
+Expressions and mouth visemes keep today's timing. The view draws an empty
+`S-rig` layer where the actors stand and leaves out their parts and the
+contact props; the timeline leaves out their ops. A scene that cannot play
+per frame keeps the op list and says why on `content.rigFallback` (a
+drawing style outside `RIG_FRAME_STYLES`, a seated set, an animal or
+object, a mobility aid, a held phone, or a character-cameo); `castGate`
+returns those as `warnings` and `story validate` prints them.
+
 ### Saved characters (`launchclip.character.v1`)
 
 One designed character as a file, used by the CLI, by agents (the
@@ -5648,11 +5685,63 @@ cost (`SPRITE_IMAGE_USD` per picture).
   local Kokoro voices. A failure stops finish before rendering;
   `launchclip story validate` reports the same findings (`cast: …`).
 
+### The per-frame rig in the renderers (`content.rigScene`)
+
+A cast scene whose resolved model carries `content.rigScene` (the plan, JSON)
+draws those characters per frame, not from the op list
+(`kit/core/characters/rig-scene-layer.mjs`, docs/rd/per-frame-rig.md):
+
+- **The layer.** The cast scene's own view (`charactersView`) draws one
+  empty full-canvas `<div id="<scene>-rig">` (`rigLayerId(model)`) where the
+  actors sit: over the set's back and an image screen, just under the
+  foreground, inside the camera wrappers (`-cam`, `-overlay-cam`,
+  `-punch`); with a video screen, in the overlay. Scene zooms and camera
+  landings wrap the whole module, so they move the layer as they move the
+  set. Without `rigScene` the view is unchanged.
+- **The frame.** `rigSceneTree(plan, t, {width, height}, prepared)` with
+  `t = min(time, model.end) − model.start` (seconds from the scene start,
+  held at the scene end) and `prepared = rigScenePrepare(plan)`, computed
+  once per scene. Pure: any frame alone equals it after every earlier one.
+- **Remotion** (`kit/remotion/catalog/CatalogCharacters.tsx`): `PartsModule`
+  takes `perFrame(view, t)`; the cast scene's is `fillRigLayer(view, model,
+  rigSceneTree(…))`, which copies only the path down to the layer, so the
+  memoised set stays shared.
+- **HyperFrames** (`kit/hyperframes/catalog-characters.mjs`): the emitter
+  writes the empty layer, the plan and `prepared` as JSON, and a linear proxy
+  tween over the scene, `tl.fromTo(clock, {t: start}, {t: end, onUpdate:
+  paint})`, whose `paint` calls `window.lcRigScene(host, plan, prepared,
+  clock.t − start, canvas)`. That sets the layer's `innerHTML` to the frame's
+  markup (catalog-b.mjs `renderNode`, the serialiser every HyperFrames tree
+  uses) and skips the DOM when the markup equals the last frame's (a hold).
+  The story compiler inlines the painter once per page, before the timeline
+  script, when any scene has `rigScene`: `RIG_RUNTIME`
+  (`kit/hyperframes/rig-runtime.mjs`, GENERATED by `node
+  scripts/rig-runtime.mjs` from `kit/hyperframes/rig-scene-paint.mjs` and the
+  kit/core rig code it imports; esbuild, minified, about 90 KB). Rerun the
+  script after changing the rig; `test/rig_scene_layer.test.js` fails while
+  it is stale.
+- **Cost.** With `prepared` (spring checkpoints every 0.5 s) a frame
+  costs about the same at any t: about 0.3 ms in Node, markup included.
+  Both renderers pass it: Remotion memoises it per scene, HyperFrames
+  inlines it as JSON.
+- **Not covered yet.** A HyperFrames held or looped clone of a rig scene
+  (the clone has no proxy tween); the parity harness's internal builder
+  (used only when the story compiler fails) does not inline the runtime.
+- **Tests.** `test/rig_scene_layer.test.js`: the layer's place, the emitter's
+  proxy tween, the runtime evaluated in Node painting exactly
+  `renderNode(rigSceneTree(…))` for sampled t, and one host seeked out of
+  order painting the same markup.
+
 ### Parity
 
 `test/fixtures/parity/characters-*.json` (every set, both orientations, a
 screen with a video and with an image, a cameo with a card) through
-`scripts/parity.mjs`.
+`scripts/parity.mjs`. The per-frame rig: `characters-rig-stick-classic-void`
+(stick-classic on the void stage: a walk to a block, a push) and
+`characters-rig-rubber-hose-world` (rubber-hose in a city street: a walk, a
+throw), both `cast.rig: "frame"`. Scene parity draws the bare module, so
+camera landings on the rig are covered by story parity (`runStoryParity`)
+on `examples/story/stickman-*-rig-9x16`.
 
 ## Screenplay: SCRIPT.json version 2 (`kit/core/screenplay.mjs`)
 

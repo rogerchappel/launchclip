@@ -28,7 +28,7 @@ const OUT = path.resolve(args.find((arg) => !arg.startsWith('--')) ?? PACKAGE);
 export const STAGED_DIRS = Object.freeze(['src', 'kit', 'public']);
 // Loaded through computed paths (lazy voice providers, spawned scripts) or
 // read as data, so the import graph alone does not reach them.
-const EXTRA_TREES = Object.freeze(['src/voice', 'src/scripts', 'kit/hyperframes', 'kit/remotion', 'kit/styles', 'kit/profiles', 'public']);
+const EXTRA_TREES = Object.freeze(['src/voice', 'src/scripts', 'src/rig_thresholds.json', 'kit/hyperframes', 'kit/remotion', 'kit/styles', 'kit/profiles', 'public']);
 // kit/remotion is staged as the TSX the renderer bundles, not as its own package.
 const SKIP = /(^|\/)(node_modules|dist)(\/|$)|^kit\/remotion\/(package\.json|README\.md|LICENSE|scripts\/)/;
 

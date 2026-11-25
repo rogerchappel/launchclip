@@ -204,6 +204,8 @@ function resolve(params, ctx) {
     const area = bounds(all.map(s => s.points));
     return {strokes, total: all.length, colourAt: rt(t0 + ink + 0.12), colour, area};
   });
+  // The catalogue's shared entry beat (the drawing starting); silent, draw carries the cue.
+  b.events.push({id: `${b.id}-build`, name: 'build', time: begin, role: 'emphasis'});
   b.events.push({id: `${b.id}-draw`, name: 'draw', time: begin, endTime: rt(begin + share * INK_SHARE), role: 'emphasis', cue: 'pen-scribble'});
   pieces.forEach((piece, i) => { const first = piece.strokes[0]; b.events.push({id: `${b.id}-outline-${i}`, name: `outline-${i}`, time: rt(first.at + first.duration), role: 'emphasis'}); });
   pieces.forEach((piece, i) => b.events.push({id: `${b.id}-colour-${i}`, name: `colour-${i}`, time: piece.colourAt, endTime: rt(piece.colourAt + piece.colour), role: 'emphasis', cue: 'pen-scribble'}));
@@ -313,6 +315,6 @@ export const handDrawn = {
   describe: `An illustration drawn on by hand, whiteboard-explainer style: a pen inks the object's outline stroke by stroke (silhouette first, inner lines growing out of drawn ones), then colours it in, on a paper plate. One object, or two side by side drawn one after the other (${EDITORIAL_OBJECTS.join(', ')} drawn in detail; else a world-kit prop, or an icon at hero scale). An optional line of free type across the top, and a brand or sponsor name on the pen's barrel. For an explainer's opening or a concept that is easier to watch being drawn than to read.`,
   params: {subject: `${OBJECT_PARAM} the object drawn first`, second: `${OBJECT_PARAM} optional: drawn beside it, after it`, pen: `${HAND_PENS.join(' | ')} (default marker): the pen that draws, none for lines with no pen`,
     barrel: 'string ≤ 24 (optional): a brand or sponsor name printed on the pen', text: 'string ≤ 32, one line of free type across the top (optional; the caption usually says it)'},
-  events: ['draw', 'outline-0', 'colour-0', 'outline-1', 'colour-1'], timing: timingRules({rules: ['the pen draws from 0.35 s after the entrance; each object gets an equal share: 72% ink, 18% colour', 'the pen draws at a hand\'s pace (about 2200 px a second at 1080p, at most 6 lines a second); the shortest lines past that arrive with the colour', 'the pen leaves through the last 0.2 s']}), variants: ['default'],
+  events: ['build', 'draw', 'outline-0', 'colour-0', 'outline-1', 'colour-1'], timing: timingRules({rules: ['the pen draws from 0.35 s after the entrance; each object gets an equal share: 72% ink, 18% colour', 'the pen draws at a hand\'s pace (about 2200 px a second at 1080p, at most 6 lines a second); the shortest lines past that arrive with the colour', 'the pen leaves through the last 0.2 s']}), variants: ['default'],
   resolve, view, timeline
 };

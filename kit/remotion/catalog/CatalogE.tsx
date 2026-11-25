@@ -38,11 +38,13 @@ type PartsView = {front: ViewNode | null; behind: ViewNode | null; media: ViewNo
 export const CatalogEModule: React.FC<{model: any}> = ({model}) => <PartsModule model={model} viewOf={catalogEView} timelineOf={catalogETimeline} />;
 
 /** The shared renderer for {front, behind, media, overlay} views (catalogues E and F). */
-export const PartsModule: React.FC<{model: any; viewOf: (model: any) => any; timelineOf: (model: any) => any[]}> = ({model, viewOf, timelineOf}) => {
+export const PartsModule: React.FC<{model: any; viewOf: (model: any) => any; timelineOf: (model: any) => any[]; perFrame?: (view: PartsView, t: number) => PartsView}> = ({model, viewOf, timelineOf, perFrame}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const t = model.start + frame / fps;
-  const view = useMemo(() => viewOf(model) as PartsView, [model, viewOf]);
+  const still = useMemo(() => viewOf(model) as PartsView, [model, viewOf]);
+  // A per-frame layer (the cast scene's rig) refills its part of the view each frame.
+  const view = perFrame ? perFrame(still, t) : still;
   const ops = useMemo(() => timelineOf(model), [model, timelineOf]);
   const state = frameState(ops, t) as Map<string, FrameProps>;
   if (model.layer === 'split') {

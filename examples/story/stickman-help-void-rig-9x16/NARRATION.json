@@ -1,0 +1,294 @@
+{
+  "schema_version": "launchclip.narration.v1",
+  "provider": "kokoro",
+  "voice": null,
+  "speed": 1.2,
+  "text": "Sam had one crate to move. He pushed. And pushed harder. Nothing. So he tried the hard part. Maya? Little help? Sure. One push, one pull, and it finally moved. Catch!",
+  "sample_rate": 24000,
+  "duration_seconds": 21.683,
+  "words": [
+    {
+      "text": "Sam",
+      "start": 0.082,
+      "end": 0.331,
+      "speaker": "narrator",
+      "phonemes": "s:47 ˈ:95 a:64 m:43"
+    },
+    {
+      "text": "had",
+      "start": 0.375,
+      "end": 0.506,
+      "speaker": "narrator",
+      "phonemes": "h:44 a:44 d:44"
+    },
+    {
+      "text": "one",
+      "start": 0.521,
+      "end": 0.71,
+      "speaker": "narrator",
+      "phonemes": "w:27 ˈ:44 ɒ:44 n:45"
+    },
+    {
+      "text": "crate",
+      "start": 0.755,
+      "end": 0.989,
+      "speaker": "narrator",
+      "phonemes": "k:45 ɹ:23 ˈ:40 e:44 ɪ:45 t:38"
+    },
+    {
+      "text": "to",
+      "start": 1.034,
+      "end": 1.088,
+      "speaker": "narrator",
+      "phonemes": "t:22 ə:32"
+    },
+    {
+      "text": "move.",
+      "start": 1.156,
+      "end": 1.848,
+      "speaker": "narrator",
+      "phonemes": "m:40 ˈ:65 u:66 ː:72 v:473"
+    },
+    {
+      "text": "He",
+      "start": 2.316,
+      "end": 2.417,
+      "speaker": "narrator",
+      "phonemes": "h:41 i:28 ː:27"
+    },
+    {
+      "text": "pushed.",
+      "start": 2.506,
+      "end": 2.995,
+      "speaker": "narrator",
+      "phonemes": "p:44 ˈ:75 ʊ:92 ʃ:75 t:248"
+    },
+    {
+      "text": "And",
+      "start": 3.795,
+      "end": 3.897,
+      "speaker": "narrator",
+      "phonemes": "a:42 n:22 d:23"
+    },
+    {
+      "text": "pushed",
+      "start": 3.939,
+      "end": 4.154,
+      "speaker": "narrator",
+      "phonemes": "p:41 ˈ:43 ʊ:56 ʃ:43 t:32"
+    },
+    {
+      "text": "harder.",
+      "start": 4.2,
+      "end": 4.911,
+      "speaker": "narrator",
+      "phonemes": "h:38 ˈ:68 ɑ:45 ː:43 d:77 ə:444"
+    },
+    {
+      "text": "Nothing.",
+      "start": 6.511,
+      "end": 7.184,
+      "speaker": "narrator",
+      "phonemes": "n:44 ˈ:47 ʌ:71 θ:84 ɪ:71 ŋ:311"
+    },
+    {
+      "text": "So",
+      "start": 7.611,
+      "end": 7.751,
+      "speaker": "narrator",
+      "phonemes": "s:35 ˌ:22 ə:22 ʊ:22"
+    },
+    {
+      "text": "he",
+      "start": 7.774,
+      "end": 7.841,
+      "speaker": "narrator",
+      "phonemes": "h:22 i:22 ː:22"
+    },
+    {
+      "text": "tried",
+      "start": 7.901,
+      "end": 8.133,
+      "speaker": "narrator",
+      "phonemes": "t:44 ɹ:38 ˈ:62 a:44 ɪ:38 d:23"
+    },
+    {
+      "text": "the",
+      "start": 8.166,
+      "end": 8.2,
+      "speaker": "narrator",
+      "phonemes": "ð:22 ə:22"
+    },
+    {
+      "text": "hard",
+      "start": 8.244,
+      "end": 8.467,
+      "speaker": "narrator",
+      "phonemes": "h:30 ˈ:65 ɑ:44 ː:43 d:41"
+    },
+    {
+      "text": "part.",
+      "start": 8.531,
+      "end": 9.237,
+      "speaker": "narrator",
+      "phonemes": "p:44 ˈ:78 ɑ:69 ː:74 t:461"
+    },
+    {
+      "text": "Maya?",
+      "start": 9.837,
+      "end": 10.44,
+      "speaker": "sam",
+      "phonemes": "m:50 ˈ:108 a:64 ɪ:70 ə:280"
+    },
+    {
+      "text": "Little",
+      "start": 11.022,
+      "end": 11.286,
+      "speaker": "sam",
+      "phonemes": "l:43 ˈ:28 ɪ:31 ɾ:40 ə:44 l:44"
+    },
+    {
+      "text": "help?",
+      "start": 11.346,
+      "end": 11.89,
+      "speaker": "sam",
+      "phonemes": "h:44 ˈ:67 ɛ:69 l:82 p:282"
+    },
+    {
+      "text": "Sure.",
+      "start": 12.79,
+      "end": 13.293,
+      "speaker": "maya",
+      "phonemes": "ʃ:42 ˈ:63 ʊ:85 ɹ:278"
+    },
+    {
+      "text": "One",
+      "start": 16.293,
+      "end": 16.461,
+      "speaker": "narrator",
+      "phonemes": "w:43 ˈ:44 ɒ:44 n:44"
+    },
+    {
+      "text": "push,",
+      "start": 16.548,
+      "end": 16.767,
+      "speaker": "narrator",
+      "phonemes": "p:44 ˈ:68 ʊ:86 ʃ:61"
+    },
+    {
+      "text": "one",
+      "start": 16.858,
+      "end": 16.984,
+      "speaker": "narrator",
+      "phonemes": "w:27 ˈ:43 ɒ:44 n:44"
+    },
+    {
+      "text": "pull,",
+      "start": 17.073,
+      "end": 17.294,
+      "speaker": "narrator",
+      "phonemes": "p:44 ˈ:60 ʊ:91 l:69"
+    },
+    {
+      "text": "and",
+      "start": 17.353,
+      "end": 17.421,
+      "speaker": "narrator",
+      "phonemes": "a:22 n:22 d:22"
+    },
+    {
+      "text": "it",
+      "start": 17.444,
+      "end": 17.504,
+      "speaker": "narrator",
+      "phonemes": "ɪ:29 t:31"
+    },
+    {
+      "text": "finally",
+      "start": 17.518,
+      "end": 17.905,
+      "speaker": "narrator",
+      "phonemes": "f:43 ˈ:51 a:44 ɪ:41 n:44 ə:44 l:45 i:44"
+    },
+    {
+      "text": "moved.",
+      "start": 17.949,
+      "end": 18.722,
+      "speaker": "narrator",
+      "phonemes": "m:36 ˈ:67 u:73 ː:67 v:64 d:465"
+    },
+    {
+      "text": "Catch!",
+      "start": 21.122,
+      "end": 21.579,
+      "speaker": "sam",
+      "phonemes": "k:66 ˈ:104 æ:63 t:64 ʃ:179"
+    }
+  ],
+  "lines": [
+    {
+      "speaker": "narrator",
+      "voice": "bf_emma",
+      "text": "Sam had one crate to move. He pushed.",
+      "start": 0,
+      "end": 3.055,
+      "cached": false
+    },
+    {
+      "speaker": "narrator",
+      "voice": "bf_emma",
+      "text": "And pushed harder.",
+      "start": 3.735,
+      "end": 4.971,
+      "cached": false
+    },
+    {
+      "speaker": "narrator",
+      "voice": "bf_emma",
+      "text": "Nothing. So he tried the hard part.",
+      "start": 6.451,
+      "end": 9.297,
+      "cached": false
+    },
+    {
+      "speaker": "sam",
+      "voice": "am_michael",
+      "text": "Maya? Little help?",
+      "start": 9.777,
+      "end": 11.95,
+      "cached": false
+    },
+    {
+      "speaker": "maya",
+      "voice": "af_heart",
+      "text": "Sure.",
+      "start": 12.73,
+      "end": 13.353,
+      "cached": false
+    },
+    {
+      "speaker": "narrator",
+      "voice": "bf_emma",
+      "text": "One push, one pull, and it finally moved.",
+      "start": 16.233,
+      "end": 18.782,
+      "cached": false
+    },
+    {
+      "speaker": "sam",
+      "voice": "am_michael",
+      "text": "Catch!",
+      "start": 21.062,
+      "end": 21.683,
+      "cached": false
+    }
+  ],
+  "gaps": [
+    0.8,
+    1.6,
+    0.6,
+    0.9,
+    3,
+    2.4
+  ]
+}

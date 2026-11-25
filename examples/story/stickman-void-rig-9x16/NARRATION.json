@@ -1,0 +1,139 @@
+{
+  "schema_version": "launchclip.narration.v1",
+  "provider": "kokoro",
+  "voice": null,
+  "speed": 1.2,
+  "text": "When something will not move, most people push harder. And harder. Try pulling instead.",
+  "sample_rate": 24000,
+  "duration_seconds": 5.851,
+  "words": [
+    {
+      "text": "When",
+      "start": 0.06,
+      "end": 0.166,
+      "speaker": "narrator",
+      "phonemes": "w:24 ˌ:22 ɛ:26 n:41"
+    },
+    {
+      "text": "something",
+      "start": 0.19,
+      "end": 0.544,
+      "speaker": "narrator",
+      "phonemes": "s:42 ˈ:39 ʌ:36 m:66 θ:45 ɪ:44 ŋ:42"
+    },
+    {
+      "text": "will",
+      "start": 0.588,
+      "end": 0.701,
+      "speaker": "narrator",
+      "phonemes": "w:30 ɪ:43 l:39"
+    },
+    {
+      "text": "not",
+      "start": 0.744,
+      "end": 0.945,
+      "speaker": "narrator",
+      "phonemes": "n:24 ˌ:47 ɑ:44 ː:43 t:43"
+    },
+    {
+      "text": "move,",
+      "start": 0.96,
+      "end": 1.53,
+      "speaker": "narrator",
+      "phonemes": "m:44 ˈ:75 u:108 ː:85 v:213"
+    },
+    {
+      "text": "most",
+      "start": 1.645,
+      "end": 1.831,
+      "speaker": "narrator",
+      "phonemes": "m:22 ˈ:31 o:28 ʊ:41 s:36 t:23"
+    },
+    {
+      "text": "people",
+      "start": 1.895,
+      "end": 2.151,
+      "speaker": "narrator",
+      "phonemes": "p:40 ˈ:44 i:22 ː:44 p:43 ə:42 l:42"
+    },
+    {
+      "text": "push",
+      "start": 2.197,
+      "end": 2.388,
+      "speaker": "narrator",
+      "phonemes": "p:44 ˈ:44 ʊ:58 ʃ:46"
+    },
+    {
+      "text": "harder.",
+      "start": 2.4,
+      "end": 3.117,
+      "speaker": "narrator",
+      "phonemes": "h:35 ˈ:70 ɑ:39 ː:35 ɹ:41 d:77 ɚ:385"
+    },
+    {
+      "text": "And",
+      "start": 3.435,
+      "end": 3.553,
+      "speaker": "narrator",
+      "phonemes": "æ:43 n:29 d:36"
+    },
+    {
+      "text": "harder.",
+      "start": 3.66,
+      "end": 4.262,
+      "speaker": "narrator",
+      "phonemes": "h:44 ˈ:67 ɑ:42 ː:42 ɹ:43 d:82 ɚ:326"
+    },
+    {
+      "text": "Try",
+      "start": 4.562,
+      "end": 4.768,
+      "speaker": "narrator",
+      "phonemes": "t:43 ɹ:37 ˈ:59 a:42 ɪ:42"
+    },
+    {
+      "text": "pulling",
+      "start": 4.857,
+      "end": 5.071,
+      "speaker": "narrator",
+      "phonemes": "p:42 ˈ:35 ʊ:42 l:62 ɪ:42 ŋ:36"
+    },
+    {
+      "text": "instead.",
+      "start": 5.105,
+      "end": 5.791,
+      "speaker": "narrator",
+      "phonemes": "ɪ:42 n:79 s:61 t:44 ˈ:95 ɛ:75 d:290"
+    }
+  ],
+  "lines": [
+    {
+      "speaker": "narrator",
+      "voice": "am_michael",
+      "text": "When something will not move, most people push harder.",
+      "start": 0,
+      "end": 3.177,
+      "cached": false
+    },
+    {
+      "speaker": "narrator",
+      "voice": "am_michael",
+      "text": "And harder.",
+      "start": 3.357,
+      "end": 4.322,
+      "cached": false
+    },
+    {
+      "speaker": "narrator",
+      "voice": "am_michael",
+      "text": "Try pulling instead.",
+      "start": 4.502,
+      "end": 5.851,
+      "cached": false
+    }
+  ],
+  "gaps": [
+    0.3,
+    0.3
+  ]
+}

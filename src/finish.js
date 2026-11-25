@@ -41,6 +41,7 @@ import { actingGate, boxedOnFlatBackdrops, densityGate, ghostingGate, physicsGat
 import { visualDensityGate } from "./visual_density.js";
 import { choreographyGate, holdGate, stateGate } from "./movement_guardrails.js";
 import { explainGates } from "./gate_summary.js";
+import { rigGate } from "./rig_gate.js";
 import { constraintsGate, coverageGate, directionGate, faceGate, gateProfile, lipSyncGate, paceGate, prototypeCut, renderPaceGate, prototypeScope, readFaceData, readProjectDirection } from "./quality_gates.js";
 import { VERSION } from "./doctor.js";
 import { analyzeProductionAudio } from "./render_audio_analysis.js";
@@ -2216,6 +2217,13 @@ async function runGates(ctx, { pixels = true } = {}) {
     gates.choreography = choreographyGate(ctx.resolved);
   } catch (error) {
     gates.choreography = { status: "failed", error: error.message };
+  }
+  // The per-frame rig (src/rig_gate.js): planted feet, rigid bones, held props; only when a scene uses it.
+  try {
+    const rig = rigGate(ctx.resolved);
+    if (rig.status !== "skipped") gates.rig = rig;
+  } catch (error) {
+    gates.rig = { status: "failed", error: error.message };
   }
 
   // Captions that are on are seen: hidden under cards for at most a small share of the narration.

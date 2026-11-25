@@ -2522,6 +2522,16 @@ params:
 - at: when the change lands (the stressed word): seconds from scene start (optional; else a matching hit, else a default)
 events: build, change
 
+### hand-drawn (keeps captions)
+An illustration drawn on by hand, whiteboard-explainer style: a pen inks the object's outline stroke by stroke (silhouette first, inner lines growing out of drawn ones), then colours it in, on a paper plate. One object, or two side by side drawn one after the other (deck, calendar, clock drawn in detail; else a world-kit prop, or an icon at hero scale). An optional line of free type across the top, and a brand or sponsor name on the pen's barrel. For an explainer's opening or a concept that is easier to watch being drawn than to read.
+params:
+- subject: {object (drawn in detail: deck, calendar, clock; else a world-kit prop: bench, mug, …; else an icon name), icon? (the icon drawn when object is none of those)} the object drawn first
+- second: {object (drawn in detail: deck, calendar, clock; else a world-kit prop: bench, mug, …; else an icon name), icon? (the icon drawn when object is none of those)} optional: drawn beside it, after it
+- pen: marker | pencil | brush | fountain | none (default marker): the pen that draws, none for lines with no pen
+- barrel: string ≤ 24 (optional): a brand or sponsor name printed on the pen
+- text: string ≤ 32, one line of free type across the top (optional; the caption usually says it)
+events: build, draw, outline-0, colour-0, outline-1, colour-1
+
 ### drop-grid (keeps captions)
 Things pile up as they are said: 1–40 cards, coins or tiles drop into a grid one by one ("10 times a day": ten cards land), each with a weighted fall, a squash on contact, a contact shadow and a puff of dust, over faint empty slots; an optional counter climbs with every landing, and confetti bursts and the grid ripples when it fills. Landed items rock gently on their base. Time each drop to its word with params.times.
 params:
@@ -2820,6 +2830,7 @@ Generated from the modules' own timing constants (`moduleTiming(id)` in kit/core
 | node-graph | 2 s | 0.5 s | scene − 0.65 s | the hub pops on the first beat after 0.5 s; nodes flock out from the middle of the fan outwards a quarter beat apart; a pulse lands on every beat once the wires are drawn; converge falls on the first bar line two beats after the last wire, or the last beat before the exit |
 | sprout | 2 s | 0.5 s | scene − 0.65 s | wires leave half a beat after the anchor lands, nearest first, a quarter beat apart; each label lands 0.4 s after its wire leaves; a pulse reaches one label per beat once all have landed |
 | illustration | 2 s | 0.5 s | scene − 0.65 s | the object lands 0.7 s in, its line 0.8 s later; the change is centred on at (or the change hit) and takes 1–2.2 s, slow → fast → slow, under a 10% kick; the plate travels and the stage pushes in through the hold |
+| hand-drawn | 2 s | 0.5 s | scene − 0.65 s | the pen draws from 0.35 s after the entrance; each object gets an equal share: 72% ink, 18% colour; the pen draws at a hand's pace (about 2200 px a second at 1080p, at most 6 lines a second); the shortest lines past that arrive with the colour; the pen leaves through the last 0.2 s |
 | drop-grid | 2 s | 0.5 s | scene − 0.65 s | each item lands TACTILE.fall s after its drop time; time drops to the words that count them; the last item lands before the exit |
 | live-counter | 2 s | 0.5 s | scene − 0.65 s | the count runs from at until just before the exit, so the figure is moving whenever it is on screen |
 | live-bars | 2 s | 0.5 s | scene − 0.65 s | the bars climb from at until just before the exit |

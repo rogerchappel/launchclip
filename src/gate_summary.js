@@ -36,6 +36,9 @@ const RULES = {
   "mouth-open-silent": MOUTHS,
   "mouth-closed": MOUTHS,
   "action-missing": "Characters don't act out what's said",
+  "rig-foot-slide": "A character's feet slide on the ground",
+  "rig-grip-loss": "Something a character holds slips out of their hand",
+  "rig-prop-teleport": "Something a character holds jumps across the screen",
   duration: "The video is the wrong length",
   dimensions: "The video is the wrong size"
 };
@@ -53,6 +56,7 @@ const GATES = {
   holds: "Some shots hold too long",
   states: "Some on-screen changes don't land",
   choreography: "Some movement looks clumsy",
+  rig: "A character's body moves in a way that looks wrong",
   captions: "Captions are hidden behind graphics in places",
   loudness: "The sound is too quiet or too loud",
   motion: "Parts of the video barely move",

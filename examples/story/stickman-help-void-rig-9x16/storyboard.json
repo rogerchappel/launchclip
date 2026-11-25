@@ -1,0 +1,395 @@
+{
+  "schema": "launchclip.story.v1",
+  "title": "When you ask for help (stickman test: classic black and white, per-frame rig, four shots)",
+  "notes": "No-AI multi-shot test of the per-frame rig: a push that fails, a look and a point in close-up, a dropped ball and a walk over, a push and a pull on one crate, a throw and a catch, and an end frame that loops to the start.",
+  "lane": "motion",
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "duration": 24,
+    "platform": "youtube-shorts"
+  },
+  "brand": {
+    "colors": {
+      "bg": "#000000",
+      "primary": "#d7372c",
+      "accent": "#d7372c",
+      "ink": "#111111",
+      "paper": "#f6f3ee"
+    },
+    "fonts": {
+      "display": "anton",
+      "body": "inter",
+      "meta": "jetbrains-mono"
+    }
+  },
+  "camera": {
+    "mode": "world"
+  },
+  "cast": {
+    "style": "stick-classic",
+    "rig": "frame",
+    "characters": [
+      {
+        "id": "sam",
+        "voice": "am_michael",
+        "position": "left"
+      },
+      {
+        "id": "maya",
+        "voice": "af_heart",
+        "position": "right"
+      }
+    ]
+  },
+  "audio": {
+    "words": "NARRATION.json",
+    "narration": {
+      "provider": "kokoro",
+      "voice": "bf_emma",
+      "lines": [
+        {
+          "speaker": "narrator",
+          "text": "Sam had one crate to move. He pushed.",
+          "gap": 0.8
+        },
+        {
+          "speaker": "narrator",
+          "text": "And pushed harder.",
+          "gap": 1.6
+        },
+        {
+          "speaker": "narrator",
+          "text": "Nothing. So he tried the hard part.",
+          "gap": 0.6
+        },
+        {
+          "speaker": "sam",
+          "text": "Maya? Little help?",
+          "gap": 0.9
+        },
+        {
+          "speaker": "maya",
+          "text": "Sure.",
+          "gap": 3
+        },
+        {
+          "speaker": "narrator",
+          "text": "One push, one pull, and it finally moved.",
+          "gap": 2.4
+        },
+        {
+          "speaker": "sam",
+          "text": "Catch!"
+        }
+      ]
+    }
+  },
+  "scenes": [
+    {
+      "id": "push",
+      "module": "cast-scene",
+      "start": 0,
+      "end": "word:harder.+1.6",
+      "params": {
+        "set": "standing",
+        "world": {
+          "kind": "void-stage",
+          "time": "night"
+        },
+        "objects": [
+          {
+            "id": "crate",
+            "prop": "box",
+            "at": 0.5
+          }
+        ],
+        "cast": [
+          {
+            "id": "sam",
+            "pose": "stand",
+            "expression": "focused",
+            "cues": [
+              {
+                "at": "word:Sam",
+                "action": "walk-to",
+                "target": {
+                  "prop": "crate"
+                }
+              },
+              {
+                "at": "word:pushed.",
+                "action": "push",
+                "target": {
+                  "prop": "crate"
+                },
+                "expression": "frustrated"
+              },
+              {
+                "at": "word:harder.",
+                "action": "push",
+                "target": {
+                  "prop": "crate"
+                },
+                "expression": "angry",
+                "squash": {
+                  "amount": -0.25,
+                  "hold": 0.35,
+                  "recover": 0.4
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "zooms": [
+        {
+          "at": "word:harder.",
+          "land": "sam",
+          "move": "push",
+          "shot": "close",
+          "purpose": "land on Sam straining as the push fails"
+        }
+      ]
+    },
+    {
+      "id": "ask",
+      "module": "cast-scene",
+      "start": "word:harder.+1.6",
+      "end": "word:help?+0.5",
+      "params": {
+        "set": "standing",
+        "world": {
+          "kind": "void-stage",
+          "time": "night"
+        },
+        "cast": [
+          {
+            "id": "sam",
+            "pose": "stand",
+            "expression": "frustrated",
+            "says": "auto",
+            "cues": [
+              {
+                "at": "word:Nothing.",
+                "action": "look-far",
+                "expression": "sad"
+              },
+              {
+                "at": "word:hard",
+                "action": "turn-to-look",
+                "target": {
+                  "character": "maya"
+                },
+                "expression": "focused"
+              },
+              {
+                "at": "word:Maya?",
+                "action": "point-at",
+                "target": {
+                  "character": "maya"
+                },
+                "expression": "happy"
+              }
+            ]
+          },
+          {
+            "id": "maya",
+            "pose": "stand",
+            "expression": "neutral"
+          }
+        ]
+      },
+      "zooms": [
+        {
+          "at": "word:Nothing.",
+          "land": "sam",
+          "move": "cut",
+          "shot": "close",
+          "purpose": "close on Sam giving up on pushing",
+          "screen": "left-third"
+        },
+        {
+          "at": "word:Maya?",
+          "land": "sam",
+          "move": "push",
+          "shot": "close",
+          "purpose": "widen as Sam points across to Maya",
+          "screen": "left-third"
+        }
+      ]
+    },
+    {
+      "id": "answer",
+      "module": "cast-scene",
+      "start": "word:help?+0.5",
+      "end": "word:One.#2-1.2",
+      "params": {
+        "set": "standing",
+        "world": {
+          "kind": "void-stage",
+          "time": "night"
+        },
+        "objects": [
+          {
+            "id": "crate",
+            "prop": "box",
+            "at": 0.3
+          }
+        ],
+        "cast": [
+          {
+            "id": "maya",
+            "pose": "stand",
+            "expression": "happy",
+            "holds": "ball",
+            "says": "auto",
+            "cues": [
+              {
+                "at": "word:Sure.",
+                "action": "drop",
+                "expression": "delighted"
+              },
+              {
+                "at": "word:Sure.+0.7",
+                "action": "walk-to",
+                "target": {
+                  "prop": "crate"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "zooms": [
+        {
+          "at": "word:help?+0.55",
+          "land": "maya",
+          "move": "cut",
+          "shot": "medium",
+          "purpose": "cut to Maya for her answer"
+        }
+      ]
+    },
+    {
+      "id": "pull",
+      "module": "cast-scene",
+      "start": "word:One.#2-1.2",
+      "end": 24,
+      "params": {
+        "set": "standing",
+        "world": {
+          "kind": "void-stage",
+          "time": "night"
+        },
+        "objects": [
+          {
+            "id": "crate",
+            "prop": "box",
+            "at": 0.5
+          },
+          {
+            "id": "ball",
+            "prop": "ball",
+            "at": 0.4
+          }
+        ],
+        "cast": [
+          {
+            "id": "sam",
+            "pose": "stand",
+            "expression": "focused",
+            "says": "auto",
+            "cues": [
+              {
+                "at": "word:One.#2-1.1",
+                "action": "walk-to",
+                "target": {
+                  "prop": "crate"
+                }
+              },
+              {
+                "at": "word:One.#2",
+                "action": "push",
+                "target": {
+                  "prop": "crate"
+                },
+                "expression": "focused"
+              },
+              {
+                "at": "word:moved.+0.4",
+                "action": "walk-to",
+                "target": {
+                  "prop": "ball"
+                },
+                "expression": "happy"
+              },
+              {
+                "at": "word:moved.+1.6",
+                "action": "lift",
+                "target": {
+                  "prop": "ball"
+                }
+              },
+              {
+                "at": "word:Catch!",
+                "action": "throw",
+                "target": {
+                  "character": "maya"
+                },
+                "expression": "delighted"
+              }
+            ]
+          },
+          {
+            "id": "maya",
+            "pose": "stand",
+            "expression": "focused",
+            "cues": [
+              {
+                "at": "word:push,",
+                "action": "walk-to",
+                "target": {
+                  "prop": "crate"
+                }
+              },
+              {
+                "at": "word:finally",
+                "action": "pull",
+                "target": {
+                  "prop": "crate"
+                },
+                "expression": "happy"
+              },
+              {
+                "at": "word:Catch!+1.1",
+                "pose": "cheer",
+                "expression": "delighted"
+              }
+            ]
+          }
+        ]
+      },
+      "zooms": [
+        {
+          "at": "word:Catch!",
+          "land": "maya",
+          "move": "cut",
+          "shot": "medium",
+          "screen": "right-third",
+          "purpose": "cut to Maya catching the ball"
+        }
+      ]
+    }
+  ],
+  "ending": {
+    "final": "hold"
+  },
+  "overlays": [
+    {
+      "type": "captions",
+      "style": "word-highlight"
+    }
+  ]
+}

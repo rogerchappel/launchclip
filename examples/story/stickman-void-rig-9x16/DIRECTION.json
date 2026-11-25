@@ -1,0 +1,15 @@
+{
+  "schema": "launchclip.direction-map.v1",
+  "profile": "story-characters",
+  "sections": [
+    {"id": "setup", "title": "Push harder", "beat": "problem", "set": "standing",
+      "lines": [{"words": [0, 8], "intent": "hook", "treatment": "insert", "scenes": ["stage"], "set": "standing",
+        "action": {"verb": "push", "who": "sam"}, "why": "the stuck block and the usual answer"}]},
+    {"id": "attempt", "title": "And harder", "beat": "attempt",
+      "lines": [{"words": [9, 10], "intent": "problem", "treatment": "insert", "scenes": ["stage"], "set": "standing",
+        "action": {"verb": "push", "who": "sam"}, "why": "harder still, the strain shows"}]},
+    {"id": "turn", "title": "Pull", "beat": "turn",
+      "lines": [{"words": [11, 13], "intent": "turn", "treatment": "insert", "scenes": ["stage"], "set": "standing",
+        "action": {"verb": "pull", "who": "maya"}, "why": "the other way works"}]}
+  ]
+}

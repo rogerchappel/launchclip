@@ -317,3 +317,38 @@ for the reviewer and never decides the check.
 The review's shape (pending checks, three decisions, a repair log bound to
 fingerprints) follows the motion review of an MIT-licensed stickman director
 skill, rewritten for LaunchClip's shot list and cut down to six questions.
+
+**Rig measures.** A shot whose scene is drawn by the per-frame rig (below)
+also carries `rig_metrics`: the rig gate's numbers per actor and prop and its
+findings, shown under the shot in `index.html`. Like limb weight, they are
+evidence for the reviewer, not the verdict.
+
+## Per-frame rig
+
+Scenes drawn by the per-frame rig (a resolved scene with `content.rigScene`,
+docs/rd/per-frame-rig.md) are measured from the plan itself, not the pixels.
+`kit/core/characters/rig-metrics.mjs` samples the scene with `rigSceneState`
+(the joints and prop places both renderers draw, from the plan's prepared
+checkpoints) at the story's fps and reads them in canvas px:
+
+| measure | what it is | finish gate |
+|---|---|---|
+| non-finite joints | a joint or prop position that is not a number | error |
+| bone drift | the largest change of any limb segment's length | error over 1 px |
+| foot slide | per planted step, how far the foot's ground contact (its planted place plus whatever the leg's IK missed) moves from where it landed | error over 3 px |
+| grip loss | a prop picked up from rest: how far it moves from its last still frame (within 0.25 s) to the take, i.e. the hand never reached it. Releases, throws, catches and handovers are continuous by the rig's prop semantics (a curve from the release hand into the taking hand), so they are not grip loss | error over 4 px |
+| prop teleport | an unheld prop moving more than 120 px in one frame | error |
+| jerk per unit of motion | RMS third derivative of every segment's angle over its RMS angular speed | warning over 1300/s² |
+| hand corners | frames where a moving wrist (> 2 px a frame) turns more than 45° | warning over 1.5 a second |
+| limb crossings | share of frames where an arm crosses a limb, or the legs cross with the hips apart (legs passing side-on are a walk) | warning over 40% |
+
+The limits are data, in `src/rig_thresholds.json`. The warnings are
+calibrated on the approved production prototype (`prototypePlan()`), which
+scores bone drift 0, jerk per unit of motion 1107/s² (the op-list rig: 1111,
+with far less motion), 3 hand corners in 8 s and an arm crossing the body in
+31% of frames (the ball arm carries across in profile), and passes with no
+findings. `launchclip finish` runs the `rig` gate only when a scene
+uses the per-frame rig, so every other story's gates are unchanged; its
+findings carry story times, and a failed gate has a `next` repair hint and a
+plain summary. `node eval/per-frame-rig/metrics.mjs` compares the prototype
+with today's op-list rig using the same measures.

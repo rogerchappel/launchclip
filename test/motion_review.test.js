@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { appendFile, copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { buildMotionReviewPack, checkMotionReview, SHOT_CHECKS, unresolvedFindings } from "../eval/motion-review.mjs";
+import { ffmpegMissing, mediaSkip } from "./helpers/media.js";
+import { buildMotionReviewPack, checkMotionReview, rigShotMetrics, SHOT_CHECKS, unresolvedFindings } from "../eval/motion-review.mjs";
 
 // Two-shot fixture (a hard cut at 1s) and a 2s reference, tiny and fast to make.
 async function fixtures() {
@@ -16,6 +17,9 @@ async function fixtures() {
   execFileSync("ffmpeg", ["-v", "error", "-y", "-f", "lavfi", "-i", "smptebars=s=160x120:r=30:d=2", "-pix_fmt", "yuv420p", reference]);
   return { dir, video, reference };
 }
+
+// The fixtures are made with ffmpeg, which the plain test jobs do not have.
+const needsFfmpeg = mediaSkip(ffmpegMissing());
 
 const read = async (file) => JSON.parse(await readFile(file, "utf8"));
 const save = (file, value) => writeFile(file, `${JSON.stringify(value, null, 2)}\n`);
@@ -28,7 +32,7 @@ function fill(review, status = "pass") {
   return review;
 }
 
-test("review-motion makes a pack bound to the video and reference, every check pending", async (t) => {
+test("review-motion makes a pack bound to the video and reference, every check pending", { skip: needsFfmpeg }, async (t) => {
   const { dir, video, reference } = await fixtures();
   t.after(() => rm(dir, { recursive: true, force: true }));
   const out = path.join(dir, "pack");
@@ -61,7 +65,7 @@ test("review-motion makes a pack bound to the video and reference, every check p
   assert.equal(filled.ok, true);
 });
 
-test("check refuses a pass with gaps, a missing comparison basis, a bad n/a or a changed video", async (t) => {
+test("check refuses a pass with gaps, a missing comparison basis, a bad n/a or a changed video", { skip: needsFfmpeg }, async (t) => {
   const { dir, video, reference } = await fixtures();
   t.after(() => rm(dir, { recursive: true, force: true }));
   const copy = path.join(dir, "copy.mp4");
@@ -85,7 +89,7 @@ test("check refuses a pass with gaps, a missing comparison basis, a bad n/a or a
   assert.match((await checkMotionReview(file)).errors.join("\n"), /video .* changed since the pack was made/);
 });
 
-test("a model's first pass is a suggestion and never a verdict", async (t) => {
+test("a model's first pass is a suggestion and never a verdict", { skip: needsFfmpeg }, async (t) => {
   const { dir, video } = await fixtures();
   t.after(() => rm(dir, { recursive: true, force: true }));
   const seen = [];
@@ -102,7 +106,7 @@ test("a model's first pass is a suggestion and never a verdict", async (t) => {
   assert.match(result.errors.join("\n"), /pending \(a model's suggestion is not a verdict\)/);
 });
 
-test("earlier failures are carried into the repair log and each needs a resolution", async (t) => {
+test("earlier failures are carried into the repair log and each needs a resolution", { skip: needsFfmpeg }, async (t) => {
   const { dir, video } = await fixtures();
   t.after(() => rm(dir, { recursive: true, force: true }));
   const first = await buildMotionReviewPack(video, { out: path.join(dir, "review-01") });
@@ -143,7 +147,21 @@ test("earlier failures are carried into the repair log and each needs a resoluti
   assert.match((await checkMotionReview(same.file)).errors.join("\n"), /same file as before/);
 });
 
-test("launchclip review-motion makes a pack and review-motion check exits 1 while it is pending, 2 when it needs repair", async (t) => {
+test("shots drawn by the per-frame rig carry its measures into the json and the contact sheet; other projects have none", { skip: needsFfmpeg }, async (t) => {
+  const { dir, video } = await fixtures();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const rig = { measured: { actors: { ann: { foot_slide_px: 0, planted_steps: 5, bone_drift_px: 0, jerk_rms: 30635, jerk_per_motion: 386, hand_corners: 0, max_hand_turn: 29.7, crossing_frames: { legs: 0, arms: 7, arm_leg: 7 }, non_finite: 0 } }, props: { cup: { grip_loss_px: 0, teleports: 0 } } }, findings: [], note: "a guide, not a verdict" };
+  const { review, viewer } = await buildMotionReviewPack(video, { out: path.join(dir, "pack"), shots: [{ id: "s1", start: 0, end: 1, changes: [], rig }, { id: "s2", start: 1, end: 2, changes: [] }] });
+  assert.deepEqual(review.shots[0].rig_metrics, rig);
+  assert.equal(review.shots[1].rig_metrics, undefined);
+  assert.match(await readFile(viewer, "utf8"), /Rig measures.*foot slide 0 px over 5 planted steps/s);
+  const project = path.join(dir, "project");
+  await mkdir(project);
+  await copyFile(new URL("../eval/per-frame-rig/today.storyboard.json", import.meta.url), path.join(project, "storyboard.json"));
+  assert.equal((await rigShotMetrics(project)).size, 0);
+});
+
+test("launchclip review-motion makes a pack and review-motion check exits 1 while it is pending, 2 when it needs repair", { skip: needsFfmpeg }, async (t) => {
   const { runCli } = await import("../src/cli.js");
   const { dir, video, reference } = await fixtures();
   t.after(() => rm(dir, { recursive: true, force: true }));

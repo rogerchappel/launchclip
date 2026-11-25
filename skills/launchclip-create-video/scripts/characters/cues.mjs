@@ -2,7 +2,7 @@
 // (docs/VIDEO_QUALITY_RFC.md §6.3, §10.5).
 //
 // Story cast (story.cast):
-//   {style?: "flat", colors?: {primary?, accent?, paper?, ink?, bg?},
+//   {style?: "flat", colors?: {primary?, accent?, paper?, ink?, bg?}, rig?: "ops" | "frame",
 //    characters: [{id, from?, name?, voice?, build?, height?, age?, skin?, hair?,
 //                  outfit?, accessories?, headwear?, mobility?, colors?, acting?}
 //                 | {id, from?, name?, voice?, kind, size?, marks?, colors?, acting?}]}
@@ -36,6 +36,7 @@ import {ACTING_PROFILE_NAMES} from './acting.mjs';
 import {isKind, kindPhrase} from './kinds.mjs';
 import {ACTIONS, TARGET_REQUIRED, targetError} from './actions.mjs';
 import {squashError} from './contact.mjs';
+import {RIG_MODES} from './rig-compile.mjs';
 
 export {DRAWING_STYLES};
 export const KOKORO_VOICES = Object.freeze([
@@ -65,8 +66,10 @@ export function storyCastErrors(cast) {
   if (cast == null) return errors;
   if (!isObj(cast) && !Array.isArray(cast)) return ['cast must be {style?, colors?, characters: [...]}'];
   if (isObj(cast)) {
-    for (const key of Object.keys(cast)) if (!['style', 'colors', 'characters'].includes(key)) errors.push(`cast.${key} is not supported (allowed: style, colors, characters)`);
+    for (const key of Object.keys(cast)) if (!['style', 'colors', 'characters', 'rig'].includes(key)) errors.push(`cast.${key} is not supported (allowed: style, colors, characters, rig)`);
     if (cast.style !== undefined && !DRAWING_STYLES.includes(cast.style)) errors.push(`cast.style must be one of ${DRAWING_STYLES.join(', ')}`);
+    // The rig that draws the cast's scenes (characters/rig-compile.mjs): the op list, or the per-frame rig (experimental).
+    if (cast.rig !== undefined && !RIG_MODES.includes(cast.rig)) errors.push('cast.rig must be "ops" (the op list, the default) or "frame" (the per-frame rig)');
     if (cast.colors !== undefined) {
       if (!isObj(cast.colors)) errors.push('cast.colors must map brand roles to colours');
       else for (const [role, value] of Object.entries(cast.colors)) {
