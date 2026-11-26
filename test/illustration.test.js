@@ -118,3 +118,16 @@ test('illustration: a kinetic story never carries one object\'s stage into the n
   const story = resolveStory(JSON.parse(await readFile(new URL('../examples/story/illustration-9x16/storyboard.json', import.meta.url), 'utf8')));
   for (const scene of story.scenes.slice(1)) assert.equal(resolveModule(scene, story).carry ?? null, null, `${scene.id} builds its own object`);
 });
+
+test('illustration: a scene too short for the change says to lengthen it, not to move at', () => {
+  // A 2 s scene leaves no time between the build and the exit: no `at` can pass.
+  assert.throws(
+    () => resolve({subject: {object: 'clock'}, change: 'wear', at: 0.5}, 'portrait', {duration: 2}),
+    /must fall between [\d.]+ s and [\d.]+ s after the scene start; got 0\.5 s — the scene is too short for illustration: lengthen it by at least [\d.]+ s or use another module/,
+  );
+  // A window that fits keeps the plain message.
+  assert.throws(
+    () => resolve({subject: {object: 'clock'}, change: 'wear', at: 4.9}),
+    (error) => /params\.at must fall between/.test(error.message) && !/too short/.test(error.message),
+  );
+});

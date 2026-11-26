@@ -7,7 +7,7 @@
 // Imports only sibling kit/core files, so it bundles into Remotion and copies
 // into skills unchanged.
 
-import {formatBound, withinBounds} from './bounds.mjs';
+import {BOUND_EPSILON, formatBound, withinBounds} from './bounds.mjs';
 import {getEase} from './motion.mjs';
 import {grammarDuration, grammarEase} from './grammar.mjs';
 import {profileGeometry} from './layout-check.mjs';
@@ -486,7 +486,11 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
       const hit = hits.find(entry => entry.event === name);
       rel = hit ? hit.at - start : fallback;
     }
-    if (!withinBounds(rel, min, max)) check.fail(at !== undefined ? path : `${path} (default for "${name}")`, `must fall between ${formatBound(min)} s and ${formatBound(max)} s after the scene start; got ${r2(rel)} s${at === undefined ? ' — lengthen the scene or set it explicitly' : ''}`, {timing: {path, min, max, got: rel, explicit: at !== undefined}});
+    // An empty window: no time fits, so moving `at` can never pass; only a longer scene or another module can.
+    const hint = min > max + BOUND_EPSILON
+      ? ` — the scene is too short for ${moduleId}: lengthen it by at least ${formatBound(Math.ceil((min - max) * 100) / 100)} s or use another module`
+      : at === undefined ? ' — lengthen the scene or set it explicitly' : '';
+    if (!withinBounds(rel, min, max)) check.fail(at !== undefined ? path : `${path} (default for "${name}")`, `must fall between ${formatBound(min)} s and ${formatBound(max)} s after the scene start; got ${r2(rel)} s${hint}`, {timing: {path, min, max, got: rel, explicit: at !== undefined}});
     return rt(start + rel);
   };
 
