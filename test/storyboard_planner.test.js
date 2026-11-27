@@ -138,6 +138,48 @@ test("a scene shorter than its module allows is lengthened by tooling, not a rep
   assert.ok(report.warnings.some((entry) => /^timing: tooling fitted scenes to their module's minimum length: newton lengthened/.test(entry)), report.warnings.join("\n"));
 });
 
+// The module errors a weak planner repeats on every repair, one scene each (as seen in production).
+const STUCK_SCENES = [
+  ["illustration", { subject: { object: "mug" } }, /^fallback: tooling replaced s3 \(illustration: params\.change is required\) with a text card$/],
+  ["clip", { media: { kind: "video" } }, /^fallback: tooling replaced s3 \(clip: params\.media\.src is required\) with a text card$/],
+  ["process-steps", { steps: [{ label: "Hot", at: 0.5 }, { label: "Warm", at: 0.6 }, { label: "Cool", at: 1.5 }] }, /^fallback: tooling replaced s3 \(process-steps: params\.steps\[1\]\.at must come at least 0\.35 s after the previous step .*\) with a text card$/]
+];
+for (const [module, params, warning] of STUCK_SCENES) {
+  test(`fallback: a ${module} scene that still fails its params after the last repair becomes a text card of its words`, async () => {
+    const story = goodStoryboard();
+    story.scenes[2] = { ...story.scenes[2], module, params };
+    const client = fakeClient([envelope(story), envelope(story)]);
+    const report = await plan(client, { maxRepairs: 1, editRounds: 0 });
+    assert.equal(report.status, "passed", report.errors.join("\n"));
+    assert.equal(client.calls.length, 2, "no model call past the repairs");
+    assert.ok(report.attempts[0].errors.some((entry) => entry.startsWith("params: scenes[2] (s3)")), report.attempts[0].errors.join("\n"));
+    const card = report.storyboard.scenes.find((scene) => scene.id === "s3");
+    assert.equal(card.module, "motion-title");
+    assert.equal(card.params.text, "The gap shrinks");
+    assert.ok(report.warnings.some((entry) => warning.test(entry)), report.warnings.join("\n"));
+  });
+}
+
+test("fallback: a broken scene with no words over it is merged into its neighbour", async () => {
+  const story = goodStoryboard();
+  story.scenes[3].end = 10.6;
+  story.scenes.push({ id: "s5", module: "clip", start: 10.6, end: 12, params: { media: { kind: "video" } } });
+  delete story.ending;
+  const client = fakeClient([envelope(story)]);
+  const report = await plan(client, { maxRepairs: 0, editRounds: 0 });
+  assert.equal(report.status, "passed", report.errors.join("\n"));
+  assert.equal(client.calls.length, 1);
+  assert.deepEqual(report.storyboard.scenes.map((scene) => scene.id), ["s1", "s2", "s3", "s4"]);
+  assert.ok(report.warnings.some((entry) => /^fallback: tooling s5 \([\d.]+ s\) merged into s4 \(clip: params\.media\.src is required\)$/.test(entry)), report.warnings.join("\n"));
+});
+
+test("fallback: timeline errors are not swapped away; the plan still fails", async () => {
+  const client = fakeClient([envelope(brokenStoryboard())]);
+  const report = await plan(client, { maxRepairs: 0, editRounds: 0 });
+  assert.equal(report.status, "failed");
+  assert.ok(!report.warnings.some((entry) => entry.startsWith("fallback: ")));
+});
+
 test("param errors surface with the param's path, from the module's schema", async () => {
   const story = goodStoryboard();
   story.scenes[0].params.headline = "Why does a hot cup of coffee on your desk cool so quickly at first and then so slowly afterwards?";
