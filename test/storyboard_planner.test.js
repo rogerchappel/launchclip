@@ -412,6 +412,17 @@ test("direction: the repair loop repairs both the map and the storyboard", async
   assert.deepEqual(report.direction, fixed);
 });
 
+test("direction: a plan that fails only the map's checks ships with them as warnings when the repairs run out", async () => {
+  const wrong = structuredClone(MAP);
+  wrong.sections[0].lines[1].scenes = ["equation"];
+  const stuck = () => ({ model: "gpt-5.6-luna", value: { storyboard_json: JSON.stringify(goodStoryboard()), direction_json: JSON.stringify(wrong) }, usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } });
+  const client = fakeClient([envelope(goodStoryboard()), ...Array.from({ length: 12 }, () => stuck)], { direction: wrong });
+  const report = await plan(client, { direction: true, profile: SHORT_MOTION });
+  assert.equal(report.status, "passed", report.errors.join("\n"));
+  assert.ok(report.warnings.some((line) => /^direction: .*names scene "equation"/.test(line)), report.warnings.join("\n"));
+  assert.ok(report.warnings.some((line) => /kept the storyboard closest to the profile/.test(line)), report.warnings.join("\n"));
+});
+
 test("direction: a map that fails its own checks is repaired before the storyboard", async () => {
   const gap = structuredClone(MAP);
   gap.sections[0].lines.splice(2, 1);

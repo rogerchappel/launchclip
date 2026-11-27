@@ -1009,7 +1009,9 @@ export function resolveChecked(raw, { words = [], beats = null, style = null } =
 // Errors a storyboard may still ship with when the repairs run out.
 // A storyboard that fails only these still ships when the repairs run out: a
 // weak hook or one card too many beats no video.
-const NEAR_MISS = ["cadence: ", "density: ", "order: ", "placeholder: ", "hook: ", "cards: ", "featured: ", "reading: ", "opening: ", "variety: ", "characters: "];
+// direction: (the map's notes on the plan) and tells: (style findings) judge craft, not whether the video renders:
+// a plan that fails only those ships with them as warnings rather than failing the make.
+const NEAR_MISS = ["cadence: ", "density: ", "order: ", "placeholder: ", "hook: ", "cards: ", "featured: ", "reading: ", "opening: ", "variety: ", "characters: ", "direction: ", "tells: "];
 
 /** Cards that hold more words than their time on screen allows (src/direction_guardrails.js readingFindings), as repair notes. */
 export function planReadingErrors(resolved) {
