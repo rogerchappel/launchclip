@@ -488,7 +488,8 @@ export function createBase(moduleId, params, ctx, {allowed, required = [], hides
     }
     // An empty window: no time fits, so moving `at` can never pass; only a longer scene or another module can.
     const hint = min > max + BOUND_EPSILON
-      ? ` — the scene is too short for ${moduleId}: lengthen it by at least ${formatBound(Math.ceil((min - max) * 100) / 100)} s or use another module`
+      // "needs a scene of at least" is the wording src/duration_fit.js reads, so tooling lengthens the scene.
+      ? ` — the scene is too short for ${moduleId}: it needs a scene of at least ${formatBound(Math.ceil((duration + min - max) * 100) / 100)} s; lengthen it or use another module`
       : at === undefined ? ' — lengthen the scene or set it explicitly' : '';
     if (!withinBounds(rel, min, max)) check.fail(at !== undefined ? path : `${path} (default for "${name}")`, `must fall between ${formatBound(min)} s and ${formatBound(max)} s after the scene start; got ${r2(rel)} s${hint}`, {timing: {path, min, max, got: rel, explicit: at !== undefined}});
     return rt(start + rel);
