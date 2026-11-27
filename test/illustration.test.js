@@ -8,6 +8,7 @@ import {MODULES, catalogHTimeline, catalogHView} from '@launchclip/core/catalog-
 import {frameState} from '@launchclip/core/catalog-b-view.mjs';
 import {sceneMotionFindings} from '@launchclip/core/motion-check.mjs';
 import {CHANGES, SEEN_SHARE} from '@launchclip/core/illustration.mjs';
+import {durationErrors} from '../src/duration_fit.js';
 import {EXTRA_SAMPLES, SAMPLES} from '../scripts/element-samples.mjs';
 import {elementFixtures} from '../scripts/element-parity.mjs';
 
@@ -123,11 +124,20 @@ test('illustration: a scene too short for the change says to lengthen it, not to
   // A 2 s scene leaves no time between the build and the exit: no `at` can pass.
   assert.throws(
     () => resolve({subject: {object: 'clock'}, change: 'wear', at: 0.5}, 'portrait', {duration: 2}),
-    /must fall between [\d.]+ s and [\d.]+ s after the scene start; got 0\.5 s — the scene is too short for illustration: lengthen it by at least [\d.]+ s or use another module/,
+    /must fall between [\d.]+ s and [\d.]+ s after the scene start; got 0\.5 s — the scene is too short for illustration: it needs a scene of at least [\d.]+ s; lengthen it or use another module/,
   );
   // A window that fits keeps the plain message.
   assert.throws(
     () => resolve({subject: {object: 'clock'}, change: 'wear', at: 4.9}),
     (error) => /params\.at must fall between/.test(error.message) && !/too short/.test(error.message),
   );
+});
+
+test('illustration: a too-short scene is reported in the words duration_fit reads, and the length it asks for resolves', () => {
+  let message = '';
+  try { resolve({subject: {object: 'clock'}, change: 'wear'}, 'portrait', {duration: 2}); } catch (error) { message = error.message; }
+  const [found] = durationErrors([`params: scenes[2] (x): module "illustration" params: ${message}`]);
+  assert.equal(found.scene, 2);
+  assert.ok(found.min > 2, `asks for a longer scene, got ${found.min}`);
+  assert.doesNotThrow(() => resolve({subject: {object: 'clock'}, change: 'wear'}, 'portrait', {duration: found.min}));
 });
