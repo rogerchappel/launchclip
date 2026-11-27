@@ -457,6 +457,19 @@ export async function planStoryboard(options = {}) {
           checked = checkStoryboard(pinned.storyboard, checkOptions);
         }
       }
+      // The repairs have run out and a scene's module still cannot be drawn ("params.change is required"): that scene
+      // becomes a plain text card of its own narration over the same time, else merges into its neighbour, so one
+      // broken scene does not fail the video. Timeline errors ("validation:") are left to fail.
+      if (!checked.ok && attempt >= repairs && checked.storyboard && checked.errors.some((entry) => entry.startsWith("params: "))) {
+        const swapped = fallbackScenes(pinned.storyboard, checked.errors, { words: wordList, beats, direction, check: (candidate, map) => checkStoryboard(candidate, { ...checkOptions, direction: map }) });
+        if (swapped.warnings.length) {
+          pinned.storyboard = swapped.storyboard;
+          direction = swapped.direction;
+          checkOptions.direction = direction;
+          checked = swapped.checked;
+          pinned.warnings = [...pinned.warnings, ...swapped.warnings];
+        }
+      }
       // A card in the caption band while captions show (a caption position the
       // module layout does not plan for, such as the middle of the frame,
       // otherwise fails every attempt): the card moves out of the band, else
@@ -1536,6 +1549,46 @@ function providerOf(client, model) {
 // own, and a map line naming an insert the fill gives (hidden-<n>).
 function isConstraintError(entry) {
   return /^constraints: /.test(entry) || /^direction: .*names scene "(hidden|must-use)-\d+", which is not in the storyboard/.test(entry);
+}
+
+// A scene whose module still fails its params after the repairs, as a text card (motion-title) of the words spoken over
+// its time; a scene with no words to show, or whose card fails too, is merged into its neighbour (fitDurations merge).
+// → {storyboard, direction, checked, warnings: ["fallback: tooling replaced sc3 (illustration: params.change is required) with a text card"]}
+const FALLBACK_MODULE = "motion-title";
+function fallbackScenes(storyboard, errors, { words, beats, direction, check }) {
+  const failing = new Map();
+  for (const entry of errors) {
+    const match = /^params: scenes\[\d+\] \(([^)]+)\): (?:module "[^"]+" params: )?(.*)$/.exec(entry);
+    if (match && !failing.has(match[1])) failing.set(match[1], match[2].replace(/^\S+ \([^)]*\): /, ""));
+  }
+  const times = sceneTimes(storyboard, words, beats);
+  const copy = structuredClone(storyboard);
+  const carded = new Map();
+  for (const [id, reason] of failing) {
+    const scene = copy.scenes.find((entry) => entry?.id === id);
+    const time = times.get(id);
+    failing.set(id, `${scene?.module}: ${reason}`);
+    if (!scene || !time || scene.module === FALLBACK_MODULE) continue;
+    const spoken = words.filter((word) => Number(word.start) >= time.start - 1e-6 && Number(word.start) < time.end).map((word) => String(word.text).trim()).filter(Boolean).slice(0, 16);
+    while (spoken.join(" ").length > 90) spoken.pop();
+    if (!spoken.length) continue;
+    delete scene.hits;
+    scene.module = FALLBACK_MODULE;
+    scene.params = { text: spoken.join(" ") };
+    carded.set(id, `fallback: tooling replaced ${id} (${failing.get(id)}) with a text card`);
+  }
+  let checked = check(copy, direction);
+  let result = { storyboard: copy, direction };
+  // Still failing on its own params (no words for a card, or the card fails too): merged into a neighbour.
+  const left = [...failing.keys()].filter((id) => checked.errors.some((entry) => entry.startsWith("params: ") && entry.includes(`(${id})`)));
+  const merged = left.length ? fitDurations(copy, [], { words, beats, direction, merge: left.map((id) => copy.scenes.findIndex((entry) => entry?.id === id)).filter((index) => index >= 0) }) : null;
+  if (merged?.changed.length) {
+    result = merged;
+    checked = check(merged.storyboard, merged.direction);
+    for (const id of left) carded.delete(id);
+  }
+  const warnings = [...carded.values(), ...(merged?.changed ?? []).map((entry) => `fallback: tooling ${entry} (${failing.get(entry.split(" ")[0])})`)];
+  return { storyboard: result.storyboard, direction: result.direction, checked, warnings };
 }
 
 function resolvedOrNull(storyboard, words, beats) {

@@ -73,9 +73,11 @@ export function durationErrors(errors) {
  * A copy of the storyboard with each too-short scene lengthened, merged or
  * dropped, the direction map with merged and dropped ids rewritten, and what
  * changed: {storyboard, direction, changed: ["hardwood-board 1.29 → 2.01 s"]}.
+ * `merge` lists scene indexes to merge (or drop) whatever their length.
  */
-export function fitDurations(storyboard, errors, { words = [], beats = null, direction = null } = {}) {
-  const found = durationErrors(errors);
+export function fitDurations(storyboard, errors, { words = [], beats = null, direction = null, merge = [] } = {}) {
+  // merge: scene indexes to fold into a neighbour outright (no length is enough for them).
+  const found = [...durationErrors(errors), ...merge.map((scene) => ({ scene, min: Infinity, max: null, got: null }))];
   if (!found.length) return { storyboard, direction, changed: [] };
   let resolved;
   try { resolved = resolveStory(structuredClone(storyboard), { words, beats }); } catch { return { storyboard, direction, changed: [] }; }
